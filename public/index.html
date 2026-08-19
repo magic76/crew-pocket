@@ -1,0 +1,791 @@
+<!DOCTYPE html>
+<html lang="zh-TW" class="dark h-full w-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#0f172a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>Antigravity 隨身助理</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: { 500: '#6366f1', 600: '#4f46e5', 700: '#4338ca' }
+          }
+        }
+      }
+    }
+  </script>
+  <!-- Marked.js for Markdown -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <!-- Highlight.js for Code Highlighting -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <style>
+    *, *::before, *::after {
+      box-sizing: border-box;
+    }
+    html, body {
+      height: 100%;
+      height: 100dvh;
+      width: 100%;
+      max-width: 100vw;
+      margin: 0;
+      padding: 0;
+      overflow-x: hidden;
+      overflow-y: hidden;
+      background-color: #020617;
+    }
+    
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar { width: 3px; height: 3px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+    
+    /* Strict Markdown & Text Responsive Wrapping */
+    .prose {
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+    .prose p { margin-bottom: 0.65rem; line-height: 1.6; }
+    .prose p:last-child { margin-bottom: 0; }
+    .prose h1, .prose h2, .prose h3, .prose h4 { font-weight: 700; margin-top: 0.85rem; margin-bottom: 0.4rem; color: #f8fafc; }
+    .prose h1 { font-size: 1.25rem; }
+    .prose h2 { font-size: 1.1rem; }
+    .prose h3 { font-size: 1rem; }
+    .prose ul, .prose ol { margin-left: 1.1rem; margin-bottom: 0.65rem; }
+    .prose ul { list-style-type: disc; }
+    .prose ol { list-style-type: decimal; }
+    .prose li { margin-bottom: 0.25rem; }
+    
+    /* Prevent table horizontal overflow */
+    .table-wrapper {
+      width: 100%;
+      max-width: 100%;
+      overflow-x: auto;
+      margin: 0.65rem 0;
+      border-radius: 0.5rem;
+      border: 1px solid #334155;
+    }
+    .prose table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.8rem;
+    }
+    .prose th, .prose td {
+      border: 1px solid #334155;
+      padding: 0.4rem 0.6rem;
+      text-align: left;
+    }
+    .prose th { background-color: #1e293b; font-weight: 600; }
+    .prose tr:nth-child(even) { background-color: #0f172a; }
+    
+    .prose blockquote { border-left: 3px solid #6366f1; padding-left: 0.6rem; color: #94a3b8; margin: 0.65rem 0; font-size: 0.9em; }
+    .prose img { max-width: 100%; height: auto; border-radius: 0.5rem; margin: 0.65rem 0; border: 1px solid #334155; cursor: pointer; display: block; }
+    .prose code:not(pre code) { background-color: #1e293b; color: #38bdf8; padding: 0.1rem 0.3rem; border-radius: 0.25rem; font-size: 0.85em; overflow-wrap: anywhere; }
+    
+    .prose pre {
+      position: relative;
+      background-color: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 0.5rem;
+      padding: 0.65rem;
+      margin: 0.65rem 0;
+      max-width: 100%;
+      overflow-x: auto;
+      white-space: pre;
+    }
+    
+    @keyframes pulse-ring {
+      0% { transform: scale(0.95); opacity: 0.8; }
+      50% { transform: scale(1.15); opacity: 0.3; }
+      100% { transform: scale(0.95); opacity: 0.8; }
+    }
+    .recording-pulse { animation: pulse-ring 1.5s infinite; }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 flex flex-col h-[100dvh] w-full max-w-full overflow-hidden select-none">
+
+  <!-- TOP HEADER -->
+  <header class="bg-slate-900/95 backdrop-blur border-b border-slate-800 px-3 py-2.5 flex items-center justify-between z-20 shrink-0 w-full max-w-full">
+    <div class="flex items-center gap-2.5 min-w-0">
+      <!-- Drawer Menu Button -->
+      <button id="menu-btn" class="p-2 rounded-lg hover:bg-slate-800 text-slate-300 hover:text-white transition active:scale-95 shrink-0">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+        </svg>
+      </button>
+      <div class="flex flex-col min-w-0">
+        <div class="flex items-center gap-1.5 min-w-0">
+          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0"></span>
+          <h1 id="header-title" class="font-semibold text-xs sm:text-sm text-white truncate">Antigravity 隨身助理</h1>
+        </div>
+        <span id="header-subtitle" class="text-[11px] text-slate-400 truncate">Gemini 3.7 • 本地原生</span>
+      </div>
+    </div>
+    
+    <!-- New Chat Button -->
+    <button id="new-chat-btn" class="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium transition shadow-md shadow-indigo-600/30 active:scale-95 shrink-0">
+      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+      </svg>
+      <span>新對話</span>
+    </button>
+  </header>
+
+  <!-- MAIN CHAT CONTAINER -->
+  <div class="relative flex-1 flex min-h-0 w-full max-w-full overflow-hidden">
+    
+    <!-- SIDEBAR DRAWER (History with Delete Option) -->
+    <div id="drawer-overlay" class="fixed inset-0 bg-black/60 z-30 opacity-0 pointer-events-none transition-opacity duration-300"></div>
+    <aside id="drawer" class="fixed inset-y-0 left-0 w-72 sm:w-80 bg-slate-900 border-r border-slate-800 z-40 transform -translate-x-full transition-transform duration-300 flex flex-col">
+      <div class="p-3.5 border-b border-slate-800 flex items-center justify-between">
+        <h2 class="font-bold text-slate-200 text-sm sm:text-base">歷史對話紀錄</h2>
+        <button id="close-drawer-btn" class="p-1 text-slate-400 hover:text-white rounded-md">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+          </svg>
+        </button>
+      </div>
+      <!-- Conversations List -->
+      <div id="conv-list" class="flex-1 overflow-y-auto p-2 space-y-1">
+        <div class="p-4 text-center text-xs text-slate-500">載入歷史紀錄中...</div>
+      </div>
+      <div class="p-3 border-t border-slate-800 text-center text-xs text-slate-500">
+        所有資料 100% 存於手機本地
+      </div>
+    </aside>
+
+    <!-- MESSAGES SCROLL AREA -->
+    <main id="messages-container" class="flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-4 space-y-3.5 select-text min-h-0 w-full max-w-full">
+      <!-- Welcome Message -->
+      <div class="flex gap-2.5 w-full max-w-2xl mx-auto justify-start min-w-0">
+        <div class="w-7 h-7 rounded-full bg-indigo-600/30 border border-indigo-500/50 flex items-center justify-center text-indigo-400 shrink-0 text-xs font-bold mt-0.5">
+          AG
+        </div>
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl rounded-tl-none p-3.5 text-xs sm:text-sm text-slate-200 shadow-md flex-1 min-w-0 prose">
+          <p class="font-semibold text-white mb-1">你好！我是你的 Antigravity 隨身助理 🚀</p>
+          <p class="text-slate-300 leading-relaxed">
+            我可以幫你查詢行程、分析相機照片、翻譯菜單、閱讀電子車票或執行手機上的各項任務。請使用下方輸入框打字、語音說話或拍照！
+          </p>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- FIXED/PINNED BOTTOM INPUT BAR -->
+  <footer class="bg-slate-900/95 backdrop-blur border-t border-slate-800 p-2 pb-[max(0.6rem,env(safe-area-inset-bottom))] shrink-0 z-20 shadow-2xl w-full max-w-full">
+    <div class="w-full max-w-2xl mx-auto flex flex-col gap-1.5 min-w-0">
+      
+      <!-- Image Preview Thumbnail (if uploaded) -->
+      <div id="image-preview-container" class="hidden relative inline-flex items-center gap-2 bg-slate-800 border border-slate-700 rounded-lg p-1.5 w-fit max-w-full">
+        <img id="preview-thumb" src="" class="w-10 h-10 object-cover rounded" alt="Preview">
+        <div class="flex flex-col">
+          <span id="preview-filename" class="text-xs text-slate-200 max-w-[120px] truncate font-medium">photo.jpg</span>
+          <span id="preview-filesize" class="text-[10px] text-emerald-400">已自動優化壓縮</span>
+        </div>
+        <button id="remove-image-btn" class="p-1 text-slate-400 hover:text-red-400 rounded-full ml-1">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Input Row -->
+      <div class="flex items-center gap-1.5 w-full min-w-0">
+        
+        <!-- Hidden Photo Input -->
+        <input type="file" id="camera-input" accept="image/*" capture="environment" class="hidden">
+
+        <!-- Camera Button -->
+        <button id="cam-btn" type="button" title="拍照/相簿" class="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-slate-300 hover:text-indigo-400 transition active:scale-95 shrink-0 border border-slate-700 flex items-center justify-center">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/>
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/>
+          </svg>
+        </button>
+
+        <!-- Voice Recognition (Mic) Button -->
+        <button id="mic-btn" type="button" title="語音輸入" class="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-slate-300 hover:text-rose-400 transition active:scale-95 shrink-0 border border-slate-700 flex items-center justify-center">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/>
+          </svg>
+        </button>
+
+        <!-- Textarea Input Box -->
+        <div class="relative flex-1 min-w-0">
+          <textarea id="prompt-input" rows="1" placeholder="問任何問題、拍照或語音輸入..." class="w-full bg-slate-950 text-slate-100 placeholder-slate-500 text-xs sm:text-sm rounded-xl px-3 py-2 border border-slate-700 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none resize-none max-h-24 transition block"></textarea>
+        </div>
+
+        <!-- Send Button -->
+        <button id="send-btn" type="button" title="送出" class="p-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white transition shadow-md shadow-indigo-600/30 active:scale-95 shrink-0 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </footer>
+
+  <!-- IMAGE LIGHTBOX MODAL -->
+  <div id="lightbox" class="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4 opacity-0 pointer-events-none transition-opacity duration-200">
+    <button id="close-lightbox-btn" class="absolute top-4 right-4 p-2 text-white bg-slate-800/80 rounded-full">
+      <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+      </svg>
+    </button>
+    <img id="lightbox-img" src="" class="max-w-full max-h-full object-contain rounded-lg" alt="Enlarged">
+  </div>
+
+  <script>
+    // Marked configuration: wrap tables in table-wrapper
+    const renderer = new marked.Renderer();
+    const originalTable = renderer.table.bind(renderer);
+    renderer.table = function(header, body) {
+      const tableHtml = originalTable(header, body);
+      return `<div class="table-wrapper">${tableHtml}</div>`;
+    };
+    marked.setOptions({ renderer: renderer });
+
+    // State
+    let currentConversationId = null;
+    let uploadedImagePath = null;
+    let isStreaming = false;
+    let recognition = null;
+    let isRecording = false;
+
+    // DOM Elements
+    const messagesContainer = document.getElementById('messages-container');
+    const promptInput = document.getElementById('prompt-input');
+    const sendBtn = document.getElementById('send-btn');
+    const camBtn = document.getElementById('cam-btn');
+    const micBtn = document.getElementById('mic-btn');
+    const cameraInput = document.getElementById('camera-input');
+    const imagePreviewContainer = document.getElementById('image-preview-container');
+    const previewThumb = document.getElementById('preview-thumb');
+    const previewFilename = document.getElementById('preview-filename');
+    const previewFilesize = document.getElementById('preview-filesize');
+    const removeImageBtn = document.getElementById('remove-image-btn');
+    const menuBtn = document.getElementById('menu-btn');
+    const drawer = document.getElementById('drawer');
+    const drawerOverlay = document.getElementById('drawer-overlay');
+    const closeDrawerBtn = document.getElementById('close-drawer-btn');
+    const convList = document.getElementById('conv-list');
+    const newChatBtn = document.getElementById('new-chat-btn');
+    const headerTitle = document.getElementById('header-title');
+    const lightbox = document.getElementById('lightbox');
+    const lightboxImg = document.getElementById('lightbox-img');
+    const closeLightboxBtn = document.getElementById('close-lightbox-btn');
+
+    // Auto resize textarea
+    promptInput.addEventListener('input', () => {
+      promptInput.style.height = 'auto';
+      promptInput.style.height = Math.min(promptInput.scrollHeight, 100) + 'px';
+    });
+
+    // Enter to send
+    promptInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+      }
+    });
+
+    // Drawer Toggle
+    function toggleDrawer(open) {
+      if (open) {
+        drawer.classList.remove('-translate-x-full');
+        drawerOverlay.classList.remove('opacity-0', 'pointer-events-none');
+        loadConversations();
+      } else {
+        drawer.classList.add('-translate-x-full');
+        drawerOverlay.classList.add('opacity-0', 'pointer-events-none');
+      }
+    }
+    menuBtn.addEventListener('click', () => toggleDrawer(true));
+    closeDrawerBtn.addEventListener('click', () => toggleDrawer(false));
+    drawerOverlay.addEventListener('click', () => toggleDrawer(false));
+
+    // Lightbox
+    function showLightbox(src) {
+      lightboxImg.src = src;
+      lightbox.classList.remove('opacity-0', 'pointer-events-none');
+    }
+    closeLightboxBtn.addEventListener('click', () => {
+      lightbox.classList.add('opacity-0', 'pointer-events-none');
+    });
+    lightbox.addEventListener('click', (e) => {
+      if (e.target === lightbox) lightbox.classList.add('opacity-0', 'pointer-events-none');
+    });
+
+    // Transform local image paths into proxy URL
+    function formatMessageContent(content) {
+      if (!content) return '';
+      let formatted = content.replace(/((\/data\/data\/|\/storage\/|\/sdcard\/)[^\s\)\"\'\<\>]+\.(png|jpg|jpeg|webp|svg|gif))/gi, (match) => {
+        return `/api/image?path=${encodeURIComponent(match)}`;
+      });
+      return marked.parse(formatted);
+    }
+
+    // Scroll to bottom
+    function scrollToBottom() {
+      messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    }
+
+    // Helper: format tool info into readable summary
+    function formatToolSummary(tool) {
+      const name = tool.name || tool.tool_name || 'action';
+      const args = tool.args || (tool.tool_info && tool.tool_info.parameters) || {};
+      
+      let desc = name;
+      if (name === 'run_command' && args.CommandLine) {
+        desc = `執行指令: ${args.CommandLine.slice(0, 45)}${args.CommandLine.length > 45 ? '...' : ''}`;
+      } else if (name === 'search_web' && args.query) {
+        desc = `網路搜尋: "${args.query}"`;
+      } else if (name === 'view_file' && args.AbsolutePath) {
+        desc = `檢視檔案: ${args.AbsolutePath.split('/').pop()}`;
+      } else if (name === 'write_to_file' && args.TargetFile) {
+        desc = `寫入檔案: ${args.TargetFile.split('/').pop()}`;
+      } else if (name === 'generate_image' && args.Prompt) {
+        desc = `生成圖片: "${args.Prompt.slice(0, 30)}..."`;
+      } else if (name === 'list_dir') {
+        desc = `列出目錄檔案`;
+      }
+      return desc;
+    }
+
+    // Render tools accordion HTML
+    function buildToolsAccordionHtml(tools) {
+      if (!tools || tools.length === 0) return '';
+      
+      const itemsHtml = tools.map((t, idx) => {
+        const title = formatToolSummary(t);
+        return `
+          <div class="border-b border-slate-800/80 last:border-b-0 py-1 text-[11px]">
+            <div class="text-slate-300 font-mono flex items-center gap-1.5">
+              <span class="text-indigo-400">#${idx + 1}</span>
+              <span class="truncate">${escapeHtml(title)}</span>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      return `
+        <details class="my-2 bg-slate-950/70 border border-slate-800/90 rounded-xl overflow-hidden text-xs">
+          <summary class="px-3 py-1.5 cursor-pointer flex items-center justify-between text-slate-400 hover:text-slate-200 font-mono select-none bg-slate-900/60">
+            <div class="flex items-center gap-1.5">
+              <span>⚙️ 操作記錄 (${tools.length} 個動作)</span>
+            </div>
+            <span class="text-[10px] text-slate-500">展開 ▼</span>
+          </summary>
+          <div class="px-3 py-2 border-t border-slate-800/60 bg-slate-950/90 space-y-1">
+            ${itemsHtml}
+          </div>
+        </details>
+      `;
+    }
+
+    // Append Message to UI
+    function appendMessage(role, content, timestamp, tools = []) {
+      const isUser = role === 'user';
+      const msgDiv = document.createElement('div');
+      msgDiv.className = `flex gap-2.5 w-full max-w-2xl mx-auto min-w-0 ${isUser ? 'justify-end' : 'justify-start'}`;
+
+      const avatar = isUser
+        ? `<div class="w-7 h-7 rounded-full bg-slate-700 flex items-center justify-center text-slate-300 shrink-0 text-xs font-bold order-2 mt-0.5">我</div>`
+        : `<div class="w-7 h-7 rounded-full bg-indigo-600/30 border border-indigo-500/50 flex items-center justify-center text-indigo-400 shrink-0 text-xs font-bold mt-0.5">AG</div>`;
+
+      const toolsHtml = (!isUser && tools && tools.length > 0) ? buildToolsAccordionHtml(tools) : '';
+
+      const bubbleClass = isUser
+        ? 'bg-indigo-600 text-white rounded-2xl rounded-tr-none p-3 text-xs sm:text-sm shadow-md order-1 max-w-[85%] break-words'
+        : 'bg-slate-900 border border-slate-800 text-slate-200 rounded-2xl rounded-tl-none p-3.5 text-xs sm:text-sm shadow-md flex-1 min-w-0 prose';
+
+      let bodyHtml = '';
+      if (isUser) {
+        let userText = content;
+        let imgHtml = '';
+        const match = userText.match(/\[Uploaded Image:\s*([^\]]+)\]/);
+        if (match) {
+          const imgP = match[1].trim();
+          imgHtml = `<img src="/api/image?path=${encodeURIComponent(imgP)}" class="max-h-48 sm:max-h-56 max-w-full rounded-xl object-contain border border-indigo-400/40 cursor-pointer shadow-md mb-2 bg-black/20 block" alt="Uploaded Photo">`;
+          userText = userText.replace(/\[Uploaded Image:\s*([^\]]+)\]/, '').trim();
+        }
+        bodyHtml = `${imgHtml}<div class="whitespace-pre-wrap leading-relaxed break-words">${escapeHtml(userText)}</div>`;
+      } else {
+        bodyHtml = `
+          <div class="tools-container">${toolsHtml}</div>
+          <div class="msg-content leading-relaxed min-w-0">${formatMessageContent(content)}</div>
+        `;
+      }
+
+      msgDiv.innerHTML = `${avatar}<div class="${bubbleClass}">${bodyHtml}</div>`;
+      messagesContainer.appendChild(msgDiv);
+
+      msgDiv.querySelectorAll('img').forEach(img => {
+        img.addEventListener('click', () => showLightbox(img.src));
+      });
+
+      msgDiv.querySelectorAll('pre code').forEach(el => hljs.highlightElement(el));
+
+      scrollToBottom();
+      return msgDiv;
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // Delete Conversation Action
+    async function deleteConversation(convId, e) {
+      e.stopPropagation();
+      if (!confirm('確定要刪除這筆對話紀錄嗎？刪除後無法恢復。')) return;
+
+      try {
+        const res = await fetch(`/api/conversation?id=${convId}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (data.success) {
+          if (currentConversationId === convId) {
+            currentConversationId = null;
+            headerTitle.textContent = '新對話';
+            messagesContainer.innerHTML = '';
+            appendMessage('assistant', '你好！已為你開啟新對話。有什麼可以幫你的？');
+          }
+          await loadConversations();
+        }
+      } catch (err) {
+        alert('刪除失敗：' + err.message);
+      }
+    }
+
+    // Load History for a Conversation
+    async function loadConversationHistory(convId) {
+      currentConversationId = convId;
+      messagesContainer.innerHTML = '';
+      toggleDrawer(false);
+
+      try {
+        const res = await fetch(`/api/history?id=${convId}`);
+        const data = await res.json();
+        
+        if (data.messages && data.messages.length > 0) {
+          data.messages.forEach(msg => appendMessage(msg.role, msg.content, msg.timestamp, msg.tools || []));
+          headerTitle.textContent = data.messages[0].content.slice(0, 18) || '對話紀錄';
+        } else {
+          headerTitle.textContent = '新對話';
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    // Load Conversations List in Drawer (with Delete Button)
+    async function loadConversations() {
+      try {
+        const res = await fetch('/api/conversations');
+        const data = await res.json();
+        convList.innerHTML = '';
+
+        if (!data.conversations || data.conversations.length === 0) {
+          convList.innerHTML = '<div class="p-4 text-center text-xs text-slate-500">尚無歷史對話</div>';
+          return;
+        }
+
+        data.conversations.forEach(conv => {
+          const item = document.createElement('div');
+          const isCurrent = conv.id === currentConversationId;
+          item.className = `group p-2 rounded-xl cursor-pointer transition flex items-center justify-between text-xs ${
+            isCurrent ? 'bg-indigo-600/20 text-indigo-300 border border-indigo-500/30' : 'hover:bg-slate-800 text-slate-300'
+          }`;
+          item.innerHTML = `
+            <div class="flex items-center gap-2 truncate min-w-0 flex-1">
+              <svg class="w-3.5 h-3.5 shrink-0 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/>
+              </svg>
+              <span class="truncate">${escapeHtml(conv.title)}</span>
+            </div>
+            <button class="delete-btn p-1 text-slate-500 hover:text-rose-400 hover:bg-slate-700/60 rounded-md transition shrink-0 ml-1.5 active:scale-90" title="刪除此紀錄">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+            </button>
+          `;
+          
+          item.querySelector('.delete-btn').addEventListener('click', (e) => deleteConversation(conv.id, e));
+          item.addEventListener('click', () => loadConversationHistory(conv.id));
+          convList.appendChild(item);
+        });
+      } catch (err) {
+        convList.innerHTML = '<div class="p-4 text-center text-xs text-red-400">載入失敗</div>';
+      }
+    }
+
+    // New Chat Action
+    newChatBtn.addEventListener('click', () => {
+      currentConversationId = null;
+      headerTitle.textContent = '新對話';
+      messagesContainer.innerHTML = '';
+      appendMessage('assistant', '你好！已為你開啟新對話。有什麼可以幫你的？');
+      toggleDrawer(false);
+    });
+
+    // ⚡ Fast Client-Side Image Compression (Max 1280px, ~150KB JPEG)
+    function compressImageFile(file, maxWidth = 1280, quality = 0.8) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = (event) => {
+          const img = new Image();
+          img.src = event.target.result;
+          img.onload = () => {
+            let width = img.width;
+            let height = img.height;
+
+            if (width > maxWidth || height > maxWidth) {
+              if (width > height) {
+                height = Math.round((height * maxWidth) / width);
+                width = maxWidth;
+              } else {
+                width = Math.round((width * maxWidth) / height);
+                height = maxWidth;
+              }
+            }
+
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, width, height);
+
+            const compressedBase64 = canvas.toDataURL('image/jpeg', quality);
+            const approxKb = Math.round((compressedBase64.length * 3) / 4 / 1024);
+            resolve({ base64: compressedBase64, kb: approxKb });
+          };
+          img.onerror = (err) => reject(err);
+        };
+        reader.onerror = (err) => reject(err);
+      });
+    }
+
+    // Camera & Upload Handlers with Compression
+    camBtn.addEventListener('click', () => cameraInput.click());
+    cameraInput.addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      try {
+        previewFilename.textContent = '壓縮中...';
+        imagePreviewContainer.classList.remove('hidden');
+
+        // Fast Client-side Compression
+        const { base64, kb } = await compressImageFile(file, 1280, 0.8);
+        previewThumb.src = base64;
+        previewFilename.textContent = file.name || 'photo.jpg';
+        previewFilesize.textContent = `已優化至 ${kb} KB`;
+
+        const res = await fetch('/api/upload', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ imageBase64: base64, filename: 'photo.jpg' })
+        });
+        const data = await res.json();
+        if (data.success) {
+          uploadedImagePath = data.filePath;
+        }
+      } catch (err) {
+        alert('圖片處理失敗：' + err.message);
+        imagePreviewContainer.classList.add('hidden');
+      }
+    });
+
+    removeImageBtn.addEventListener('click', () => {
+      uploadedImagePath = null;
+      cameraInput.value = '';
+      imagePreviewContainer.classList.add('hidden');
+    });
+
+    // Web Speech Recognition
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SpeechRecognition) {
+      recognition = new SpeechRecognition();
+      recognition.continuous = false;
+      recognition.interimResults = true;
+      recognition.lang = 'zh-TW';
+
+      recognition.onstart = () => {
+        isRecording = true;
+        micBtn.classList.add('bg-rose-600', 'text-white', 'recording-pulse');
+      };
+
+      recognition.onresult = (event) => {
+        let transcript = '';
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          transcript += event.results[i][0].transcript;
+        }
+        promptInput.value = transcript;
+        promptInput.dispatchEvent(new Event('input'));
+      };
+
+      recognition.onerror = (e) => {
+        console.error('Speech recognition error:', e);
+        isRecording = false;
+        micBtn.classList.remove('bg-rose-600', 'text-white', 'recording-pulse');
+      };
+
+      recognition.onend = () => {
+        isRecording = false;
+        micBtn.classList.remove('bg-rose-600', 'text-white', 'recording-pulse');
+      };
+
+      micBtn.addEventListener('click', () => {
+        if (isRecording) {
+          recognition.stop();
+        } else {
+          recognition.start();
+        }
+      });
+    } else {
+      micBtn.classList.add('opacity-40');
+      micBtn.title = '此瀏覽器不支援語音辨識';
+    }
+
+    // Send Message with Live Streaming & Tools Logging
+    async function sendMessage() {
+      const text = promptInput.value.trim();
+      const imgPath = uploadedImagePath;
+
+      if (!text && !imgPath) return;
+      if (isStreaming) return;
+
+      isStreaming = true;
+      sendBtn.disabled = true;
+
+      let userDisplay = text;
+      if (imgPath) userDisplay = `[Uploaded Image: ${imgPath}]\n${userDisplay}`;
+      appendMessage('user', userDisplay);
+
+      promptInput.value = '';
+      promptInput.style.height = 'auto';
+      uploadedImagePath = null;
+      cameraInput.value = '';
+      imagePreviewContainer.classList.add('hidden');
+
+      const liveTools = [];
+
+      const assistantMsgDiv = document.createElement('div');
+      assistantMsgDiv.className = 'flex gap-2.5 w-full max-w-2xl mx-auto justify-start min-w-0';
+      assistantMsgDiv.innerHTML = `
+        <div class="w-7 h-7 rounded-full bg-indigo-600/30 border border-indigo-500/50 flex items-center justify-center text-indigo-400 shrink-0 text-xs font-bold mt-0.5">AG</div>
+        <div class="bg-slate-900 border border-slate-800 text-slate-200 rounded-2xl rounded-tl-none p-3.5 text-xs sm:text-sm shadow-md flex-1 min-w-0 prose">
+          <div class="live-status text-xs font-mono text-indigo-300 mb-2 flex items-center gap-1.5">
+            <span class="inline-block w-2 h-2 rounded-full bg-indigo-400 animate-ping"></span>
+            <span class="status-text">思考中...</span>
+          </div>
+          <div class="tools-container"></div>
+          <div class="msg-content leading-relaxed min-w-0"><span class="inline-block w-2 h-4 bg-indigo-400 animate-pulse"></span></div>
+        </div>
+      `;
+      messagesContainer.appendChild(assistantMsgDiv);
+      const contentElem = assistantMsgDiv.querySelector('.msg-content');
+      const liveStatusElem = assistantMsgDiv.querySelector('.live-status');
+      const statusTextElem = assistantMsgDiv.querySelector('.status-text');
+      const toolsContainerElem = assistantMsgDiv.querySelector('.tools-container');
+      scrollToBottom();
+
+      let accumulatedText = '';
+
+      try {
+        const response = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            prompt: text,
+            conversation_id: currentConversationId,
+            image_path: imgPath
+          })
+        });
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop();
+
+          let currentEvent = 'message';
+          for (const line of lines) {
+            if (line.startsWith('event:')) {
+              currentEvent = line.replace('event:', '').trim();
+            } else if (line.startsWith('data:')) {
+              const rawData = line.replace('data:', '').trim();
+              if (!rawData) continue;
+              try {
+                const data = JSON.parse(rawData);
+                if (currentEvent === 'init' && data.conversation_id) {
+                  currentConversationId = data.conversation_id;
+                } else if (currentEvent === 'tool') {
+                  liveTools.push(data);
+                  statusTextElem.textContent = `執行動作: ${formatToolSummary(data)}`;
+                  toolsContainerElem.innerHTML = buildToolsAccordionHtml(liveTools);
+                  scrollToBottom();
+                } else if (currentEvent === 'chunk' && data.accumulated) {
+                  liveStatusElem.style.display = 'none';
+                  accumulatedText = data.accumulated;
+                  contentElem.innerHTML = formatMessageContent(accumulatedText);
+                  scrollToBottom();
+                } else if (currentEvent === 'done') {
+                  liveStatusElem.style.display = 'none';
+                  if (data.conversation_id) currentConversationId = data.conversation_id;
+                  if (data.response) accumulatedText = data.response;
+                  contentElem.innerHTML = formatMessageContent(accumulatedText);
+                  toolsContainerElem.innerHTML = buildToolsAccordionHtml(liveTools);
+                  assistantMsgDiv.querySelectorAll('pre code').forEach(el => hljs.highlightElement(el));
+                  assistantMsgDiv.querySelectorAll('img').forEach(img => {
+                    img.addEventListener('click', () => showLightbox(img.src));
+                  });
+                }
+              } catch (e) {}
+            }
+          }
+        }
+      } catch (err) {
+        liveStatusElem.style.display = 'none';
+        contentElem.innerHTML = `<span class="text-rose-400">發生錯誤：${err.message}</span>`;
+      } finally {
+        liveStatusElem.style.display = 'none';
+        isStreaming = false;
+        sendBtn.disabled = false;
+        scrollToBottom();
+      }
+    }
+
+    sendBtn.addEventListener('click', sendMessage);
+
+    // Initial load: Load most recent conversation
+    (async function init() {
+      try {
+        const res = await fetch('/api/conversations');
+        const data = await res.json();
+        if (data.conversations && data.conversations.length > 0) {
+          loadConversationHistory(data.conversations[0].id);
+        }
+      } catch (e) {}
+    })();
+  </script>
+</body>
+</html>

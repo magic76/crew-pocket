@@ -1,0 +1,570 @@
+const http = require('node:http');
+const fs = require('node:fs');
+const fsPromises = require('node:fs/promises');
+const path = require('node:path');
+const url = require('node:url');
+const { spawn } = require('node:child_process');
+const EventEmitter = require('node:events');
+
+const PORT = process.env.PORT || 8000;
+const HOST = '127.0.0.1';
+const ROOT_DIR = path.resolve(__dirname);
+const PUBLIC_DIR = path.join(ROOT_DIR, 'public');
+const UPLOADS_DIR = path.join(ROOT_DIR, 'uploads');
+const BRAIN_DIR = '/data/data/com.termux/files/home/.gemini/antigravity-cli/brain';
+const IDLE_TIMEOUT_MS = 30 * 60 * 1000; // 30 mins idle sleep
+
+if (!fs.existsSync(UPLOADS_DIR)) {
+  fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+}
+
+const MIME_TYPES = {
+  '.html': 'text/html; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.js': 'application/javascript; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.webp': 'image/webp',
+  '.svg': 'image/svg+xml',
+  '.gif': 'image/gif',
+  '.ico': 'image/x-icon'
+};
+
+function parseJsonBody(req) {
+  return new Promise((resolve, reject) => {
+    let body = '';
+    req.on('data', chunk => {
+      body += chunk.toString();
+      if (body.length > 50 * 1024 * 1024) reject(new Error('Payload too large'));
+    });
+    req.on('end', () => {
+      try {
+        resolve(body ? JSON.parse(body) : {});
+      } catch (err) {
+        reject(err);
+      }
+    });
+    req.on('error', reject);
+  });
+}
+
+function cleanUserContent(raw) {
+  if (!raw) return '';
+  const match = raw.match(/<USER_REQUEST>([\s\S]*?)<\/USER_REQUEST>/);
+  if (match) return match[1].trim();
+  return raw.replace(/<ADDITIONAL_METADATA>[\s\S]*?<\/ADDITIONAL_METADATA>/g, '')
+            .replace(/<USER_SETTINGS_CHANGE>[\s\S]*?<\/USER_SETTINGS_CHANGE>/g, '')
+            .trim();
+}
+
+// ==========================================
+// 🚀 Persistent Active Session Manager
+// ==========================================
+class ActiveSessionManager {
+  constructor() {
+    this.current = null; // { conversationId, process, emitter, isBusy, idleTimer, buffer }
+  }
+
+  // Get or initialize persistent session
+  async getOrCreateSession(targetConversationId) {
+    // If targetConversationId is specified AND matches current running session, reuse it!
+    if (targetConversationId && this.current && this.current.process && !this.current.process.killed) {
+      if (this.current.conversationId === targetConversationId) {
+        this.resetIdleTimer();
+        return this.current;
+      }
+    }
+
+    // Otherwise (new session requested, or switching to different session): spawn new process
+    this.closeActiveSession();
+
+    console.log(`[SessionManager] Spawning resident agy process for session: ${targetConversationId || 'NEW'}`);
+    
+    const args = [
+      '--input-format', 'stream-json',
+      '--output-format', 'stream-json',
+      '--dangerously-skip-permissions'
+    ];
+
+    if (targetConversationId) {
+      args.push('--conversation', targetConversationId);
+    }
+
+    const child = spawn('agy', args, {
+      cwd: '/data/data/com.termux/files/home',
+      env: process.env
+    });
+
+    const emitter = new EventEmitter();
+    emitter.setMaxListeners(50);
+
+    const sessionObj = {
+      conversationId: targetConversationId || null,
+      process: child,
+      emitter,
+      isBusy: false,
+      idleTimer: null,
+      buffer: ''
+    };
+
+    this.current = sessionObj;
+    this.resetIdleTimer();
+
+    const initPromise = new Promise((resolve) => {
+      const onInitData = (chunk) => {
+        sessionObj.buffer += chunk.toString();
+        const lines = sessionObj.buffer.split('\n');
+        sessionObj.buffer = lines.pop();
+
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          try {
+            const item = JSON.parse(line);
+            if (item.event === 'init' && item.conversation_id) {
+              sessionObj.conversationId = item.conversation_id;
+              console.log(`[SessionManager] Resident session initialized: ${sessionObj.conversationId}`);
+              child.stdout.removeListener('data', onInitData);
+              resolve();
+              return;
+            }
+          } catch (e) {}
+        }
+      };
+      child.stdout.on('data', onInitData);
+    });
+
+    child.stdout.on('data', (chunk) => {
+      sessionObj.buffer += chunk.toString();
+      const lines = sessionObj.buffer.split('\n');
+      sessionObj.buffer = lines.pop();
+
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        try {
+          const item = JSON.parse(line);
+          emitter.emit('event', item);
+        } catch (e) {
+          emitter.emit('raw', line);
+        }
+      }
+    });
+
+    child.stderr.on('data', (errChunk) => {
+      console.error(`[Resident agy stderr] ${errChunk.toString()}`);
+    });
+
+    child.on('close', (code) => {
+      console.log(`[SessionManager] Resident process exited with code ${code}`);
+      if (this.current === sessionObj) {
+        this.current = null;
+      }
+    });
+
+    await initPromise;
+    return sessionObj;
+  }
+
+  resetIdleTimer() {
+    if (!this.current) return;
+    if (this.current.idleTimer) clearTimeout(this.current.idleTimer);
+    this.current.idleTimer = setTimeout(() => {
+      console.log(`[SessionManager] Session idle for 30m, sleeping process to save battery/RAM.`);
+      this.closeActiveSession();
+    }, IDLE_TIMEOUT_MS);
+  }
+
+  closeActiveSession() {
+    if (this.current && this.current.process) {
+      if (this.current.idleTimer) clearTimeout(this.current.idleTimer);
+      try {
+        this.current.process.kill('SIGTERM');
+      } catch (e) {}
+      this.current = null;
+    }
+  }
+
+  // Handle deletion of a session
+  onSessionDeleted(convId) {
+    if (this.current && this.current.conversationId === convId) {
+      this.closeActiveSession();
+    }
+  }
+}
+
+const sessionManager = new ActiveSessionManager();
+
+// ==========================================
+// 📡 API Handlers
+// ==========================================
+
+async function handleListConversations(res) {
+  try {
+    if (!fs.existsSync(BRAIN_DIR)) {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({ conversations: [] }));
+    }
+
+    const dirs = await fsPromises.readdir(BRAIN_DIR, { withFileTypes: true });
+    const convList = [];
+
+    for (const dir of dirs) {
+      if (!dir.isDirectory()) continue;
+      const convId = dir.name;
+      const logPath = path.join(BRAIN_DIR, convId, '.system_generated', 'logs', 'transcript.jsonl');
+      
+      let title = '對話 ' + convId.slice(0, 8);
+      let updatedAt = 0;
+
+      try {
+        const stat = await fsPromises.stat(path.join(BRAIN_DIR, convId));
+        updatedAt = stat.mtimeMs;
+
+        if (fs.existsSync(logPath)) {
+          const logStat = await fsPromises.stat(logPath);
+          updatedAt = Math.max(updatedAt, logStat.mtimeMs);
+          
+          const content = await fsPromises.readFile(logPath, 'utf-8');
+          const lines = content.trim().split('\n');
+          for (const line of lines) {
+            try {
+              const item = JSON.parse(line);
+              if (item.type === 'USER_INPUT' && item.content) {
+                const cleaned = cleanUserContent(item.content);
+                if (cleaned) {
+                  title = cleaned.slice(0, 35) + (cleaned.length > 35 ? '...' : '');
+                  break;
+                }
+              }
+            } catch (e) {}
+          }
+        }
+        convList.push({ id: convId, title, updatedAt });
+      } catch (err) {}
+    }
+
+    convList.sort((a, b) => b.updatedAt - a.updatedAt);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ conversations: convList }));
+  } catch (err) {
+    res.writeHead(500, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: err.message }));
+  }
+}
+
+async function handleGetHistory(parsedUrl, res) {
+  try {
+    const convId = parsedUrl.query.id;
+    if (!convId) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({ error: 'Missing conversation id' }));
+    }
+
+    const logPath = path.join(BRAIN_DIR, convId, '.system_generated', 'logs', 'transcript.jsonl');
+    if (!fs.existsSync(logPath)) {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({ conversation_id: convId, messages: [] }));
+    }
+
+    const content = await fsPromises.readFile(logPath, 'utf-8');
+    const lines = content.trim().split('\n');
+    const messages = [];
+
+    let currentAssistantMsg = null;
+
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      try {
+        const item = JSON.parse(line);
+        if (item.type === 'USER_INPUT') {
+          const text = cleanUserContent(item.content);
+          if (text) {
+            currentAssistantMsg = null;
+            messages.push({
+              role: 'user',
+              content: text,
+              timestamp: item.created_at || new Date().toISOString()
+            });
+          }
+        } else if (item.type === 'PLANNER_RESPONSE') {
+          if (!currentAssistantMsg) {
+            currentAssistantMsg = {
+              role: 'assistant',
+              content: item.content || '',
+              tools: [],
+              thinking: item.thinking || '',
+              timestamp: item.created_at || new Date().toISOString()
+            };
+            messages.push(currentAssistantMsg);
+          }
+
+          if (item.content) currentAssistantMsg.content = item.content;
+          if (item.thinking) currentAssistantMsg.thinking = item.thinking;
+          if (item.tool_calls && Array.isArray(item.tool_calls)) {
+            for (const tc of item.tool_calls) {
+              currentAssistantMsg.tools.push({ name: tc.name, args: tc.args });
+            }
+          }
+        }
+      } catch (e) {}
+    }
+
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ conversation_id: convId, messages }));
+  } catch (err) {
+    res.writeHead(500, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: err.message }));
+  }
+}
+
+// Delete a conversation
+async function handleDeleteConversation(parsedUrl, res) {
+  try {
+    const convId = parsedUrl.query.id;
+    if (!convId || !/^[a-zA-Z0-9_\-]+$/.test(convId)) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({ error: 'Invalid conversation id' }));
+    }
+
+    const targetDir = path.join(BRAIN_DIR, convId);
+    if (!targetDir.startsWith(BRAIN_DIR)) {
+      res.writeHead(403, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({ error: 'Forbidden' }));
+    }
+
+    // Stop resident process if it is running on this session
+    sessionManager.onSessionDeleted(convId);
+
+    if (fs.existsSync(targetDir)) {
+      await fsPromises.rm(targetDir, { recursive: true, force: true });
+      console.log(`[Delete] Deleted conversation session: ${convId}`);
+    }
+
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: true, id: convId }));
+  } catch (err) {
+    res.writeHead(500, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: err.message }));
+  }
+}
+
+async function handleImageProxy(parsedUrl, res) {
+  const imgPath = parsedUrl.query.path;
+  if (!imgPath || !fs.existsSync(imgPath)) {
+    res.writeHead(404, { 'Content-Type': 'text/plain' });
+    return res.end('Image not found');
+  }
+
+  const ext = path.extname(imgPath).toLowerCase();
+  const contentType = MIME_TYPES[ext] || 'application/octet-stream';
+
+  try {
+    const data = await fsPromises.readFile(imgPath);
+    res.writeHead(200, {
+      'Content-Type': contentType,
+      'Cache-Control': 'public, max-age=86400'
+    });
+    res.end(data);
+  } catch (err) {
+    res.writeHead(500, { 'Content-Type': 'text/plain' });
+    res.end(err.message);
+  }
+}
+
+async function handleUpload(req, res) {
+  try {
+    const body = await parseJsonBody(req);
+    const { imageBase64, filename } = body;
+    if (!imageBase64) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({ error: 'No image data provided' }));
+    }
+
+    const ext = (filename && path.extname(filename)) ? path.extname(filename) : '.jpg';
+    const cleanBase64 = imageBase64.replace(/^data:image\/\w+;base64,/, '');
+    const buffer = Buffer.from(cleanBase64, 'base64');
+    const targetName = `photo_${Date.now()}${ext}`;
+    const targetPath = path.join(UPLOADS_DIR, targetName);
+
+    await fsPromises.writeFile(targetPath, buffer);
+
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      success: true,
+      filePath: targetPath,
+      url: `/api/image?path=${encodeURIComponent(targetPath)}`
+    }));
+  } catch (err) {
+    res.writeHead(500, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: err.message }));
+  }
+}
+
+// SSE Chat using Resident Pipe
+async function handleChat(req, res) {
+  let body;
+  try {
+    body = await parseJsonBody(req);
+  } catch (err) {
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify({ error: 'Invalid JSON body' }));
+  }
+
+  const { prompt, conversation_id, image_path } = body;
+  if (!prompt && !image_path) {
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify({ error: 'Prompt or image is required' }));
+  }
+
+  let finalPrompt = prompt || 'Analyze this image';
+  if (image_path) {
+    finalPrompt = `[Uploaded Image: ${image_path}]\n${finalPrompt}`;
+  }
+
+  // Set SSE Headers
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream; charset=utf-8',
+    'Cache-Control': 'no-cache, no-transform',
+    'Connection': 'keep-alive',
+    'Access-Control-Allow-Origin': '*'
+  });
+
+  const sendEvent = (event, data) => {
+    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+  };
+
+  try {
+    const session = await sessionManager.getOrCreateSession(conversation_id);
+    session.isBusy = true;
+
+    sendEvent('init', { conversation_id: session.conversationId });
+
+    let fullResponse = '';
+
+    const onEvent = (item) => {
+      if (item.event === 'step_update' && item.step_update) {
+        const su = item.step_update;
+        if (su.step_type === 'agent_response' && su.text_delta) {
+          fullResponse += su.text_delta;
+          sendEvent('chunk', { delta: su.text_delta, accumulated: fullResponse });
+        } else if (su.step_type === 'tool') {
+          sendEvent('tool', {
+            state: su.state,
+            tool_name: su.tool_name,
+            tool_info: su.tool_info,
+            duration_seconds: su.duration_seconds
+          });
+        }
+      } else if (item.event === 'result' && item.result) {
+        if (item.result.conversation_id) session.conversationId = item.result.conversation_id;
+        if (item.result.response && !fullResponse) fullResponse = item.result.response;
+
+        sendEvent('done', {
+          response: fullResponse,
+          conversation_id: session.conversationId,
+          status: item.result.status
+        });
+
+        cleanup();
+        res.end();
+      }
+    };
+
+    const onRaw = (line) => {
+      fullResponse += line + '\n';
+      sendEvent('chunk', { delta: line + '\n', accumulated: fullResponse });
+    };
+
+    session.emitter.on('event', onEvent);
+    session.emitter.on('raw', onRaw);
+
+    function cleanup() {
+      session.isBusy = false;
+      session.emitter.removeListener('event', onEvent);
+      session.emitter.removeListener('raw', onRaw);
+      sessionManager.resetIdleTimer();
+    }
+
+    req.on('close', () => {
+      cleanup();
+    });
+
+    const payload = {
+      type: 'user',
+      message: {
+        role: 'user',
+        content: [{ type: 'text', text: finalPrompt }]
+      }
+    };
+
+    console.log(`[Resident Pipe] Pushing turn to active session (${session.conversationId})...`);
+    session.process.stdin.write(JSON.stringify(payload) + '\n');
+
+  } catch (err) {
+    console.error('[Chat Error]', err);
+    sendEvent('done', { error: err.message });
+    res.end();
+  }
+}
+
+async function handleStatic(pathname, res) {
+  let filePath = path.join(PUBLIC_DIR, pathname === '/' ? 'index.html' : pathname);
+
+  if (!filePath.startsWith(PUBLIC_DIR)) {
+    res.writeHead(403, { 'Content-Type': 'text/plain' });
+    return res.end('Forbidden');
+  }
+
+  if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
+    filePath = path.join(PUBLIC_DIR, 'index.html');
+  }
+
+  const ext = path.extname(filePath).toLowerCase();
+  const contentType = MIME_TYPES[ext] || 'application/octet-stream';
+
+  try {
+    const data = await fsPromises.readFile(filePath);
+    res.writeHead(200, { 'Content-Type': contentType });
+    res.end(data);
+  } catch (err) {
+    res.writeHead(404, { 'Content-Type': 'text/plain' });
+    res.end('Not Found');
+  }
+}
+
+const server = http.createServer(async (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204);
+    return res.end();
+  }
+
+  const parsedUrl = url.parse(req.url, true);
+  const pathname = parsedUrl.pathname;
+
+  if (pathname === '/api/conversations' && req.method === 'GET') {
+    return handleListConversations(res);
+  } else if (pathname === '/api/history' && req.method === 'GET') {
+    return handleGetHistory(parsedUrl, res);
+  } else if (pathname === '/api/conversation' && req.method === 'DELETE') {
+    return handleDeleteConversation(parsedUrl, res);
+  } else if (pathname === '/api/chat' && req.method === 'POST') {
+    return handleChat(req, res);
+  } else if (pathname === '/api/upload' && req.method === 'POST') {
+    return handleUpload(req, res);
+  } else if (pathname === '/api/image' && req.method === 'GET') {
+    return handleImageProxy(parsedUrl, res);
+  } else {
+    return handleStatic(pathname, res);
+  }
+});
+
+server.listen(PORT, HOST, () => {
+  console.log(`=================================================`);
+  console.log(`🚀 Antigravity Web UI (Resident Pipe) at: http://${HOST}:${PORT}`);
+  console.log(`=================================================`);
+});
