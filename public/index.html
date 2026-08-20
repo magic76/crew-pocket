@@ -101,6 +101,32 @@
     .prose img { max-width: 100%; height: auto; border-radius: 0.5rem; margin: 0.65rem 0; border: 1px solid #334155; cursor: pointer; display: block; }
     .prose code:not(pre code) { background-color: #1e293b; color: #38bdf8; padding: 0.1rem 0.3rem; border-radius: 0.25rem; font-size: 0.85em; overflow-wrap: anywhere; }
     
+    /* Elegant Google Maps & Standard Links */
+    .prose a { color: #818cf8; text-decoration: underline; text-underline-offset: 2px; }
+    .prose a:hover { color: #a5b4fc; }
+    .prose a[href*="maps.google.com"], .prose a[href*="google.com/maps"] {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+      background: rgba(99, 102, 241, 0.18);
+      border: 1px solid rgba(129, 140, 248, 0.45);
+      color: #c7d2fe !important;
+      text-decoration: none !important;
+      padding: 0.15rem 0.5rem;
+      border-radius: 0.5rem;
+      font-weight: 500;
+      font-size: 0.85em;
+      margin: 0.1rem 0;
+      transition: all 0.15s ease;
+      vertical-align: middle;
+    }
+    .prose a[href*="maps.google.com"]:hover, .prose a[href*="google.com/maps"]:hover {
+      background: rgba(99, 102, 241, 0.35);
+      border-color: rgba(129, 140, 248, 0.8);
+      color: #ffffff !important;
+      transform: scale(1.02);
+    }
+    
     .prose pre {
       position: relative;
       background-color: #0f172a;
