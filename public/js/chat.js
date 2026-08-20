@@ -156,21 +156,30 @@ function buildThinkingBlockHtml(thinking) {
 }
 
 // Append Message to UI
-function appendMessage(role, content, timestamp, tools = [], thinking = '') {
+function appendMessage(role, content, timestamp, tools = [], thinking = '', isBtw = false) {
   const isUser = role === 'user';
   const msgDiv = document.createElement('div');
   msgDiv.className = `flex gap-2.5 w-full max-w-2xl mx-auto min-w-0 ${isUser ? 'justify-end' : 'justify-start'}`;
 
+  const isUserBtw = isUser && (isBtw || /^\s*\/btw\b/i.test(content || ''));
+
   const avatar = isUser
-    ? `<div class="w-7 h-7 rounded-full bg-slate-700 flex items-center justify-center text-slate-300 shrink-0 text-xs font-bold order-2 mt-0.5">我</div>`
-    : `<div class="w-7 h-7 rounded-full bg-indigo-600/30 border border-indigo-500/50 flex items-center justify-center text-indigo-400 shrink-0 text-xs font-bold mt-0.5">AG</div>`;
+    ? `<div class="w-7 h-7 rounded-full ${isUserBtw ? 'bg-teal-600 text-white' : 'bg-slate-700 text-slate-300'} flex items-center justify-center shrink-0 text-xs font-bold order-2 mt-0.5 shadow-sm">我</div>`
+    : `<div class="w-7 h-7 rounded-full ${isBtw ? 'bg-teal-600/30 border-teal-500/50 text-teal-300' : 'bg-indigo-600/30 border-indigo-500/50 text-indigo-400'} border flex items-center justify-center shrink-0 text-xs font-bold mt-0.5">AG</div>`;
 
   const thinkingHtml = (!isUser && thinking) ? buildThinkingBlockHtml(thinking) : '';
   const toolsHtml = (!isUser && tools && tools.length > 0) ? buildToolsAccordionHtml(tools) : '';
 
-  const bubbleClass = isUser
-    ? 'bg-indigo-600 text-white rounded-2xl rounded-tr-none p-3 text-xs sm:text-sm shadow-md order-1 max-w-[85%] break-words'
-    : 'bg-slate-900 border border-slate-800 text-slate-200 rounded-2xl rounded-tl-none p-3.5 text-xs sm:text-sm shadow-md flex-1 min-w-0 prose';
+  let bubbleClass = '';
+  if (isUser) {
+    bubbleClass = isUserBtw
+      ? 'bg-gradient-to-r from-teal-700 to-indigo-600 text-white rounded-2xl rounded-tr-none p-3 text-xs sm:text-sm shadow-md order-1 max-w-[85%] break-words border border-teal-400/30'
+      : 'bg-indigo-600 text-white rounded-2xl rounded-tr-none p-3 text-xs sm:text-sm shadow-md order-1 max-w-[85%] break-words';
+  } else {
+    bubbleClass = isBtw
+      ? 'btw-card bg-gradient-to-b from-slate-900 via-slate-900 to-teal-950/40 border border-teal-500/50 text-slate-200 rounded-2xl rounded-tl-none p-3.5 text-xs sm:text-sm shadow-lg shadow-teal-950/30 flex-1 min-w-0 prose'
+      : 'bg-slate-900 border border-slate-800 text-slate-200 rounded-2xl rounded-tl-none p-3.5 text-xs sm:text-sm shadow-md flex-1 min-w-0 prose';
+  }
 
   let bodyHtml = '';
   if (isUser) {
@@ -182,13 +191,25 @@ function appendMessage(role, content, timestamp, tools = [], thinking = '') {
       imgHtml = `<img src="/api/image?path=${encodeURIComponent(imgP)}" class="max-h-48 sm:max-h-56 max-w-full rounded-xl object-contain border border-indigo-400/40 cursor-pointer shadow-md mb-2 bg-black/20 block" alt="Uploaded Photo">`;
       userText = userText.replace(/\[Uploaded Image:\s*([^\]]+)\]/, '').trim();
     }
-    bodyHtml = `${imgHtml}<div class="whitespace-pre-wrap leading-relaxed break-words">${escapeHtml(userText)}</div>`;
+    const btwBadge = isUserBtw ? `<div class="mb-1 flex items-center gap-1"><span class="px-1.5 py-0.2 rounded bg-teal-500/30 border border-teal-400/50 text-[10px] font-mono font-semibold text-teal-200">💬 順帶一提</span></div>` : '';
+    bodyHtml = `${imgHtml}${btwBadge}<div class="whitespace-pre-wrap leading-relaxed break-words">${escapeHtml(userText)}</div>`;
   } else {
     const timeStr = timestamp ? new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+    const btwHeader = isBtw ? `
+      <div class="flex items-center justify-between border-b border-teal-800/60 pb-1.5 mb-2 select-none">
+        <span class="px-2 py-0.5 rounded-full bg-teal-500/20 text-teal-300 border border-teal-500/40 text-[10px] font-mono font-semibold flex items-center gap-1">
+          <span class="w-1.5 h-1.5 rounded-full bg-teal-400 animate-pulse"></span>
+          💬 順帶一提 · 支線解答
+        </span>
+        <button type="button" class="btw-toggle-btn text-[10px] text-teal-400 hover:text-teal-200 font-mono transition px-1.5 py-0.5 rounded hover:bg-teal-900/40">收合 ▲</button>
+      </div>
+    ` : '';
+
     bodyHtml = `
+      ${btwHeader}
       <div class="thinking-container">${thinkingHtml}</div>
       <div class="tools-container">${toolsHtml}</div>
-      <div class="msg-content leading-relaxed min-w-0">${formatMessageContent(content)}</div>
+      <div class="btw-content msg-content leading-relaxed min-w-0">${formatMessageContent(content)}</div>
       <div class="msg-footer mt-2.5 pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400 select-none">
         <div class="flex items-center gap-2">
           <button type="button" class="tts-btn px-2 py-0.5 rounded-md hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition flex items-center gap-1 active:scale-95">
@@ -205,6 +226,17 @@ function appendMessage(role, content, timestamp, tools = [], thinking = '') {
 
   msgDiv.innerHTML = `${avatar}<div class="${bubbleClass}">${bodyHtml}</div>`;
   messagesContainer.appendChild(msgDiv);
+
+  if (isBtw && !isUser) {
+    const toggleBtn = msgDiv.querySelector('.btw-toggle-btn');
+    const btwCard = msgDiv.querySelector('.btw-card');
+    if (toggleBtn && btwCard) {
+      toggleBtn.addEventListener('click', () => {
+        const isCollapsed = btwCard.classList.toggle('collapsed');
+        toggleBtn.textContent = isCollapsed ? '展開 ▼' : '收合 ▲';
+      });
+    }
+  }
 
   msgDiv.querySelectorAll('img').forEach(img => {
     img.addEventListener('click', () => showLightbox(img.src));
@@ -255,7 +287,10 @@ async function loadConversationHistory(convId) {
     const data = await res.json();
     
     if (data.messages && data.messages.length > 0) {
-      data.messages.forEach(msg => appendMessage(msg.role, msg.content, msg.timestamp, msg.tools || [], msg.thinking || ''));
+      data.messages.forEach((msg, idx) => {
+        const isBtw = msg.role === 'assistant' && idx > 0 && /^\s*\/btw\b/i.test(data.messages[idx - 1].content || '');
+        appendMessage(msg.role, msg.content, msg.timestamp, msg.tools || [], msg.thinking || '', isBtw);
+      });
       const firstUserMsg = data.messages.find(m => m.role === 'user');
       if (headerTitle) headerTitle.textContent = (firstUserMsg && firstUserMsg.content) ? firstUserMsg.content.slice(0, 18) : '對話紀錄';
     } else {
@@ -374,9 +409,11 @@ async function sendMessage() {
   currentAbortController = new AbortController();
   setStreamingState(true);
 
+  const isBtwQuery = /^\s*\/btw\b/i.test(text);
+
   let userDisplay = text;
   if (imgPath) userDisplay = `[Uploaded Image: ${imgPath}]\n${userDisplay}`;
-  appendMessage('user', userDisplay);
+  appendMessage('user', userDisplay, undefined, [], '', isBtwQuery);
 
   promptInput.value = '';
   promptInput.style.height = 'auto';
@@ -393,20 +430,34 @@ async function sendMessage() {
 
   const assistantMsgDiv = document.createElement('div');
   assistantMsgDiv.className = 'flex gap-2.5 w-full max-w-2xl mx-auto justify-start min-w-0';
+
+  const avatarHtml = isBtwQuery
+    ? `<div class="w-7 h-7 rounded-full bg-teal-600/30 border border-teal-500/50 flex items-center justify-center text-teal-300 shrink-0 text-xs font-bold mt-0.5">AG</div>`
+    : `<div class="w-7 h-7 rounded-full bg-indigo-600/30 border border-indigo-500/50 flex items-center justify-center text-indigo-400 shrink-0 text-xs font-bold mt-0.5">AG</div>`;
+
+  const bubbleClass = isBtwQuery
+    ? 'btw-card bg-gradient-to-b from-slate-900 via-slate-900 to-teal-950/40 border border-teal-500/50 text-slate-200 rounded-2xl rounded-tl-none p-3.5 text-xs sm:text-sm shadow-lg shadow-teal-950/30 flex-1 min-w-0 prose'
+    : 'bg-slate-900 border border-slate-800 text-slate-200 rounded-2xl rounded-tl-none p-3.5 text-xs sm:text-sm shadow-md flex-1 min-w-0 prose';
+
+  const shimmerClass = isBtwQuery ? 'shimmer-bar-teal' : 'shimmer-bar';
+  const statusBorderClass = isBtwQuery ? 'border-teal-500/40 from-slate-900 to-teal-950/40' : 'border-indigo-500/30 from-slate-900 to-indigo-950/40';
+  const statusBadgeClass = isBtwQuery ? 'bg-teal-500/20 text-teal-300 border-teal-500/40' : 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40';
+  const statusInitText = isBtwQuery ? '💬 順帶一提解答中...' : '🧠 思考分析中...';
+
   assistantMsgDiv.innerHTML = `
-    <div class="w-7 h-7 rounded-full bg-indigo-600/30 border border-indigo-500/50 flex items-center justify-center text-indigo-400 shrink-0 text-xs font-bold mt-0.5">AG</div>
-    <div class="bg-slate-900 border border-slate-800 text-slate-200 rounded-2xl rounded-tl-none p-3.5 text-xs sm:text-sm shadow-md flex-1 min-w-0 prose">
+    ${avatarHtml}
+    <div class="${bubbleClass}">
       
       <!-- Live Cyberpunk Status Bar with Shimmer Line (Idea 2) -->
-      <div class="live-status mb-2.5 rounded-2xl bg-gradient-to-b from-slate-900 to-indigo-950/40 border border-indigo-500/30 overflow-hidden shadow-lg select-none">
-        <div class="shimmer-bar h-[2px] w-full"></div>
+      <div class="live-status mb-2.5 rounded-2xl bg-gradient-to-b ${statusBorderClass} border overflow-hidden shadow-lg select-none">
+        <div class="${shimmerClass} h-[2px] w-full"></div>
         <div class="p-2.5 flex flex-col gap-2">
           <!-- Top Row: Phase + Counters -->
           <div class="flex items-center justify-between gap-2 flex-wrap">
             <div class="flex items-center gap-1.5 min-w-0">
-              <span class="inline-block w-2 h-2 rounded-full bg-indigo-400 animate-ping shrink-0"></span>
-              <span class="text-[9px] px-1.5 py-0.5 rounded border font-mono font-semibold bg-indigo-500/20 text-indigo-300 border-indigo-500/40 shrink-0">${escapeHtml(modelLabel)}</span>
-              <span class="status-text truncate font-medium text-[11px] text-slate-200">🧠 思考分析中...</span>
+              <span class="inline-block w-2 h-2 rounded-full ${isBtwQuery ? 'bg-teal-400' : 'bg-indigo-400'} animate-ping shrink-0"></span>
+              <span class="text-[9px] px-1.5 py-0.5 rounded border font-mono font-semibold ${statusBadgeClass} shrink-0">${escapeHtml(modelLabel)}</span>
+              <span class="status-text truncate font-medium text-[11px] text-slate-200">${statusInitText}</span>
             </div>
             <!-- Counters: Tokens + Speed + Timer (Idea 3) -->
             <div class="flex items-center gap-1.5 shrink-0 text-[10px] font-mono">
@@ -428,7 +479,7 @@ async function sendMessage() {
 
       <div class="thinking-container"></div>
       <div class="tools-container"></div>
-      <div class="msg-content leading-relaxed min-w-0"><span class="inline-block w-2 h-4 bg-indigo-400 animate-pulse"></span></div>
+      <div class="btw-content msg-content leading-relaxed min-w-0"><span class="inline-block w-2 h-4 ${isBtwQuery ? 'bg-teal-400' : 'bg-indigo-400'} animate-pulse"></span></div>
     </div>
   `;
   messagesContainer.appendChild(assistantMsgDiv);
@@ -582,6 +633,28 @@ async function sendMessage() {
               const estTokens = Math.round(accumulatedText.length / 2);
               const avgSpeed = Math.round(estTokens / Math.max(0.5, totalSec));
 
+              if (isBtwQuery) {
+                let btwHeader = assistantMsgDiv.querySelector('.btw-header');
+                const cardEl = assistantMsgDiv.querySelector('.btw-card');
+                if (!btwHeader && cardEl) {
+                  btwHeader = document.createElement('div');
+                  btwHeader.className = 'btw-header flex items-center justify-between border-b border-teal-800/60 pb-1.5 mb-2 select-none';
+                  btwHeader.innerHTML = `
+                    <span class="px-2 py-0.5 rounded-full bg-teal-500/20 text-teal-300 border border-teal-500/40 text-[10px] font-mono font-semibold flex items-center gap-1">
+                      <span class="w-1.5 h-1.5 rounded-full bg-teal-400 animate-pulse"></span>
+                      💬 順帶一提 · 支線解答
+                    </span>
+                    <button type="button" class="btw-toggle-btn text-[10px] text-teal-400 hover:text-teal-200 font-mono transition px-1.5 py-0.5 rounded hover:bg-teal-900/40">收合 ▲</button>
+                  `;
+                  cardEl.insertBefore(btwHeader, cardEl.firstChild);
+                  const toggleBtn = btwHeader.querySelector('.btw-toggle-btn');
+                  toggleBtn.addEventListener('click', () => {
+                    const isCollapsed = cardEl.classList.toggle('collapsed');
+                    toggleBtn.textContent = isCollapsed ? '展開 ▼' : '收合 ▲';
+                  });
+                }
+              }
+
               // Append Action Footer with Stats, TTS and Copy All
               let footer = assistantMsgDiv.querySelector('.msg-footer');
               if (!footer) {
@@ -603,7 +676,8 @@ async function sendMessage() {
                     <span>· ${timeStr}</span>
                   </div>
                 `;
-                assistantMsgDiv.querySelector('.bg-slate-900').appendChild(footer);
+                const bubbleEl = assistantMsgDiv.querySelector('.btw-card') || assistantMsgDiv.querySelector('.bg-slate-900');
+                if (bubbleEl) bubbleEl.appendChild(footer);
                 const ttsBtn = footer.querySelector('.tts-btn');
                 ttsBtn.addEventListener('click', () => toggleSpeech(accumulatedText, ttsBtn));
               }

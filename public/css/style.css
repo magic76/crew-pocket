@@ -123,3 +123,18 @@ html, body {
   background-size: 250% 100%;
   animation: shimmer-flow 2.2s linear infinite;
 }
+.shimmer-bar-teal {
+  background: linear-gradient(90deg, #14b8a6, #2dd4bf, #06b6d4, #38bdf8, #14b8a6);
+  background-size: 250% 100%;
+  animation: shimmer-flow 2.2s linear infinite;
+}
+
+.btw-card {
+  transition: all 0.2s ease;
+}
+.btw-card.collapsed .btw-content,
+.btw-card.collapsed .thinking-container,
+.btw-card.collapsed .tools-container,
+.btw-card.collapsed .msg-footer {
+  display: none !important;
+}
