@@ -2200,7 +2200,82 @@
           assistantMsgDiv.querySelector('.bg-slate-900').appendChild(abortBadge);
           enhanceCodeBlocks(assistantMsgDiv);
         } else {
-          contentElem.innerHTML = `<span class="text-rose-400">發生錯誤：${err.message}</span>`;
+          // Graceful Disconnection Recovery (Solution 2)
+          console.warn('[SSE Disconnect] Stream interrupted:', err);
+          
+          if (accumulatedText && accumulatedText.trim()) {
+            // 1. Preserve all existing streamed text - NEVER wipe out screen!
+            contentElem.innerHTML = formatMessageContent(accumulatedText);
+            
+            // 2. Add Reconnecting Badge
+            const recoveryBadge = document.createElement('div');
+            recoveryBadge.className = 'recovery-badge mt-2 p-1.5 rounded-lg bg-indigo-950/60 border border-indigo-500/40 text-[10px] text-indigo-300 font-mono flex items-center justify-between gap-2';
+            recoveryBadge.innerHTML = `
+              <span class="flex items-center gap-1.5">
+                <span class="inline-block w-2 h-2 rounded-full bg-indigo-400 animate-ping"></span>
+                <span>連線暫時重置，正在自動補齊完整回覆...</span>
+              </span>
+            `;
+            assistantMsgDiv.querySelector('.bg-slate-900').appendChild(recoveryBadge);
+
+            // 3. Auto-query History API to recover complete response
+            if (currentConversationId) {
+              let attempts = 0;
+              const checkHistory = async () => {
+                attempts++;
+                try {
+                  const hRes = await fetch(`/api/history?id=${currentConversationId}`);
+                  if (hRes.ok) {
+                    const hData = await hRes.json();
+                    if (hData.messages && hData.messages.length > 0) {
+                      const lastAssistant = [...hData.messages].reverse().find(m => m.role === 'assistant');
+                      if (lastAssistant && lastAssistant.content && lastAssistant.content.length >= accumulatedText.length) {
+                        accumulatedText = lastAssistant.content;
+                        contentElem.innerHTML = formatMessageContent(accumulatedText);
+                        if (lastAssistant.tools && lastAssistant.tools.length > 0) {
+                          toolsContainerElem.innerHTML = buildToolsAccordionHtml(lastAssistant.tools);
+                        }
+                        if (lastAssistant.thinking) {
+                          thinkingContainerElem.innerHTML = buildThinkingBlockHtml(lastAssistant.thinking);
+                        }
+                        recoveryBadge.innerHTML = `
+                          <span class="flex items-center gap-1.5 text-emerald-300">
+                            <span class="text-emerald-400 font-bold">✓</span>
+                            <span>已成功同步並補齊完整回覆</span>
+                          </span>
+                        `;
+                        setTimeout(() => recoveryBadge.remove(), 4000);
+                        enhanceCodeBlocks(assistantMsgDiv);
+                        return;
+                      }
+                    }
+                  }
+                } catch (e) {}
+
+                if (attempts < 4) {
+                  setTimeout(checkHistory, attempts * 1500);
+                } else {
+                  recoveryBadge.innerHTML = `
+                    <span class="flex items-center gap-1 text-slate-400">
+                      <span>⚠️ 已保留現有回覆內容</span>
+                    </span>
+                    <button type="button" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-[10px]" onclick="loadConversationHistory('${currentConversationId}')">🔄 重整</button>
+                  `;
+                }
+              };
+              setTimeout(checkHistory, 1200);
+            }
+          } else {
+            // Empty response failed
+            contentElem.innerHTML = `
+              <div class="p-2 rounded-lg bg-rose-950/40 border border-rose-800/60 text-xs text-rose-300 flex items-center justify-between">
+                <span>連線中斷（${escapeHtml(err.message)}）</span>
+                <button type="button" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-[10px]" onclick="sendMessage()">重試</button>
+              </div>
+            `;
+          }
+
+          enhanceCodeBlocks(assistantMsgDiv);
         }
       } finally {
         clearInterval(liveTimerInterval);
