@@ -248,6 +248,9 @@
 
       <!-- Quick Action Chips Bar (Horizontally scrollable) -->
       <div class="flex items-center gap-1.5 overflow-x-auto py-0.5 px-0.5 no-scrollbar select-none text-[11px] font-medium shrink-0">
+        <button type="button" class="quick-chip shrink-0 px-2.5 py-1 rounded-full bg-slate-900/90 hover:bg-emerald-950/80 border border-slate-700/80 hover:border-emerald-500/60 text-slate-300 hover:text-emerald-300 flex items-center gap-1.5 transition active:scale-95 shadow-sm" data-fill="請推薦周邊景點並附上 Google 地圖一鍵導航卡片：">
+          <span>🗺️</span><span>景點導航</span>
+        </button>
         <button type="button" class="quick-chip shrink-0 px-2.5 py-1 rounded-full bg-slate-900/90 hover:bg-indigo-950/80 border border-slate-700/80 hover:border-indigo-500/60 text-slate-300 hover:text-indigo-300 flex items-center gap-1.5 transition active:scale-95 shadow-sm" data-fill="請幫我用 Chart.js 繪製一份圖表：">
           <span>📊</span><span>畫圖表</span>
         </button>
@@ -364,7 +367,21 @@
           <p class="text-slate-300 text-[11px]">AI 輸出的 HTML/SVG 會自動轉換為美觀卡片。點擊【開啟預覽】可全螢幕操作微型網頁，或展開對話內小窗直接互動。</p>
         </div>
 
-        <!-- 4. Android Floating Window -->
+        <!-- 4. Google Maps & Hardware Integration -->
+        <div class="p-3 rounded-xl bg-slate-950/80 border border-teal-500/30 space-y-1.5">
+          <div class="flex items-center justify-between">
+            <span class="font-semibold text-teal-300 flex items-center gap-1.5">
+              <span>🗺️</span> <span>Google 地圖一鍵導航 & 手機硬體</span>
+            </span>
+            <span class="text-[9px] px-1.5 py-0.5 rounded bg-teal-950 text-teal-400 border border-teal-800">隨身必備</span>
+          </div>
+          <p class="text-slate-300 text-[11px]">問旅遊/餐廳/景點時，AI 會主動附上一鍵導航卡。點擊【地鐵/步行導航】直接從您當前 GPS 位置喚醒 Google Maps 開始導航！亦支援手機震動、電量檢測與 GPS 定位。</p>
+          <div class="text-[10px] font-mono text-slate-400 bg-black/50 p-2 rounded border border-slate-800">
+            Prompt 範例：「推薦附近景點並附上 Google 地圖導航卡片」
+          </div>
+        </div>
+
+        <!-- 5. Android Floating Window -->
         <div class="p-3 rounded-xl bg-slate-950/80 border border-purple-500/30 space-y-1.5">
           <div class="flex items-center justify-between">
             <span class="font-semibold text-purple-300 flex items-center gap-1.5">
@@ -375,7 +392,7 @@
           <p class="text-slate-300 text-[11px]">在手機「多工任務畫面」中，長按 Antigravity 圖示選擇【以彈出視窗檢視】，即可縮小成懸浮泡泡，邊滑其他 App 邊叫出 AI！</p>
         </div>
 
-        <!-- 5. Slash Commands -->
+        <!-- 6. Slash Commands -->
         <div class="p-3 rounded-xl bg-slate-950/80 border border-slate-700/80 space-y-1.5">
           <div class="flex items-center justify-between">
             <span class="font-semibold text-slate-200 flex items-center gap-1.5">
