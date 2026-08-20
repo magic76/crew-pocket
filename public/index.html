@@ -33,6 +33,7 @@
   <!-- Highlight.js for Code Highlighting -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
   <style>
     *, *::before, *::after {
       box-sizing: border-box;
@@ -512,6 +513,12 @@
     let recognition = null;
     let isRecording = false;
     let userScrolledUp = false;
+    const activeBlobUrls = new Set();
+    
+    function revokeAllBlobUrls() {
+      activeBlobUrls.forEach(url => URL.revokeObjectURL(url));
+      activeBlobUrls.clear();
+    }
 
     // DOM Elements
     const messagesContainer = document.getElementById('messages-container');
@@ -949,6 +956,7 @@
         if (isHtml) {
           const blob = new Blob([rawCode], { type: 'text/html;charset=utf-8' });
           const blobUrl = URL.createObjectURL(blob);
+          activeBlobUrls.add(blobUrl);
           const typeLabel = lang === 'SVG' ? 'SVG 視覺圖形' : 'HTML 網頁產物';
 
           const card = document.createElement('div');
@@ -1011,6 +1019,7 @@
             if (detailsExpander.open && !sandboxContainer.querySelector('iframe')) {
               const inlineFrame = document.createElement('iframe');
               inlineFrame.className = 'w-full h-full border-0 absolute inset-0';
+              inlineFrame.sandbox = 'allow-scripts allow-forms allow-popups';
               inlineFrame.src = blobUrl;
               sandboxContainer.appendChild(inlineFrame);
             }
@@ -1183,47 +1192,80 @@
       const renderTarget = outputBox.querySelector('.render-target');
       const consoleBox = outputBox.querySelector('.console-box');
 
+      const iframe = document.createElement('iframe');
+      iframe.sandbox = "allow-scripts";
+      iframe.className = "w-full border-0";
+      iframe.style.minHeight = "300px";
+      
+      const htmlContent = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+          <style>
+            body { margin: 0; display: flex; flex-direction: column; align-items: center; background: transparent; color: white; font-family: monospace; }
+            canvas { max-width: 100%; border-radius: 0.5rem; border: 1px solid #1e293b; background: rgba(15, 23, 42, 0.6); }
+          </style>
+        </head>
+        <body>
+          <div id="container" style="width: 100%; display: flex; flex-direction: column; align-items: center;">
+            <canvas id="canvas"></canvas>
+          </div>
+          <script>
+            ['log', 'error', 'warn'].forEach(method => {
+              const original = console[method];
+              console[method] = function(...args) {
+                window.parent.postMessage({ type: 'console', method, args: args.map(a => typeof a === 'object' ? JSON.stringify(a, null, 2) : String(a)) }, '*');
+                original.apply(console, args);
+              };
+            });
+            try {
+              const container = document.getElementById('container');
+              const canvas = document.getElementById('canvas');
+              canvas.width = Math.min(window.innerWidth - 32, 480);
+              canvas.height = Math.round(canvas.width * 0.62);
+              const ctx = canvas.getContext('2d');
+              
+              ${rawCode}
+              
+              window.parent.postMessage({ type: 'done' }, '*');
+            } catch (err) {
+              console.error(err.message);
+              window.parent.postMessage({ type: 'error' }, '*');
+            }
+          </script>
+        </body>
+        </html>
+      `;
+      
+      iframe.srcdoc = htmlContent;
+      renderTarget.appendChild(iframe);
+
       const logs = [];
-      const customConsole = {
-        log: (...args) => {
-          logs.push(args.map(a => typeof a === 'object' ? JSON.stringify(a, null, 2) : String(a)).join(' '));
+      const messageHandler = (e) => {
+        if (e.source !== iframe.contentWindow) return;
+        
+        if (e.data.type === 'console') {
+          const prefix = e.data.method === 'error' ? '[ERR] ' : e.data.method === 'warn' ? '[WARN] ' : '';
+          logs.push(prefix + e.data.args.join(' '));
           consoleBox.classList.remove('hidden');
-          consoleBox.textContent = logs.join('\n');
-        },
-        error: (...args) => {
-          logs.push('[ERR] ' + args.map(a => typeof a === 'object' ? JSON.stringify(a, null, 2) : String(a)).join(' '));
-          consoleBox.classList.remove('hidden');
-          consoleBox.textContent = logs.join('\n');
-        },
-        warn: (...args) => {
-          logs.push('[WARN] ' + args.map(a => typeof a === 'object' ? JSON.stringify(a, null, 2) : String(a)).join(' '));
-          consoleBox.classList.remove('hidden');
-          consoleBox.textContent = logs.join('\n');
+          consoleBox.textContent = logs.join('\\n');
+        } else if (e.data.type === 'done') {
+          const elapsed = (performance.now() - startTs).toFixed(1);
+          outputBox.querySelector('span.font-mono').innerHTML = \`<span class="w-2 h-2 rounded-full bg-emerald-400"></span> 🌐 瀏覽器渲染完成 (\${elapsed}ms)\`;
+          if (navigator.vibrate) navigator.vibrate(30);
+        } else if (e.data.type === 'error') {
+          outputBox.querySelector('span.font-mono').innerHTML = \`<span class="w-2 h-2 rounded-full bg-rose-400"></span> 🌐 執行報錯\`;
         }
       };
+      window.addEventListener('message', messageHandler);
 
-      // Create an automatic Canvas context
-      const canvas = document.createElement('canvas');
-      canvas.className = 'max-w-full rounded-xl border border-slate-800 bg-slate-900/60 shadow-inner';
-      const canvasWidth = Math.min(window.innerWidth - 64, 480);
-      canvas.width = canvasWidth;
-      canvas.height = Math.round(canvasWidth * 0.62);
-      const ctx = canvas.getContext('2d');
-      renderTarget.appendChild(canvas);
-
-      try {
-        const fn = new Function('container', 'canvas', 'ctx', 'console', 'Chart', rawCode);
-        const result = fn(renderTarget, canvas, ctx, customConsole, window.Chart);
-        if (result !== undefined && result !== null) {
-          customConsole.log(result);
-        }
-        const elapsed = (performance.now() - startTs).toFixed(1);
-        outputBox.querySelector('span.font-mono').innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-400"></span> 🌐 瀏覽器渲染完成 (${elapsed}ms)`;
-        if (navigator.vibrate) navigator.vibrate(30);
-      } catch (err) {
-        customConsole.error(err.message);
-        outputBox.querySelector('span.font-mono').innerHTML = `<span class="w-2 h-2 rounded-full bg-rose-400"></span> 🌐 執行報錯`;
-      }
+      const closeBtn = outputBox.querySelector('.close-output-btn');
+      const originalOnclick = closeBtn.onclick;
+      closeBtn.onclick = () => {
+        window.removeEventListener('message', messageHandler);
+        originalOnclick();
+      };
     }
 
     // TTS Web Speech Synthesis
@@ -1311,10 +1353,22 @@
     // Transform local image paths into proxy URL
     function formatMessageContent(content) {
       if (!content) return '';
-      let formatted = content.replace(/((\/data\/data\/|\/storage\/|\/sdcard\/)[^\s\)\"\'\<\>]+\.(png|jpg|jpeg|webp|svg|gif))/gi, (match) => {
+      
+      const codeBlocks = [];
+      let currentContent = content.replace(/```[\s\S]*?```/g, (match) => {
+        codeBlocks.push(match);
+        return `__CODE_BLOCK_${codeBlocks.length - 1}__`;
+      });
+      
+      let formatted = currentContent.replace(/((\/data\/data\/|\/storage\/|\/sdcard\/)[^\s\)\"\'\<\>]+\.(png|jpg|jpeg|webp|svg|gif))/gi, (match) => {
         return `/api/image?path=${encodeURIComponent(match)}`;
       });
-      return marked.parse(formatted);
+      
+      formatted = formatted.replace(/__CODE_BLOCK_(\d+)__/g, (match, index) => {
+        return codeBlocks[index];
+      });
+
+      return DOMPurify.sanitize(marked.parse(formatted), { ADD_ATTR: ['target'], ALLOW_DATA_ATTR: false });
     }
 
     // Helper: format tool info with rich metadata, category badges & icons
@@ -1540,6 +1594,7 @@
     async function loadConversationHistory(convId) {
       currentConversationId = convId;
       localStorage.setItem('agy_active_conv_id', convId);
+      revokeAllBlobUrls();
       messagesContainer.innerHTML = '';
       toggleDrawer(false);
 
@@ -1606,6 +1661,7 @@
     newChatBtn.addEventListener('click', () => {
       currentConversationId = null;
       localStorage.removeItem('agy_active_conv_id');
+      revokeAllBlobUrls();
       headerTitle.textContent = '新對話';
       messagesContainer.innerHTML = '';
       appendMessage('assistant', '你好！已為你開啟新對話。有什麼可以幫你的？');
@@ -1854,6 +1910,7 @@
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let buffer = '';
+        let currentEvent = 'message';
 
         while (true) {
           const { value, done } = await reader.read();
@@ -1863,9 +1920,10 @@
           const lines = buffer.split('\n');
           buffer = lines.pop();
 
-          let currentEvent = 'message';
           for (const line of lines) {
-            if (line.startsWith('event:')) {
+            if (line === '') {
+              currentEvent = 'message';
+            } else if (line.startsWith('event:')) {
               currentEvent = line.replace('event:', '').trim();
             } else if (line.startsWith('data:')) {
               const rawData = line.replace('data:', '').trim();

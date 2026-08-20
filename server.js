@@ -35,18 +35,40 @@ const MIME_TYPES = {
 function parseJsonBody(req) {
   return new Promise((resolve, reject) => {
     let body = '';
-    req.on('data', chunk => {
+    let done = false;
+
+    const onData = chunk => {
+      if (done) return;
       body += chunk.toString();
-      if (body.length > 50 * 1024 * 1024) reject(new Error('Payload too large'));
-    });
-    req.on('end', () => {
+      if (body.length > 50 * 1024 * 1024) {
+        done = true;
+        req.removeListener('data', onData);
+        req.removeListener('end', onEnd);
+        req.removeListener('error', onError);
+        req.destroy();
+        reject(new Error('Payload too large'));
+      }
+    };
+
+    const onEnd = () => {
+      if (done) return;
+      done = true;
       try {
         resolve(body ? JSON.parse(body) : {});
       } catch (err) {
         reject(err);
       }
-    });
-    req.on('error', reject);
+    };
+
+    const onError = (err) => {
+      if (done) return;
+      done = true;
+      reject(err);
+    };
+
+    req.on('data', onData);
+    req.on('end', onEnd);
+    req.on('error', onError);
   });
 }
 
@@ -65,10 +87,17 @@ function cleanUserContent(raw) {
 class ActiveSessionManager {
   constructor() {
     this.current = null; // { conversationId, process, emitter, isBusy, idleTimer, buffer }
+    this.initPromise = null;
   }
 
   // Get or initialize persistent session
   async getOrCreateSession(targetConversationId, targetModel) {
+    if (this.initPromise) {
+      try {
+        await this.initPromise;
+      } catch (e) {}
+    }
+
     // If targetConversationId matches current running session AND model matches (if specified), reuse it!
     if (targetConversationId && this.current && this.current.process && !this.current.process.killed) {
       const modelMatches = !targetModel || this.current.model === targetModel;
@@ -131,10 +160,11 @@ class ActiveSessionManager {
     let initDone = false;
     let timeoutTimer = null;
 
-    const initPromise = new Promise((resolve, reject) => {
+    this.initPromise = new Promise((resolve, reject) => {
       timeoutTimer = setTimeout(() => {
         if (!initDone) {
           initDone = true;
+          try { child.kill('SIGKILL'); } catch (e) {}
           reject(new Error('Timeout waiting for agy process initialization'));
         }
       }, 15000);
@@ -208,7 +238,11 @@ class ActiveSessionManager {
       }
     });
 
-    await initPromise;
+    try {
+      await this.initPromise;
+    } finally {
+      this.initPromise = null;
+    }
     return sessionObj;
   }
 
@@ -302,9 +336,9 @@ async function handleListConversations(res) {
 async function handleGetHistory(parsedUrl, res) {
   try {
     const convId = parsedUrl.query.id;
-    if (!convId) {
+    if (!convId || !/^[a-zA-Z0-9_\-]+$/.test(convId)) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
-      return res.end(JSON.stringify({ error: 'Missing conversation id' }));
+      return res.end(JSON.stringify({ error: 'Invalid conversation id' }));
     }
 
     const logPath = path.join(BRAIN_DIR, convId, '.system_generated', 'logs', 'transcript.jsonl');
@@ -403,16 +437,27 @@ async function handleDeleteConversation(parsedUrl, res) {
 
 async function handleImageProxy(parsedUrl, res) {
   const imgPath = parsedUrl.query.path;
-  if (!imgPath || !fs.existsSync(imgPath)) {
+  if (!imgPath) {
     res.writeHead(404, { 'Content-Type': 'text/plain' });
     return res.end('Image not found');
   }
 
-  const ext = path.extname(imgPath).toLowerCase();
+  const resolvedPath = path.resolve(imgPath);
+  if (!resolvedPath.startsWith(UPLOADS_DIR + path.sep) && !resolvedPath.startsWith(BRAIN_DIR + path.sep)) {
+    res.writeHead(403, { 'Content-Type': 'text/plain' });
+    return res.end('Forbidden');
+  }
+
+  if (!fs.existsSync(resolvedPath)) {
+    res.writeHead(404, { 'Content-Type': 'text/plain' });
+    return res.end('Image not found');
+  }
+
+  const ext = path.extname(resolvedPath).toLowerCase();
   const contentType = MIME_TYPES[ext] || 'application/octet-stream';
 
   try {
-    const data = await fsPromises.readFile(imgPath);
+    const data = await fsPromises.readFile(resolvedPath);
     res.writeHead(200, {
       'Content-Type': contentType,
       'Cache-Control': 'public, max-age=86400'
@@ -654,12 +699,15 @@ async function handleChat(req, res) {
   }
 
   // Set SSE Headers
-  res.writeHead(200, {
+  const origin = req.headers.origin;
+  const allowOrigin = (origin && /^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/.test(origin)) ? origin : '';
+  const headers = {
     'Content-Type': 'text/event-stream; charset=utf-8',
     'Cache-Control': 'no-cache, no-transform',
-    'Connection': 'keep-alive',
-    'Access-Control-Allow-Origin': '*'
-  });
+    'Connection': 'keep-alive'
+  };
+  if (allowOrigin) headers['Access-Control-Allow-Origin'] = allowOrigin;
+  res.writeHead(200, headers);
 
   const sendEvent = (event, data) => {
     res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
@@ -711,14 +759,22 @@ async function handleChat(req, res) {
       sendEvent('chunk', { delta: line + '\n', accumulated: fullResponse });
     };
 
+    const onClose = (code) => {
+      sendEvent('done', { error: `agy process crashed or closed with code ${code}` });
+      cleanup();
+      res.end();
+    };
+
     session.emitter.on('event', onEvent);
     session.emitter.on('raw', onRaw);
+    if (session.process) session.process.on('close', onClose);
 
     function cleanup() {
       if (session) {
         session.isBusy = false;
         session.emitter.removeListener('event', onEvent);
         session.emitter.removeListener('raw', onRaw);
+        if (session.process) session.process.removeListener('close', onClose);
       }
       sessionManager.resetIdleTimer();
     }
@@ -795,7 +851,13 @@ async function handleStop(req, res) {
 }
 
 const server = http.createServer(async (req, res) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  const origin = req.headers.origin;
+  if (origin && /^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/.test(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  } else if (req.method === 'GET') {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+  }
+
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
