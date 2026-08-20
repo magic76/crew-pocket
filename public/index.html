@@ -579,14 +579,15 @@
       });
     });
 
-    // Enter to send (Shift+Enter for newline, with IME composition protection)
+    // Enter key: purely insert newline (Ctrl+Enter or Cmd+Enter to send)
     promptInput.addEventListener('keydown', (e) => {
       if (e.isComposing || e.keyCode === 229) return;
-      if (e.key === 'Enter' && !e.shiftKey) {
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
         e.preventDefault();
         slashMenu.classList.add('hidden');
         sendMessage();
       }
+      // Pure Enter defaults to native newline and auto-resizes
     });
 
     // Drawer Toggle
