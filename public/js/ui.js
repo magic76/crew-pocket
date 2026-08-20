@@ -1,0 +1,307 @@
+// Antigravity Web UI - UI State, Modals & Helpers
+
+// Global State
+let currentConversationId = null;
+let currentModel = localStorage.getItem('agy_current_model') || 'gemini-3.7-flash-high';
+let availableModels = [];
+let uploadedImagePath = null;
+let isStreaming = false;
+let currentAbortController = null;
+let recognition = null;
+let isRecording = false;
+let userScrolledUp = false;
+let notificationsEnabled = localStorage.getItem('agy_notify_enabled') !== 'false';
+let swRegistration = null;
+let streamingStartedAt = 0;
+const activeBlobUrls = new Set();
+
+function revokeAllBlobUrls() {
+  activeBlobUrls.forEach(url => URL.revokeObjectURL(url));
+  activeBlobUrls.clear();
+}
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text || '';
+  return div.innerHTML;
+}
+
+// DOM Elements Reference
+const messagesContainer = document.getElementById('messages-container');
+const promptInput = document.getElementById('prompt-input');
+const sendBtn = document.getElementById('send-btn');
+const sendIcon = document.getElementById('send-icon');
+const stopIcon = document.getElementById('stop-icon');
+const camBtn = document.getElementById('cam-btn');
+const micBtn = document.getElementById('mic-btn');
+const cameraInput = document.getElementById('camera-input');
+const imagePreviewContainer = document.getElementById('image-preview-container');
+const previewThumb = document.getElementById('preview-thumb');
+const previewFilename = document.getElementById('preview-filename');
+const previewFilesize = document.getElementById('preview-filesize');
+const removeImageBtn = document.getElementById('remove-image-btn');
+const menuBtn = document.getElementById('menu-btn');
+const drawer = document.getElementById('drawer');
+const drawerOverlay = document.getElementById('drawer-overlay');
+const closeDrawerBtn = document.getElementById('close-drawer-btn');
+const convList = document.getElementById('conv-list');
+const newChatBtn = document.getElementById('new-chat-btn');
+const notifyBtn = document.getElementById('notify-btn');
+const headerTitle = document.getElementById('header-title');
+const slashMenu = document.getElementById('slash-menu');
+const lightbox = document.getElementById('lightbox');
+const lightboxImg = document.getElementById('lightbox-img');
+const closeLightboxBtn = document.getElementById('close-lightbox-btn');
+const cheatSheetBtn = document.getElementById('cheat-sheet-btn');
+const cheatSheetModal = document.getElementById('cheat-sheet-modal');
+const closeCheatSheetBtn = document.getElementById('close-cheat-sheet-btn');
+const openCheatChip = document.getElementById('open-cheat-chip');
+const usageBtn = document.getElementById('usage-btn');
+const usageModal = document.getElementById('usage-modal');
+const closeUsageBtn = document.getElementById('close-usage-btn');
+const openUsageChip = document.getElementById('open-usage-chip');
+const refreshUsageBtn = document.getElementById('refresh-usage-btn');
+const usageBarsContainer = document.getElementById('usage-bars-container');
+const modelSelectorBtn = document.getElementById('model-selector-btn');
+const modelModal = document.getElementById('model-modal');
+const closeModelBtn = document.getElementById('close-model-btn');
+const modelOptionsContainer = document.getElementById('model-options-container');
+const modelBadgeIcon = document.getElementById('model-badge-icon');
+const modelDisplayName = document.getElementById('model-display-name');
+const networkDot = document.getElementById('network-dot');
+const networkOfflineBadge = document.getElementById('network-offline-badge');
+const gpsChip = document.getElementById('gps-chip');
+
+// Smart Scroll
+function scrollToBottom(force = false) {
+  if (force || !userScrolledUp) {
+    if (messagesContainer) messagesContainer.scrollTop = messagesContainer.scrollHeight;
+  }
+}
+
+// Copy to Clipboard
+function copyToClipboard(text, btn) {
+  navigator.clipboard.writeText(text).then(() => {
+    const original = btn.innerHTML;
+    btn.innerHTML = `<span class="text-emerald-400 font-medium">✓ 已複製</span>`;
+    setTimeout(() => { btn.innerHTML = original; }, 1800);
+  }).catch(() => {
+    alert('複製失敗');
+  });
+}
+
+// Lightbox
+function showLightbox(src) {
+  if (lightboxImg && lightbox) {
+    lightboxImg.src = src;
+    lightbox.classList.remove('opacity-0', 'pointer-events-none');
+  }
+}
+
+// Drawer Toggle
+function toggleDrawer(open) {
+  if (!drawer || !drawerOverlay) return;
+  if (open) {
+    drawer.classList.remove('-translate-x-full');
+    drawerOverlay.classList.remove('opacity-0', 'pointer-events-none');
+    if (typeof loadConversations === 'function') loadConversations();
+  } else {
+    drawer.classList.add('-translate-x-full');
+    drawerOverlay.classList.add('opacity-0', 'pointer-events-none');
+  }
+}
+
+// Capabilities Cheat Sheet Modal Handlers
+function toggleCheatSheet(open) {
+  if (!cheatSheetModal) return;
+  if (open) {
+    cheatSheetModal.classList.remove('opacity-0', 'pointer-events-none');
+  } else {
+    cheatSheetModal.classList.add('opacity-0', 'pointer-events-none');
+  }
+}
+
+// Usage Quota Modal Handlers
+function toggleUsageModal(open) {
+  if (!usageModal) return;
+  if (open) {
+    usageModal.classList.remove('opacity-0', 'pointer-events-none');
+    loadUsageData();
+  } else {
+    usageModal.classList.add('opacity-0', 'pointer-events-none');
+  }
+}
+
+async function loadUsageData() {
+  if (!usageBarsContainer) return;
+  usageBarsContainer.innerHTML = `
+    <div class="text-center py-6 text-slate-400 text-xs flex flex-col items-center gap-2 font-sans">
+      <span class="inline-block w-5 h-5 rounded-full border-2 border-indigo-400 border-t-transparent animate-spin"></span>
+      <span>正在執行 agy /usage 查詢即時配額...</span>
+    </div>
+  `;
+
+  try {
+    const res = await fetch('/api/usage');
+    const data = await res.json();
+
+    if (data.quotas && data.quotas.length > 0) {
+      usageBarsContainer.innerHTML = data.quotas.map(q => {
+        const pct = q.percent;
+        let barColor = 'bg-emerald-500';
+        let textColor = 'text-emerald-400';
+        if (pct < 20) {
+          barColor = 'bg-rose-500';
+          textColor = 'text-rose-400';
+        } else if (pct < 50) {
+          barColor = 'bg-amber-500';
+          textColor = 'text-amber-400';
+        }
+
+        const resetTime = q.resetAt ? new Date(q.resetAt).toLocaleString('zh-TW', { hour12: false, month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
+
+        return `
+          <div class="p-3 rounded-xl bg-slate-950/90 border border-slate-800 space-y-1.5 font-sans shadow-sm">
+            <div class="flex items-center justify-between text-xs">
+              <span class="font-bold text-white">${escapeHtml(q.model)}</span>
+              <span class="font-mono font-bold ${textColor}">${pct}% 剩餘</span>
+            </div>
+            <div class="w-full h-2 rounded-full bg-slate-800 overflow-hidden">
+              <div class="h-full rounded-full ${barColor} transition-all duration-500" style="width: ${pct}%"></div>
+            </div>
+            <div class="flex items-center justify-between text-[10px] text-slate-400 font-mono">
+              <span>${escapeHtml(q.type)}</span>
+              ${resetTime ? `<span>重置: ${resetTime}</span>` : ''}
+            </div>
+          </div>
+        `;
+      }).join('');
+    } else {
+      usageBarsContainer.innerHTML = `
+        <div class="p-3 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-300 font-mono whitespace-pre-wrap">${escapeHtml(data.raw || '未能解析到配額資訊')}</div>
+      `;
+    }
+  } catch (err) {
+    usageBarsContainer.innerHTML = `
+      <div class="p-3 rounded-xl bg-rose-950/50 border border-rose-800 text-xs text-rose-300">查詢失敗: ${escapeHtml(err.message)}</div>
+    `;
+  }
+}
+
+// Model Selector Modal Handlers
+function updateModelUI() {
+  const found = availableModels.find(m => m.id === currentModel);
+  if (found) {
+    if (modelBadgeIcon) modelBadgeIcon.textContent = found.icon;
+    if (modelDisplayName) modelDisplayName.textContent = found.name;
+  } else {
+    if (modelBadgeIcon) modelBadgeIcon.textContent = '✨';
+    if (modelDisplayName) modelDisplayName.textContent = currentModel.replace('gemini-', 'Gemini ').replace('claude-', 'Claude ');
+  }
+}
+
+function toggleModelModal(open) {
+  if (!modelModal) return;
+  if (open) {
+    modelModal.classList.remove('opacity-0', 'pointer-events-none');
+    loadModelsList();
+  } else {
+    modelModal.classList.add('opacity-0', 'pointer-events-none');
+  }
+}
+
+async function loadModelsList() {
+  if (!modelOptionsContainer) return;
+  try {
+    if (availableModels.length === 0) {
+      const res = await fetch('/api/models');
+      const data = await res.json();
+      availableModels = data.models || [];
+    }
+
+    modelOptionsContainer.innerHTML = availableModels.map(m => {
+      const isSelected = (m.id === currentModel);
+      const activeRing = isSelected ? 'ring-2 ring-indigo-500 bg-indigo-950/50 border-indigo-500/80' : 'bg-slate-950/80 border-slate-800 hover:border-slate-700';
+
+      return `
+        <button type="button" class="w-full text-left p-3 rounded-xl border ${activeRing} transition active:scale-[0.98] flex items-center justify-between gap-2 shadow-sm font-sans" onclick="selectModel('${m.id}')">
+          <div class="flex items-center gap-2.5 min-w-0">
+            <span class="text-xl shrink-0">${m.icon}</span>
+            <div class="min-w-0">
+              <div class="flex items-center gap-1.5">
+                <span class="font-bold text-xs text-white truncate">${escapeHtml(m.name)}</span>
+                <span class="text-[9px] px-1.5 py-0.5 rounded border font-mono ${m.badgeColor}">${m.badge}</span>
+              </div>
+              <div class="text-[11px] text-slate-400 truncate mt-0.5">${escapeHtml(m.desc)}</div>
+            </div>
+          </div>
+          ${isSelected ? '<span class="text-indigo-400 font-bold text-sm shrink-0">✓</span>' : ''}
+        </button>
+      `;
+    }).join('');
+
+  } catch (e) {
+    modelOptionsContainer.innerHTML = `<div class="p-3 text-xs text-rose-400">載入模型清單失敗</div>`;
+  }
+}
+
+window.selectModel = function(modelId) {
+  currentModel = modelId;
+  localStorage.setItem('agy_current_model', currentModel);
+  updateModelUI();
+  toggleModelModal(false);
+  if (navigator.vibrate) navigator.vibrate(20);
+  console.log(`🤖 已切換 AI 核心模型至: ${currentModel}`);
+};
+
+// Push Notification Helpers
+async function triggerDoneNotification(text) {
+  if (!notificationsEnabled || !('Notification' in window) || Notification.permission !== 'granted') return;
+
+  const cleanSummary = (text || '回覆已完成')
+    .replace(/\p{Extended_Pictographic}/gu, '')
+    .replace(/[*#_~`<>]/g, '')
+    .trim()
+    .slice(0, 70);
+
+  const notifOptions = {
+    body: `✨ ${cleanSummary || '回覆已生成完畢！'}`,
+    tag: 'agy-done',
+    renotify: true,
+    vibrate: [200, 100, 200]
+  };
+
+  if (swRegistration && swRegistration.showNotification) {
+    try {
+      await swRegistration.showNotification('Antigravity 隨身助理', notifOptions);
+      return;
+    } catch (e) {
+      console.warn('[SW showNotification error]', e);
+    }
+  }
+
+  try {
+    const n = new Notification('Antigravity 隨身助理', notifOptions);
+    n.onclick = () => {
+      window.focus();
+      n.close();
+    };
+  } catch (e) {}
+}
+
+function updateNotifyBtnUI() {
+  if (!notifyBtn) return;
+  if (!('Notification' in window)) {
+    notifyBtn.style.display = 'none';
+    return;
+  }
+  if (Notification.permission === 'granted' && notificationsEnabled) {
+    notifyBtn.classList.add('text-indigo-400', 'bg-indigo-600/20');
+    notifyBtn.classList.remove('text-slate-400');
+    notifyBtn.title = '通知已開啟 (點擊測試/關閉)';
+  } else {
+    notifyBtn.classList.remove('text-indigo-400', 'bg-indigo-600/20');
+    notifyBtn.classList.add('text-slate-400');
+    notifyBtn.title = '通知已關閉 (點擊開啟)';
+  }
+}

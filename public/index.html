@@ -12,6 +12,7 @@
   <link rel="icon" type="image/jpeg" href="/icon.jpg">
   <link rel="apple-touch-icon" href="/icon-192.jpg">
   <title>Antigravity 隨身助理</title>
+  
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
@@ -26,136 +27,22 @@
       }
     }
   </script>
+  
   <!-- Marked.js for Markdown -->
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  
   <!-- Chart.js for Live Data Visualization -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  
   <!-- Highlight.js for Code Highlighting -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  
   <!-- DOMPurify Local for Offline & Zero-Latency Sanitization -->
   <script src="/dompurify.min.js"></script>
-  <style>
-    *, *::before, *::after {
-      box-sizing: border-box;
-    }
-    html, body {
-      height: 100%;
-      height: 100dvh;
-      width: 100%;
-      max-width: 100vw;
-      margin: 0;
-      padding: 0;
-      overflow-x: hidden;
-      overflow-y: hidden;
-      background-color: #020617;
-    }
-    
-    /* Custom Scrollbar */
-    ::-webkit-scrollbar { width: 3px; height: 3px; }
-    ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
-    
-    /* Strict Markdown & Text Responsive Wrapping */
-    .prose {
-      width: 100%;
-      max-width: 100%;
-      min-width: 0;
-      overflow-wrap: anywhere;
-      word-break: break-word;
-    }
-    .prose p { margin-bottom: 0.65rem; line-height: 1.6; }
-    .prose p:last-child { margin-bottom: 0; }
-    .prose h1, .prose h2, .prose h3, .prose h4 { font-weight: 700; margin-top: 0.85rem; margin-bottom: 0.4rem; color: #f8fafc; }
-    .prose h1 { font-size: 1.25rem; }
-    .prose h2 { font-size: 1.1rem; }
-    .prose h3 { font-size: 1rem; }
-    .prose ul, .prose ol { margin-left: 1.1rem; margin-bottom: 0.65rem; }
-    .prose ul { list-style-type: disc; }
-    .prose ol { list-style-type: decimal; }
-    .prose li { margin-bottom: 0.25rem; }
-    
-    /* Prevent table horizontal overflow */
-    .table-wrapper {
-      width: 100%;
-      max-width: 100%;
-      overflow-x: auto;
-      margin: 0.65rem 0;
-      border-radius: 0.5rem;
-      border: 1px solid #334155;
-    }
-    .prose table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 0.8rem;
-    }
-    .prose th, .prose td {
-      border: 1px solid #334155;
-      padding: 0.4rem 0.6rem;
-      text-align: left;
-    }
-    .prose th { background-color: #1e293b; font-weight: 600; }
-    .prose tr:nth-child(even) { background-color: #0f172a; }
-    
-    .prose blockquote { border-left: 3px solid #6366f1; padding-left: 0.6rem; color: #94a3b8; margin: 0.65rem 0; font-size: 0.9em; }
-    .prose img { max-width: 100%; height: auto; border-radius: 0.5rem; margin: 0.65rem 0; border: 1px solid #334155; cursor: pointer; display: block; }
-    .prose code:not(pre code) { background-color: #1e293b; color: #38bdf8; padding: 0.1rem 0.3rem; border-radius: 0.25rem; font-size: 0.85em; overflow-wrap: anywhere; }
-    
-    /* Elegant Google Maps & Standard Links */
-    .prose a { color: #818cf8; text-decoration: underline; text-underline-offset: 2px; }
-    .prose a:hover { color: #a5b4fc; }
-    .prose a[href*="maps.google.com"], .prose a[href*="google.com/maps"] {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.25rem;
-      background: rgba(99, 102, 241, 0.18);
-      border: 1px solid rgba(129, 140, 248, 0.45);
-      color: #c7d2fe !important;
-      text-decoration: none !important;
-      padding: 0.15rem 0.5rem;
-      border-radius: 0.5rem;
-      font-weight: 500;
-      font-size: 0.85em;
-      margin: 0.1rem 0;
-      transition: all 0.15s ease;
-      vertical-align: middle;
-    }
-    .prose a[href*="maps.google.com"]:hover, .prose a[href*="google.com/maps"]:hover {
-      background: rgba(99, 102, 241, 0.35);
-      border-color: rgba(129, 140, 248, 0.8);
-      color: #ffffff !important;
-      transform: scale(1.02);
-    }
-    
-    .prose pre {
-      position: relative;
-      background-color: #0f172a;
-      border: 1px solid #334155;
-      border-radius: 0.5rem;
-      padding: 0.65rem;
-      margin: 0.65rem 0;
-      max-width: 100%;
-      overflow-x: auto;
-      white-space: pre;
-    }
-    
-    @keyframes pulse-ring {
-      0% { transform: scale(0.95); opacity: 0.8; }
-      50% { transform: scale(1.15); opacity: 0.3; }
-      100% { transform: scale(0.95); opacity: 0.8; }
-    }
-    .recording-pulse { animation: pulse-ring 1.5s infinite; }
 
-    @keyframes shimmer-flow {
-      0% { background-position: -200% 0; }
-      100% { background-position: 200% 0; }
-    }
-    .shimmer-bar {
-      background: linear-gradient(90deg, #6366f1, #38bdf8, #a855f7, #ec4899, #6366f1);
-      background-size: 250% 100%;
-      animation: shimmer-flow 2.2s linear infinite;
-    }
-  </style>
+  <!-- Modular Stylesheet -->
+  <link rel="stylesheet" href="/css/style.css">
 </head>
 <body class="bg-slate-950 text-slate-100 flex flex-col h-[100dvh] w-full max-w-full overflow-hidden">
 
@@ -248,52 +135,60 @@
         <div class="bg-slate-900 border border-slate-800 rounded-2xl rounded-tl-none p-3.5 text-xs sm:text-sm text-slate-200 shadow-md flex-1 min-w-0 prose">
           <p class="font-semibold text-white mb-1">你好！我是你的 Antigravity 隨身助理 🚀</p>
           <p class="text-slate-300 leading-relaxed">
-            我可以幫你查詢行程、分析相機照片、翻譯菜單、閱讀電子車票或執行手機上的各項任務。請使用下方輸入框打字、語音說話或拍照！
+            我具備<b>即時相機視覺辨識</b>、<b>雙向中文語音對話</b>、<b>Python / Bash 後端沙盒執行</b>、<b>Chart.js 瀏覽器圖表動態渲染</b>以及<b>Google Maps 一鍵導航卡片</b>等超能力。
           </p>
+          <div class="mt-2.5 pt-2 border-t border-slate-800 text-[11px] text-slate-400 flex flex-wrap gap-x-3 gap-y-1">
+            <span>💡 提示詞開頭輸入 <code class="text-indigo-300 bg-indigo-950 px-1 py-0.5 rounded">/</code> 可呼叫快捷指令</span>
+            <span>📱 點擊下方膠囊可快速測試各種超能力</span>
+          </div>
         </div>
       </div>
     </main>
   </div>
 
-  <!-- FIXED/PINNED BOTTOM INPUT BAR -->
-  <footer class="bg-slate-900/95 backdrop-blur border-t border-slate-800 p-2 pb-[max(0.6rem,env(safe-area-inset-bottom))] shrink-0 z-20 shadow-2xl w-full max-w-full">
-    <div class="w-full max-w-2xl mx-auto flex flex-col gap-1.5 min-w-0">
+  <!-- BOTTOM INPUT BAR -->
+  <footer class="bg-slate-900/95 backdrop-blur border-t border-slate-800 p-2 sm:p-3 shrink-0 z-10 w-full max-w-full">
+    <div class="max-w-2xl mx-auto flex flex-col gap-1.5 relative w-full">
       
-      <!-- Image Preview Thumbnail (if uploaded) -->
-      <div id="image-preview-container" class="hidden relative inline-flex items-center gap-2 bg-slate-800 border border-slate-700 rounded-lg p-1.5 w-fit max-w-full">
-        <img id="preview-thumb" src="" class="w-10 h-10 object-cover rounded" alt="Preview">
-        <div class="flex flex-col">
-          <span id="preview-filename" class="text-xs text-slate-200 max-w-[120px] truncate font-medium">photo.jpg</span>
-          <span id="preview-filesize" class="text-[10px] text-emerald-400">已自動優化壓縮</span>
+      <!-- Slash Command Autocomplete Popover -->
+      <div id="slash-menu" class="hidden absolute bottom-full left-0 mb-2 w-72 bg-slate-900/95 backdrop-blur border border-slate-700/80 rounded-2xl shadow-2xl p-1.5 z-30 space-y-1 font-mono text-xs">
+        <div class="px-2 py-1 text-[10px] text-slate-400 font-sans font-bold border-b border-slate-800 flex items-center justify-between">
+          <span>⚡ Antigravity 快捷指令</span>
+          <span class="text-slate-500 font-normal">點擊自動填入</span>
         </div>
-        <button id="remove-image-btn" class="p-1 text-slate-400 hover:text-red-400 rounded-full ml-1">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-          </svg>
+        <button type="button" class="slash-item w-full text-left px-2.5 py-1.5 rounded-xl hover:bg-indigo-600/20 hover:text-indigo-300 flex items-center justify-between text-slate-300 transition" data-cmd="/plan ">
+          <span class="font-bold text-indigo-400">/plan</span>
+          <span class="text-[10px] text-slate-400 font-sans">逐步規劃複雜任務</span>
+        </button>
+        <button type="button" class="slash-item w-full text-left px-2.5 py-1.5 rounded-xl hover:bg-indigo-600/20 hover:text-indigo-300 flex items-center justify-between text-slate-300 transition" data-cmd="/goal ">
+          <span class="font-bold text-amber-400">/goal</span>
+          <span class="text-[10px] text-slate-400 font-sans">自主達成目標</span>
+        </button>
+        <button type="button" class="slash-item w-full text-left px-2.5 py-1.5 rounded-xl hover:bg-indigo-600/20 hover:text-indigo-300 flex items-center justify-between text-slate-300 transition" data-cmd="/schedule ">
+          <span class="font-bold text-emerald-400">/schedule</span>
+          <span class="text-[10px] text-slate-400 font-sans">設定定時提醒排程</span>
+        </button>
+        <button type="button" class="slash-item w-full text-left px-2.5 py-1.5 rounded-xl hover:bg-indigo-600/20 hover:text-indigo-300 flex items-center justify-between text-slate-300 transition" data-cmd="/grill-me ">
+          <span class="font-bold text-pink-400">/grill-me</span>
+          <span class="text-[10px] text-slate-400 font-sans">互動訪談對齊需求</span>
+        </button>
+        <button type="button" class="slash-item w-full text-left px-2.5 py-1.5 rounded-xl hover:bg-indigo-600/20 hover:text-indigo-300 flex items-center justify-between text-slate-300 transition" data-cmd="/learn ">
+          <span class="font-bold text-sky-400">/learn</span>
+          <span class="text-[10px] text-slate-400 font-sans">記憶行為模式</span>
         </button>
       </div>
 
-      <!-- Slash Command Autocomplete / Quick Picker -->
-      <div id="slash-menu" class="hidden flex flex-wrap gap-1.5 p-2 bg-slate-900/95 border border-slate-800 rounded-xl shadow-xl backdrop-blur max-h-36 overflow-y-auto">
-        <button type="button" class="slash-item px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-indigo-600/30 hover:border-indigo-500/50 border border-slate-700 text-slate-300 hover:text-white text-xs flex items-center gap-1.5 transition active:scale-95" data-cmd="/plan " data-desc="詳細分步規劃任務">
-          <span class="text-indigo-400 font-mono font-bold">/plan</span>
-          <span class="text-[10px] text-slate-400">分步規劃</span>
-        </button>
-        <button type="button" class="slash-item px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-indigo-600/30 hover:border-indigo-500/50 border border-slate-700 text-slate-300 hover:text-white text-xs flex items-center gap-1.5 transition active:scale-95" data-cmd="/goal " data-desc="自主持續執行任務直到目標達成">
-          <span class="text-emerald-400 font-mono font-bold">/goal</span>
-          <span class="text-[10px] text-slate-400">自主目標</span>
-        </button>
-        <button type="button" class="slash-item px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-indigo-600/30 hover:border-indigo-500/50 border border-slate-700 text-slate-300 hover:text-white text-xs flex items-center gap-1.5 transition active:scale-95" data-cmd="/grill-me " data-desc="透過互動提問對齊需求細節">
-          <span class="text-amber-400 font-mono font-bold">/grill-me</span>
-          <span class="text-[10px] text-slate-400">訪談對齊</span>
-        </button>
-        <button type="button" class="slash-item px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-indigo-600/30 hover:border-indigo-500/50 border border-slate-700 text-slate-300 hover:text-white text-xs flex items-center gap-1.5 transition active:scale-95" data-cmd="/learn " data-desc="記住特定操作習慣或修正偏好">
-          <span class="text-purple-400 font-mono font-bold">/learn</span>
-          <span class="text-[10px] text-slate-400">記住經驗</span>
-        </button>
-        <button type="button" class="slash-item px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-indigo-600/30 hover:border-indigo-500/50 border border-slate-700 text-slate-300 hover:text-white text-xs flex items-center gap-1.5 transition active:scale-95" data-cmd="/schedule " data-desc="設定定時提醒或重複工作排程">
-          <span class="text-sky-400 font-mono font-bold">/schedule</span>
-          <span class="text-[10px] text-slate-400">定時排程</span>
+      <!-- Image Preview Capsule -->
+      <div id="image-preview-container" class="hidden flex items-center gap-2 p-1.5 bg-slate-800/90 border border-slate-700 rounded-xl w-fit">
+        <img id="preview-thumb" class="w-10 h-10 object-cover rounded-lg border border-slate-600 cursor-pointer" alt="Preview">
+        <div class="flex flex-col text-xs pr-1">
+          <span id="preview-filename" class="font-medium text-slate-200 truncate max-w-[140px]">photo.jpg</span>
+          <span id="preview-filesize" class="text-[10px] text-emerald-400">已最佳化壓縮</span>
+        </div>
+        <button id="remove-image-btn" type="button" class="p-1 rounded-full text-slate-400 hover:text-rose-400 hover:bg-slate-700">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+          </svg>
         </button>
       </div>
 
@@ -342,126 +237,115 @@
           </svg>
         </button>
 
-        <!-- Voice Recognition (Mic) Button -->
+        <!-- Mic Button -->
         <button id="mic-btn" type="button" title="語音輸入" class="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-slate-300 hover:text-rose-400 transition active:scale-95 shrink-0 border border-slate-700 flex items-center justify-center">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/>
           </svg>
         </button>
 
-        <!-- Textarea Input Box -->
+        <!-- Textarea (Auto-expand, Ctrl+Enter to send) -->
         <div class="relative flex-1 min-w-0">
-          <textarea id="prompt-input" rows="1" placeholder="問任何問題、點擊快捷膠囊、輸入 / 指令、拍照或語音..." class="w-full bg-slate-950 text-slate-100 placeholder-slate-500 text-xs sm:text-sm rounded-xl px-3 py-2 border border-slate-700 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none resize-none max-h-24 transition block"></textarea>
+          <textarea
+            id="prompt-input"
+            rows="1"
+            placeholder="問任何問題... (Ctrl+Enter 發送)"
+            class="w-full bg-slate-800 text-slate-100 placeholder-slate-400 text-xs sm:text-sm rounded-xl px-3.5 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 border border-slate-700 resize-none max-h-32 transition leading-relaxed block overflow-y-auto"
+          ></textarea>
         </div>
 
         <!-- Send / Stop Button -->
-        <button id="send-btn" type="button" title="送出" class="p-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white transition shadow-md shadow-indigo-600/30 active:scale-95 shrink-0 flex items-center justify-center">
-          <svg id="send-icon" class="w-5 h-5 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/>
+        <button
+          id="send-btn"
+          type="button"
+          title="送出"
+          class="p-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white shadow-md shadow-indigo-600/30 transition active:scale-95 shrink-0 flex items-center justify-center min-w-[42px] min-h-[42px]"
+        >
+          <!-- Send Icon -->
+          <svg id="send-icon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
           </svg>
-          <svg id="stop-icon" class="w-5 h-5 hidden pointer-events-none" fill="currentColor" viewBox="0 0 24 24">
-            <rect x="6" y="6" width="12" height="12" rx="2" />
+          <!-- Stop Icon -->
+          <svg id="stop-icon" class="w-5 h-5 hidden text-white animate-pulse" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M6 6h12v12H6z"/>
           </svg>
         </button>
+      </div>
+
+      <!-- Compact Footer Info -->
+      <div class="flex items-center justify-between text-[10px] text-slate-400 px-1 select-none">
+        <span>Enter 換行 · Ctrl+Enter 發送 · <code class="text-indigo-300">/</code> 快捷指令</span>
+        <span class="text-indigo-400 font-mono">Antigravity Mobile 2.0</span>
       </div>
     </div>
   </footer>
 
-  <!-- CAPABILITIES CHEAT-SHEET MODAL -->
+  <!-- CAPABILITIES CHEAT SHEET MODAL -->
   <div id="cheat-sheet-modal" class="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-3 opacity-0 pointer-events-none transition-opacity duration-200">
-    <div class="bg-slate-900 border border-slate-700/80 rounded-2xl w-full max-w-lg max-h-[85dvh] flex flex-col shadow-2xl overflow-hidden">
-      <!-- Modal Header -->
+    <div class="bg-slate-900 border border-slate-700/80 rounded-2xl w-full max-w-md flex flex-col shadow-2xl overflow-hidden max-h-[85dvh]">
+      <!-- Header -->
       <div class="px-4 py-3 border-b border-slate-800 flex items-center justify-between bg-slate-950/60">
         <div class="flex items-center gap-2">
           <span class="text-lg">💡</span>
           <div>
-            <h2 class="text-xs font-bold text-white tracking-wide">Antigravity 超能力功能錦囊</h2>
-            <div class="text-[10px] text-slate-400">隨身 AI 與掌上開發工作台秘笈</div>
+            <h2 class="text-xs font-bold text-white tracking-wide">隨身助理超能力功能錦囊</h2>
+            <div class="text-[10px] text-slate-400">Termux 行動端專屬強大能力全覽</div>
           </div>
         </div>
         <button id="close-cheat-sheet-btn" class="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition text-xs font-mono">✕</button>
       </div>
       
-      <!-- Modal Body (Scrollable) -->
-      <div class="p-4 space-y-3.5 overflow-y-auto text-xs leading-relaxed">
+      <!-- Body (Scrollable List) -->
+      <div class="p-4 space-y-3 overflow-y-auto text-xs text-slate-300 font-sans leading-relaxed">
         
-        <!-- 1. Live Browser JS & Chart.js -->
-        <div class="p-3 rounded-xl bg-slate-950/80 border border-indigo-500/30 space-y-1.5">
-          <div class="flex items-center justify-between">
-            <span class="font-semibold text-indigo-300 flex items-center gap-1.5">
-              <span>📊</span> <span>瀏覽器 JS & Chart.js 即時渲染</span>
-            </span>
-            <span class="text-[9px] px-1.5 py-0.5 rounded bg-indigo-950 text-indigo-400 border border-indigo-800">零延遲</span>
+        <!-- Section 1 -->
+        <div class="p-2.5 rounded-xl bg-slate-950/80 border border-indigo-900/50 space-y-1">
+          <div class="font-bold text-indigo-400 flex items-center gap-1.5">
+            <span>🌐</span><span>1. 瀏覽器互動圖表 & 網頁小工具 (Chart.js / Canvas / HTML)</span>
           </div>
-          <p class="text-slate-300 text-[11px]">只要讓 AI 輸出 JavaScript 代碼，點擊右上角【🌐 瀏覽器渲染】，手機螢幕將直接畫出互動折線圖、圓餅圖、Canvas 動畫或 Web Audio 音效！</p>
-          <div class="text-[10px] font-mono text-slate-400 bg-black/50 p-2 rounded border border-slate-800">
-            Prompt 範例：「幫我用 Chart.js 畫出本週預算分配圓餅圖」
-          </div>
+          <p class="text-[11px] text-slate-400">
+            請 AI 繪製數據趨勢圖或製作小工具，代碼區塊右上角點擊<b>【瀏覽器渲染】</b>可直接在對話框內互動，或點擊<b>【開啟預覽】</b>全螢幕使用。
+          </p>
         </div>
 
-        <!-- 2. Termux Backend Runner -->
-        <div class="p-3 rounded-xl bg-slate-950/80 border border-emerald-500/30 space-y-1.5">
-          <div class="flex items-center justify-between">
-            <span class="font-semibold text-emerald-300 flex items-center gap-1.5">
-              <span>⚡</span> <span>Python / Node / Bash 一鍵沙盒</span>
-            </span>
-            <span class="text-[9px] px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800">50ms 秒跑</span>
+        <!-- Section 2 -->
+        <div class="p-2.5 rounded-xl bg-slate-950/80 border border-emerald-900/50 space-y-1">
+          <div class="font-bold text-emerald-400 flex items-center gap-1.5">
+            <span>🐍</span><span>2. Python / Bash 後端即時直譯執行 (Termux 算力)</span>
           </div>
-          <p class="text-slate-300 text-[11px]">所有代碼塊均有【▶️ 執行】按鈕。點擊後直接在 Termux 本機調度直譯器執行，下方秒展開黑色終端印出 Output，零 Token 消耗。</p>
-          <div class="text-[10px] font-mono text-slate-400 bg-black/50 p-2 rounded border border-slate-800">
-            Prompt 範例：「寫一段 Python 計算房貸每月還款金額」
-          </div>
+          <p class="text-[11px] text-slate-400">
+            演算法計算、正則解析、磁碟巡檢（<code class="text-emerald-300">df -h</code>）或腳本處理，點擊代碼右上角<b>【執行】</b>秒出結果。
+          </p>
         </div>
 
-        <!-- 3. HTML & SVG Action Cards -->
-        <div class="p-3 rounded-xl bg-slate-950/80 border border-sky-500/30 space-y-1.5">
-          <div class="flex items-center justify-between">
-            <span class="font-semibold text-sky-300 flex items-center gap-1.5">
-              <span>🌐</span> <span>HTML / SVG 產物獨立沙盒</span>
-            </span>
-            <span class="text-[9px] px-1.5 py-0.5 rounded bg-sky-950 text-sky-400 border border-sky-800">全螢幕預覽</span>
+        <!-- Section 3 -->
+        <div class="p-2.5 rounded-xl bg-slate-950/80 border border-amber-900/50 space-y-1">
+          <div class="font-bold text-amber-400 flex items-center gap-1.5">
+            <span>🗺️</span><span>3. Google 地圖導航與景點卡片</span>
           </div>
-          <p class="text-slate-300 text-[11px]">AI 輸出的 HTML/SVG 會自動轉換為美觀卡片。點擊【開啟預覽】可全螢幕操作微型網頁，或展開對話內小窗直接互動。</p>
+          <p class="text-[11px] text-slate-400">
+            推薦餐廳、旅遊行程或交通路線時，AI 會生成<b>一鍵喚醒 Google 地圖 App</b> 的導航卡片，直覺好用。
+          </p>
         </div>
 
-        <!-- 4. Google Maps & Hardware Integration -->
-        <div class="p-3 rounded-xl bg-slate-950/80 border border-teal-500/30 space-y-1.5">
-          <div class="flex items-center justify-between">
-            <span class="font-semibold text-teal-300 flex items-center gap-1.5">
-              <span>🗺️</span> <span>Google 地圖一鍵導航 & 手機硬體</span>
-            </span>
-            <span class="text-[9px] px-1.5 py-0.5 rounded bg-teal-950 text-teal-400 border border-teal-800">隨身必備</span>
+        <!-- Section 4 -->
+        <div class="p-2.5 rounded-xl bg-slate-950/80 border border-rose-900/50 space-y-1">
+          <div class="font-bold text-rose-400 flex items-center gap-1.5">
+            <span>📱</span><span>4. 手機硬體原生整合 (GPS / 震動 / 語音 / 相機)</span>
           </div>
-          <p class="text-slate-300 text-[11px]">問旅遊/餐廳/景點時，AI 會主動附上一鍵導航卡。點擊【地鐵/步行導航】直接從您當前 GPS 位置喚醒 Google Maps 開始導航！亦支援手機震動、電量檢測與 GPS 定位。</p>
-          <div class="text-[10px] font-mono text-slate-400 bg-black/50 p-2 rounded border border-slate-800">
-            Prompt 範例：「推薦附近景點並附上 Google 地圖導航卡片」
-          </div>
+          <p class="text-[11px] text-slate-400">
+            支援手機鏡頭拍照秒壓縮上傳、中文語音輸入辨識（STT）、語音合成朗讀（TTS）與觸覺震動回饋。
+          </p>
         </div>
 
-        <!-- 5. Android Floating Window -->
-        <div class="p-3 rounded-xl bg-slate-950/80 border border-purple-500/30 space-y-1.5">
-          <div class="flex items-center justify-between">
-            <span class="font-semibold text-purple-300 flex items-center gap-1.5">
-              <span>📱</span> <span>Android 懸浮小窗與懸浮球</span>
-            </span>
-            <span class="text-[9px] px-1.5 py-0.5 rounded bg-purple-950 text-purple-400 border border-purple-800">多工必備</span>
+        <!-- Section 5 -->
+        <div class="p-2.5 rounded-xl bg-slate-950/80 border border-purple-900/50 space-y-1">
+          <div class="font-bold text-purple-400 flex items-center gap-1.5">
+            <span>⚡</span><span>5. 專業快捷指令 (/plan, /goal, /schedule, /grill-me)</span>
           </div>
-          <p class="text-slate-300 text-[11px]">在手機「多工任務畫面」中，長按 Antigravity 圖示選擇【以彈出視窗檢視】，即可縮小成懸浮泡泡，邊滑其他 App 邊叫出 AI！</p>
-        </div>
-
-        <!-- 6. Slash Commands -->
-        <div class="p-3 rounded-xl bg-slate-950/80 border border-slate-700/80 space-y-1.5">
-          <div class="flex items-center justify-between">
-            <span class="font-semibold text-slate-200 flex items-center gap-1.5">
-              <span>🚀</span> <span>常用 Slash 指令秘笈</span>
-            </span>
-          </div>
-          <div class="grid grid-cols-2 gap-1.5 text-[10px] font-mono">
-            <div class="bg-black/40 p-1.5 rounded border border-slate-800"><span class="text-indigo-400 font-bold">/plan</span>: 複雜任務分步規劃</div>
-            <div class="bg-black/40 p-1.5 rounded border border-slate-800"><span class="text-emerald-400 font-bold">/goal</span>: 長任務自主持續達成</div>
-            <div class="bg-black/40 p-1.5 rounded border border-slate-800"><span class="text-amber-400 font-bold">/grill-me</span>: 透過提問對齊需求</div>
-            <div class="bg-black/40 p-1.5 rounded border border-slate-800"><span class="text-sky-400 font-bold">/schedule</span>: 定時提醒排程</div>
-          </div>
+          <p class="text-[11px] text-slate-400">
+            在輸入框輸入 <code class="text-purple-300">/</code> 即可快速呼叫自主目標規劃、定時排程提醒與需求對齊助手。
+          </p>
         </div>
 
       </div>
@@ -470,33 +354,30 @@
 
   <!-- USAGE QUOTA MODAL -->
   <div id="usage-modal" class="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-3 opacity-0 pointer-events-none transition-opacity duration-200">
-    <div class="bg-slate-900 border border-slate-700/80 rounded-2xl w-full max-w-sm flex flex-col shadow-2xl overflow-hidden">
+    <div class="bg-slate-900 border border-slate-700/80 rounded-2xl w-full max-w-sm flex flex-col shadow-2xl overflow-hidden max-h-[85dvh]">
       <!-- Header -->
       <div class="px-4 py-3 border-b border-slate-800 flex items-center justify-between bg-slate-950/60">
         <div class="flex items-center gap-2">
           <span class="text-lg">📊</span>
           <div>
-            <h2 class="text-xs font-bold text-white tracking-wide">AGY 模型配額與剩餘用量</h2>
-            <div class="text-[10px] text-slate-400">即時同步官方 /usage 配額狀態</div>
+            <h2 class="text-xs font-bold text-white tracking-wide">AI 模型配額用量監控</h2>
+            <div class="text-[10px] text-slate-400">即時調用 agy /usage 獲取</div>
           </div>
         </div>
         <button id="close-usage-btn" class="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition text-xs font-mono">✕</button>
       </div>
 
-      <!-- Content -->
-      <div class="p-4 space-y-3.5">
-        <!-- Container for dynamic progress bars -->
-        <div id="usage-bars-container" class="space-y-3">
-          <div class="text-center py-6 text-slate-400 text-xs flex flex-col items-center gap-2">
-            <span class="inline-block w-5 h-5 rounded-full border-2 border-indigo-400 border-t-transparent animate-spin"></span>
-            <span>正在向伺服器查詢即時用量...</span>
-          </div>
-        </div>
+      <!-- Body -->
+      <div class="p-4 space-y-3 overflow-y-auto" id="usage-bars-container">
+        <!-- Loaded dynamically -->
+      </div>
 
-        <!-- Refresh Button -->
-        <button id="refresh-usage-btn" class="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-slate-200 font-sans text-xs font-semibold flex items-center justify-center gap-1.5 border border-slate-700 transition active:scale-95">
-          <svg class="w-3.5 h-3.5 text-sky-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-          <span>重新整理即時配額</span>
+      <!-- Footer -->
+      <div class="p-3 border-t border-slate-800 bg-slate-950/40 flex items-center justify-between">
+        <span class="text-[10px] text-slate-500 font-mono">配額以各模型重置時間為準</span>
+        <button id="refresh-usage-btn" class="px-2.5 py-1 rounded-lg bg-sky-950/80 border border-sky-700/60 hover:bg-sky-900 text-sky-300 text-xs font-medium flex items-center gap-1 transition active:scale-95">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+          <span>重新整理</span>
         </button>
       </div>
     </div>
@@ -534,1864 +415,10 @@
     <img id="lightbox-img" src="" class="max-w-full max-h-full object-contain rounded-lg" alt="Enlarged">
   </div>
 
-  <script>
-    // Marked configuration: wrap tables in table-wrapper
-    const renderer = new marked.Renderer();
-    const originalTable = renderer.table.bind(renderer);
-    renderer.table = function(header, body) {
-      const tableHtml = originalTable(header, body);
-      return `<div class="table-wrapper">${tableHtml}</div>`;
-    };
-    marked.setOptions({ renderer: renderer });
-
-    // State
-    let currentConversationId = null;
-    let currentModel = localStorage.getItem('agy_current_model') || 'gemini-3.7-flash-high';
-    let availableModels = [];
-    let uploadedImagePath = null;
-    let isStreaming = false;
-    let currentAbortController = null;
-    let recognition = null;
-    let isRecording = false;
-    let userScrolledUp = false;
-    const activeBlobUrls = new Set();
-    
-    function revokeAllBlobUrls() {
-      activeBlobUrls.forEach(url => URL.revokeObjectURL(url));
-      activeBlobUrls.clear();
-    }
-
-    // DOM Elements
-    const messagesContainer = document.getElementById('messages-container');
-    const promptInput = document.getElementById('prompt-input');
-    const sendBtn = document.getElementById('send-btn');
-    const sendIcon = document.getElementById('send-icon');
-    const stopIcon = document.getElementById('stop-icon');
-    const camBtn = document.getElementById('cam-btn');
-    const micBtn = document.getElementById('mic-btn');
-    const cameraInput = document.getElementById('camera-input');
-    const imagePreviewContainer = document.getElementById('image-preview-container');
-    const previewThumb = document.getElementById('preview-thumb');
-    const previewFilename = document.getElementById('preview-filename');
-    const previewFilesize = document.getElementById('preview-filesize');
-    const removeImageBtn = document.getElementById('remove-image-btn');
-    const menuBtn = document.getElementById('menu-btn');
-    const drawer = document.getElementById('drawer');
-    const drawerOverlay = document.getElementById('drawer-overlay');
-    const closeDrawerBtn = document.getElementById('close-drawer-btn');
-    const convList = document.getElementById('conv-list');
-    const newChatBtn = document.getElementById('new-chat-btn');
-    const notifyBtn = document.getElementById('notify-btn');
-    const headerTitle = document.getElementById('header-title');
-    const slashMenu = document.getElementById('slash-menu');
-    const lightbox = document.getElementById('lightbox');
-    const lightboxImg = document.getElementById('lightbox-img');
-    const closeLightboxBtn = document.getElementById('close-lightbox-btn');
-
-    // 🌐 Real-time Network Connectivity Monitor
-    const networkDot = document.getElementById('network-dot');
-    const networkOfflineBadge = document.getElementById('network-offline-badge');
-    let isOnline = navigator.onLine;
-
-    function updateNetworkUI(online) {
-      isOnline = online;
-      if (online) {
-        if (networkDot) {
-          networkDot.className = 'w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0';
-          networkDot.title = '網路連線正常 (可正常與 AI 對話)';
-        }
-        if (networkOfflineBadge) networkOfflineBadge.classList.add('hidden');
-      } else {
-        if (networkDot) {
-          networkDot.className = 'w-2 h-2 rounded-full bg-rose-500 animate-ping shrink-0';
-          networkDot.title = '手機無網路連線 (請檢查 Wi-Fi/行動數據)';
-        }
-        if (networkOfflineBadge) networkOfflineBadge.classList.remove('hidden');
-      }
-    }
-
-    async function checkInternetConnection() {
-      if (!navigator.onLine) {
-        updateNetworkUI(false);
-        return false;
-      }
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 2500);
-        await fetch('https://www.gstatic.com/generate_204', { mode: 'no-cors', cache: 'no-store', signal: controller.signal });
-        clearTimeout(timeoutId);
-        updateNetworkUI(true);
-        return true;
-      } catch (e) {
-        updateNetworkUI(navigator.onLine);
-        return navigator.onLine;
-      }
-    }
-
-    window.addEventListener('online', () => {
-      updateNetworkUI(true);
-      checkInternetConnection();
-      if (navigator.vibrate) navigator.vibrate(20);
-    });
-
-    window.addEventListener('offline', () => {
-      updateNetworkUI(false);
-      if (navigator.vibrate) navigator.vibrate([40, 40, 40]);
-    });
-
-    document.addEventListener('visibilitychange', () => {
-      if (!document.hidden) checkInternetConnection();
-    });
-
-    setInterval(checkInternetConnection, 30000);
-    checkInternetConnection();
-
-    // 🔔 Push Notification & Service Worker Management
-    let notificationsEnabled = localStorage.getItem('agy_notify_enabled') !== 'false';
-    let swRegistration = null;
-
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js').then(reg => {
-        swRegistration = reg;
-      }).catch(err => {
-        console.warn('SW registration failed:', err);
-      });
-    }
-
-    async function triggerDoneNotification(text) {
-      if (!notificationsEnabled || !('Notification' in window) || Notification.permission !== 'granted') return;
-
-      const cleanSummary = (text || '回覆已完成')
-        .replace(/\p{Extended_Pictographic}/gu, '')
-        .replace(/[*#_~`<>]/g, '')
-        .trim()
-        .slice(0, 70);
-
-      const notifOptions = {
-        body: `✨ ${cleanSummary || '回覆已生成完畢！'}`,
-        tag: 'agy-done',
-        renotify: true,
-        vibrate: [200, 100, 200]
-      };
-
-      // 1. Android Chrome requires ServiceWorker showNotification
-      if (swRegistration && swRegistration.showNotification) {
-        try {
-          await swRegistration.showNotification('Antigravity 隨身助理', notifOptions);
-          return;
-        } catch (e) {
-          console.warn('[SW showNotification error]', e);
-        }
-      }
-
-      // 2. Desktop / Safari Standard Notification fallback
-      try {
-        const n = new Notification('Antigravity 隨身助理', notifOptions);
-        n.onclick = () => {
-          window.focus();
-          n.close();
-        };
-      } catch (e) {}
-    }
-
-    function updateNotifyBtnUI() {
-      if (!notifyBtn) return;
-      if (!('Notification' in window)) {
-        notifyBtn.style.display = 'none';
-        return;
-      }
-      if (Notification.permission === 'granted' && notificationsEnabled) {
-        notifyBtn.classList.add('text-indigo-400', 'bg-indigo-600/20');
-        notifyBtn.classList.remove('text-slate-400');
-        notifyBtn.title = '通知已開啟 (點擊測試/關閉)';
-      } else {
-        notifyBtn.classList.remove('text-indigo-400', 'bg-indigo-600/20');
-        notifyBtn.classList.add('text-slate-400');
-        notifyBtn.title = '通知已關閉 (點擊開啟)';
-      }
-    }
-
-    if (notifyBtn) {
-      updateNotifyBtnUI();
-      notifyBtn.addEventListener('click', async () => {
-        if (!('Notification' in window)) {
-          alert('您的瀏覽器不支援 Web Notifications');
-          return;
-        }
-        if (Notification.permission === 'default') {
-          const perm = await Notification.requestPermission();
-          notificationsEnabled = (perm === 'granted');
-          if (perm === 'granted') {
-            triggerDoneNotification('系統通知功能已成功啟用！🎉');
-          }
-        } else if (Notification.permission === 'granted') {
-          notificationsEnabled = !notificationsEnabled;
-          if (notificationsEnabled) {
-            triggerDoneNotification('系統通知已重新開啟！');
-          }
-        } else {
-          alert('請在瀏覽器網址列設定（鎖頭圖示）中允許此網站發送通知。');
-          return;
-        }
-        localStorage.setItem('agy_notify_enabled', notificationsEnabled);
-        updateNotifyBtnUI();
-      });
-    }
-
-    // Smart Scroll Function
-    function scrollToBottom(force = false) {
-      if (force || !userScrolledUp) {
-        messagesContainer.scrollTop = messagesContainer.scrollHeight;
-      }
-    }
-
-    messagesContainer.addEventListener('scroll', () => {
-      const threshold = 80;
-      const isAtBottom = messagesContainer.scrollHeight - messagesContainer.scrollTop - messagesContainer.clientHeight <= threshold;
-      userScrolledUp = !isAtBottom;
-    });
-
-    // Auto resize textarea on typing & Slash Command Trigger
-    promptInput.addEventListener('input', () => {
-      promptInput.style.height = 'auto';
-      promptInput.style.height = Math.min(promptInput.scrollHeight, 120) + 'px';
-      const val = promptInput.value.trim();
-      if (val.startsWith('/') && !val.includes(' ')) {
-        slashMenu.classList.remove('hidden');
-      } else {
-        slashMenu.classList.add('hidden');
-      }
-    });
-
-    // Slash menu item selection
-    document.querySelectorAll('.slash-item').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const cmd = btn.dataset.cmd;
-        promptInput.value = cmd;
-        slashMenu.classList.add('hidden');
-        promptInput.focus();
-        promptInput.style.height = 'auto';
-        promptInput.style.height = Math.min(promptInput.scrollHeight, 120) + 'px';
-      });
-    });
-
-    // Enter key: purely insert newline (Ctrl+Enter or Cmd+Enter to send)
-    promptInput.addEventListener('keydown', (e) => {
-      if (e.isComposing || e.keyCode === 229) return;
-      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-        e.preventDefault();
-        slashMenu.classList.add('hidden');
-        sendMessage();
-      }
-      // Pure Enter defaults to native newline and auto-resizes
-    });
-
-    // Drawer Toggle
-    function toggleDrawer(open) {
-      if (open) {
-        drawer.classList.remove('-translate-x-full');
-        drawerOverlay.classList.remove('opacity-0', 'pointer-events-none');
-        loadConversations();
-      } else {
-        drawer.classList.add('-translate-x-full');
-        drawerOverlay.classList.add('opacity-0', 'pointer-events-none');
-      }
-    }
-    menuBtn.addEventListener('click', () => toggleDrawer(true));
-    closeDrawerBtn.addEventListener('click', () => toggleDrawer(false));
-    drawerOverlay.addEventListener('click', () => toggleDrawer(false));
-
-    // Lightbox
-    function showLightbox(src) {
-      lightboxImg.src = src;
-      lightbox.classList.remove('opacity-0', 'pointer-events-none');
-    }
-    closeLightboxBtn.addEventListener('click', () => {
-      lightbox.classList.add('opacity-0', 'pointer-events-none');
-    });
-    lightbox.addEventListener('click', (e) => {
-      if (e.target === lightbox) lightbox.classList.add('opacity-0', 'pointer-events-none');
-    });
-
-    // Capabilities Cheat Sheet Modal Handlers
-    const cheatSheetBtn = document.getElementById('cheat-sheet-btn');
-    const cheatSheetModal = document.getElementById('cheat-sheet-modal');
-    const closeCheatSheetBtn = document.getElementById('close-cheat-sheet-btn');
-    const openCheatChip = document.getElementById('open-cheat-chip');
-
-    function toggleCheatSheet(open) {
-      if (!cheatSheetModal) return;
-      if (open) {
-        cheatSheetModal.classList.remove('opacity-0', 'pointer-events-none');
-      } else {
-        cheatSheetModal.classList.add('opacity-0', 'pointer-events-none');
-      }
-    }
-
-    if (cheatSheetBtn) cheatSheetBtn.addEventListener('click', () => toggleCheatSheet(true));
-    if (openCheatChip) openCheatChip.addEventListener('click', () => toggleCheatSheet(true));
-    if (closeCheatSheetBtn) closeCheatSheetBtn.addEventListener('click', () => toggleCheatSheet(false));
-    if (cheatSheetModal) {
-      cheatSheetModal.addEventListener('click', (e) => {
-        if (e.target === cheatSheetModal) toggleCheatSheet(false);
-      });
-    }
-
-    // Usage Quota Modal Handlers
-    const usageBtn = document.getElementById('usage-btn');
-    const usageModal = document.getElementById('usage-modal');
-    const closeUsageBtn = document.getElementById('close-usage-btn');
-    const openUsageChip = document.getElementById('open-usage-chip');
-    const refreshUsageBtn = document.getElementById('refresh-usage-btn');
-    const usageBarsContainer = document.getElementById('usage-bars-container');
-
-    function toggleUsageModal(open) {
-      if (!usageModal) return;
-      if (open) {
-        usageModal.classList.remove('opacity-0', 'pointer-events-none');
-        loadUsageData();
-      } else {
-        usageModal.classList.add('opacity-0', 'pointer-events-none');
-      }
-    }
-
-    async function loadUsageData() {
-      if (!usageBarsContainer) return;
-      usageBarsContainer.innerHTML = `
-        <div class="text-center py-6 text-slate-400 text-xs flex flex-col items-center gap-2 font-sans">
-          <span class="inline-block w-5 h-5 rounded-full border-2 border-indigo-400 border-t-transparent animate-spin"></span>
-          <span>正在執行 agy /usage 查詢即時配額...</span>
-        </div>
-      `;
-
-      try {
-        const res = await fetch('/api/usage');
-        const data = await res.json();
-
-        if (data.quotas && data.quotas.length > 0) {
-          usageBarsContainer.innerHTML = data.quotas.map(q => {
-            const pct = q.percent;
-            let barColor = 'bg-emerald-500';
-            let textColor = 'text-emerald-400';
-            if (pct < 20) {
-              barColor = 'bg-rose-500';
-              textColor = 'text-rose-400';
-            } else if (pct < 50) {
-              barColor = 'bg-amber-500';
-              textColor = 'text-amber-400';
-            }
-
-            const resetTime = q.resetAt ? new Date(q.resetAt).toLocaleString('zh-TW', { hour12: false, month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
-
-            return `
-              <div class="p-3 rounded-xl bg-slate-950/90 border border-slate-800 space-y-1.5 font-sans shadow-sm">
-                <div class="flex items-center justify-between text-xs">
-                  <span class="font-bold text-white">${escapeHtml(q.model)}</span>
-                  <span class="font-mono font-bold ${textColor}">${pct}% 剩餘</span>
-                </div>
-                <div class="w-full h-2 rounded-full bg-slate-800 overflow-hidden">
-                  <div class="h-full rounded-full ${barColor} transition-all duration-500" style="width: ${pct}%"></div>
-                </div>
-                <div class="flex items-center justify-between text-[10px] text-slate-400 font-mono">
-                  <span>${escapeHtml(q.type)}</span>
-                  ${resetTime ? `<span>重置: ${resetTime}</span>` : ''}
-                </div>
-              </div>
-            `;
-          }).join('');
-        } else {
-          usageBarsContainer.innerHTML = `
-            <div class="p-3 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-300 font-mono whitespace-pre-wrap">${escapeHtml(data.raw || '未能解析到配額資訊')}</div>
-          `;
-        }
-      } catch (err) {
-        usageBarsContainer.innerHTML = `
-          <div class="p-3 rounded-xl bg-rose-950/50 border border-rose-800 text-xs text-rose-300">查詢失敗: ${escapeHtml(err.message)}</div>
-        `;
-      }
-    }
-
-    if (usageBtn) usageBtn.addEventListener('click', () => toggleUsageModal(true));
-    if (openUsageChip) openUsageChip.addEventListener('click', () => toggleUsageModal(true));
-    if (closeUsageBtn) closeUsageBtn.addEventListener('click', () => toggleUsageModal(false));
-    if (refreshUsageBtn) refreshUsageBtn.addEventListener('click', loadUsageData);
-    if (usageModal) {
-      usageModal.addEventListener('click', (e) => {
-        if (e.target === usageModal) toggleUsageModal(false);
-      });
-    }
-
-    // Model Selector Modal Handlers
-    const modelSelectorBtn = document.getElementById('model-selector-btn');
-    const modelModal = document.getElementById('model-modal');
-    const closeModelBtn = document.getElementById('close-model-btn');
-    const modelOptionsContainer = document.getElementById('model-options-container');
-    const modelBadgeIcon = document.getElementById('model-badge-icon');
-    const modelDisplayName = document.getElementById('model-display-name');
-
-    function updateModelUI() {
-      const found = availableModels.find(m => m.id === currentModel);
-      if (found) {
-        if (modelBadgeIcon) modelBadgeIcon.textContent = found.icon;
-        if (modelDisplayName) modelDisplayName.textContent = found.name;
-      } else {
-        if (modelBadgeIcon) modelBadgeIcon.textContent = '✨';
-        if (modelDisplayName) modelDisplayName.textContent = currentModel.replace('gemini-', 'Gemini ').replace('claude-', 'Claude ');
-      }
-    }
-
-    function toggleModelModal(open) {
-      if (!modelModal) return;
-      if (open) {
-        modelModal.classList.remove('opacity-0', 'pointer-events-none');
-        loadModelsList();
-      } else {
-        modelModal.classList.add('opacity-0', 'pointer-events-none');
-      }
-    }
-
-    async function loadModelsList() {
-      if (!modelOptionsContainer) return;
-      try {
-        if (availableModels.length === 0) {
-          const res = await fetch('/api/models');
-          const data = await res.json();
-          availableModels = data.models || [];
-        }
-
-        modelOptionsContainer.innerHTML = availableModels.map(m => {
-          const isSelected = (m.id === currentModel);
-          const activeRing = isSelected ? 'ring-2 ring-indigo-500 bg-indigo-950/50 border-indigo-500/80' : 'bg-slate-950/80 border-slate-800 hover:border-slate-700';
-
-          return `
-            <button type="button" class="w-full text-left p-3 rounded-xl border ${activeRing} transition active:scale-[0.98] flex items-center justify-between gap-2 shadow-sm font-sans" onclick="selectModel('${m.id}')">
-              <div class="flex items-center gap-2.5 min-w-0">
-                <span class="text-xl shrink-0">${m.icon}</span>
-                <div class="min-w-0">
-                  <div class="flex items-center gap-1.5">
-                    <span class="font-bold text-xs text-white truncate">${escapeHtml(m.name)}</span>
-                    <span class="text-[9px] px-1.5 py-0.5 rounded border font-mono ${m.badgeColor}">${m.badge}</span>
-                  </div>
-                  <div class="text-[11px] text-slate-400 truncate mt-0.5">${escapeHtml(m.desc)}</div>
-                </div>
-              </div>
-              ${isSelected ? '<span class="text-indigo-400 font-bold text-sm shrink-0">✓</span>' : ''}
-            </button>
-          `;
-        }).join('');
-
-      } catch (e) {
-        modelOptionsContainer.innerHTML = `<div class="p-3 text-xs text-rose-400">載入模型清單失敗</div>`;
-      }
-    }
-
-    window.selectModel = function(modelId) {
-      currentModel = modelId;
-      localStorage.setItem('agy_current_model', currentModel);
-      updateModelUI();
-      toggleModelModal(false);
-      if (navigator.vibrate) navigator.vibrate(20);
-      console.log(`🤖 已切換 AI 核心模型至: ${currentModel}`);
-    };
-
-    if (modelSelectorBtn) modelSelectorBtn.addEventListener('click', () => toggleModelModal(true));
-    if (closeModelBtn) closeModelBtn.addEventListener('click', () => toggleModelModal(false));
-    if (modelModal) {
-      modelModal.addEventListener('click', (e) => {
-        if (e.target === modelModal) toggleModelModal(false);
-      });
-    }
-
-    // Initialize model on load
-    fetch('/api/models').then(r => r.json()).then(data => {
-      availableModels = data.models || [];
-      updateModelUI();
-    }).catch(() => {});
-
-    // Browser GPS Geolocation Handler
-    const gpsChip = document.getElementById('gps-chip');
-    if (gpsChip) {
-      gpsChip.addEventListener('click', () => {
-        if (!navigator.geolocation) {
-          alert('您的瀏覽器不支援 GPS 衛星定位功能');
-          return;
-        }
-
-        const originalHtml = gpsChip.innerHTML;
-        gpsChip.innerHTML = `<span class="inline-block w-2.5 h-2.5 rounded-full border-2 border-rose-400 border-t-transparent animate-spin"></span><span>定位中...</span>`;
-        if (navigator.vibrate) navigator.vibrate(20);
-
-        navigator.geolocation.getCurrentPosition(
-          async (position) => {
-            const lat = position.coords.latitude.toFixed(6);
-            const lon = position.coords.longitude.toFixed(6);
-            const accuracy = Math.round(position.coords.accuracy);
-
-            let placeInfo = '';
-            try {
-              // Fast reverse geocoding via OpenStreetMap
-              const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=18&addressdetails=1&accept-language=zh-TW`);
-              if (res.ok) {
-                const data = await res.json();
-                const addr = data.address || {};
-                const city = addr.city || addr.town || addr.county || '';
-                const suburb = addr.suburb || addr.district || '';
-                const road = addr.road || '';
-                placeInfo = [city, suburb, road].filter(Boolean).join('');
-              }
-            } catch (e) {}
-
-            const locationLabel = placeInfo ? `（約位於 ${placeInfo}，精確度約 ${accuracy} 公尺）` : `（精確度約 ${accuracy} 公尺）`;
-            const queryText = `📍 我目前的手機即時 GPS 座標為：緯度 ${lat}, 經度 ${lon}${locationLabel}。請根據我當前的位置，推薦我身邊 1 公里內的在地必吃美食或人氣景點，並為每個地點附上 Google 地圖一鍵導航卡片：`;
-
-            promptInput.value = queryText;
-            promptInput.focus();
-            promptInput.dispatchEvent(new Event('input'));
-            gpsChip.innerHTML = originalHtml;
-            if (navigator.vibrate) navigator.vibrate([30, 30]);
-          },
-          (err) => {
-            gpsChip.innerHTML = originalHtml;
-            let errMsg = '無法獲取位置資訊';
-            if (err.code === 1) errMsg = '請在手機瀏覽器權限中允許「位置資訊 (GPS)」';
-            else if (err.code === 2) errMsg = '定位訊號不良或 GPS 開關尚未開啟';
-            else if (err.code === 3) errMsg = '定位請求逾時';
-            alert(`定位失敗：${errMsg}`);
-          },
-          { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-        );
-      });
-    }
-
-    // Quick Action Chips Fill Handler
-    document.querySelectorAll('.quick-chip').forEach(chip => {
-      chip.addEventListener('click', () => {
-        const fillText = chip.getAttribute('data-fill');
-        if (!fillText) return;
-        promptInput.value = fillText;
-        promptInput.focus();
-        promptInput.dispatchEvent(new Event('input'));
-        if (navigator.vibrate) navigator.vibrate(20);
-      });
-    });
-
-    // Copy to clipboard helper
-    function copyToClipboard(text, btn) {
-      navigator.clipboard.writeText(text).then(() => {
-        const original = btn.innerHTML;
-        btn.innerHTML = `<span class="text-emerald-400 font-medium">✓ 已複製</span>`;
-        setTimeout(() => { btn.innerHTML = original; }, 1800);
-      }).catch(() => {
-        alert('複製失敗');
-      });
-    }
-
-    // Enhance code blocks: Convert HTML/SVG into Ultra-Clean Action Cards
-    function enhanceCodeBlocks(container) {
-      const pres = container.querySelectorAll('pre');
-      pres.forEach(pre => {
-        if (pre.dataset.enhanced) return;
-        pre.dataset.enhanced = 'true';
-
-        const codeEl = pre.querySelector('code');
-        if (!codeEl) return;
-
-        // Capture pure original raw code BEFORE highlight modifies DOM
-        const rawCode = codeEl.textContent || codeEl.innerText;
-        let lang = 'CODE';
-        codeEl.classList.forEach(cls => {
-          if (cls.startsWith('language-')) lang = cls.replace('language-', '').toUpperCase();
-        });
-
-        hljs.highlightElement(codeEl);
-
-        const isHtml = lang === 'HTML' || lang === 'XML' || lang === 'SVG' || /^\s*<(!DOCTYPE|html|svg)/i.test(rawCode);
-
-        if (isHtml) {
-          const blob = new Blob([rawCode], { type: 'text/html;charset=utf-8' });
-          const blobUrl = URL.createObjectURL(blob);
-          activeBlobUrls.add(blobUrl);
-          const typeLabel = lang === 'SVG' ? 'SVG 視覺圖形' : 'HTML 網頁產物';
-
-          const card = document.createElement('div');
-          card.className = 'my-2.5 not-prose';
-
-          card.innerHTML = `
-            <div class="p-3 rounded-2xl bg-gradient-to-r from-slate-900 to-slate-800/90 border border-slate-700/80 shadow-md flex flex-col gap-2.5">
-              <div class="flex items-center justify-between gap-2 flex-wrap">
-                <div class="flex items-center gap-2.5 min-w-0">
-                  <div class="w-8 h-8 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
-                    </svg>
-                  </div>
-                  <div class="min-w-0">
-                    <div class="text-xs font-semibold text-white truncate">🌐 ${typeLabel}</div>
-                    <div class="text-[10px] text-slate-400">點擊開啟全螢幕或展開預覽</div>
-                  </div>
-                </div>
-                <div class="flex items-center gap-1.5 shrink-0 ml-auto">
-                  <!-- Native unblockable anchor link -->
-                  <a href="${blobUrl}" target="_blank" class="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white text-xs font-semibold flex items-center gap-1.5 shadow-md shadow-emerald-900/40 active:scale-95 transition no-underline">
-                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
-                    </svg>
-                    <span>開啟預覽</span>
-                  </a>
-                  <button type="button" class="card-copy-btn p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 transition border border-slate-700 active:scale-95" title="複製 HTML 原始碼">
-                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
-                    </svg>
-                  </button>
-                </div>
-              </div>
-              <!-- Optional on-demand inline sandbox expander -->
-              <details class="border-t border-slate-800/80 pt-2 text-xs">
-                <summary class="cursor-pointer text-indigo-400 hover:text-indigo-300 font-mono text-[11px] select-none flex items-center justify-between">
-                  <span>📱 在對話框中直接展開小視窗</span>
-                  <span class="text-[10px] text-slate-500">點擊展開 ▼</span>
-                </summary>
-                <div class="sandbox-container mt-2 h-72 rounded-xl overflow-hidden bg-slate-950 border border-slate-700 relative">
-                  <!-- Lazy created iframe -->
-                </div>
-              </details>
-            </div>
-          `;
-
-          // Button handlers
-          const cardCopyBtn = card.querySelector('.card-copy-btn');
-          const detailsExpander = card.querySelector('details');
-          const sandboxContainer = card.querySelector('.sandbox-container');
-
-          cardCopyBtn.onclick = (e) => {
-            e.stopPropagation();
-            copyToClipboard(rawCode, cardCopyBtn);
-          };
-
-          detailsExpander.ontoggle = () => {
-            if (detailsExpander.open && !sandboxContainer.querySelector('iframe')) {
-              const inlineFrame = document.createElement('iframe');
-              inlineFrame.className = 'w-full h-full border-0 absolute inset-0';
-              inlineFrame.sandbox = 'allow-scripts allow-forms allow-popups';
-              inlineFrame.src = blobUrl;
-              sandboxContainer.appendChild(inlineFrame);
-            }
-          };
-
-          // Replace pre with card completely
-          if (pre.parentNode) {
-            pre.parentNode.replaceChild(card, pre);
-          } else {
-            container.appendChild(card);
-          }
-        } else {
-          // Standard code blocks (Python, Shell, JS, JSON, etc.)
-          const header = document.createElement('div');
-          header.className = 'flex items-center justify-between px-2.5 py-1 bg-slate-800/90 border-b border-slate-700/60 text-[11px] font-mono text-slate-400 select-none rounded-t-lg -mx-2.5 -mt-2.5 mb-2';
-
-          const langLabel = document.createElement('span');
-          langLabel.className = 'font-semibold text-slate-300 text-[10px] tracking-wider';
-          langLabel.textContent = lang;
-          header.appendChild(langLabel);
-
-          const actionsContainer = document.createElement('div');
-          actionsContainer.className = 'flex items-center gap-1.5';
-
-          const lowerLang = lang.toLowerCase();
-          const isJs = ['javascript', 'js', 'node'].includes(lowerLang);
-          const isOtherExecutable = ['python', 'py', 'bash', 'sh', 'shell', 'zsh'].includes(lowerLang);
-
-          if (isJs) {
-            // 🌐 Browser Sandbox Runner (DOM / Canvas / Chart.js / Audio)
-            const browserRunBtn = document.createElement('button');
-            browserRunBtn.type = 'button';
-            browserRunBtn.className = 'px-2 py-0.5 rounded bg-indigo-950/80 border border-indigo-700/60 hover:bg-indigo-900 text-indigo-300 text-[10px] font-mono flex items-center gap-1 transition active:scale-95';
-            browserRunBtn.innerHTML = `<svg class="w-3 h-3 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg><span>瀏覽器渲染</span>`;
-            browserRunBtn.onclick = (e) => {
-              e.stopPropagation();
-              runInBrowserSandbox(rawCode, pre);
-            };
-            actionsContainer.appendChild(browserRunBtn);
-
-            // 💻 Backend Node.js Runner
-            const nodeRunBtn = document.createElement('button');
-            nodeRunBtn.type = 'button';
-            nodeRunBtn.className = 'px-2 py-0.5 rounded bg-emerald-950/80 border border-emerald-700/60 hover:bg-emerald-900 text-emerald-300 text-[10px] font-mono flex items-center gap-1 transition active:scale-95';
-            nodeRunBtn.innerHTML = `<svg class="w-3 h-3 text-emerald-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd"/></svg><span>Node.js</span>`;
-            nodeRunBtn.onclick = (e) => {
-              e.stopPropagation();
-              runInBackendSandbox(rawCode, 'javascript', pre, nodeRunBtn);
-            };
-            actionsContainer.appendChild(nodeRunBtn);
-          } else if (isOtherExecutable) {
-            // Python / Bash Backend Runner
-            const runBtn = document.createElement('button');
-            runBtn.type = 'button';
-            runBtn.className = 'px-2 py-0.5 rounded bg-emerald-950/80 border border-emerald-700/60 hover:bg-emerald-900 text-emerald-300 text-[10px] font-mono flex items-center gap-1 transition active:scale-95';
-            runBtn.innerHTML = `<svg class="w-3 h-3 text-emerald-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd"/></svg><span>執行</span>`;
-            runBtn.onclick = (e) => {
-              e.stopPropagation();
-              runInBackendSandbox(rawCode, lowerLang, pre, runBtn);
-            };
-            actionsContainer.appendChild(runBtn);
-          }
-
-          const copyBtn = document.createElement('button');
-          copyBtn.type = 'button';
-          copyBtn.className = 'px-2 py-0.5 rounded bg-slate-700/80 hover:bg-slate-600 text-slate-300 text-[10px] font-sans flex items-center gap-1 transition active:scale-95';
-          copyBtn.innerHTML = `<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>複製`;
-          copyBtn.onclick = (e) => {
-            e.stopPropagation();
-            copyToClipboard(rawCode, copyBtn);
-          };
-          actionsContainer.appendChild(copyBtn);
-
-          header.appendChild(actionsContainer);
-          pre.insertBefore(header, pre.firstChild);
-        }
-      });
-    }
-
-    // Helper: Execute in Termux Backend (Python, Node.js, Bash)
-    async function runInBackendSandbox(rawCode, lang, pre, btn) {
-      const originalBtnHtml = btn.innerHTML;
-      btn.disabled = true;
-      btn.innerHTML = `<span class="inline-block w-2.5 h-2.5 rounded-full border-2 border-emerald-400 border-t-transparent animate-spin"></span><span>執行中...</span>`;
-
-      let outputBox = pre.nextElementSibling;
-      if (!outputBox || !outputBox.classList.contains('code-output-box')) {
-        outputBox = document.createElement('div');
-        outputBox.className = 'code-output-box mt-2 p-2.5 rounded-xl bg-black/95 border border-slate-700 font-mono text-[11px] select-text shadow-lg';
-        pre.parentNode.insertBefore(outputBox, pre.nextSibling);
-      }
-
-      outputBox.innerHTML = `
-        <div class="flex items-center justify-between text-[10px] text-slate-400 border-b border-slate-800 pb-1 mb-1.5 select-none">
-          <span class="flex items-center gap-1.5 text-indigo-400 font-semibold font-mono">
-            <span class="inline-block w-2 h-2 rounded-full bg-indigo-400 animate-ping"></span>
-            直譯執行中 (${lang})...
-          </span>
-        </div>
-        <div class="text-slate-500 text-[11px] font-mono animate-pulse">正在 Termux 環境中調度直譯器...</div>
-      `;
-
-      try {
-        const res = await fetch('/api/run-code', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ code: rawCode, language: lang })
-        });
-        const data = await res.json();
-
-        const isSuccess = data.success;
-        const statusColor = isSuccess ? 'text-emerald-400' : 'text-rose-400';
-        const statusDot = isSuccess ? 'bg-emerald-400' : 'bg-rose-400';
-        const displayText = (data.output || '') + (data.error ? (data.output ? '\n' : '') + data.error : '');
-
-        outputBox.innerHTML = `
-          <div class="flex items-center justify-between text-[10px] text-slate-400 border-b border-slate-800 pb-1 mb-1.5 select-none">
-            <span class="flex items-center gap-1.5 ${statusColor} font-semibold font-mono">
-              <span class="w-1.5 h-1.5 rounded-full ${statusDot}"></span>
-              ${isSuccess ? '執行完成' : '執行異常'} (${data.duration_ms || 0}ms)
-            </span>
-            <button type="button" class="close-output-btn text-slate-500 hover:text-slate-200 text-[10px] px-1.5 py-0.5 rounded hover:bg-slate-800 transition">✕ 關閉</button>
-          </div>
-          <pre class="whitespace-pre-wrap leading-relaxed ${isSuccess ? 'text-slate-200' : 'text-rose-300'} font-mono overflow-x-auto text-[11px] max-h-60 overflow-y-auto bg-transparent border-0 p-0 m-0">${escapeHtml(displayText || '(無輸出內容)')}</pre>
-        `;
-
-        outputBox.querySelector('.close-output-btn').onclick = () => outputBox.remove();
-        if (navigator.vibrate) navigator.vibrate(30);
-
-      } catch (err) {
-        outputBox.innerHTML = `
-          <div class="flex items-center justify-between text-[10px] text-rose-400 border-b border-slate-800 pb-1 mb-1.5">
-            <span>執行請求失敗</span>
-            <button type="button" class="close-output-btn text-slate-500 hover:text-slate-200 text-[10px]">✕</button>
-          </div>
-          <div class="text-rose-400 text-[11px]">${escapeHtml(err.message)}</div>
-        `;
-        outputBox.querySelector('.close-output-btn').onclick = () => outputBox.remove();
-      } finally {
-        btn.disabled = false;
-        btn.innerHTML = originalBtnHtml;
-      }
-    }
-
-    // Helper: Execute in Browser Sandbox (DOM / Canvas / Chart.js / Web Audio)
-    function runInBrowserSandbox(rawCode, pre) {
-      let outputBox = pre.nextElementSibling;
-      if (!outputBox || !outputBox.classList.contains('code-output-box')) {
-        outputBox = document.createElement('div');
-        outputBox.className = 'code-output-box mt-2 p-3 rounded-2xl bg-slate-950 border border-indigo-500/40 font-mono text-[11px] select-text shadow-xl';
-        pre.parentNode.insertBefore(outputBox, pre.nextSibling);
-      }
-
-      const startTs = performance.now();
-
-      outputBox.innerHTML = `
-        <div class="flex items-center justify-between text-[10px] text-slate-400 border-b border-slate-800 pb-1.5 mb-2 select-none">
-          <span class="flex items-center gap-1.5 text-indigo-300 font-semibold font-mono">
-            <span class="w-2 h-2 rounded-full bg-indigo-400 animate-pulse"></span>
-            🌐 瀏覽器動態渲染視窗
-          </span>
-          <button type="button" class="close-output-btn text-slate-500 hover:text-slate-200 text-[10px] px-1.5 py-0.5 rounded hover:bg-slate-800 transition">✕ 關閉</button>
-        </div>
-        <div class="render-target w-full min-h-0 mb-2 overflow-x-auto flex flex-col items-center justify-center gap-2"></div>
-        <pre class="console-box whitespace-pre-wrap leading-relaxed text-emerald-300 font-mono text-[11px] max-h-40 overflow-y-auto bg-black/60 p-2 rounded-lg border border-slate-800 hidden"></pre>
-      `;
-
-      outputBox.querySelector('.close-output-btn').onclick = () => outputBox.remove();
-
-      const renderTarget = outputBox.querySelector('.render-target');
-      const consoleBox = outputBox.querySelector('.console-box');
-
-      const iframe = document.createElement('iframe');
-      iframe.sandbox = "allow-scripts";
-      iframe.className = "w-full border-0";
-      iframe.style.minHeight = "300px";
-      
-      const escapedCode = JSON.stringify(rawCode);
-      const htmlContent = `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"><\/script>
-  <style>
-    body { margin: 0; padding: 4px; display: flex; flex-direction: column; align-items: center; background: transparent; color: white; font-family: monospace; }
-    canvas { max-width: 100%; border-radius: 0.5rem; border: 1px solid #1e293b; background: rgba(15, 23, 42, 0.6); }
-  </style>
-</head>
-<body>
-  <div id="container" style="width: 100%; display: flex; flex-direction: column; align-items: center;">
-    <canvas id="canvas"></canvas>
-  </div>
-  <script>
-    ['log', 'error', 'warn'].forEach(method => {
-      const original = console[method];
-      console[method] = function(...args) {
-        window.parent.postMessage({ type: 'console', method, args: args.map(a => typeof a === 'object' ? JSON.stringify(a, null, 2) : String(a)) }, '*');
-        original.apply(console, args);
-      };
-    });
-    try {
-      const container = document.getElementById('container');
-      const canvas = document.getElementById('canvas');
-      canvas.width = Math.min(window.innerWidth - 32, 480);
-      canvas.height = Math.round(canvas.width * 0.62);
-      const ctx = canvas.getContext('2d');
-      
-      const runner = new Function('container', 'canvas', 'ctx', 'console', 'Chart', ${escapedCode});
-      runner(container, canvas, ctx, console, window.Chart);
-      
-      window.parent.postMessage({ type: 'done' }, '*');
-    } catch (err) {
-      console.error(err.message);
-      window.parent.postMessage({ type: 'error' }, '*');
-    }
-  <\/script>
-</body>
-</html>`;
-      
-      iframe.srcdoc = htmlContent;
-      renderTarget.appendChild(iframe);
-
-      const logs = [];
-      const messageHandler = (e) => {
-        if (e.source !== iframe.contentWindow) return;
-        
-        if (e.data.type === 'console') {
-          const prefix = e.data.method === 'error' ? '[ERR] ' : e.data.method === 'warn' ? '[WARN] ' : '';
-          logs.push(prefix + e.data.args.join(' '));
-          consoleBox.classList.remove('hidden');
-          consoleBox.textContent = logs.join('\n');
-        } else if (e.data.type === 'done') {
-          const elapsed = (performance.now() - startTs).toFixed(1);
-          outputBox.querySelector('span.font-mono').innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-400"></span> 🌐 瀏覽器渲染完成 (${elapsed}ms)`;
-          if (navigator.vibrate) navigator.vibrate(30);
-        } else if (e.data.type === 'error') {
-          outputBox.querySelector('span.font-mono').innerHTML = `<span class="w-2 h-2 rounded-full bg-rose-400"></span> 🌐 執行報錯`;
-        }
-      };
-      window.addEventListener('message', messageHandler);
-
-      const closeBtn = outputBox.querySelector('.close-output-btn');
-      const originalOnclick = closeBtn.onclick;
-      closeBtn.onclick = () => {
-        window.removeEventListener('message', messageHandler);
-        originalOnclick();
-      };
-    }
-
-    // TTS Web Speech Synthesis
-    let currentSpeakingBtn = null;
-    function stripMarkdownForTTS(text) {
-      if (!text) return '';
-      return text
-        .replace(/```[\s\S]*?```/g, ' [程式碼區塊省略] ')
-        .replace(/`([^`]+)`/g, '$1')
-        .replace(/!\[([^\]]*)\]\([^)]*\)/g, '')
-        .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
-        .replace(/<[^>]+>/g, '')
-        .replace(/[*#_~>]/g, '')
-        .replace(/\[Uploaded Image:[^\]]+\]/g, '')
-        .replace(/\p{Extended_Pictographic}/gu, '')
-        .replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE00}-\u{FE0F}]/gu, '')
-        .replace(/\s+/g, ' ')
-        .trim();
-    }
-
-    function resetTTSBtn(btn) {
-      if (!btn) return;
-      btn.classList.remove('text-indigo-400', 'bg-indigo-600/20');
-      btn.classList.add('text-slate-400', 'hover:text-slate-300');
-      btn.innerHTML = `
-        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"/>
-        </svg>
-        <span class="text-[10px]">朗讀</span>
-      `;
-    }
-
-    function toggleSpeech(rawText, btn) {
-      if (!('speechSynthesis' in window)) {
-        alert('您的瀏覽器不支援語音合成朗讀');
-        return;
-      }
-
-      if (window.speechSynthesis.speaking && currentSpeakingBtn === btn) {
-        window.speechSynthesis.cancel();
-        resetTTSBtn(btn);
-        currentSpeakingBtn = null;
-        return;
-      }
-
-      if (window.speechSynthesis.speaking) {
-        window.speechSynthesis.cancel();
-        if (currentSpeakingBtn) resetTTSBtn(currentSpeakingBtn);
-      }
-
-      const cleanText = stripMarkdownForTTS(rawText);
-      if (!cleanText) return;
-
-      const utterance = new SpeechSynthesisUtterance(cleanText);
-      utterance.lang = /[\u4e00-\u9fa5]/.test(cleanText) ? 'zh-TW' : 'en-US';
-      utterance.rate = 1.0;
-      utterance.pitch = 1.0;
-
-      utterance.onstart = () => {
-        currentSpeakingBtn = btn;
-        btn.classList.add('text-indigo-400', 'bg-indigo-600/20');
-        btn.classList.remove('text-slate-400', 'hover:text-slate-300');
-        btn.innerHTML = `
-          <svg class="w-3.5 h-3.5 animate-pulse text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z"/>
-          </svg>
-          <span class="text-[10px] text-indigo-300 font-medium">停止</span>
-        `;
-      };
-
-      utterance.onend = () => {
-        resetTTSBtn(btn);
-        if (currentSpeakingBtn === btn) currentSpeakingBtn = null;
-      };
-
-      utterance.onerror = () => {
-        resetTTSBtn(btn);
-        if (currentSpeakingBtn === btn) currentSpeakingBtn = null;
-      };
-
-      window.speechSynthesis.speak(utterance);
-    }
-
-    // Transform local image paths into proxy URL
-    function formatMessageContent(content) {
-      if (!content) return '';
-      
-      const codeBlocks = [];
-      let currentContent = content.replace(/```[\s\S]*?```/g, (match) => {
-        codeBlocks.push(match);
-        return `__CODE_BLOCK_${codeBlocks.length - 1}__`;
-      });
-      
-      let formatted = currentContent.replace(/((\/data\/data\/|\/storage\/|\/sdcard\/)[^\s\)\"\'\<\>]+\.(png|jpg|jpeg|webp|svg|gif))/gi, (match) => {
-        return `/api/image?path=${encodeURIComponent(match)}`;
-      });
-      
-      formatted = formatted.replace(/__CODE_BLOCK_(\d+)__/g, (match, index) => {
-        return codeBlocks[index];
-      });
-
-      const rawHtml = marked.parse(formatted);
-      if (typeof DOMPurify !== 'undefined') {
-        return DOMPurify.sanitize(rawHtml, {
-          ADD_ATTR: ['target', 'class', 'style', 'data-enhanced', 'data-cmd', 'data-desc', 'data-fill'],
-          ADD_TAGS: ['iframe', 'canvas', 'details', 'summary', 'svg', 'path', 'g', 'rect', 'circle', 'line'],
-          USE_PROFILES: { html: true, svg: true }
-        });
-      }
-      return rawHtml;
-    }
-
-    // Helper: format tool info with rich metadata, category badges & icons
-    function getToolDetails(tool) {
-      const name = tool.name || tool.tool_name || 'action';
-      const args = tool.args || (tool.tool_info && tool.tool_info.parameters) || {};
-      let icon = '⚙️';
-      let label = '系統動作';
-      let badgeColor = 'bg-slate-800 text-slate-300 border-slate-700';
-      let desc = name;
-
-      if (name === 'run_command') {
-        icon = '💻';
-        label = '終端指令';
-        badgeColor = 'bg-amber-950/40 text-amber-300 border-amber-800/60';
-        const cmd = args.CommandLine || '';
-        desc = cmd ? `$ ${cmd.slice(0, 45)}${cmd.length > 45 ? '...' : ''}` : '執行終端命令';
-      } else if (name === 'view_file') {
-        icon = '📄';
-        label = '檢視檔案';
-        badgeColor = 'bg-blue-950/40 text-blue-300 border-blue-800/60';
-        const p = (args.AbsolutePath || '').split('/').pop();
-        desc = p ? `讀取 ${p}` : '檢視檔案內容';
-      } else if (name === 'replace_file_content') {
-        icon = '📝';
-        label = '編輯修改';
-        badgeColor = 'bg-emerald-950/40 text-emerald-300 border-emerald-800/60';
-        const p = (args.TargetFile || '').split('/').pop();
-        desc = p ? `修改 ${p}` : '替換檔案內容';
-      } else if (name === 'write_to_file') {
-        icon = '💾';
-        label = '寫入建立';
-        badgeColor = 'bg-emerald-950/40 text-emerald-300 border-emerald-800/60';
-        const p = (args.TargetFile || '').split('/').pop();
-        desc = p ? `建立 ${p}` : '寫入檔案';
-      } else if (name === 'grep_search') {
-        icon = '🔍';
-        label = '代碼搜尋';
-        badgeColor = 'bg-purple-950/40 text-purple-300 border-purple-800/60';
-        desc = args.Query ? `搜尋 "${args.Query}"` : '搜尋代碼庫';
-      } else if (name === 'find_by_name') {
-        icon = '📁';
-        label = '搜尋檔案';
-        badgeColor = 'bg-purple-950/40 text-purple-300 border-purple-800/60';
-        desc = args.Pattern ? `查找 "${args.Pattern}"` : '依名稱查找檔案';
-      } else if (name === 'search_web') {
-        icon = '🌐';
-        label = '網路檢索';
-        badgeColor = 'bg-sky-950/40 text-sky-300 border-sky-800/60';
-        desc = args.query ? `搜尋 "${args.query}"` : '搜尋網路公開資料';
-      } else if (name === 'generate_image') {
-        icon = '🎨';
-        label = '生成圖片';
-        badgeColor = 'bg-pink-950/40 text-pink-300 border-pink-800/60';
-        desc = args.Prompt ? `繪製 "${args.Prompt.slice(0, 30)}..."` : 'AI 圖片生成';
-      } else if (name === 'list_dir') {
-        icon = '📂';
-        label = '目錄清單';
-        badgeColor = 'bg-slate-800/60 text-slate-300 border-slate-700/60';
-        desc = '列出檔案目錄';
-      } else if (name === 'invoke_subagent') {
-        icon = '🤖';
-        label = '調度代理';
-        badgeColor = 'bg-indigo-950/40 text-indigo-300 border-indigo-800/60';
-        desc = '調派子代理協同工作';
-      }
-
-      const durationStr = (tool.duration_seconds && Number(tool.duration_seconds) > 0)
-        ? `${Number(tool.duration_seconds).toFixed(1)}s`
-        : '';
-      return { icon, label, badgeColor, desc, durationStr };
-    }
-
-    function formatToolSummary(tool) {
-      const d = getToolDetails(tool);
-      return `${d.icon} ${d.label}: ${d.desc}`;
-    }
-
-    // Render tools accordion HTML with rich cards
-    function buildToolsAccordionHtml(tools) {
-      if (!tools || tools.length === 0) return '';
-      
-      const itemsHtml = tools.map((t, idx) => {
-        const d = getToolDetails(t);
-        return `
-          <div class="py-1.5 border-b border-slate-800/60 last:border-b-0 flex items-center justify-between gap-2 text-xs">
-            <div class="flex items-center gap-2 min-w-0">
-              <span class="px-1.5 py-0.5 rounded-md border text-[10px] font-mono font-medium shrink-0 ${d.badgeColor}">
-                ${d.icon} ${d.label}
-              </span>
-              <span class="text-slate-300 font-mono text-[11px] truncate">${escapeHtml(d.desc)}</span>
-            </div>
-            ${d.durationStr ? `<span class="text-[10px] text-slate-500 font-mono shrink-0">${d.durationStr}</span>` : ''}
-          </div>
-        `;
-      }).join('');
-
-      return `
-        <details class="my-2 bg-slate-950/70 border border-slate-800/90 rounded-xl overflow-hidden text-xs">
-          <summary class="px-3 py-1.5 cursor-pointer flex items-center justify-between text-slate-400 hover:text-slate-200 font-mono select-none bg-slate-900/60">
-            <div class="flex items-center gap-1.5">
-              <span>⚙️ 執行了 ${tools.length} 個操作動作</span>
-            </div>
-            <span class="text-[10px] text-slate-500">展開 ▼</span>
-          </summary>
-          <div class="px-3 py-2 border-t border-slate-800/60 bg-slate-950/90 space-y-1">
-            ${itemsHtml}
-          </div>
-        </details>
-      `;
-    }
-
-    // Render collapsible thinking block
-    function buildThinkingBlockHtml(thinking) {
-      if (!thinking || !thinking.trim()) return '';
-      return `
-        <details class="my-2 bg-slate-950/60 border border-purple-900/40 rounded-xl overflow-hidden text-xs">
-          <summary class="px-3 py-1.5 bg-purple-950/30 text-purple-300 font-mono text-[11px] cursor-pointer flex items-center justify-between select-none">
-            <span class="flex items-center gap-1.5">💡 深度思考推理過程</span>
-            <span class="text-[10px] text-purple-400">展開 ▼</span>
-          </summary>
-          <div class="p-3 text-slate-300 font-mono text-[11px] leading-relaxed whitespace-pre-wrap border-t border-purple-900/30 bg-slate-950/90">
-            ${escapeHtml(thinking.trim())}
-          </div>
-        </details>
-      `;
-    }
-
-    // Append Message to UI
-    function appendMessage(role, content, timestamp, tools = [], thinking = '') {
-      const isUser = role === 'user';
-      const msgDiv = document.createElement('div');
-      msgDiv.className = `flex gap-2.5 w-full max-w-2xl mx-auto min-w-0 ${isUser ? 'justify-end' : 'justify-start'}`;
-
-      const avatar = isUser
-        ? `<div class="w-7 h-7 rounded-full bg-slate-700 flex items-center justify-center text-slate-300 shrink-0 text-xs font-bold order-2 mt-0.5">我</div>`
-        : `<div class="w-7 h-7 rounded-full bg-indigo-600/30 border border-indigo-500/50 flex items-center justify-center text-indigo-400 shrink-0 text-xs font-bold mt-0.5">AG</div>`;
-
-      const thinkingHtml = (!isUser && thinking) ? buildThinkingBlockHtml(thinking) : '';
-      const toolsHtml = (!isUser && tools && tools.length > 0) ? buildToolsAccordionHtml(tools) : '';
-
-      const bubbleClass = isUser
-        ? 'bg-indigo-600 text-white rounded-2xl rounded-tr-none p-3 text-xs sm:text-sm shadow-md order-1 max-w-[85%] break-words'
-        : 'bg-slate-900 border border-slate-800 text-slate-200 rounded-2xl rounded-tl-none p-3.5 text-xs sm:text-sm shadow-md flex-1 min-w-0 prose';
-
-      let bodyHtml = '';
-      if (isUser) {
-        let userText = content;
-        let imgHtml = '';
-        const match = userText.match(/\[Uploaded Image:\s*([^\]]+)\]/);
-        if (match) {
-          const imgP = match[1].trim();
-          imgHtml = `<img src="/api/image?path=${encodeURIComponent(imgP)}" class="max-h-48 sm:max-h-56 max-w-full rounded-xl object-contain border border-indigo-400/40 cursor-pointer shadow-md mb-2 bg-black/20 block" alt="Uploaded Photo">`;
-          userText = userText.replace(/\[Uploaded Image:\s*([^\]]+)\]/, '').trim();
-        }
-        bodyHtml = `${imgHtml}<div class="whitespace-pre-wrap leading-relaxed break-words">${escapeHtml(userText)}</div>`;
-      } else {
-        const timeStr = timestamp ? new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
-        bodyHtml = `
-          <div class="thinking-container">${thinkingHtml}</div>
-          <div class="tools-container">${toolsHtml}</div>
-          <div class="msg-content leading-relaxed min-w-0">${formatMessageContent(content)}</div>
-          <div class="msg-footer mt-2.5 pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400 select-none">
-            <div class="flex items-center gap-2">
-              <button type="button" class="tts-btn px-2 py-0.5 rounded-md hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition flex items-center gap-1 active:scale-95">
-                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"/>
-                </svg>
-                <span class="text-[10px]">朗讀</span>
-              </button>
-            </div>
-            <span class="text-[10px] text-slate-500 font-mono">${timeStr}</span>
-          </div>
-        `;
-      }
-
-      msgDiv.innerHTML = `${avatar}<div class="${bubbleClass}">${bodyHtml}</div>`;
-      messagesContainer.appendChild(msgDiv);
-
-      msgDiv.querySelectorAll('img').forEach(img => {
-        img.addEventListener('click', () => showLightbox(img.src));
-      });
-
-      const ttsBtn = msgDiv.querySelector('.tts-btn');
-      if (ttsBtn) {
-        ttsBtn.addEventListener('click', () => toggleSpeech(content, ttsBtn));
-      }
-
-      enhanceCodeBlocks(msgDiv);
-      scrollToBottom();
-      return msgDiv;
-    }
-
-    function escapeHtml(text) {
-      const div = document.createElement('div');
-      div.textContent = text;
-      return div.innerHTML;
-    }
-
-    // Delete Conversation Action
-    async function deleteConversation(convId, e) {
-      e.stopPropagation();
-      if (!confirm('確定要刪除這筆對話紀錄嗎？刪除後無法恢復。')) return;
-
-      try {
-        const res = await fetch(`/api/conversation?id=${convId}`, { method: 'DELETE' });
-        const data = await res.json();
-        if (data.success) {
-          if (currentConversationId === convId) {
-            currentConversationId = null;
-            headerTitle.textContent = '新對話';
-            messagesContainer.innerHTML = '';
-            appendMessage('assistant', '你好！已為你開啟新對話。有什麼可以幫你的？');
-          }
-          await loadConversations();
-        }
-      } catch (err) {
-        alert('刪除失敗：' + err.message);
-      }
-    }
-
-    // Load History for a Conversation
-    async function loadConversationHistory(convId) {
-      currentConversationId = convId;
-      localStorage.setItem('agy_active_conv_id', convId);
-      revokeAllBlobUrls();
-      messagesContainer.innerHTML = '';
-      toggleDrawer(false);
-
-      try {
-        const res = await fetch(`/api/history?id=${convId}`);
-        const data = await res.json();
-        
-        if (data.messages && data.messages.length > 0) {
-          data.messages.forEach(msg => appendMessage(msg.role, msg.content, msg.timestamp, msg.tools || [], msg.thinking || ''));
-          const firstUserMsg = data.messages.find(m => m.role === 'user');
-          headerTitle.textContent = (firstUserMsg && firstUserMsg.content) ? firstUserMsg.content.slice(0, 18) : '對話紀錄';
-        } else {
-          headerTitle.textContent = '新對話';
-          appendMessage('assistant', '你好！已為你開啟此對話。有什麼可以幫你的？');
-        }
-      } catch (err) {
-        console.error(err);
-        messagesContainer.innerHTML = `<div class="p-4 text-center text-xs text-rose-400">載入歷史對話失敗：${err.message}</div>`;
-      }
-    }
-
-    // Load Conversations List in Drawer (with Delete Button)
-    async function loadConversations() {
-      try {
-        const res = await fetch('/api/conversations');
-        const data = await res.json();
-        convList.innerHTML = '';
-
-        if (!data.conversations || data.conversations.length === 0) {
-          convList.innerHTML = '<div class="p-4 text-center text-xs text-slate-500">尚無歷史對話</div>';
-          return;
-        }
-
-        data.conversations.forEach(conv => {
-          const item = document.createElement('div');
-          const isCurrent = conv.id === currentConversationId;
-          item.className = `group p-2 rounded-xl cursor-pointer transition flex items-center justify-between text-xs ${
-            isCurrent ? 'bg-indigo-600/20 text-indigo-300 border border-indigo-500/30' : 'hover:bg-slate-800 text-slate-300'
-          }`;
-          item.innerHTML = `
-            <div class="flex items-center gap-2 truncate min-w-0 flex-1">
-              <svg class="w-3.5 h-3.5 shrink-0 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/>
-              </svg>
-              <span class="truncate">${escapeHtml(conv.title)}</span>
-            </div>
-            <button class="delete-btn p-1 text-slate-500 hover:text-rose-400 hover:bg-slate-700/60 rounded-md transition shrink-0 ml-1.5 active:scale-90" title="刪除此紀錄">
-              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-              </svg>
-            </button>
-          `;
-          
-          item.querySelector('.delete-btn').addEventListener('click', (e) => deleteConversation(conv.id, e));
-          item.addEventListener('click', () => loadConversationHistory(conv.id));
-          convList.appendChild(item);
-        });
-      } catch (err) {
-        convList.innerHTML = '<div class="p-4 text-center text-xs text-red-400">載入失敗</div>';
-      }
-    }
-
-    // New Chat Action
-    newChatBtn.addEventListener('click', () => {
-      currentConversationId = null;
-      localStorage.removeItem('agy_active_conv_id');
-      revokeAllBlobUrls();
-      headerTitle.textContent = '新對話';
-      messagesContainer.innerHTML = '';
-      appendMessage('assistant', '你好！已為你開啟新對話。有什麼可以幫你的？');
-      toggleDrawer(false);
-    });
-
-    // ⚡ Fast Client-Side Image Compression (Max 1280px, ~150KB JPEG)
-    function compressImageFile(file, maxWidth = 1280, quality = 0.8) {
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.readAsDataURL(file);
-        reader.onload = (event) => {
-          const img = new Image();
-          img.src = event.target.result;
-          img.onload = () => {
-            let width = img.width;
-            let height = img.height;
-
-            if (width > maxWidth || height > maxWidth) {
-              if (width > height) {
-                height = Math.round((height * maxWidth) / width);
-                width = maxWidth;
-              } else {
-                width = Math.round((width * maxWidth) / height);
-                height = maxWidth;
-              }
-            }
-
-            const canvas = document.createElement('canvas');
-            canvas.width = width;
-            canvas.height = height;
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(img, 0, 0, width, height);
-
-            const compressedBase64 = canvas.toDataURL('image/jpeg', quality);
-            const approxKb = Math.round((compressedBase64.length * 3) / 4 / 1024);
-            resolve({ base64: compressedBase64, kb: approxKb });
-          };
-          img.onerror = (err) => reject(err);
-        };
-        reader.onerror = (err) => reject(err);
-      });
-    }
-
-    // Camera & Upload Handlers with Compression
-    camBtn.addEventListener('click', () => cameraInput.click());
-    cameraInput.addEventListener('change', async (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-
-      try {
-        previewFilename.textContent = '壓縮中...';
-        imagePreviewContainer.classList.remove('hidden');
-
-        // Fast Client-side Compression
-        const { base64, kb } = await compressImageFile(file, 1280, 0.8);
-        previewThumb.src = base64;
-        previewFilename.textContent = file.name || 'photo.jpg';
-        previewFilesize.textContent = `已優化至 ${kb} KB`;
-
-        const res = await fetch('/api/upload', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ imageBase64: base64, filename: 'photo.jpg' })
-        });
-        const data = await res.json();
-        if (data.success) {
-          uploadedImagePath = data.filePath;
-        }
-      } catch (err) {
-        alert('圖片處理失敗：' + err.message);
-        imagePreviewContainer.classList.add('hidden');
-      }
-    });
-
-    removeImageBtn.addEventListener('click', () => {
-      uploadedImagePath = null;
-      cameraInput.value = '';
-      imagePreviewContainer.classList.add('hidden');
-    });
-
-    // Web Speech Recognition
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (SpeechRecognition) {
-      recognition = new SpeechRecognition();
-      recognition.continuous = false;
-      recognition.interimResults = true;
-      recognition.lang = 'zh-TW';
-
-      recognition.onstart = () => {
-        isRecording = true;
-        micBtn.classList.add('bg-rose-600', 'text-white', 'recording-pulse');
-      };
-
-      recognition.onresult = (event) => {
-        let transcript = '';
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          transcript += event.results[i][0].transcript;
-        }
-        promptInput.value = transcript;
-        promptInput.dispatchEvent(new Event('input'));
-      };
-
-      recognition.onerror = (e) => {
-        console.error('Speech recognition error:', e);
-        isRecording = false;
-        micBtn.classList.remove('bg-rose-600', 'text-white', 'recording-pulse');
-      };
-
-      recognition.onend = () => {
-        isRecording = false;
-        micBtn.classList.remove('bg-rose-600', 'text-white', 'recording-pulse');
-      };
-
-      micBtn.addEventListener('click', () => {
-        if (isRecording) {
-          recognition.stop();
-        } else {
-          recognition.start();
-        }
-      });
-    } else {
-      micBtn.classList.add('opacity-40');
-      micBtn.title = '此瀏覽器不支援語音辨識';
-    }
-
-    // Toggle Send / Stop button appearance & state
-    function setStreamingState(streaming) {
-      isStreaming = streaming;
-      if (streaming) {
-        sendBtn.classList.remove('bg-indigo-600', 'hover:bg-indigo-500', 'active:bg-indigo-700', 'shadow-indigo-600/30');
-        sendBtn.classList.add('bg-rose-600', 'hover:bg-rose-500', 'active:bg-rose-700', 'shadow-rose-600/30');
-        sendIcon.classList.add('hidden');
-        stopIcon.classList.remove('hidden');
-        sendBtn.title = '中斷生成';
-      } else {
-        sendBtn.classList.remove('bg-rose-600', 'hover:bg-rose-500', 'active:bg-rose-700', 'shadow-rose-600/30');
-        sendBtn.classList.add('bg-indigo-600', 'hover:bg-indigo-500', 'active:bg-indigo-700', 'shadow-indigo-600/30');
-        sendIcon.classList.remove('hidden');
-        stopIcon.classList.add('hidden');
-        sendBtn.title = '送出';
-      }
-    }
-
-    // Stop active generation
-    async function stopGeneration() {
-      if (currentAbortController) {
-        try {
-          currentAbortController.abort();
-        } catch (e) {}
-        currentAbortController = null;
-      }
-      try {
-        await fetch('/api/stop', { method: 'POST' });
-      } catch (e) {}
-      if (navigator.vibrate) {
-        navigator.vibrate([40, 40, 40]);
-      }
-      setStreamingState(false);
-    }
-
-    // Send Message with Live Streaming, Tools Logging, and Abort Support
-    async function sendMessage() {
-      const text = promptInput.value.trim();
-      const imgPath = uploadedImagePath;
-
-      if (!text && !imgPath) return;
-      if (isStreaming) return;
-
-      if (!isOnline && !navigator.onLine) {
-        alert('⚠️ 手機目前處於離線狀態，請檢查 Wi-Fi 或行動數據連線！');
-        if (navigator.vibrate) navigator.vibrate([40, 80, 40]);
-        return;
-      }
-
-      currentAbortController = new AbortController();
-      setStreamingState(true);
-
-      let userDisplay = text;
-      if (imgPath) userDisplay = `[Uploaded Image: ${imgPath}]\n${userDisplay}`;
-      appendMessage('user', userDisplay);
-
-      promptInput.value = '';
-      promptInput.style.height = 'auto';
-      uploadedImagePath = null;
-      cameraInput.value = '';
-      imagePreviewContainer.classList.add('hidden');
-
-      const liveTools = [];
-      let liveThinking = '';
-      const startTs = performance.now();
-
-      // Find current model info for badge
-      const modelObj = availableModels.find(m => m.id === currentModel);
-      const modelLabel = modelObj ? modelObj.name : 'AI';
-
-      const assistantMsgDiv = document.createElement('div');
-      assistantMsgDiv.className = 'flex gap-2.5 w-full max-w-2xl mx-auto justify-start min-w-0';
-      assistantMsgDiv.innerHTML = `
-        <div class="w-7 h-7 rounded-full bg-indigo-600/30 border border-indigo-500/50 flex items-center justify-center text-indigo-400 shrink-0 text-xs font-bold mt-0.5">AG</div>
-        <div class="bg-slate-900 border border-slate-800 text-slate-200 rounded-2xl rounded-tl-none p-3.5 text-xs sm:text-sm shadow-md flex-1 min-w-0 prose">
-          
-          <!-- Live Cyberpunk Status Bar with Shimmer Line (Idea 2) -->
-          <div class="live-status mb-2.5 rounded-2xl bg-gradient-to-b from-slate-900 to-indigo-950/40 border border-indigo-500/30 overflow-hidden shadow-lg select-none">
-            <div class="shimmer-bar h-[2px] w-full"></div>
-            <div class="p-2.5 flex flex-col gap-2">
-              <!-- Top Row: Phase + Counters -->
-              <div class="flex items-center justify-between gap-2 flex-wrap">
-                <div class="flex items-center gap-1.5 min-w-0">
-                  <span class="inline-block w-2 h-2 rounded-full bg-indigo-400 animate-ping shrink-0"></span>
-                  <span class="text-[9px] px-1.5 py-0.5 rounded border font-mono font-semibold bg-indigo-500/20 text-indigo-300 border-indigo-500/40 shrink-0">${escapeHtml(modelLabel)}</span>
-                  <span class="status-text truncate font-medium text-[11px] text-slate-200">🧠 思考分析中...</span>
-                </div>
-                <!-- Counters: Tokens + Speed + Timer (Idea 3) -->
-                <div class="flex items-center gap-1.5 shrink-0 text-[10px] font-mono">
-                  <span class="live-tokens text-emerald-300 bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-800/60 hidden">🪙 0 tok</span>
-                  <span class="live-speed text-indigo-300 bg-indigo-900/40 px-1.5 py-0.5 rounded border border-indigo-700/50 hidden">⚡ 0 t/s</span>
-                  <span class="live-timer font-bold text-slate-200 bg-slate-800/90 px-1.5 py-0.5 rounded border border-slate-700">0.0s</span>
-                </div>
-              </div>
-              
-              <!-- Step-by-Step Pipeline Pills (Idea 4) -->
-              <div class="live-pipeline flex flex-wrap items-center gap-1 text-[10px] font-mono border-t border-slate-800/80 pt-1.5">
-                <span class="pipeline-pill pill-init px-2 py-0.5 rounded-full bg-indigo-950/80 border border-indigo-700/60 text-indigo-300 flex items-center gap-1">
-                  <span class="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse"></span>
-                  <span>🧠 思考分析</span>
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <div class="thinking-container"></div>
-          <div class="tools-container"></div>
-          <div class="msg-content leading-relaxed min-w-0"><span class="inline-block w-2 h-4 bg-indigo-400 animate-pulse"></span></div>
-        </div>
-      `;
-      messagesContainer.appendChild(assistantMsgDiv);
-      const contentElem = assistantMsgDiv.querySelector('.msg-content');
-      const liveStatusElem = assistantMsgDiv.querySelector('.live-status');
-      const statusTextElem = assistantMsgDiv.querySelector('.status-text');
-      const liveTimerElem = assistantMsgDiv.querySelector('.live-timer');
-      const liveTokensElem = assistantMsgDiv.querySelector('.live-tokens');
-      const liveSpeedElem = assistantMsgDiv.querySelector('.live-speed');
-      const livePipelineElem = assistantMsgDiv.querySelector('.live-pipeline');
-      const thinkingContainerElem = assistantMsgDiv.querySelector('.thinking-container');
-      const toolsContainerElem = assistantMsgDiv.querySelector('.tools-container');
-      scrollToBottom();
-
-      // Pipeline State Tracker
-      const pipelineSteps = new Map();
-      pipelineSteps.set('init', { label: '🧠 思考分析', status: 'running' });
-
-      function renderPipeline() {
-        if (!livePipelineElem) return;
-        const html = Array.from(pipelineSteps.values()).map(step => {
-          const isDone = step.status === 'done';
-          const isRunning = step.status === 'running';
-          const badgeClass = isDone
-            ? 'bg-slate-900 border-slate-700/80 text-slate-400'
-            : isRunning
-            ? 'bg-indigo-950/90 border-indigo-500/70 text-indigo-300 shadow-sm'
-            : 'bg-slate-950/50 border-slate-800 text-slate-500';
-          const icon = isDone
-            ? '<span class="text-emerald-400 font-bold">✓</span>'
-            : isRunning
-            ? '<span class="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-ping"></span>'
-            : '<span class="w-1.5 h-1.5 rounded-full bg-slate-600"></span>';
-          return `<span class="px-2 py-0.5 rounded-full border text-[10px] flex items-center gap-1 font-mono ${badgeClass}">${icon}<span>${escapeHtml(step.label)}</span></span>`;
-        }).join('');
-        livePipelineElem.innerHTML = html;
-      }
-
-      const liveTimerInterval = setInterval(() => {
-        const elapsedSec = (performance.now() - startTs) / 1000;
-        if (liveTimerElem) liveTimerElem.textContent = `${elapsedSec.toFixed(1)}s`;
-        if (accumulatedText.length > 0) {
-          const estTokens = Math.round(accumulatedText.length / 2);
-          if (liveTokensElem) {
-            liveTokensElem.textContent = `🪙 ${estTokens} tok`;
-            liveTokensElem.classList.remove('hidden');
-          }
-          if (liveSpeedElem) {
-            const speed = Math.round(estTokens / Math.max(0.2, elapsedSec));
-            if (speed > 0) {
-              liveSpeedElem.textContent = `⚡ ${speed} t/s`;
-              liveSpeedElem.classList.remove('hidden');
-            }
-          }
-        }
-      }, 100);
-
-      let accumulatedText = '';
-      let abortedHandled = false;
-
-      try {
-        const response = await fetch('/api/chat', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            prompt: text,
-            conversation_id: currentConversationId,
-            image_path: imgPath,
-            model: currentModel
-          }),
-          signal: currentAbortController.signal
-        });
-
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = '';
-        let currentEvent = 'message';
-
-        while (true) {
-          const { value, done } = await reader.read();
-          if (done) break;
-
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split('\n');
-          buffer = lines.pop();
-
-          for (const line of lines) {
-            if (line === '') {
-              currentEvent = 'message';
-            } else if (line.startsWith('event:')) {
-              currentEvent = line.replace('event:', '').trim();
-            } else if (line.startsWith('data:')) {
-              const rawData = line.replace('data:', '').trim();
-              if (!rawData) continue;
-              try {
-                const data = JSON.parse(rawData);
-                if (currentEvent === 'init' && data.conversation_id) {
-                  currentConversationId = data.conversation_id;
-                  localStorage.setItem('agy_active_conv_id', currentConversationId);
-                } else if (currentEvent === 'thought') {
-                  const initStep = pipelineSteps.get('init');
-                  if (initStep) initStep.status = 'done';
-                  pipelineSteps.set('thought', { label: '💡 深度推理', status: 'running' });
-                  renderPipeline();
-
-                  liveThinking += (data.delta || data.thinking || data.fullThinking || '');
-                  thinkingContainerElem.innerHTML = buildThinkingBlockHtml(liveThinking);
-                  statusTextElem.textContent = '💡 深度推理思考中...';
-                  scrollToBottom();
-                } else if (currentEvent === 'tool') {
-                  const initStep = pipelineSteps.get('init');
-                  if (initStep) initStep.status = 'done';
-                  const thoughtStep = pipelineSteps.get('thought');
-                  if (thoughtStep) thoughtStep.status = 'done';
-
-                  liveTools.push(data);
-                  const d = getToolDetails(data);
-                  pipelineSteps.set(`tool_${liveTools.length}`, { label: `${d.icon} ${d.label}`, status: 'done' });
-                  renderPipeline();
-
-                  statusTextElem.textContent = `${d.icon} ${d.label}: ${d.desc}`;
-                  toolsContainerElem.innerHTML = buildToolsAccordionHtml(liveTools);
-                  scrollToBottom();
-                } else if (currentEvent === 'chunk' && data.accumulated) {
-                  const initStep = pipelineSteps.get('init');
-                  if (initStep) initStep.status = 'done';
-                  const thoughtStep = pipelineSteps.get('thought');
-                  if (thoughtStep) thoughtStep.status = 'done';
-                  pipelineSteps.set('writing', { label: '✍️ 組織撰寫', status: 'running' });
-                  renderPipeline();
-
-                  statusTextElem.textContent = '✍️ 回覆組織撰寫中...';
-                  accumulatedText = data.accumulated;
-                  contentElem.innerHTML = formatMessageContent(accumulatedText);
-                  scrollToBottom();
-                } else if (currentEvent === 'done') {
-                  clearInterval(liveTimerInterval);
-                  liveStatusElem.style.display = 'none';
-                  if (data.conversation_id) {
-                    currentConversationId = data.conversation_id;
-                    localStorage.setItem('agy_active_conv_id', currentConversationId);
-                  }
-                  if (data.response) accumulatedText = data.response;
-                  contentElem.innerHTML = formatMessageContent(accumulatedText);
-                  toolsContainerElem.innerHTML = buildToolsAccordionHtml(liveTools);
-                  if (liveThinking) {
-                    thinkingContainerElem.innerHTML = buildThinkingBlockHtml(liveThinking);
-                  }
-
-                  const totalSec = ((performance.now() - startTs) / 1000).toFixed(1);
-                  const estTokens = Math.round(accumulatedText.length / 2);
-                  const avgSpeed = Math.round(estTokens / Math.max(0.5, totalSec));
-
-                  // Append Action Footer with Stats, TTS and Copy All
-                  let footer = assistantMsgDiv.querySelector('.msg-footer');
-                  if (!footer) {
-                    footer = document.createElement('div');
-                    footer.className = 'msg-footer mt-2.5 pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400 select-none';
-                    const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                    footer.innerHTML = `
-                      <div class="flex items-center gap-2">
-                        <button type="button" class="tts-btn px-2 py-0.5 rounded-md hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition flex items-center gap-1 active:scale-95">
-                          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"/>
-                          </svg>
-                          <span class="text-[10px]">朗讀</span>
-                        </button>
-                      </div>
-                      <div class="flex items-center gap-1.5 text-[10px] text-slate-500 font-mono">
-                        <span class="text-slate-400">⏱️ ${totalSec}s</span>
-                        ${avgSpeed > 0 ? `<span class="text-indigo-400/80">· ⚡ ${avgSpeed} t/s</span>` : ''}
-                        <span>· ${timeStr}</span>
-                      </div>
-                    `;
-                    assistantMsgDiv.querySelector('.bg-slate-900').appendChild(footer);
-                    const ttsBtn = footer.querySelector('.tts-btn');
-                    ttsBtn.addEventListener('click', () => toggleSpeech(accumulatedText, ttsBtn));
-                  }
-
-                  enhanceCodeBlocks(assistantMsgDiv);
-                  assistantMsgDiv.querySelectorAll('img').forEach(img => {
-                    img.addEventListener('click', () => showLightbox(img.src));
-                  });
-
-                  // 🔔 Trigger System Notification when user is away (tab hidden or in another app)
-                  if (document.hidden) {
-                    triggerDoneNotification(accumulatedText);
-                  }
-
-                  if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
-                }
-              } catch (e) {}
-            }
-          }
-        }
-      } catch (err) {
-        clearInterval(liveTimerInterval);
-        liveStatusElem.style.display = 'none';
-        if (err.name === 'AbortError') {
-          abortedHandled = true;
-          const abortBadge = document.createElement('div');
-          abortBadge.className = 'mt-2 pt-1.5 border-t border-slate-800 text-[11px] text-amber-400 font-mono flex items-center gap-1';
-          abortBadge.innerHTML = `<svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg><span>[已手動中斷生成]</span>`;
-          assistantMsgDiv.querySelector('.bg-slate-900').appendChild(abortBadge);
-          enhanceCodeBlocks(assistantMsgDiv);
-        } else {
-          // Graceful Disconnection Recovery (Solution 2)
-          console.warn('[SSE Disconnect] Stream interrupted:', err);
-          
-          if (accumulatedText && accumulatedText.trim()) {
-            // 1. Preserve all existing streamed text - NEVER wipe out screen!
-            contentElem.innerHTML = formatMessageContent(accumulatedText);
-            
-            // 2. Add Reconnecting Badge
-            const recoveryBadge = document.createElement('div');
-            recoveryBadge.className = 'recovery-badge mt-2 p-1.5 rounded-lg bg-indigo-950/60 border border-indigo-500/40 text-[10px] text-indigo-300 font-mono flex items-center justify-between gap-2';
-            recoveryBadge.innerHTML = `
-              <span class="flex items-center gap-1.5">
-                <span class="inline-block w-2 h-2 rounded-full bg-indigo-400 animate-ping"></span>
-                <span>連線暫時重置，正在自動補齊完整回覆...</span>
-              </span>
-            `;
-            assistantMsgDiv.querySelector('.bg-slate-900').appendChild(recoveryBadge);
-
-            // 3. Auto-query History API to recover complete response
-            if (currentConversationId) {
-              let attempts = 0;
-              const checkHistory = async () => {
-                attempts++;
-                try {
-                  const hRes = await fetch(`/api/history?id=${currentConversationId}`);
-                  if (hRes.ok) {
-                    const hData = await hRes.json();
-                    if (hData.messages && hData.messages.length > 0) {
-                      const lastAssistant = [...hData.messages].reverse().find(m => m.role === 'assistant');
-                      if (lastAssistant && lastAssistant.content && lastAssistant.content.length >= accumulatedText.length) {
-                        accumulatedText = lastAssistant.content;
-                        contentElem.innerHTML = formatMessageContent(accumulatedText);
-                        if (lastAssistant.tools && lastAssistant.tools.length > 0) {
-                          toolsContainerElem.innerHTML = buildToolsAccordionHtml(lastAssistant.tools);
-                        }
-                        if (lastAssistant.thinking) {
-                          thinkingContainerElem.innerHTML = buildThinkingBlockHtml(lastAssistant.thinking);
-                        }
-                        recoveryBadge.innerHTML = `
-                          <span class="flex items-center gap-1.5 text-emerald-300">
-                            <span class="text-emerald-400 font-bold">✓</span>
-                            <span>已成功同步並補齊完整回覆</span>
-                          </span>
-                        `;
-                        setTimeout(() => recoveryBadge.remove(), 4000);
-                        enhanceCodeBlocks(assistantMsgDiv);
-                        return;
-                      }
-                    }
-                  }
-                } catch (e) {}
-
-                if (attempts < 4) {
-                  setTimeout(checkHistory, attempts * 1500);
-                } else {
-                  recoveryBadge.innerHTML = `
-                    <span class="flex items-center gap-1 text-slate-400">
-                      <span>⚠️ 已保留現有回覆內容</span>
-                    </span>
-                    <button type="button" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-[10px]" onclick="loadConversationHistory('${currentConversationId}')">🔄 重整</button>
-                  `;
-                }
-              };
-              setTimeout(checkHistory, 1200);
-            }
-          } else {
-            // Empty response failed
-            contentElem.innerHTML = `
-              <div class="p-2 rounded-lg bg-rose-950/40 border border-rose-800/60 text-xs text-rose-300 flex items-center justify-between">
-                <span>連線中斷（${escapeHtml(err.message)}）</span>
-                <button type="button" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-[10px]" onclick="sendMessage()">重試</button>
-              </div>
-            `;
-          }
-
-          enhanceCodeBlocks(assistantMsgDiv);
-        }
-      } finally {
-        clearInterval(liveTimerInterval);
-        liveStatusElem.style.display = 'none';
-        setStreamingState(false);
-        currentAbortController = null;
-        scrollToBottom();
-      }
-    }
-
-    let streamingStartedAt = 0;
-
-    function handleSendClick(e) {
-      if (e) {
-        if (e.cancelable) e.preventDefault();
-        e.stopPropagation();
-      }
-
-      if (isStreaming) {
-        // Prevent accidental immediate cancellation on single tap / fast double-tap:
-        // Must be streaming for at least 800ms before user can intentionally abort
-        if (Date.now() - streamingStartedAt > 800) {
-          if (navigator.vibrate) navigator.vibrate([40, 40, 40]);
-          stopGeneration();
-        }
-      } else {
-        streamingStartedAt = Date.now();
-        if (navigator.vibrate) navigator.vibrate(25);
-        slashMenu.classList.add('hidden');
-        sendMessage();
-      }
-    }
-
-    sendBtn.addEventListener('click', handleSendClick);
-
-    // Initial load: Restore last active conversation or load most recent
-    (async function init() {
-      try {
-        const savedConvId = localStorage.getItem('agy_active_conv_id');
-        const res = await fetch('/api/conversations');
-        const data = await res.json();
-        if (data.conversations && data.conversations.length > 0) {
-          const targetId = (savedConvId && data.conversations.some(c => c.id === savedConvId))
-            ? savedConvId
-            : data.conversations[0].id;
-          loadConversationHistory(targetId);
-        }
-      } catch (e) {
-        console.error('Init load error:', e);
-      }
-    })();
-  </script>
+  <!-- Modular Scripts -->
+  <script src="/js/ui.js"></script>
+  <script src="/js/tools.js"></script>
+  <script src="/js/chat.js"></script>
+  <script src="/js/app.js"></script>
 </body>
 </html>
