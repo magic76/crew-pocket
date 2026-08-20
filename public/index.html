@@ -139,7 +139,14 @@
       </div>
     </div>
     
-    <div class="flex items-center gap-1.5 shrink-0">
+    <div class="flex items-center gap-1 shrink-0">
+      <!-- Capabilities Cheat Sheet Button -->
+      <button id="cheat-sheet-btn" class="p-2 rounded-lg hover:bg-slate-800 text-amber-400 hover:text-amber-300 transition active:scale-95 shrink-0" title="💡 超能力功能錦囊">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+        </svg>
+      </button>
+
       <!-- Notification Toggle Button -->
       <button id="notify-btn" class="p-2 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition active:scale-95 shrink-0" title="系統推播通知">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -239,6 +246,28 @@
         </button>
       </div>
 
+      <!-- Quick Action Chips Bar (Horizontally scrollable) -->
+      <div class="flex items-center gap-1.5 overflow-x-auto py-0.5 px-0.5 no-scrollbar select-none text-[11px] font-medium shrink-0">
+        <button type="button" class="quick-chip shrink-0 px-2.5 py-1 rounded-full bg-slate-900/90 hover:bg-indigo-950/80 border border-slate-700/80 hover:border-indigo-500/60 text-slate-300 hover:text-indigo-300 flex items-center gap-1.5 transition active:scale-95 shadow-sm" data-fill="請幫我用 Chart.js 繪製一份圖表：">
+          <span>📊</span><span>畫圖表</span>
+        </button>
+        <button type="button" class="quick-chip shrink-0 px-2.5 py-1 rounded-full bg-slate-900/90 hover:bg-emerald-950/80 border border-slate-700/80 hover:border-emerald-500/60 text-slate-300 hover:text-emerald-300 flex items-center gap-1.5 transition active:scale-95 shadow-sm" data-fill="請寫一段 Python 腳本並輸出結果：">
+          <span>🐍</span><span>跑 Python</span>
+        </button>
+        <button type="button" class="quick-chip shrink-0 px-2.5 py-1 rounded-full bg-slate-900/90 hover:bg-sky-950/80 border border-slate-700/80 hover:border-sky-500/60 text-slate-300 hover:text-sky-300 flex items-center gap-1.5 transition active:scale-95 shadow-sm" data-fill="請幫我設計一個可互動的 HTML 小工具：">
+          <span>🌐</span><span>做網頁</span>
+        </button>
+        <button type="button" class="quick-chip shrink-0 px-2.5 py-1 rounded-full bg-slate-900/90 hover:bg-purple-950/80 border border-slate-700/80 hover:border-purple-500/60 text-slate-300 hover:text-purple-300 flex items-center gap-1.5 transition active:scale-95 shadow-sm" data-fill="請寫一段 Bash 腳本檢查當前 Termux 系統與磁碟狀態">
+          <span>🛠️</span><span>系統巡檢</span>
+        </button>
+        <button type="button" class="quick-chip shrink-0 px-2.5 py-1 rounded-full bg-slate-900/90 hover:bg-blue-950/80 border border-slate-700/80 hover:border-blue-500/60 text-slate-300 hover:text-blue-300 flex items-center gap-1.5 transition active:scale-95 shadow-sm" data-fill="請深入搜尋網路並整理完整分析：">
+          <span>🔍</span><span>深度搜尋</span>
+        </button>
+        <button type="button" id="open-cheat-chip" class="shrink-0 px-2.5 py-1 rounded-full bg-amber-950/40 hover:bg-amber-950/80 border border-amber-600/50 text-amber-300 flex items-center gap-1 transition active:scale-95 shadow-sm">
+          <span>💡</span><span>功能錦囊</span>
+        </button>
+      </div>
+
       <!-- Input Row -->
       <div class="flex items-center gap-1.5 w-full min-w-0">
         
@@ -262,7 +291,7 @@
 
         <!-- Textarea Input Box -->
         <div class="relative flex-1 min-w-0">
-          <textarea id="prompt-input" rows="1" placeholder="問任何問題、輸入 / 查看指令、拍照或語音..." class="w-full bg-slate-950 text-slate-100 placeholder-slate-500 text-xs sm:text-sm rounded-xl px-3 py-2 border border-slate-700 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none resize-none max-h-24 transition block"></textarea>
+          <textarea id="prompt-input" rows="1" placeholder="問任何問題、點擊快捷膠囊、輸入 / 指令、拍照或語音..." class="w-full bg-slate-950 text-slate-100 placeholder-slate-500 text-xs sm:text-sm rounded-xl px-3 py-2 border border-slate-700 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none resize-none max-h-24 transition block"></textarea>
         </div>
 
         <!-- Send / Stop Button -->
@@ -277,6 +306,93 @@
       </div>
     </div>
   </footer>
+
+  <!-- CAPABILITIES CHEAT-SHEET MODAL -->
+  <div id="cheat-sheet-modal" class="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-3 opacity-0 pointer-events-none transition-opacity duration-200">
+    <div class="bg-slate-900 border border-slate-700/80 rounded-2xl w-full max-w-lg max-h-[85dvh] flex flex-col shadow-2xl overflow-hidden">
+      <!-- Modal Header -->
+      <div class="px-4 py-3 border-b border-slate-800 flex items-center justify-between bg-slate-950/60">
+        <div class="flex items-center gap-2">
+          <span class="text-lg">💡</span>
+          <div>
+            <h2 class="text-xs font-bold text-white tracking-wide">Antigravity 超能力功能錦囊</h2>
+            <div class="text-[10px] text-slate-400">隨身 AI 與掌上開發工作台秘笈</div>
+          </div>
+        </div>
+        <button id="close-cheat-sheet-btn" class="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition text-xs font-mono">✕</button>
+      </div>
+      
+      <!-- Modal Body (Scrollable) -->
+      <div class="p-4 space-y-3.5 overflow-y-auto text-xs leading-relaxed">
+        
+        <!-- 1. Live Browser JS & Chart.js -->
+        <div class="p-3 rounded-xl bg-slate-950/80 border border-indigo-500/30 space-y-1.5">
+          <div class="flex items-center justify-between">
+            <span class="font-semibold text-indigo-300 flex items-center gap-1.5">
+              <span>📊</span> <span>瀏覽器 JS & Chart.js 即時渲染</span>
+            </span>
+            <span class="text-[9px] px-1.5 py-0.5 rounded bg-indigo-950 text-indigo-400 border border-indigo-800">零延遲</span>
+          </div>
+          <p class="text-slate-300 text-[11px]">只要讓 AI 輸出 JavaScript 代碼，點擊右上角【🌐 瀏覽器渲染】，手機螢幕將直接畫出互動折線圖、圓餅圖、Canvas 動畫或 Web Audio 音效！</p>
+          <div class="text-[10px] font-mono text-slate-400 bg-black/50 p-2 rounded border border-slate-800">
+            Prompt 範例：「幫我用 Chart.js 畫出本週預算分配圓餅圖」
+          </div>
+        </div>
+
+        <!-- 2. Termux Backend Runner -->
+        <div class="p-3 rounded-xl bg-slate-950/80 border border-emerald-500/30 space-y-1.5">
+          <div class="flex items-center justify-between">
+            <span class="font-semibold text-emerald-300 flex items-center gap-1.5">
+              <span>⚡</span> <span>Python / Node / Bash 一鍵沙盒</span>
+            </span>
+            <span class="text-[9px] px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800">50ms 秒跑</span>
+          </div>
+          <p class="text-slate-300 text-[11px]">所有代碼塊均有【▶️ 執行】按鈕。點擊後直接在 Termux 本機調度直譯器執行，下方秒展開黑色終端印出 Output，零 Token 消耗。</p>
+          <div class="text-[10px] font-mono text-slate-400 bg-black/50 p-2 rounded border border-slate-800">
+            Prompt 範例：「寫一段 Python 計算房貸每月還款金額」
+          </div>
+        </div>
+
+        <!-- 3. HTML & SVG Action Cards -->
+        <div class="p-3 rounded-xl bg-slate-950/80 border border-sky-500/30 space-y-1.5">
+          <div class="flex items-center justify-between">
+            <span class="font-semibold text-sky-300 flex items-center gap-1.5">
+              <span>🌐</span> <span>HTML / SVG 產物獨立沙盒</span>
+            </span>
+            <span class="text-[9px] px-1.5 py-0.5 rounded bg-sky-950 text-sky-400 border border-sky-800">全螢幕預覽</span>
+          </div>
+          <p class="text-slate-300 text-[11px]">AI 輸出的 HTML/SVG 會自動轉換為美觀卡片。點擊【開啟預覽】可全螢幕操作微型網頁，或展開對話內小窗直接互動。</p>
+        </div>
+
+        <!-- 4. Android Floating Window -->
+        <div class="p-3 rounded-xl bg-slate-950/80 border border-purple-500/30 space-y-1.5">
+          <div class="flex items-center justify-between">
+            <span class="font-semibold text-purple-300 flex items-center gap-1.5">
+              <span>📱</span> <span>Android 懸浮小窗與懸浮球</span>
+            </span>
+            <span class="text-[9px] px-1.5 py-0.5 rounded bg-purple-950 text-purple-400 border border-purple-800">多工必備</span>
+          </div>
+          <p class="text-slate-300 text-[11px]">在手機「多工任務畫面」中，長按 Antigravity 圖示選擇【以彈出視窗檢視】，即可縮小成懸浮泡泡，邊滑其他 App 邊叫出 AI！</p>
+        </div>
+
+        <!-- 5. Slash Commands -->
+        <div class="p-3 rounded-xl bg-slate-950/80 border border-slate-700/80 space-y-1.5">
+          <div class="flex items-center justify-between">
+            <span class="font-semibold text-slate-200 flex items-center gap-1.5">
+              <span>🚀</span> <span>常用 Slash 指令秘笈</span>
+            </span>
+          </div>
+          <div class="grid grid-cols-2 gap-1.5 text-[10px] font-mono">
+            <div class="bg-black/40 p-1.5 rounded border border-slate-800"><span class="text-indigo-400 font-bold">/plan</span>: 複雜任務分步規劃</div>
+            <div class="bg-black/40 p-1.5 rounded border border-slate-800"><span class="text-emerald-400 font-bold">/goal</span>: 長任務自主持續達成</div>
+            <div class="bg-black/40 p-1.5 rounded border border-slate-800"><span class="text-amber-400 font-bold">/grill-me</span>: 透過提問對齊需求</div>
+            <div class="bg-black/40 p-1.5 rounded border border-slate-800"><span class="text-sky-400 font-bold">/schedule</span>: 定時提醒排程</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
 
   <!-- IMAGE LIGHTBOX MODAL -->
   <div id="lightbox" class="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4 opacity-0 pointer-events-none transition-opacity duration-200">
@@ -498,6 +614,42 @@
     });
     lightbox.addEventListener('click', (e) => {
       if (e.target === lightbox) lightbox.classList.add('opacity-0', 'pointer-events-none');
+    });
+
+    // Capabilities Cheat Sheet Modal Handlers
+    const cheatSheetBtn = document.getElementById('cheat-sheet-btn');
+    const cheatSheetModal = document.getElementById('cheat-sheet-modal');
+    const closeCheatSheetBtn = document.getElementById('close-cheat-sheet-btn');
+    const openCheatChip = document.getElementById('open-cheat-chip');
+
+    function toggleCheatSheet(open) {
+      if (!cheatSheetModal) return;
+      if (open) {
+        cheatSheetModal.classList.remove('opacity-0', 'pointer-events-none');
+      } else {
+        cheatSheetModal.classList.add('opacity-0', 'pointer-events-none');
+      }
+    }
+
+    if (cheatSheetBtn) cheatSheetBtn.addEventListener('click', () => toggleCheatSheet(true));
+    if (openCheatChip) openCheatChip.addEventListener('click', () => toggleCheatSheet(true));
+    if (closeCheatSheetBtn) closeCheatSheetBtn.addEventListener('click', () => toggleCheatSheet(false));
+    if (cheatSheetModal) {
+      cheatSheetModal.addEventListener('click', (e) => {
+        if (e.target === cheatSheetModal) toggleCheatSheet(false);
+      });
+    }
+
+    // Quick Action Chips Fill Handler
+    document.querySelectorAll('.quick-chip').forEach(chip => {
+      chip.addEventListener('click', () => {
+        const fillText = chip.getAttribute('data-fill');
+        if (!fillText) return;
+        promptInput.value = fillText;
+        promptInput.focus();
+        promptInput.dispatchEvent(new Event('input'));
+        if (navigator.vibrate) navigator.vibrate(20);
+      });
     });
 
     // Copy to clipboard helper
