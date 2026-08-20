@@ -82,14 +82,24 @@ class ActiveSessionManager {
 
     console.log(`[SessionManager] Spawning resident agy process for session: ${targetConversationId || 'NEW'}`);
     
+    // Check if target conversation exists in brain directory
+    let validConvId = targetConversationId;
+    if (validConvId) {
+      const convDir = path.join(BRAIN_DIR, validConvId);
+      if (!fs.existsSync(convDir)) {
+        console.warn(`[SessionManager] Conversation ${validConvId} directory not found in brain. Starting a new session.`);
+        validConvId = null;
+      }
+    }
+
     const args = [
       '--input-format', 'stream-json',
       '--output-format', 'stream-json',
       '--dangerously-skip-permissions'
     ];
 
-    if (targetConversationId) {
-      args.push('--conversation', targetConversationId);
+    if (validConvId) {
+      args.push('--conversation', validConvId);
     }
 
     const child = spawn('agy', args, {
@@ -101,7 +111,7 @@ class ActiveSessionManager {
     emitter.setMaxListeners(50);
 
     const sessionObj = {
-      conversationId: targetConversationId || null,
+      conversationId: validConvId || null,
       process: child,
       emitter,
       isBusy: false,
@@ -112,11 +122,20 @@ class ActiveSessionManager {
     this.current = sessionObj;
     this.resetIdleTimer();
 
-    const initPromise = new Promise((resolve) => {
+    let initDone = false;
+    let timeoutTimer = null;
+
+    const initPromise = new Promise((resolve, reject) => {
+      timeoutTimer = setTimeout(() => {
+        if (!initDone) {
+          initDone = true;
+          reject(new Error('Timeout waiting for agy process initialization'));
+        }
+      }, 15000);
+
       const onInitData = (chunk) => {
-        sessionObj.buffer += chunk.toString();
-        const lines = sessionObj.buffer.split('\n');
-        sessionObj.buffer = lines.pop();
+        const text = chunk.toString();
+        const lines = text.split('\n');
 
         for (const line of lines) {
           if (!line.trim()) continue;
@@ -125,14 +144,35 @@ class ActiveSessionManager {
             if (item.event === 'init' && item.conversation_id) {
               sessionObj.conversationId = item.conversation_id;
               console.log(`[SessionManager] Resident session initialized: ${sessionObj.conversationId}`);
-              child.stdout.removeListener('data', onInitData);
-              resolve();
+              if (!initDone) {
+                initDone = true;
+                clearTimeout(timeoutTimer);
+                child.stdout.removeListener('data', onInitData);
+                resolve();
+              }
               return;
             }
           } catch (e) {}
         }
       };
+
       child.stdout.on('data', onInitData);
+
+      child.once('error', (err) => {
+        if (!initDone) {
+          initDone = true;
+          clearTimeout(timeoutTimer);
+          reject(err);
+        }
+      });
+
+      child.once('close', (code) => {
+        if (!initDone) {
+          initDone = true;
+          clearTimeout(timeoutTimer);
+          reject(new Error(`agy process exited prematurely with code ${code}`));
+        }
+      });
     });
 
     child.stdout.on('data', (chunk) => {
@@ -310,8 +350,14 @@ async function handleGetHistory(parsedUrl, res) {
       } catch (e) {}
     }
 
+    // Filter out completely blank ghost messages
+    const filteredMessages = messages.filter(m => {
+      if (m.role === 'user') return Boolean(m.content && m.content.trim());
+      return Boolean(m.content && m.content.trim()) || (m.tools && m.tools.length > 0);
+    });
+
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ conversation_id: convId, messages }));
+    res.end(JSON.stringify({ conversation_id: convId, messages: filteredMessages }));
   } catch (err) {
     res.writeHead(500, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: err.message }));
@@ -401,6 +447,114 @@ async function handleUpload(req, res) {
   }
 }
 
+// ⚡ One-Click Code Execution Sandbox
+async function handleRunCode(req, res) {
+  let body;
+  try {
+    body = await parseJsonBody(req);
+  } catch (err) {
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify({ error: 'Invalid JSON body' }));
+  }
+
+  const { code, language } = body;
+  if (!code) {
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify({ error: 'No code provided' }));
+  }
+
+  const lang = (language || 'javascript').toLowerCase().trim();
+  const startTs = Date.now();
+
+  let cmd = 'node';
+  let ext = '.js';
+
+  const SCRATCH_DIR = path.join(ROOT_DIR, 'scratch');
+  if (!fs.existsSync(SCRATCH_DIR)) {
+    fs.mkdirSync(SCRATCH_DIR, { recursive: true });
+  }
+
+  if (lang.includes('py')) {
+    cmd = 'python3';
+    ext = '.py';
+  } else if (lang.includes('bash') || lang.includes('sh') || lang.includes('shell')) {
+    cmd = 'bash';
+    ext = '.sh';
+  } else {
+    cmd = 'node';
+    ext = '.js';
+  }
+
+  const tempFile = path.join(SCRATCH_DIR, `run_${Date.now()}_${Math.random().toString(36).substring(7)}${ext}`);
+  
+  try {
+    await fsPromises.writeFile(tempFile, code, 'utf-8');
+
+    const child = spawn(cmd, [tempFile], {
+      cwd: '/data/data/com.termux/files/home',
+      env: { ...process.env, PYTHONUNBUFFERED: '1' }
+    });
+
+    let stdout = '';
+    let stderr = '';
+    let isKilled = false;
+
+    const timeout = setTimeout(() => {
+      isKilled = true;
+      try { child.kill('SIGTERM'); } catch (e) {}
+    }, 15000); // 15s max execution time
+
+    child.stdout.on('data', chunk => {
+      if (stdout.length < 50000) stdout += chunk.toString();
+    });
+
+    child.stderr.on('data', chunk => {
+      if (stderr.length < 50000) stderr += chunk.toString();
+    });
+
+    child.on('close', async (exitCode) => {
+      clearTimeout(timeout);
+      try { await fsPromises.unlink(tempFile); } catch (e) {}
+
+      const duration_ms = Date.now() - startTs;
+      let output = stdout.trim();
+      let error = stderr.trim();
+
+      if (isKilled) {
+        error = (error ? error + '\n' : '') + '[執行逾時 (超過 15 秒已自動中止)]';
+      }
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        success: exitCode === 0 && !isKilled,
+        output: output || (exitCode === 0 ? '(程式執行成功，無輸出內容)' : ''),
+        error,
+        exit_code: exitCode,
+        duration_ms
+      }));
+    });
+
+    child.on('error', async (err) => {
+      clearTimeout(timeout);
+      try { await fsPromises.unlink(tempFile); } catch (e) {}
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        success: false,
+        output: '',
+        error: `無法啟動直譯器 (${cmd}): ${err.message}`,
+        exit_code: -1,
+        duration_ms: Date.now() - startTs
+      }));
+    });
+
+  } catch (err) {
+    try { await fsPromises.unlink(tempFile); } catch (e) {}
+    res.writeHead(500, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: err.message }));
+  }
+}
+
 // SSE Chat using Resident Pipe
 async function handleChat(req, res) {
   let body;
@@ -448,6 +602,9 @@ async function handleChat(req, res) {
         if (su.step_type === 'agent_response' && su.text_delta) {
           fullResponse += su.text_delta;
           sendEvent('chunk', { delta: su.text_delta, accumulated: fullResponse });
+        } else if (su.step_type === 'thought' || su.thinking_delta || su.thinking) {
+          const tDelta = su.thinking_delta || su.thinking || su.text || '';
+          if (tDelta) sendEvent('thought', { delta: tDelta });
         } else if (su.step_type === 'tool') {
           sendEvent('tool', {
             state: su.state,
@@ -458,6 +615,7 @@ async function handleChat(req, res) {
         }
       } else if (item.event === 'result' && item.result) {
         if (item.result.conversation_id) session.conversationId = item.result.conversation_id;
+        if (item.result.thinking) sendEvent('thought', { fullThinking: item.result.thinking });
         if (item.result.response && !fullResponse) fullResponse = item.result.response;
 
         sendEvent('done', {
@@ -480,13 +638,19 @@ async function handleChat(req, res) {
     session.emitter.on('raw', onRaw);
 
     function cleanup() {
-      session.isBusy = false;
-      session.emitter.removeListener('event', onEvent);
-      session.emitter.removeListener('raw', onRaw);
+      if (session) {
+        session.isBusy = false;
+        session.emitter.removeListener('event', onEvent);
+        session.emitter.removeListener('raw', onRaw);
+      }
       sessionManager.resetIdleTimer();
     }
 
     req.on('close', () => {
+      if (session && session.isBusy) {
+        console.log(`[Chat Aborted] Client closed connection while session was busy. Stopping active session.`);
+        sessionManager.closeActiveSession();
+      }
       cleanup();
     });
 
@@ -525,11 +689,31 @@ async function handleStatic(pathname, res) {
 
   try {
     const data = await fsPromises.readFile(filePath);
-    res.writeHead(200, { 'Content-Type': contentType });
+    res.writeHead(200, {
+      'Content-Type': contentType,
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      'Pragma': 'no-cache',
+      'Expires': '0'
+    });
     res.end(data);
   } catch (err) {
     res.writeHead(404, { 'Content-Type': 'text/plain' });
     res.end('Not Found');
+  }
+}
+
+// Abort active generation
+async function handleStop(req, res) {
+  try {
+    console.log('[Stop Request] Aborting active generation session...');
+    if (sessionManager.current) {
+      sessionManager.closeActiveSession();
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: true, message: 'Generation interrupted' }));
+  } catch (err) {
+    res.writeHead(500, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: err.message }));
   }
 }
 
@@ -554,8 +738,12 @@ const server = http.createServer(async (req, res) => {
     return handleDeleteConversation(parsedUrl, res);
   } else if (pathname === '/api/chat' && req.method === 'POST') {
     return handleChat(req, res);
+  } else if (pathname === '/api/stop' && req.method === 'POST') {
+    return handleStop(req, res);
   } else if (pathname === '/api/upload' && req.method === 'POST') {
     return handleUpload(req, res);
+  } else if (pathname === '/api/run-code' && req.method === 'POST') {
+    return handleRunCode(req, res);
   } else if (pathname === '/api/image' && req.method === 'GET') {
     return handleImageProxy(parsedUrl, res);
   } else {

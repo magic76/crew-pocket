@@ -132,13 +132,22 @@
       </div>
     </div>
     
-    <!-- New Chat Button -->
-    <button id="new-chat-btn" class="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium transition shadow-md shadow-indigo-600/30 active:scale-95 shrink-0">
-      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
-      </svg>
-      <span>新對話</span>
-    </button>
+    <div class="flex items-center gap-1.5 shrink-0">
+      <!-- Notification Toggle Button -->
+      <button id="notify-btn" class="p-2 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition active:scale-95 shrink-0" title="系統推播通知">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
+        </svg>
+      </button>
+      
+      <!-- New Chat Button -->
+      <button id="new-chat-btn" class="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium transition shadow-md shadow-indigo-600/30 active:scale-95 shrink-0">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+        </svg>
+        <span>新對話</span>
+      </button>
+    </div>
   </header>
 
   <!-- MAIN CHAT CONTAINER -->
@@ -199,6 +208,30 @@
         </button>
       </div>
 
+      <!-- Slash Command Autocomplete / Quick Picker -->
+      <div id="slash-menu" class="hidden flex flex-wrap gap-1.5 p-2 bg-slate-900/95 border border-slate-800 rounded-xl shadow-xl backdrop-blur max-h-36 overflow-y-auto">
+        <button type="button" class="slash-item px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-indigo-600/30 hover:border-indigo-500/50 border border-slate-700 text-slate-300 hover:text-white text-xs flex items-center gap-1.5 transition active:scale-95" data-cmd="/plan " data-desc="詳細分步規劃任務">
+          <span class="text-indigo-400 font-mono font-bold">/plan</span>
+          <span class="text-[10px] text-slate-400">分步規劃</span>
+        </button>
+        <button type="button" class="slash-item px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-indigo-600/30 hover:border-indigo-500/50 border border-slate-700 text-slate-300 hover:text-white text-xs flex items-center gap-1.5 transition active:scale-95" data-cmd="/goal " data-desc="自主持續執行任務直到目標達成">
+          <span class="text-emerald-400 font-mono font-bold">/goal</span>
+          <span class="text-[10px] text-slate-400">自主目標</span>
+        </button>
+        <button type="button" class="slash-item px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-indigo-600/30 hover:border-indigo-500/50 border border-slate-700 text-slate-300 hover:text-white text-xs flex items-center gap-1.5 transition active:scale-95" data-cmd="/grill-me " data-desc="透過互動提問對齊需求細節">
+          <span class="text-amber-400 font-mono font-bold">/grill-me</span>
+          <span class="text-[10px] text-slate-400">訪談對齊</span>
+        </button>
+        <button type="button" class="slash-item px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-indigo-600/30 hover:border-indigo-500/50 border border-slate-700 text-slate-300 hover:text-white text-xs flex items-center gap-1.5 transition active:scale-95" data-cmd="/learn " data-desc="記住特定操作習慣或修正偏好">
+          <span class="text-purple-400 font-mono font-bold">/learn</span>
+          <span class="text-[10px] text-slate-400">記住經驗</span>
+        </button>
+        <button type="button" class="slash-item px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-indigo-600/30 hover:border-indigo-500/50 border border-slate-700 text-slate-300 hover:text-white text-xs flex items-center gap-1.5 transition active:scale-95" data-cmd="/schedule " data-desc="設定定時提醒或重複工作排程">
+          <span class="text-sky-400 font-mono font-bold">/schedule</span>
+          <span class="text-[10px] text-slate-400">定時排程</span>
+        </button>
+      </div>
+
       <!-- Input Row -->
       <div class="flex items-center gap-1.5 w-full min-w-0">
         
@@ -222,13 +255,16 @@
 
         <!-- Textarea Input Box -->
         <div class="relative flex-1 min-w-0">
-          <textarea id="prompt-input" rows="1" placeholder="問任何問題、拍照或語音輸入..." class="w-full bg-slate-950 text-slate-100 placeholder-slate-500 text-xs sm:text-sm rounded-xl px-3 py-2 border border-slate-700 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none resize-none max-h-24 transition block"></textarea>
+          <textarea id="prompt-input" rows="1" placeholder="問任何問題、輸入 / 查看指令、拍照或語音..." class="w-full bg-slate-950 text-slate-100 placeholder-slate-500 text-xs sm:text-sm rounded-xl px-3 py-2 border border-slate-700 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none resize-none max-h-24 transition block"></textarea>
         </div>
 
-        <!-- Send Button -->
-        <button id="send-btn" type="button" title="送出" class="p-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white transition shadow-md shadow-indigo-600/30 active:scale-95 shrink-0 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center">
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <!-- Send / Stop Button -->
+        <button id="send-btn" type="button" title="送出" class="p-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white transition shadow-md shadow-indigo-600/30 active:scale-95 shrink-0 flex items-center justify-center">
+          <svg id="send-icon" class="w-5 h-5 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/>
+          </svg>
+          <svg id="stop-icon" class="w-5 h-5 hidden pointer-events-none" fill="currentColor" viewBox="0 0 24 24">
+            <rect x="6" y="6" width="12" height="12" rx="2" />
           </svg>
         </button>
       </div>
@@ -259,13 +295,17 @@
     let currentConversationId = null;
     let uploadedImagePath = null;
     let isStreaming = false;
+    let currentAbortController = null;
     let recognition = null;
     let isRecording = false;
+    let userScrolledUp = false;
 
     // DOM Elements
     const messagesContainer = document.getElementById('messages-container');
     const promptInput = document.getElementById('prompt-input');
     const sendBtn = document.getElementById('send-btn');
+    const sendIcon = document.getElementById('send-icon');
+    const stopIcon = document.getElementById('stop-icon');
     const camBtn = document.getElementById('cam-btn');
     const micBtn = document.getElementById('mic-btn');
     const cameraInput = document.getElementById('camera-input');
@@ -280,21 +320,148 @@
     const closeDrawerBtn = document.getElementById('close-drawer-btn');
     const convList = document.getElementById('conv-list');
     const newChatBtn = document.getElementById('new-chat-btn');
+    const notifyBtn = document.getElementById('notify-btn');
     const headerTitle = document.getElementById('header-title');
+    const slashMenu = document.getElementById('slash-menu');
     const lightbox = document.getElementById('lightbox');
     const lightboxImg = document.getElementById('lightbox-img');
     const closeLightboxBtn = document.getElementById('close-lightbox-btn');
 
-    // Auto resize textarea
-    promptInput.addEventListener('input', () => {
-      promptInput.style.height = 'auto';
-      promptInput.style.height = Math.min(promptInput.scrollHeight, 100) + 'px';
+    // 🔔 Push Notification & Service Worker Management
+    let notificationsEnabled = localStorage.getItem('agy_notify_enabled') !== 'false';
+    let swRegistration = null;
+
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').then(reg => {
+        swRegistration = reg;
+      }).catch(err => {
+        console.warn('SW registration failed:', err);
+      });
+    }
+
+    async function triggerDoneNotification(text) {
+      if (!notificationsEnabled || !('Notification' in window) || Notification.permission !== 'granted') return;
+
+      const cleanSummary = (text || '回覆已完成')
+        .replace(/\p{Extended_Pictographic}/gu, '')
+        .replace(/[*#_~`<>]/g, '')
+        .trim()
+        .slice(0, 70);
+
+      const notifOptions = {
+        body: `✨ ${cleanSummary || '回覆已生成完畢！'}`,
+        tag: 'agy-done',
+        renotify: true,
+        vibrate: [200, 100, 200]
+      };
+
+      // 1. Android Chrome requires ServiceWorker showNotification
+      if (swRegistration && swRegistration.showNotification) {
+        try {
+          await swRegistration.showNotification('Antigravity 隨身助理', notifOptions);
+          return;
+        } catch (e) {
+          console.warn('[SW showNotification error]', e);
+        }
+      }
+
+      // 2. Desktop / Safari Standard Notification fallback
+      try {
+        const n = new Notification('Antigravity 隨身助理', notifOptions);
+        n.onclick = () => {
+          window.focus();
+          n.close();
+        };
+      } catch (e) {}
+    }
+
+    function updateNotifyBtnUI() {
+      if (!notifyBtn) return;
+      if (!('Notification' in window)) {
+        notifyBtn.style.display = 'none';
+        return;
+      }
+      if (Notification.permission === 'granted' && notificationsEnabled) {
+        notifyBtn.classList.add('text-indigo-400', 'bg-indigo-600/20');
+        notifyBtn.classList.remove('text-slate-400');
+        notifyBtn.title = '通知已開啟 (點擊測試/關閉)';
+      } else {
+        notifyBtn.classList.remove('text-indigo-400', 'bg-indigo-600/20');
+        notifyBtn.classList.add('text-slate-400');
+        notifyBtn.title = '通知已關閉 (點擊開啟)';
+      }
+    }
+
+    if (notifyBtn) {
+      updateNotifyBtnUI();
+      notifyBtn.addEventListener('click', async () => {
+        if (!('Notification' in window)) {
+          alert('您的瀏覽器不支援 Web Notifications');
+          return;
+        }
+        if (Notification.permission === 'default') {
+          const perm = await Notification.requestPermission();
+          notificationsEnabled = (perm === 'granted');
+          if (perm === 'granted') {
+            triggerDoneNotification('系統通知功能已成功啟用！🎉');
+          }
+        } else if (Notification.permission === 'granted') {
+          notificationsEnabled = !notificationsEnabled;
+          if (notificationsEnabled) {
+            triggerDoneNotification('系統通知已重新開啟！');
+          }
+        } else {
+          alert('請在瀏覽器網址列設定（鎖頭圖示）中允許此網站發送通知。');
+          return;
+        }
+        localStorage.setItem('agy_notify_enabled', notificationsEnabled);
+        updateNotifyBtnUI();
+      });
+    }
+
+    // Smart Scroll Function
+    function scrollToBottom(force = false) {
+      if (force || !userScrolledUp) {
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+      }
+    }
+
+    messagesContainer.addEventListener('scroll', () => {
+      const threshold = 80;
+      const isAtBottom = messagesContainer.scrollHeight - messagesContainer.scrollTop - messagesContainer.clientHeight <= threshold;
+      userScrolledUp = !isAtBottom;
     });
 
-    // Enter to send
+    // Auto resize textarea on typing & Slash Command Trigger
+    promptInput.addEventListener('input', () => {
+      promptInput.style.height = 'auto';
+      promptInput.style.height = Math.min(promptInput.scrollHeight, 120) + 'px';
+      const val = promptInput.value.trim();
+      if (val.startsWith('/') && !val.includes(' ')) {
+        slashMenu.classList.remove('hidden');
+      } else {
+        slashMenu.classList.add('hidden');
+      }
+    });
+
+    // Slash menu item selection
+    document.querySelectorAll('.slash-item').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const cmd = btn.dataset.cmd;
+        promptInput.value = cmd;
+        slashMenu.classList.add('hidden');
+        promptInput.focus();
+        promptInput.style.height = 'auto';
+        promptInput.style.height = Math.min(promptInput.scrollHeight, 120) + 'px';
+      });
+    });
+
+    // Enter to send (Shift+Enter for newline, with IME composition protection)
     promptInput.addEventListener('keydown', (e) => {
+      if (e.isComposing || e.keyCode === 229) return;
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
+        slashMenu.classList.add('hidden');
         sendMessage();
       }
     });
@@ -326,6 +493,305 @@
       if (e.target === lightbox) lightbox.classList.add('opacity-0', 'pointer-events-none');
     });
 
+    // Copy to clipboard helper
+    function copyToClipboard(text, btn) {
+      navigator.clipboard.writeText(text).then(() => {
+        const original = btn.innerHTML;
+        btn.innerHTML = `<span class="text-emerald-400 font-medium">✓ 已複製</span>`;
+        setTimeout(() => { btn.innerHTML = original; }, 1800);
+      }).catch(() => {
+        alert('複製失敗');
+      });
+    }
+
+    // Enhance code blocks: Convert HTML/SVG into Ultra-Clean Action Cards
+    function enhanceCodeBlocks(container) {
+      const pres = container.querySelectorAll('pre');
+      pres.forEach(pre => {
+        if (pre.dataset.enhanced) return;
+        pre.dataset.enhanced = 'true';
+
+        const codeEl = pre.querySelector('code');
+        if (!codeEl) return;
+
+        // Capture pure original raw code BEFORE highlight modifies DOM
+        const rawCode = codeEl.textContent || codeEl.innerText;
+        let lang = 'CODE';
+        codeEl.classList.forEach(cls => {
+          if (cls.startsWith('language-')) lang = cls.replace('language-', '').toUpperCase();
+        });
+
+        hljs.highlightElement(codeEl);
+
+        const isHtml = lang === 'HTML' || lang === 'XML' || lang === 'SVG' || /^\s*<(!DOCTYPE|html|svg)/i.test(rawCode);
+
+        if (isHtml) {
+          const blob = new Blob([rawCode], { type: 'text/html;charset=utf-8' });
+          const blobUrl = URL.createObjectURL(blob);
+          const typeLabel = lang === 'SVG' ? 'SVG 視覺圖形' : 'HTML 網頁產物';
+
+          const card = document.createElement('div');
+          card.className = 'my-2.5 not-prose';
+
+          card.innerHTML = `
+            <div class="p-3 rounded-2xl bg-gradient-to-r from-slate-900 to-slate-800/90 border border-slate-700/80 shadow-md flex flex-col gap-2.5">
+              <div class="flex items-center justify-between gap-2 flex-wrap">
+                <div class="flex items-center gap-2.5 min-w-0">
+                  <div class="w-8 h-8 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                    </svg>
+                  </div>
+                  <div class="min-w-0">
+                    <div class="text-xs font-semibold text-white truncate">🌐 ${typeLabel}</div>
+                    <div class="text-[10px] text-slate-400">點擊開啟全螢幕或展開預覽</div>
+                  </div>
+                </div>
+                <div class="flex items-center gap-1.5 shrink-0 ml-auto">
+                  <!-- Native unblockable anchor link -->
+                  <a href="${blobUrl}" target="_blank" class="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white text-xs font-semibold flex items-center gap-1.5 shadow-md shadow-emerald-900/40 active:scale-95 transition no-underline">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
+                    </svg>
+                    <span>開啟預覽</span>
+                  </a>
+                  <button type="button" class="card-copy-btn p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 transition border border-slate-700 active:scale-95" title="複製 HTML 原始碼">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+              <!-- Optional on-demand inline sandbox expander -->
+              <details class="border-t border-slate-800/80 pt-2 text-xs">
+                <summary class="cursor-pointer text-indigo-400 hover:text-indigo-300 font-mono text-[11px] select-none flex items-center justify-between">
+                  <span>📱 在對話框中直接展開小視窗</span>
+                  <span class="text-[10px] text-slate-500">點擊展開 ▼</span>
+                </summary>
+                <div class="sandbox-container mt-2 h-72 rounded-xl overflow-hidden bg-slate-950 border border-slate-700 relative">
+                  <!-- Lazy created iframe -->
+                </div>
+              </details>
+            </div>
+          `;
+
+          // Button handlers
+          const cardCopyBtn = card.querySelector('.card-copy-btn');
+          const detailsExpander = card.querySelector('details');
+          const sandboxContainer = card.querySelector('.sandbox-container');
+
+          cardCopyBtn.onclick = (e) => {
+            e.stopPropagation();
+            copyToClipboard(rawCode, cardCopyBtn);
+          };
+
+          detailsExpander.ontoggle = () => {
+            if (detailsExpander.open && !sandboxContainer.querySelector('iframe')) {
+              const inlineFrame = document.createElement('iframe');
+              inlineFrame.className = 'w-full h-full border-0 absolute inset-0';
+              inlineFrame.src = blobUrl;
+              sandboxContainer.appendChild(inlineFrame);
+            }
+          };
+
+          // Replace pre with card completely
+          if (pre.parentNode) {
+            pre.parentNode.replaceChild(card, pre);
+          } else {
+            container.appendChild(card);
+          }
+        } else {
+          // Standard code blocks (Python, Shell, JS, JSON, etc.)
+          const header = document.createElement('div');
+          header.className = 'flex items-center justify-between px-2.5 py-1 bg-slate-800/90 border-b border-slate-700/60 text-[11px] font-mono text-slate-400 select-none rounded-t-lg -mx-2.5 -mt-2.5 mb-2';
+
+          const langLabel = document.createElement('span');
+          langLabel.className = 'font-semibold text-slate-300 text-[10px] tracking-wider';
+          langLabel.textContent = lang;
+          header.appendChild(langLabel);
+
+          const actionsContainer = document.createElement('div');
+          actionsContainer.className = 'flex items-center gap-1.5';
+
+          const lowerLang = lang.toLowerCase();
+          const isExecutable = ['python', 'py', 'javascript', 'js', 'node', 'bash', 'sh', 'shell', 'zsh'].includes(lowerLang);
+
+          if (isExecutable) {
+            const runBtn = document.createElement('button');
+            runBtn.type = 'button';
+            runBtn.className = 'px-2 py-0.5 rounded bg-emerald-950/80 border border-emerald-700/60 hover:bg-emerald-900 text-emerald-300 text-[10px] font-mono flex items-center gap-1 transition active:scale-95';
+            runBtn.innerHTML = `<svg class="w-3 h-3 text-emerald-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd"/></svg><span>執行</span>`;
+            
+            runBtn.onclick = async (e) => {
+              e.stopPropagation();
+              const originalBtnHtml = runBtn.innerHTML;
+              runBtn.disabled = true;
+              runBtn.innerHTML = `<span class="inline-block w-2.5 h-2.5 rounded-full border-2 border-emerald-400 border-t-transparent animate-spin"></span><span>執行中...</span>`;
+
+              let outputBox = pre.nextElementSibling;
+              if (!outputBox || !outputBox.classList.contains('code-output-box')) {
+                outputBox = document.createElement('div');
+                outputBox.className = 'code-output-box mt-2 p-2.5 rounded-xl bg-black/95 border border-slate-700 font-mono text-[11px] select-text shadow-lg';
+                pre.parentNode.insertBefore(outputBox, pre.nextSibling);
+              }
+
+              outputBox.innerHTML = `
+                <div class="flex items-center justify-between text-[10px] text-slate-400 border-b border-slate-800 pb-1 mb-1.5 select-none">
+                  <span class="flex items-center gap-1.5 text-indigo-400 font-semibold font-mono">
+                    <span class="inline-block w-2 h-2 rounded-full bg-indigo-400 animate-ping"></span>
+                    直譯執行中...
+                  </span>
+                </div>
+                <div class="text-slate-500 text-[11px] font-mono animate-pulse">正在 Termux 環境中調度直譯器...</div>
+              `;
+
+              try {
+                const res = await fetch('/api/run-code', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ code: rawCode, language: lowerLang })
+                });
+                const data = await res.json();
+
+                const isSuccess = data.success;
+                const statusColor = isSuccess ? 'text-emerald-400' : 'text-rose-400';
+                const statusDot = isSuccess ? 'bg-emerald-400' : 'bg-rose-400';
+                const displayText = (data.output || '') + (data.error ? (data.output ? '\n' : '') + data.error : '');
+
+                outputBox.innerHTML = `
+                  <div class="flex items-center justify-between text-[10px] text-slate-400 border-b border-slate-800 pb-1 mb-1.5 select-none">
+                    <span class="flex items-center gap-1.5 ${statusColor} font-semibold font-mono">
+                      <span class="w-1.5 h-1.5 rounded-full ${statusDot}"></span>
+                      ${isSuccess ? '執行完成' : '執行異常'} (${data.duration_ms || 0}ms)
+                    </span>
+                    <button type="button" class="close-output-btn text-slate-500 hover:text-slate-200 text-[10px] px-1.5 py-0.5 rounded hover:bg-slate-800 transition">✕ 關閉</button>
+                  </div>
+                  <pre class="whitespace-pre-wrap leading-relaxed ${isSuccess ? 'text-slate-200' : 'text-rose-300'} font-mono overflow-x-auto text-[11px] max-h-60 overflow-y-auto bg-transparent border-0 p-0 m-0">${escapeHtml(displayText || '(無輸出內容)')}</pre>
+                `;
+
+                outputBox.querySelector('.close-output-btn').onclick = () => {
+                  outputBox.remove();
+                };
+
+                if (navigator.vibrate) navigator.vibrate(30);
+
+              } catch (err) {
+                outputBox.innerHTML = `
+                  <div class="flex items-center justify-between text-[10px] text-rose-400 border-b border-slate-800 pb-1 mb-1.5">
+                    <span>執行請求失敗</span>
+                    <button type="button" class="close-output-btn text-slate-500 hover:text-slate-200 text-[10px]">✕</button>
+                  </div>
+                  <div class="text-rose-400 text-[11px]">${escapeHtml(err.message)}</div>
+                `;
+                outputBox.querySelector('.close-output-btn').onclick = () => outputBox.remove();
+              } finally {
+                runBtn.disabled = false;
+                runBtn.innerHTML = originalBtnHtml;
+              }
+            };
+
+            actionsContainer.appendChild(runBtn);
+          }
+
+          const copyBtn = document.createElement('button');
+          copyBtn.type = 'button';
+          copyBtn.className = 'px-2 py-0.5 rounded bg-slate-700/80 hover:bg-slate-600 text-slate-300 text-[10px] font-sans flex items-center gap-1 transition active:scale-95';
+          copyBtn.innerHTML = `<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>複製`;
+          copyBtn.onclick = (e) => {
+            e.stopPropagation();
+            copyToClipboard(rawCode, copyBtn);
+          };
+          actionsContainer.appendChild(copyBtn);
+
+          header.appendChild(actionsContainer);
+          pre.insertBefore(header, pre.firstChild);
+        }
+      });
+    }
+
+    // TTS Web Speech Synthesis
+    let currentSpeakingBtn = null;
+    function stripMarkdownForTTS(text) {
+      if (!text) return '';
+      return text
+        .replace(/```[\s\S]*?```/g, ' [程式碼區塊省略] ')
+        .replace(/`([^`]+)`/g, '$1')
+        .replace(/!\[([^\]]*)\]\([^)]*\)/g, '')
+        .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+        .replace(/<[^>]+>/g, '')
+        .replace(/[*#_~>]/g, '')
+        .replace(/\[Uploaded Image:[^\]]+\]/g, '')
+        .replace(/\p{Extended_Pictographic}/gu, '')
+        .replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE00}-\u{FE0F}]/gu, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+    }
+
+    function resetTTSBtn(btn) {
+      if (!btn) return;
+      btn.classList.remove('text-indigo-400', 'bg-indigo-600/20');
+      btn.classList.add('text-slate-400', 'hover:text-slate-300');
+      btn.innerHTML = `
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"/>
+        </svg>
+        <span class="text-[10px]">朗讀</span>
+      `;
+    }
+
+    function toggleSpeech(rawText, btn) {
+      if (!('speechSynthesis' in window)) {
+        alert('您的瀏覽器不支援語音合成朗讀');
+        return;
+      }
+
+      if (window.speechSynthesis.speaking && currentSpeakingBtn === btn) {
+        window.speechSynthesis.cancel();
+        resetTTSBtn(btn);
+        currentSpeakingBtn = null;
+        return;
+      }
+
+      if (window.speechSynthesis.speaking) {
+        window.speechSynthesis.cancel();
+        if (currentSpeakingBtn) resetTTSBtn(currentSpeakingBtn);
+      }
+
+      const cleanText = stripMarkdownForTTS(rawText);
+      if (!cleanText) return;
+
+      const utterance = new SpeechSynthesisUtterance(cleanText);
+      utterance.lang = /[\u4e00-\u9fa5]/.test(cleanText) ? 'zh-TW' : 'en-US';
+      utterance.rate = 1.0;
+      utterance.pitch = 1.0;
+
+      utterance.onstart = () => {
+        currentSpeakingBtn = btn;
+        btn.classList.add('text-indigo-400', 'bg-indigo-600/20');
+        btn.classList.remove('text-slate-400', 'hover:text-slate-300');
+        btn.innerHTML = `
+          <svg class="w-3.5 h-3.5 animate-pulse text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z"/>
+          </svg>
+          <span class="text-[10px] text-indigo-300 font-medium">停止</span>
+        `;
+      };
+
+      utterance.onend = () => {
+        resetTTSBtn(btn);
+        if (currentSpeakingBtn === btn) currentSpeakingBtn = null;
+      };
+
+      utterance.onerror = () => {
+        resetTTSBtn(btn);
+        if (currentSpeakingBtn === btn) currentSpeakingBtn = null;
+      };
+
+      window.speechSynthesis.speak(utterance);
+    }
+
     // Transform local image paths into proxy URL
     function formatMessageContent(content) {
       if (!content) return '';
@@ -335,45 +801,97 @@
       return marked.parse(formatted);
     }
 
-    // Scroll to bottom
-    function scrollToBottom() {
-      messagesContainer.scrollTop = messagesContainer.scrollHeight;
-    }
-
-    // Helper: format tool info into readable summary
-    function formatToolSummary(tool) {
+    // Helper: format tool info with rich metadata, category badges & icons
+    function getToolDetails(tool) {
       const name = tool.name || tool.tool_name || 'action';
       const args = tool.args || (tool.tool_info && tool.tool_info.parameters) || {};
-      
+      let icon = '⚙️';
+      let label = '系統動作';
+      let badgeColor = 'bg-slate-800 text-slate-300 border-slate-700';
       let desc = name;
-      if (name === 'run_command' && args.CommandLine) {
-        desc = `執行指令: ${args.CommandLine.slice(0, 45)}${args.CommandLine.length > 45 ? '...' : ''}`;
-      } else if (name === 'search_web' && args.query) {
-        desc = `網路搜尋: "${args.query}"`;
-      } else if (name === 'view_file' && args.AbsolutePath) {
-        desc = `檢視檔案: ${args.AbsolutePath.split('/').pop()}`;
-      } else if (name === 'write_to_file' && args.TargetFile) {
-        desc = `寫入檔案: ${args.TargetFile.split('/').pop()}`;
-      } else if (name === 'generate_image' && args.Prompt) {
-        desc = `生成圖片: "${args.Prompt.slice(0, 30)}..."`;
+
+      if (name === 'run_command') {
+        icon = '💻';
+        label = '終端指令';
+        badgeColor = 'bg-amber-950/40 text-amber-300 border-amber-800/60';
+        const cmd = args.CommandLine || '';
+        desc = cmd ? `$ ${cmd.slice(0, 45)}${cmd.length > 45 ? '...' : ''}` : '執行終端命令';
+      } else if (name === 'view_file') {
+        icon = '📄';
+        label = '檢視檔案';
+        badgeColor = 'bg-blue-950/40 text-blue-300 border-blue-800/60';
+        const p = (args.AbsolutePath || '').split('/').pop();
+        desc = p ? `讀取 ${p}` : '檢視檔案內容';
+      } else if (name === 'replace_file_content') {
+        icon = '📝';
+        label = '編輯修改';
+        badgeColor = 'bg-emerald-950/40 text-emerald-300 border-emerald-800/60';
+        const p = (args.TargetFile || '').split('/').pop();
+        desc = p ? `修改 ${p}` : '替換檔案內容';
+      } else if (name === 'write_to_file') {
+        icon = '💾';
+        label = '寫入建立';
+        badgeColor = 'bg-emerald-950/40 text-emerald-300 border-emerald-800/60';
+        const p = (args.TargetFile || '').split('/').pop();
+        desc = p ? `建立 ${p}` : '寫入檔案';
+      } else if (name === 'grep_search') {
+        icon = '🔍';
+        label = '代碼搜尋';
+        badgeColor = 'bg-purple-950/40 text-purple-300 border-purple-800/60';
+        desc = args.Query ? `搜尋 "${args.Query}"` : '搜尋代碼庫';
+      } else if (name === 'find_by_name') {
+        icon = '📁';
+        label = '搜尋檔案';
+        badgeColor = 'bg-purple-950/40 text-purple-300 border-purple-800/60';
+        desc = args.Pattern ? `查找 "${args.Pattern}"` : '依名稱查找檔案';
+      } else if (name === 'search_web') {
+        icon = '🌐';
+        label = '網路檢索';
+        badgeColor = 'bg-sky-950/40 text-sky-300 border-sky-800/60';
+        desc = args.query ? `搜尋 "${args.query}"` : '搜尋網路公開資料';
+      } else if (name === 'generate_image') {
+        icon = '🎨';
+        label = '生成圖片';
+        badgeColor = 'bg-pink-950/40 text-pink-300 border-pink-800/60';
+        desc = args.Prompt ? `繪製 "${args.Prompt.slice(0, 30)}..."` : 'AI 圖片生成';
       } else if (name === 'list_dir') {
-        desc = `列出目錄檔案`;
+        icon = '📂';
+        label = '目錄清單';
+        badgeColor = 'bg-slate-800/60 text-slate-300 border-slate-700/60';
+        desc = '列出檔案目錄';
+      } else if (name === 'invoke_subagent') {
+        icon = '🤖';
+        label = '調度代理';
+        badgeColor = 'bg-indigo-950/40 text-indigo-300 border-indigo-800/60';
+        desc = '調派子代理協同工作';
       }
-      return desc;
+
+      const durationStr = (tool.duration_seconds && Number(tool.duration_seconds) > 0)
+        ? `${Number(tool.duration_seconds).toFixed(1)}s`
+        : '';
+      return { icon, label, badgeColor, desc, durationStr };
     }
 
-    // Render tools accordion HTML
+    function formatToolSummary(tool) {
+      const d = getToolDetails(tool);
+      return `${d.icon} ${d.label}: ${d.desc}`;
+    }
+
+    // Render tools accordion HTML with rich cards
     function buildToolsAccordionHtml(tools) {
       if (!tools || tools.length === 0) return '';
       
       const itemsHtml = tools.map((t, idx) => {
-        const title = formatToolSummary(t);
+        const d = getToolDetails(t);
         return `
-          <div class="border-b border-slate-800/80 last:border-b-0 py-1 text-[11px]">
-            <div class="text-slate-300 font-mono flex items-center gap-1.5">
-              <span class="text-indigo-400">#${idx + 1}</span>
-              <span class="truncate">${escapeHtml(title)}</span>
+          <div class="py-1.5 border-b border-slate-800/60 last:border-b-0 flex items-center justify-between gap-2 text-xs">
+            <div class="flex items-center gap-2 min-w-0">
+              <span class="px-1.5 py-0.5 rounded-md border text-[10px] font-mono font-medium shrink-0 ${d.badgeColor}">
+                ${d.icon} ${d.label}
+              </span>
+              <span class="text-slate-300 font-mono text-[11px] truncate">${escapeHtml(d.desc)}</span>
             </div>
+            ${d.durationStr ? `<span class="text-[10px] text-slate-500 font-mono shrink-0">${d.durationStr}</span>` : ''}
           </div>
         `;
       }).join('');
@@ -382,7 +900,7 @@
         <details class="my-2 bg-slate-950/70 border border-slate-800/90 rounded-xl overflow-hidden text-xs">
           <summary class="px-3 py-1.5 cursor-pointer flex items-center justify-between text-slate-400 hover:text-slate-200 font-mono select-none bg-slate-900/60">
             <div class="flex items-center gap-1.5">
-              <span>⚙️ 操作記錄 (${tools.length} 個動作)</span>
+              <span>⚙️ 執行了 ${tools.length} 個操作動作</span>
             </div>
             <span class="text-[10px] text-slate-500">展開 ▼</span>
           </summary>
@@ -393,8 +911,24 @@
       `;
     }
 
+    // Render collapsible thinking block
+    function buildThinkingBlockHtml(thinking) {
+      if (!thinking || !thinking.trim()) return '';
+      return `
+        <details class="my-2 bg-slate-950/60 border border-purple-900/40 rounded-xl overflow-hidden text-xs">
+          <summary class="px-3 py-1.5 bg-purple-950/30 text-purple-300 font-mono text-[11px] cursor-pointer flex items-center justify-between select-none">
+            <span class="flex items-center gap-1.5">💡 深度思考推理過程</span>
+            <span class="text-[10px] text-purple-400">展開 ▼</span>
+          </summary>
+          <div class="p-3 text-slate-300 font-mono text-[11px] leading-relaxed whitespace-pre-wrap border-t border-purple-900/30 bg-slate-950/90">
+            ${escapeHtml(thinking.trim())}
+          </div>
+        </details>
+      `;
+    }
+
     // Append Message to UI
-    function appendMessage(role, content, timestamp, tools = []) {
+    function appendMessage(role, content, timestamp, tools = [], thinking = '') {
       const isUser = role === 'user';
       const msgDiv = document.createElement('div');
       msgDiv.className = `flex gap-2.5 w-full max-w-2xl mx-auto min-w-0 ${isUser ? 'justify-end' : 'justify-start'}`;
@@ -403,6 +937,7 @@
         ? `<div class="w-7 h-7 rounded-full bg-slate-700 flex items-center justify-center text-slate-300 shrink-0 text-xs font-bold order-2 mt-0.5">我</div>`
         : `<div class="w-7 h-7 rounded-full bg-indigo-600/30 border border-indigo-500/50 flex items-center justify-center text-indigo-400 shrink-0 text-xs font-bold mt-0.5">AG</div>`;
 
+      const thinkingHtml = (!isUser && thinking) ? buildThinkingBlockHtml(thinking) : '';
       const toolsHtml = (!isUser && tools && tools.length > 0) ? buildToolsAccordionHtml(tools) : '';
 
       const bubbleClass = isUser
@@ -421,9 +956,22 @@
         }
         bodyHtml = `${imgHtml}<div class="whitespace-pre-wrap leading-relaxed break-words">${escapeHtml(userText)}</div>`;
       } else {
+        const timeStr = timestamp ? new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
         bodyHtml = `
+          <div class="thinking-container">${thinkingHtml}</div>
           <div class="tools-container">${toolsHtml}</div>
           <div class="msg-content leading-relaxed min-w-0">${formatMessageContent(content)}</div>
+          <div class="msg-footer mt-2.5 pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400 select-none">
+            <div class="flex items-center gap-2">
+              <button type="button" class="tts-btn px-2 py-0.5 rounded-md hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition flex items-center gap-1 active:scale-95">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"/>
+                </svg>
+                <span class="text-[10px]">朗讀</span>
+              </button>
+            </div>
+            <span class="text-[10px] text-slate-500 font-mono">${timeStr}</span>
+          </div>
         `;
       }
 
@@ -434,8 +982,12 @@
         img.addEventListener('click', () => showLightbox(img.src));
       });
 
-      msgDiv.querySelectorAll('pre code').forEach(el => hljs.highlightElement(el));
+      const ttsBtn = msgDiv.querySelector('.tts-btn');
+      if (ttsBtn) {
+        ttsBtn.addEventListener('click', () => toggleSpeech(content, ttsBtn));
+      }
 
+      enhanceCodeBlocks(msgDiv);
       scrollToBottom();
       return msgDiv;
     }
@@ -471,6 +1023,7 @@
     // Load History for a Conversation
     async function loadConversationHistory(convId) {
       currentConversationId = convId;
+      localStorage.setItem('agy_active_conv_id', convId);
       messagesContainer.innerHTML = '';
       toggleDrawer(false);
 
@@ -479,13 +1032,16 @@
         const data = await res.json();
         
         if (data.messages && data.messages.length > 0) {
-          data.messages.forEach(msg => appendMessage(msg.role, msg.content, msg.timestamp, msg.tools || []));
-          headerTitle.textContent = data.messages[0].content.slice(0, 18) || '對話紀錄';
+          data.messages.forEach(msg => appendMessage(msg.role, msg.content, msg.timestamp, msg.tools || [], msg.thinking || ''));
+          const firstUserMsg = data.messages.find(m => m.role === 'user');
+          headerTitle.textContent = (firstUserMsg && firstUserMsg.content) ? firstUserMsg.content.slice(0, 18) : '對話紀錄';
         } else {
           headerTitle.textContent = '新對話';
+          appendMessage('assistant', '你好！已為你開啟此對話。有什麼可以幫你的？');
         }
       } catch (err) {
         console.error(err);
+        messagesContainer.innerHTML = `<div class="p-4 text-center text-xs text-rose-400">載入歷史對話失敗：${err.message}</div>`;
       }
     }
 
@@ -533,6 +1089,7 @@
     // New Chat Action
     newChatBtn.addEventListener('click', () => {
       currentConversationId = null;
+      localStorage.removeItem('agy_active_conv_id');
       headerTitle.textContent = '新對話';
       messagesContainer.innerHTML = '';
       appendMessage('assistant', '你好！已為你開啟新對話。有什麼可以幫你的？');
@@ -659,7 +1216,42 @@
       micBtn.title = '此瀏覽器不支援語音辨識';
     }
 
-    // Send Message with Live Streaming & Tools Logging
+    // Toggle Send / Stop button appearance & state
+    function setStreamingState(streaming) {
+      isStreaming = streaming;
+      if (streaming) {
+        sendBtn.classList.remove('bg-indigo-600', 'hover:bg-indigo-500', 'active:bg-indigo-700', 'shadow-indigo-600/30');
+        sendBtn.classList.add('bg-rose-600', 'hover:bg-rose-500', 'active:bg-rose-700', 'shadow-rose-600/30');
+        sendIcon.classList.add('hidden');
+        stopIcon.classList.remove('hidden');
+        sendBtn.title = '中斷生成';
+      } else {
+        sendBtn.classList.remove('bg-rose-600', 'hover:bg-rose-500', 'active:bg-rose-700', 'shadow-rose-600/30');
+        sendBtn.classList.add('bg-indigo-600', 'hover:bg-indigo-500', 'active:bg-indigo-700', 'shadow-indigo-600/30');
+        sendIcon.classList.remove('hidden');
+        stopIcon.classList.add('hidden');
+        sendBtn.title = '送出';
+      }
+    }
+
+    // Stop active generation
+    async function stopGeneration() {
+      if (currentAbortController) {
+        try {
+          currentAbortController.abort();
+        } catch (e) {}
+        currentAbortController = null;
+      }
+      try {
+        await fetch('/api/stop', { method: 'POST' });
+      } catch (e) {}
+      if (navigator.vibrate) {
+        navigator.vibrate([40, 40, 40]);
+      }
+      setStreamingState(false);
+    }
+
+    // Send Message with Live Streaming, Tools Logging, and Abort Support
     async function sendMessage() {
       const text = promptInput.value.trim();
       const imgPath = uploadedImagePath;
@@ -667,8 +1259,8 @@
       if (!text && !imgPath) return;
       if (isStreaming) return;
 
-      isStreaming = true;
-      sendBtn.disabled = true;
+      currentAbortController = new AbortController();
+      setStreamingState(true);
 
       let userDisplay = text;
       if (imgPath) userDisplay = `[Uploaded Image: ${imgPath}]\n${userDisplay}`;
@@ -681,16 +1273,25 @@
       imagePreviewContainer.classList.add('hidden');
 
       const liveTools = [];
+      let liveThinking = '';
+      const startTs = performance.now();
 
       const assistantMsgDiv = document.createElement('div');
       assistantMsgDiv.className = 'flex gap-2.5 w-full max-w-2xl mx-auto justify-start min-w-0';
       assistantMsgDiv.innerHTML = `
         <div class="w-7 h-7 rounded-full bg-indigo-600/30 border border-indigo-500/50 flex items-center justify-center text-indigo-400 shrink-0 text-xs font-bold mt-0.5">AG</div>
         <div class="bg-slate-900 border border-slate-800 text-slate-200 rounded-2xl rounded-tl-none p-3.5 text-xs sm:text-sm shadow-md flex-1 min-w-0 prose">
-          <div class="live-status text-xs font-mono text-indigo-300 mb-2 flex items-center gap-1.5">
-            <span class="inline-block w-2 h-2 rounded-full bg-indigo-400 animate-ping"></span>
-            <span class="status-text">思考中...</span>
+          <div class="live-status mb-2.5 p-2 rounded-xl bg-indigo-950/40 border border-indigo-500/30 flex items-center justify-between text-xs font-mono text-indigo-300 select-none">
+            <div class="flex items-center gap-1.5 min-w-0">
+              <span class="inline-block w-2 h-2 rounded-full bg-indigo-400 animate-ping shrink-0"></span>
+              <span class="status-text truncate font-medium text-[11px]">🧠 思考分析中...</span>
+            </div>
+            <div class="flex items-center gap-1.5 shrink-0 text-[10px] font-mono">
+              <span class="live-timer font-bold text-slate-200 bg-slate-800/80 px-1.5 py-0.5 rounded border border-slate-700">0.0s</span>
+              <span class="live-speed text-indigo-300 bg-indigo-900/40 px-1.5 py-0.5 rounded border border-indigo-700/50 hidden">⚡ 0 t/s</span>
+            </div>
           </div>
+          <div class="thinking-container"></div>
           <div class="tools-container"></div>
           <div class="msg-content leading-relaxed min-w-0"><span class="inline-block w-2 h-4 bg-indigo-400 animate-pulse"></span></div>
         </div>
@@ -699,10 +1300,27 @@
       const contentElem = assistantMsgDiv.querySelector('.msg-content');
       const liveStatusElem = assistantMsgDiv.querySelector('.live-status');
       const statusTextElem = assistantMsgDiv.querySelector('.status-text');
+      const liveTimerElem = assistantMsgDiv.querySelector('.live-timer');
+      const liveSpeedElem = assistantMsgDiv.querySelector('.live-speed');
+      const thinkingContainerElem = assistantMsgDiv.querySelector('.thinking-container');
       const toolsContainerElem = assistantMsgDiv.querySelector('.tools-container');
       scrollToBottom();
 
+      const liveTimerInterval = setInterval(() => {
+        const elapsedSec = (performance.now() - startTs) / 1000;
+        if (liveTimerElem) liveTimerElem.textContent = `${elapsedSec.toFixed(1)}s`;
+        if (accumulatedText.length > 0 && liveSpeedElem) {
+          const estTokens = Math.round(accumulatedText.length / 2);
+          const speed = Math.round(estTokens / Math.max(0.2, elapsedSec));
+          if (speed > 0) {
+            liveSpeedElem.textContent = `⚡ ${speed} t/s`;
+            liveSpeedElem.classList.remove('hidden');
+          }
+        }
+      }, 100);
+
       let accumulatedText = '';
+      let abortedHandled = false;
 
       try {
         const response = await fetch('/api/chat', {
@@ -712,7 +1330,8 @@
             prompt: text,
             conversation_id: currentConversationId,
             image_path: imgPath
-          })
+          }),
+          signal: currentAbortController.signal
         });
 
         const reader = response.body.getReader();
@@ -738,53 +1357,145 @@
                 const data = JSON.parse(rawData);
                 if (currentEvent === 'init' && data.conversation_id) {
                   currentConversationId = data.conversation_id;
+                  localStorage.setItem('agy_active_conv_id', currentConversationId);
+                } else if (currentEvent === 'thought') {
+                  liveThinking += (data.delta || data.thinking || data.fullThinking || '');
+                  thinkingContainerElem.innerHTML = buildThinkingBlockHtml(liveThinking);
+                  statusTextElem.textContent = '💡 深度推理思考中...';
+                  scrollToBottom();
                 } else if (currentEvent === 'tool') {
                   liveTools.push(data);
-                  statusTextElem.textContent = `執行動作: ${formatToolSummary(data)}`;
+                  const d = getToolDetails(data);
+                  statusTextElem.textContent = `${d.icon} ${d.label}: ${d.desc}`;
                   toolsContainerElem.innerHTML = buildToolsAccordionHtml(liveTools);
                   scrollToBottom();
                 } else if (currentEvent === 'chunk' && data.accumulated) {
-                  liveStatusElem.style.display = 'none';
+                  statusTextElem.textContent = '✍️ 回覆組織撰寫中...';
                   accumulatedText = data.accumulated;
                   contentElem.innerHTML = formatMessageContent(accumulatedText);
                   scrollToBottom();
                 } else if (currentEvent === 'done') {
+                  clearInterval(liveTimerInterval);
                   liveStatusElem.style.display = 'none';
-                  if (data.conversation_id) currentConversationId = data.conversation_id;
+                  if (data.conversation_id) {
+                    currentConversationId = data.conversation_id;
+                    localStorage.setItem('agy_active_conv_id', currentConversationId);
+                  }
                   if (data.response) accumulatedText = data.response;
                   contentElem.innerHTML = formatMessageContent(accumulatedText);
                   toolsContainerElem.innerHTML = buildToolsAccordionHtml(liveTools);
-                  assistantMsgDiv.querySelectorAll('pre code').forEach(el => hljs.highlightElement(el));
+                  if (liveThinking) {
+                    thinkingContainerElem.innerHTML = buildThinkingBlockHtml(liveThinking);
+                  }
+
+                  const totalSec = ((performance.now() - startTs) / 1000).toFixed(1);
+                  const estTokens = Math.round(accumulatedText.length / 2);
+                  const avgSpeed = Math.round(estTokens / Math.max(0.5, totalSec));
+
+                  // Append Action Footer with Stats, TTS and Copy All
+                  let footer = assistantMsgDiv.querySelector('.msg-footer');
+                  if (!footer) {
+                    footer = document.createElement('div');
+                    footer.className = 'msg-footer mt-2.5 pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400 select-none';
+                    const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                    footer.innerHTML = `
+                      <div class="flex items-center gap-2">
+                        <button type="button" class="tts-btn px-2 py-0.5 rounded-md hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition flex items-center gap-1 active:scale-95">
+                          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"/>
+                          </svg>
+                          <span class="text-[10px]">朗讀</span>
+                        </button>
+                      </div>
+                      <div class="flex items-center gap-1.5 text-[10px] text-slate-500 font-mono">
+                        <span class="text-slate-400">⏱️ ${totalSec}s</span>
+                        ${avgSpeed > 0 ? `<span class="text-indigo-400/80">· ⚡ ${avgSpeed} t/s</span>` : ''}
+                        <span>· ${timeStr}</span>
+                      </div>
+                    `;
+                    assistantMsgDiv.querySelector('.bg-slate-900').appendChild(footer);
+                    const ttsBtn = footer.querySelector('.tts-btn');
+                    ttsBtn.addEventListener('click', () => toggleSpeech(accumulatedText, ttsBtn));
+                  }
+
+                  enhanceCodeBlocks(assistantMsgDiv);
                   assistantMsgDiv.querySelectorAll('img').forEach(img => {
                     img.addEventListener('click', () => showLightbox(img.src));
                   });
+
+                  // 🔔 Trigger System Notification when user is away (tab hidden or in another app)
+                  if (document.hidden) {
+                    triggerDoneNotification(accumulatedText);
+                  }
+
+                  if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
                 }
               } catch (e) {}
             }
           }
         }
       } catch (err) {
+        clearInterval(liveTimerInterval);
         liveStatusElem.style.display = 'none';
-        contentElem.innerHTML = `<span class="text-rose-400">發生錯誤：${err.message}</span>`;
+        if (err.name === 'AbortError') {
+          abortedHandled = true;
+          const abortBadge = document.createElement('div');
+          abortBadge.className = 'mt-2 pt-1.5 border-t border-slate-800 text-[11px] text-amber-400 font-mono flex items-center gap-1';
+          abortBadge.innerHTML = `<svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg><span>[已手動中斷生成]</span>`;
+          assistantMsgDiv.querySelector('.bg-slate-900').appendChild(abortBadge);
+          enhanceCodeBlocks(assistantMsgDiv);
+        } else {
+          contentElem.innerHTML = `<span class="text-rose-400">發生錯誤：${err.message}</span>`;
+        }
       } finally {
+        clearInterval(liveTimerInterval);
         liveStatusElem.style.display = 'none';
-        isStreaming = false;
-        sendBtn.disabled = false;
+        setStreamingState(false);
+        currentAbortController = null;
         scrollToBottom();
       }
     }
 
-    sendBtn.addEventListener('click', sendMessage);
+    let streamingStartedAt = 0;
 
-    // Initial load: Load most recent conversation
+    function handleSendClick(e) {
+      if (e) {
+        if (e.cancelable) e.preventDefault();
+        e.stopPropagation();
+      }
+
+      if (isStreaming) {
+        // Prevent accidental immediate cancellation on single tap / fast double-tap:
+        // Must be streaming for at least 800ms before user can intentionally abort
+        if (Date.now() - streamingStartedAt > 800) {
+          if (navigator.vibrate) navigator.vibrate([40, 40, 40]);
+          stopGeneration();
+        }
+      } else {
+        streamingStartedAt = Date.now();
+        if (navigator.vibrate) navigator.vibrate(25);
+        slashMenu.classList.add('hidden');
+        sendMessage();
+      }
+    }
+
+    sendBtn.addEventListener('click', handleSendClick);
+
+    // Initial load: Restore last active conversation or load most recent
     (async function init() {
       try {
+        const savedConvId = localStorage.getItem('agy_active_conv_id');
         const res = await fetch('/api/conversations');
         const data = await res.json();
         if (data.conversations && data.conversations.length > 0) {
-          loadConversationHistory(data.conversations[0].id);
+          const targetId = (savedConvId && data.conversations.some(c => c.id === savedConvId))
+            ? savedConvId
+            : data.conversations[0].id;
+          loadConversationHistory(targetId);
         }
-      } catch (e) {}
+      } catch (e) {
+        console.error('Init load error:', e);
+      }
     })();
   </script>
 </body>
