@@ -145,6 +145,16 @@
       100% { transform: scale(0.95); opacity: 0.8; }
     }
     .recording-pulse { animation: pulse-ring 1.5s infinite; }
+
+    @keyframes shimmer-flow {
+      0% { background-position: -200% 0; }
+      100% { background-position: 200% 0; }
+    }
+    .shimmer-bar {
+      background: linear-gradient(90deg, #6366f1, #38bdf8, #a855f7, #ec4899, #6366f1);
+      background-size: 250% 100%;
+      animation: shimmer-flow 2.2s linear infinite;
+    }
   </style>
 </head>
 <body class="bg-slate-950 text-slate-100 flex flex-col h-[100dvh] w-full max-w-full overflow-hidden">
@@ -1942,21 +1952,45 @@
       let liveThinking = '';
       const startTs = performance.now();
 
+      // Find current model info for badge
+      const modelObj = availableModels.find(m => m.id === currentModel);
+      const modelLabel = modelObj ? modelObj.name : 'AI';
+
       const assistantMsgDiv = document.createElement('div');
       assistantMsgDiv.className = 'flex gap-2.5 w-full max-w-2xl mx-auto justify-start min-w-0';
       assistantMsgDiv.innerHTML = `
         <div class="w-7 h-7 rounded-full bg-indigo-600/30 border border-indigo-500/50 flex items-center justify-center text-indigo-400 shrink-0 text-xs font-bold mt-0.5">AG</div>
         <div class="bg-slate-900 border border-slate-800 text-slate-200 rounded-2xl rounded-tl-none p-3.5 text-xs sm:text-sm shadow-md flex-1 min-w-0 prose">
-          <div class="live-status mb-2.5 p-2 rounded-xl bg-indigo-950/40 border border-indigo-500/30 flex items-center justify-between text-xs font-mono text-indigo-300 select-none">
-            <div class="flex items-center gap-1.5 min-w-0">
-              <span class="inline-block w-2 h-2 rounded-full bg-indigo-400 animate-ping shrink-0"></span>
-              <span class="status-text truncate font-medium text-[11px]">🧠 思考分析中...</span>
-            </div>
-            <div class="flex items-center gap-1.5 shrink-0 text-[10px] font-mono">
-              <span class="live-timer font-bold text-slate-200 bg-slate-800/80 px-1.5 py-0.5 rounded border border-slate-700">0.0s</span>
-              <span class="live-speed text-indigo-300 bg-indigo-900/40 px-1.5 py-0.5 rounded border border-indigo-700/50 hidden">⚡ 0 t/s</span>
+          
+          <!-- Live Cyberpunk Status Bar with Shimmer Line (Idea 2) -->
+          <div class="live-status mb-2.5 rounded-2xl bg-gradient-to-b from-slate-900 to-indigo-950/40 border border-indigo-500/30 overflow-hidden shadow-lg select-none">
+            <div class="shimmer-bar h-[2px] w-full"></div>
+            <div class="p-2.5 flex flex-col gap-2">
+              <!-- Top Row: Phase + Counters -->
+              <div class="flex items-center justify-between gap-2 flex-wrap">
+                <div class="flex items-center gap-1.5 min-w-0">
+                  <span class="inline-block w-2 h-2 rounded-full bg-indigo-400 animate-ping shrink-0"></span>
+                  <span class="text-[9px] px-1.5 py-0.5 rounded border font-mono font-semibold bg-indigo-500/20 text-indigo-300 border-indigo-500/40 shrink-0">${escapeHtml(modelLabel)}</span>
+                  <span class="status-text truncate font-medium text-[11px] text-slate-200">🧠 思考分析中...</span>
+                </div>
+                <!-- Counters: Tokens + Speed + Timer (Idea 3) -->
+                <div class="flex items-center gap-1.5 shrink-0 text-[10px] font-mono">
+                  <span class="live-tokens text-emerald-300 bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-800/60 hidden">🪙 0 tok</span>
+                  <span class="live-speed text-indigo-300 bg-indigo-900/40 px-1.5 py-0.5 rounded border border-indigo-700/50 hidden">⚡ 0 t/s</span>
+                  <span class="live-timer font-bold text-slate-200 bg-slate-800/90 px-1.5 py-0.5 rounded border border-slate-700">0.0s</span>
+                </div>
+              </div>
+              
+              <!-- Step-by-Step Pipeline Pills (Idea 4) -->
+              <div class="live-pipeline flex flex-wrap items-center gap-1 text-[10px] font-mono border-t border-slate-800/80 pt-1.5">
+                <span class="pipeline-pill pill-init px-2 py-0.5 rounded-full bg-indigo-950/80 border border-indigo-700/60 text-indigo-300 flex items-center gap-1">
+                  <span class="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse"></span>
+                  <span>🧠 思考分析</span>
+                </span>
+              </div>
             </div>
           </div>
+
           <div class="thinking-container"></div>
           <div class="tools-container"></div>
           <div class="msg-content leading-relaxed min-w-0"><span class="inline-block w-2 h-4 bg-indigo-400 animate-pulse"></span></div>
@@ -1967,20 +2001,52 @@
       const liveStatusElem = assistantMsgDiv.querySelector('.live-status');
       const statusTextElem = assistantMsgDiv.querySelector('.status-text');
       const liveTimerElem = assistantMsgDiv.querySelector('.live-timer');
+      const liveTokensElem = assistantMsgDiv.querySelector('.live-tokens');
       const liveSpeedElem = assistantMsgDiv.querySelector('.live-speed');
+      const livePipelineElem = assistantMsgDiv.querySelector('.live-pipeline');
       const thinkingContainerElem = assistantMsgDiv.querySelector('.thinking-container');
       const toolsContainerElem = assistantMsgDiv.querySelector('.tools-container');
       scrollToBottom();
 
+      // Pipeline State Tracker
+      const pipelineSteps = new Map();
+      pipelineSteps.set('init', { label: '🧠 思考分析', status: 'running' });
+
+      function renderPipeline() {
+        if (!livePipelineElem) return;
+        const html = Array.from(pipelineSteps.values()).map(step => {
+          const isDone = step.status === 'done';
+          const isRunning = step.status === 'running';
+          const badgeClass = isDone
+            ? 'bg-slate-900 border-slate-700/80 text-slate-400'
+            : isRunning
+            ? 'bg-indigo-950/90 border-indigo-500/70 text-indigo-300 shadow-sm'
+            : 'bg-slate-950/50 border-slate-800 text-slate-500';
+          const icon = isDone
+            ? '<span class="text-emerald-400 font-bold">✓</span>'
+            : isRunning
+            ? '<span class="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-ping"></span>'
+            : '<span class="w-1.5 h-1.5 rounded-full bg-slate-600"></span>';
+          return `<span class="px-2 py-0.5 rounded-full border text-[10px] flex items-center gap-1 font-mono ${badgeClass}">${icon}<span>${escapeHtml(step.label)}</span></span>`;
+        }).join('');
+        livePipelineElem.innerHTML = html;
+      }
+
       const liveTimerInterval = setInterval(() => {
         const elapsedSec = (performance.now() - startTs) / 1000;
         if (liveTimerElem) liveTimerElem.textContent = `${elapsedSec.toFixed(1)}s`;
-        if (accumulatedText.length > 0 && liveSpeedElem) {
+        if (accumulatedText.length > 0) {
           const estTokens = Math.round(accumulatedText.length / 2);
-          const speed = Math.round(estTokens / Math.max(0.2, elapsedSec));
-          if (speed > 0) {
-            liveSpeedElem.textContent = `⚡ ${speed} t/s`;
-            liveSpeedElem.classList.remove('hidden');
+          if (liveTokensElem) {
+            liveTokensElem.textContent = `🪙 ${estTokens} tok`;
+            liveTokensElem.classList.remove('hidden');
+          }
+          if (liveSpeedElem) {
+            const speed = Math.round(estTokens / Math.max(0.2, elapsedSec));
+            if (speed > 0) {
+              liveSpeedElem.textContent = `⚡ ${speed} t/s`;
+              liveSpeedElem.classList.remove('hidden');
+            }
           }
         }
       }, 100);
@@ -2028,17 +2094,37 @@
                   currentConversationId = data.conversation_id;
                   localStorage.setItem('agy_active_conv_id', currentConversationId);
                 } else if (currentEvent === 'thought') {
+                  const initStep = pipelineSteps.get('init');
+                  if (initStep) initStep.status = 'done';
+                  pipelineSteps.set('thought', { label: '💡 深度推理', status: 'running' });
+                  renderPipeline();
+
                   liveThinking += (data.delta || data.thinking || data.fullThinking || '');
                   thinkingContainerElem.innerHTML = buildThinkingBlockHtml(liveThinking);
                   statusTextElem.textContent = '💡 深度推理思考中...';
                   scrollToBottom();
                 } else if (currentEvent === 'tool') {
+                  const initStep = pipelineSteps.get('init');
+                  if (initStep) initStep.status = 'done';
+                  const thoughtStep = pipelineSteps.get('thought');
+                  if (thoughtStep) thoughtStep.status = 'done';
+
                   liveTools.push(data);
                   const d = getToolDetails(data);
+                  pipelineSteps.set(`tool_${liveTools.length}`, { label: `${d.icon} ${d.label}`, status: 'done' });
+                  renderPipeline();
+
                   statusTextElem.textContent = `${d.icon} ${d.label}: ${d.desc}`;
                   toolsContainerElem.innerHTML = buildToolsAccordionHtml(liveTools);
                   scrollToBottom();
                 } else if (currentEvent === 'chunk' && data.accumulated) {
+                  const initStep = pipelineSteps.get('init');
+                  if (initStep) initStep.status = 'done';
+                  const thoughtStep = pipelineSteps.get('thought');
+                  if (thoughtStep) thoughtStep.status = 'done';
+                  pipelineSteps.set('writing', { label: '✍️ 組織撰寫', status: 'running' });
+                  renderPipeline();
+
                   statusTextElem.textContent = '✍️ 回覆組織撰寫中...';
                   accumulatedText = data.accumulated;
                   contentElem.innerHTML = formatMessageContent(accumulatedText);
