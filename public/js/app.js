@@ -105,6 +105,16 @@ document.addEventListener('DOMContentLoaded', () => {
   if (closeModelBtn) closeModelBtn.addEventListener('click', () => toggleModelModal(false));
   if (modelModal) modelModal.addEventListener('click', (e) => { if (e.target === modelModal) toggleModelModal(false); });
 
+  // Files Explorer Modal listeners
+  if (filesBtn) filesBtn.addEventListener('click', () => toggleFilesModal(true));
+  if (openFilesChip) openFilesChip.addEventListener('click', () => toggleFilesModal(true));
+  if (closeFilesBtn) closeFilesBtn.addEventListener('click', () => toggleFilesModal(false));
+  if (refreshFilesBtn) refreshFilesBtn.addEventListener('click', () => loadDirectory(currentExplorerPath));
+  if (filesModal) filesModal.addEventListener('click', (e) => { if (e.target === filesModal) toggleFilesModal(false); });
+  if (closePreviewPaneBtn) closePreviewPaneBtn.addEventListener('click', () => { if (filePreviewPane) filePreviewPane.classList.add('hidden'); });
+  if (previewSendAiBtn) previewSendAiBtn.addEventListener('click', () => sendPathToAI(currentPreviewFullPath, currentPreviewFileName));
+  if (previewCopyBtn && previewFileContent) previewCopyBtn.addEventListener('click', () => copyToClipboard(previewFileContent.textContent, previewCopyBtn));
+
   // Notification Button
   if (notifyBtn) {
     updateNotifyBtnUI();

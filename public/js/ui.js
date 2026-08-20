@@ -71,6 +71,23 @@ const modelDisplayName = document.getElementById('model-display-name');
 const networkDot = document.getElementById('network-dot');
 const networkOfflineBadge = document.getElementById('network-offline-badge');
 const gpsChip = document.getElementById('gps-chip');
+const filesBtn = document.getElementById('files-btn');
+const openFilesChip = document.getElementById('open-files-chip');
+const filesModal = document.getElementById('files-modal');
+const closeFilesBtn = document.getElementById('close-files-btn');
+const refreshFilesBtn = document.getElementById('refresh-files-btn');
+const filesBreadcrumb = document.getElementById('files-breadcrumb');
+const filesListContainer = document.getElementById('files-list-container');
+const filePreviewPane = document.getElementById('file-preview-pane');
+const previewFileIcon = document.getElementById('preview-file-icon');
+const previewFileName = document.getElementById('preview-file-name');
+const previewFileSize = document.getElementById('preview-file-size');
+const previewFileContent = document.getElementById('preview-file-content');
+const previewSendAiBtn = document.getElementById('preview-send-ai-btn');
+const previewCopyBtn = document.getElementById('preview-copy-btn');
+const closePreviewPaneBtn = document.getElementById('close-preview-pane-btn');
+const filesBasePath = document.getElementById('files-base-path');
+const filesCountBadge = document.getElementById('files-count-badge');
 
 // Smart Scroll
 function scrollToBottom(force = false) {
@@ -304,4 +321,173 @@ function updateNotifyBtnUI() {
     notifyBtn.classList.add('text-slate-400');
     notifyBtn.title = '通知已關閉 (點擊開啟)';
   }
+}
+
+// ==========================================
+// 📁 Termux Local Files Explorer Logic
+// ==========================================
+let currentExplorerPath = '';
+let currentPreviewFullPath = '';
+let currentPreviewFileName = '';
+
+function toggleFilesModal(open) {
+  if (!filesModal) return;
+  if (open) {
+    filesModal.classList.remove('opacity-0', 'pointer-events-none');
+    loadDirectory(currentExplorerPath);
+  } else {
+    filesModal.classList.add('opacity-0', 'pointer-events-none');
+  }
+}
+
+async function loadDirectory(relPath = '') {
+  if (!filesListContainer) return;
+  currentExplorerPath = relPath;
+  if (filePreviewPane) filePreviewPane.classList.add('hidden');
+  
+  filesListContainer.innerHTML = `
+    <div class="text-center py-6 text-slate-400 text-xs flex flex-col items-center gap-2 font-sans">
+      <span class="inline-block w-4 h-4 rounded-full border-2 border-emerald-400 border-t-transparent animate-spin"></span>
+      <span>正在讀取目錄內容...</span>
+    </div>
+  `;
+
+  try {
+    const res = await fetch(`/api/files?path=${encodeURIComponent(relPath)}`);
+    const data = await res.json();
+    if (!data.success) {
+      filesListContainer.innerHTML = `<div class="p-3 text-rose-400 text-xs font-mono">讀取失敗：${escapeHtml(data.error)}</div>`;
+      return;
+    }
+
+    if (filesBasePath) filesBasePath.textContent = `~/${data.currentPath || ''}`;
+    if (filesCountBadge) filesCountBadge.textContent = `${data.entries ? data.entries.length : 0} 個項目`;
+
+    // Render Breadcrumbs
+    renderBreadcrumbs(data.currentPath);
+
+    if (!data.entries || data.entries.length === 0) {
+      filesListContainer.innerHTML = `
+        <div class="p-6 text-center text-slate-500 font-sans">此資料夾為空</div>
+      `;
+      return;
+    }
+
+    let itemsHtml = '';
+
+    // Up level item if not at root
+    if (!data.isRoot) {
+      itemsHtml += `
+        <div class="p-2 rounded-xl bg-slate-950/60 hover:bg-slate-800/80 border border-slate-800/80 transition flex items-center justify-between cursor-pointer group select-none" onclick="loadDirectory('${escapeHtml(data.parentPath || '')}')">
+          <div class="flex items-center gap-2">
+            <span class="text-base">📁</span>
+            <span class="font-bold text-slate-300 font-mono">.. (回上一層)</span>
+          </div>
+        </div>
+      `;
+    }
+
+    data.entries.forEach(item => {
+      if (item.isDirectory) {
+        itemsHtml += `
+          <div class="p-2 rounded-xl bg-slate-950/60 hover:bg-slate-800/80 border border-slate-800/80 transition flex items-center justify-between cursor-pointer group select-none" onclick="loadDirectory('${escapeHtml(item.relPath)}')">
+            <div class="flex items-center gap-2 min-w-0">
+              <span class="text-base shrink-0">${item.icon}</span>
+              <span class="font-bold text-slate-200 font-mono truncate">${escapeHtml(item.name)}/</span>
+            </div>
+            <span class="text-[10px] text-slate-500 font-mono group-hover:text-emerald-400 transition">進入 ▸</span>
+          </div>
+        `;
+      } else {
+        itemsHtml += `
+          <div class="p-2 rounded-xl bg-slate-950/40 hover:bg-slate-800/60 border border-slate-800/60 transition flex items-center justify-between gap-2 group select-none">
+            <div class="flex items-center gap-2 min-w-0 flex-1 cursor-pointer" onclick="previewFile('${escapeHtml(item.relPath)}')">
+              <span class="text-base shrink-0">${item.icon}</span>
+              <div class="min-w-0">
+                <div class="font-mono text-slate-200 truncate group-hover:text-emerald-300 transition">${escapeHtml(item.name)}</div>
+                <div class="text-[10px] text-slate-500 font-mono">${item.sizeFormatted}</div>
+              </div>
+            </div>
+            <div class="flex items-center gap-1 shrink-0">
+              <button type="button" class="px-2 py-1 rounded-lg bg-indigo-600/80 hover:bg-indigo-500 active:bg-indigo-700 text-white text-[10px] font-medium flex items-center gap-1 transition active:scale-95 shadow-sm" onclick="sendPathToAI('${escapeHtml(item.fullPath)}', '${escapeHtml(item.name)}')">
+                <span>💬 傳給 AI</span>
+              </button>
+              <button type="button" class="p-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 text-[10px] transition active:scale-95" title="預覽內容" onclick="previewFile('${escapeHtml(item.relPath)}')">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+              </button>
+            </div>
+          </div>
+        `;
+      }
+    });
+
+    filesListContainer.innerHTML = itemsHtml;
+
+  } catch (err) {
+    filesListContainer.innerHTML = `<div class="p-3 text-rose-400 text-xs">請求異常：${escapeHtml(err.message)}</div>`;
+  }
+}
+
+function renderBreadcrumbs(currentRel = '') {
+  if (!filesBreadcrumb) return;
+  if (!currentRel) {
+    filesBreadcrumb.innerHTML = `<span class="text-emerald-400 font-bold font-mono">~ (家目錄)</span>`;
+    return;
+  }
+
+  const parts = currentRel.split(/[\/\\]+/).filter(Boolean);
+  let accumulated = '';
+  let html = `<span class="text-slate-400 hover:text-emerald-400 font-bold cursor-pointer hover:underline" onclick="loadDirectory('')">~</span>`;
+
+  parts.forEach((p, idx) => {
+    accumulated = accumulated ? `${accumulated}/${p}` : p;
+    const isLast = idx === parts.length - 1;
+    if (isLast) {
+      html += ` <span class="text-slate-600">/</span> <span class="text-emerald-400 font-bold font-mono">${escapeHtml(p)}</span>`;
+    } else {
+      const curPath = accumulated;
+      html += ` <span class="text-slate-600">/</span> <span class="text-slate-300 hover:text-emerald-400 font-mono cursor-pointer hover:underline" onclick="loadDirectory('${escapeHtml(curPath)}')">${escapeHtml(p)}</span>`;
+    }
+  });
+
+  filesBreadcrumb.innerHTML = html;
+}
+
+window.loadDirectory = loadDirectory;
+window.previewFile = previewFile;
+window.sendPathToAI = sendPathToAI;
+
+async function previewFile(relPath) {
+  if (!filePreviewPane) return;
+  try {
+    const res = await fetch(`/api/file/read?path=${encodeURIComponent(relPath)}`);
+    const data = await res.json();
+    if (!data.success) {
+      alert(`無法預覽：${data.error}`);
+      return;
+    }
+
+    currentPreviewFullPath = data.fullPath;
+    currentPreviewFileName = data.name;
+
+    if (previewFileIcon) previewFileIcon.textContent = data.icon;
+    if (previewFileName) previewFileName.textContent = data.name;
+    if (previewFileSize) previewFileSize.textContent = data.sizeFormatted;
+    if (previewFileContent) previewFileContent.textContent = data.content;
+
+    filePreviewPane.classList.remove('hidden');
+
+  } catch (err) {
+    alert(`預覽出錯：${err.message}`);
+  }
+}
+
+function sendPathToAI(fullPath, name) {
+  if (!promptInput) return;
+  promptInput.value = `請幫我閱讀並分析這個檔案（${name}）：\n${fullPath}`;
+  promptInput.focus();
+  promptInput.style.height = 'auto';
+  promptInput.style.height = Math.min(promptInput.scrollHeight, 120) + 'px';
+  toggleFilesModal(false);
+  if (navigator.vibrate) navigator.vibrate(30);
 }

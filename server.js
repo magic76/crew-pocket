@@ -19,6 +19,7 @@ const { sessionManager } = require('./lib/session');
 const { handleListConversations, handleGetHistory, handleDeleteConversation } = require('./lib/history');
 const { handleRunCode } = require('./lib/sandbox');
 const { handleUsage } = require('./lib/usage');
+const { handleListFiles, handleReadFile } = require('./lib/files');
 
 // 🤖 List Available Models
 function handleGetModels(res) {
@@ -305,6 +306,10 @@ const server = http.createServer(async (req, res) => {
     return handleGetModels(res);
   } else if (pathname === '/api/usage' && req.method === 'GET') {
     return handleUsage(res);
+  } else if (pathname === '/api/files' && req.method === 'GET') {
+    return handleListFiles(parsedUrl, res);
+  } else if (pathname === '/api/file/read' && req.method === 'GET') {
+    return handleReadFile(parsedUrl, res);
   } else if (pathname === '/api/image' && req.method === 'GET') {
     return handleImageProxy(parsedUrl, res);
   } else {
