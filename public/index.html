@@ -1254,10 +1254,10 @@
           consoleBox.textContent = logs.join('\n');
         } else if (e.data.type === 'done') {
           const elapsed = (performance.now() - startTs).toFixed(1);
-          outputBox.querySelector('span.font-mono').innerHTML = \`<span class="w-2 h-2 rounded-full bg-emerald-400"></span> 🌐 瀏覽器渲染完成 (\${elapsed}ms)\`;
+          outputBox.querySelector('span.font-mono').innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-400"></span> 🌐 瀏覽器渲染完成 (${elapsed}ms)`;
           if (navigator.vibrate) navigator.vibrate(30);
         } else if (e.data.type === 'error') {
-          outputBox.querySelector('span.font-mono').innerHTML = \`<span class="w-2 h-2 rounded-full bg-rose-400"></span> 🌐 執行報錯\`;
+          outputBox.querySelector('span.font-mono').innerHTML = `<span class="w-2 h-2 rounded-full bg-rose-400"></span> 🌐 執行報錯`;
         }
       };
       window.addEventListener('message', messageHandler);
