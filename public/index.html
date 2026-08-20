@@ -140,6 +140,13 @@
     </div>
     
     <div class="flex items-center gap-1 shrink-0">
+      <!-- Usage Quota Button -->
+      <button id="usage-btn" class="p-2 rounded-lg hover:bg-slate-800 text-sky-400 hover:text-sky-300 transition active:scale-95 shrink-0" title="📊 模型配額用量 (/usage)">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+        </svg>
+      </button>
+
       <!-- Capabilities Cheat Sheet Button -->
       <button id="cheat-sheet-btn" class="p-2 rounded-lg hover:bg-slate-800 text-amber-400 hover:text-amber-300 transition active:scale-95 shrink-0" title="💡 超能力功能錦囊">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -265,6 +272,9 @@
         </button>
         <button type="button" class="quick-chip shrink-0 px-2.5 py-1 rounded-full bg-slate-900/90 hover:bg-blue-950/80 border border-slate-700/80 hover:border-blue-500/60 text-slate-300 hover:text-blue-300 flex items-center gap-1.5 transition active:scale-95 shadow-sm" data-fill="請深入搜尋網路並整理完整分析：">
           <span>🔍</span><span>深度搜尋</span>
+        </button>
+        <button type="button" id="open-usage-chip" class="shrink-0 px-2.5 py-1 rounded-full bg-sky-950/40 hover:bg-sky-950/80 border border-sky-600/50 text-sky-300 flex items-center gap-1 transition active:scale-95 shadow-sm">
+          <span>📊</span><span>查詢用量</span>
         </button>
         <button type="button" id="open-cheat-chip" class="shrink-0 px-2.5 py-1 rounded-full bg-amber-950/40 hover:bg-amber-950/80 border border-amber-600/50 text-amber-300 flex items-center gap-1 transition active:scale-95 shadow-sm">
           <span>💡</span><span>功能錦囊</span>
@@ -407,6 +417,40 @@
           </div>
         </div>
 
+      </div>
+    </div>
+  </div>
+
+  <!-- USAGE QUOTA MODAL -->
+  <div id="usage-modal" class="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-3 opacity-0 pointer-events-none transition-opacity duration-200">
+    <div class="bg-slate-900 border border-slate-700/80 rounded-2xl w-full max-w-sm flex flex-col shadow-2xl overflow-hidden">
+      <!-- Header -->
+      <div class="px-4 py-3 border-b border-slate-800 flex items-center justify-between bg-slate-950/60">
+        <div class="flex items-center gap-2">
+          <span class="text-lg">📊</span>
+          <div>
+            <h2 class="text-xs font-bold text-white tracking-wide">AGY 模型配額與剩餘用量</h2>
+            <div class="text-[10px] text-slate-400">即時同步官方 /usage 配額狀態</div>
+          </div>
+        </div>
+        <button id="close-usage-btn" class="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition text-xs font-mono">✕</button>
+      </div>
+
+      <!-- Content -->
+      <div class="p-4 space-y-3.5">
+        <!-- Container for dynamic progress bars -->
+        <div id="usage-bars-container" class="space-y-3">
+          <div class="text-center py-6 text-slate-400 text-xs flex flex-col items-center gap-2">
+            <span class="inline-block w-5 h-5 rounded-full border-2 border-indigo-400 border-t-transparent animate-spin"></span>
+            <span>正在向伺服器查詢即時用量...</span>
+          </div>
+        </div>
+
+        <!-- Refresh Button -->
+        <button id="refresh-usage-btn" class="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-slate-200 font-sans text-xs font-semibold flex items-center justify-center gap-1.5 border border-slate-700 transition active:scale-95">
+          <svg class="w-3.5 h-3.5 text-sky-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+          <span>重新整理即時配額</span>
+        </button>
       </div>
     </div>
   </div>
@@ -655,6 +699,90 @@
     if (cheatSheetModal) {
       cheatSheetModal.addEventListener('click', (e) => {
         if (e.target === cheatSheetModal) toggleCheatSheet(false);
+      });
+    }
+
+    // Usage Quota Modal Handlers
+    const usageBtn = document.getElementById('usage-btn');
+    const usageModal = document.getElementById('usage-modal');
+    const closeUsageBtn = document.getElementById('close-usage-btn');
+    const openUsageChip = document.getElementById('open-usage-chip');
+    const refreshUsageBtn = document.getElementById('refresh-usage-btn');
+    const usageBarsContainer = document.getElementById('usage-bars-container');
+
+    function toggleUsageModal(open) {
+      if (!usageModal) return;
+      if (open) {
+        usageModal.classList.remove('opacity-0', 'pointer-events-none');
+        loadUsageData();
+      } else {
+        usageModal.classList.add('opacity-0', 'pointer-events-none');
+      }
+    }
+
+    async function loadUsageData() {
+      if (!usageBarsContainer) return;
+      usageBarsContainer.innerHTML = `
+        <div class="text-center py-6 text-slate-400 text-xs flex flex-col items-center gap-2 font-sans">
+          <span class="inline-block w-5 h-5 rounded-full border-2 border-indigo-400 border-t-transparent animate-spin"></span>
+          <span>正在執行 agy /usage 查詢即時配額...</span>
+        </div>
+      `;
+
+      try {
+        const res = await fetch('/api/usage');
+        const data = await res.json();
+
+        if (data.quotas && data.quotas.length > 0) {
+          usageBarsContainer.innerHTML = data.quotas.map(q => {
+            const pct = q.percent;
+            let barColor = 'bg-emerald-500';
+            let textColor = 'text-emerald-400';
+            if (pct < 20) {
+              barColor = 'bg-rose-500';
+              textColor = 'text-rose-400';
+            } else if (pct < 50) {
+              barColor = 'bg-amber-500';
+              textColor = 'text-amber-400';
+            }
+
+            const resetTime = q.resetAt ? new Date(q.resetAt).toLocaleString('zh-TW', { hour12: false, month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
+
+            return `
+              <div class="p-3 rounded-xl bg-slate-950/90 border border-slate-800 space-y-1.5 font-sans shadow-sm">
+                <div class="flex items-center justify-between text-xs">
+                  <span class="font-bold text-white">${escapeHtml(q.model)}</span>
+                  <span class="font-mono font-bold ${textColor}">${pct}% 剩餘</span>
+                </div>
+                <div class="w-full h-2 rounded-full bg-slate-800 overflow-hidden">
+                  <div class="h-full rounded-full ${barColor} transition-all duration-500" style="width: ${pct}%"></div>
+                </div>
+                <div class="flex items-center justify-between text-[10px] text-slate-400 font-mono">
+                  <span>${escapeHtml(q.type)}</span>
+                  ${resetTime ? `<span>重置: ${resetTime}</span>` : ''}
+                </div>
+              </div>
+            `;
+          }).join('');
+        } else {
+          usageBarsContainer.innerHTML = `
+            <div class="p-3 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-300 font-mono whitespace-pre-wrap">${escapeHtml(data.raw || '未能解析到配額資訊')}</div>
+          `;
+        }
+      } catch (err) {
+        usageBarsContainer.innerHTML = `
+          <div class="p-3 rounded-xl bg-rose-950/50 border border-rose-800 text-xs text-rose-300">查詢失敗: ${escapeHtml(err.message)}</div>
+        `;
+      }
+    }
+
+    if (usageBtn) usageBtn.addEventListener('click', () => toggleUsageModal(true));
+    if (openUsageChip) openUsageChip.addEventListener('click', () => toggleUsageModal(true));
+    if (closeUsageBtn) closeUsageBtn.addEventListener('click', () => toggleUsageModal(false));
+    if (refreshUsageBtn) refreshUsageBtn.addEventListener('click', loadUsageData);
+    if (usageModal) {
+      usageModal.addEventListener('click', (e) => {
+        if (e.target === usageModal) toggleUsageModal(false);
       });
     }
 
