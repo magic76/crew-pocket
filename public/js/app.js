@@ -169,7 +169,20 @@ document.addEventListener('DOMContentLoaded', () => {
   // Slash Command Buttons
   document.querySelectorAll('.slash-item').forEach(btn => {
     btn.addEventListener('click', () => {
+      const action = btn.dataset.action;
       const cmd = btn.dataset.cmd;
+
+      if (action === 'clear' || cmd === '/clear') {
+        if (promptInput) {
+          promptInput.value = '';
+          promptInput.style.height = 'auto';
+        }
+        if (slashMenu) slashMenu.classList.add('hidden');
+        if (newChatBtn) newChatBtn.click();
+        if (navigator.vibrate) navigator.vibrate([20, 20]);
+        return;
+      }
+
       if (promptInput) {
         promptInput.value = cmd;
         promptInput.focus();

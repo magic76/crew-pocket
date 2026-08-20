@@ -354,6 +354,17 @@ async function sendMessage() {
   if (!text && !imgPath) return;
   if (isStreaming) return;
 
+  if (text.toLowerCase() === '/clear') {
+    promptInput.value = '';
+    promptInput.style.height = 'auto';
+    uploadedImagePath = null;
+    if (cameraInput) cameraInput.value = '';
+    if (imagePreviewContainer) imagePreviewContainer.classList.add('hidden');
+    if (newChatBtn) newChatBtn.click();
+    if (navigator.vibrate) navigator.vibrate([20, 20]);
+    return;
+  }
+
   if (!isOnline && !navigator.onLine) {
     alert('⚠️ 手機目前處於離線狀態，請檢查 Wi-Fi 或行動數據連線！');
     if (navigator.vibrate) navigator.vibrate([40, 80, 40]);

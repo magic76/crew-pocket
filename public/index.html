@@ -151,8 +151,8 @@
     <div class="max-w-2xl mx-auto flex flex-col gap-1.5 relative w-full">
       
       <!-- Slash Command Autocomplete Popover -->
-      <div id="slash-menu" class="hidden absolute bottom-full left-0 mb-2 w-72 bg-slate-900/95 backdrop-blur border border-slate-700/80 rounded-2xl shadow-2xl p-1.5 z-30 space-y-1 font-mono text-xs">
-        <div class="px-2 py-1 text-[10px] text-slate-400 font-sans font-bold border-b border-slate-800 flex items-center justify-between">
+      <div id="slash-menu" class="hidden absolute bottom-full left-0 mb-2 w-72 bg-slate-900/95 backdrop-blur border border-slate-700/80 rounded-2xl shadow-2xl p-1.5 z-30 space-y-1 font-mono text-xs max-h-60 overflow-y-auto">
+        <div class="px-2 py-1 text-[10px] text-slate-400 font-sans font-bold border-b border-slate-800 flex items-center justify-between sticky top-0 bg-slate-900/95 backdrop-blur">
           <span>⚡ Antigravity 快捷指令</span>
           <span class="text-slate-500 font-normal">點擊自動填入</span>
         </div>
@@ -163,6 +163,10 @@
         <button type="button" class="slash-item w-full text-left px-2.5 py-1.5 rounded-xl hover:bg-indigo-600/20 hover:text-indigo-300 flex items-center justify-between text-slate-300 transition" data-cmd="/goal ">
           <span class="font-bold text-amber-400">/goal</span>
           <span class="text-[10px] text-slate-400 font-sans">自主達成目標</span>
+        </button>
+        <button type="button" class="slash-item w-full text-left px-2.5 py-1.5 rounded-xl hover:bg-teal-600/20 hover:text-teal-300 flex items-center justify-between text-slate-300 transition" data-cmd="/btw ">
+          <span class="font-bold text-teal-400">/btw</span>
+          <span class="text-[10px] text-slate-400 font-sans">順帶一提 / 附帶詢問</span>
         </button>
         <button type="button" class="slash-item w-full text-left px-2.5 py-1.5 rounded-xl hover:bg-indigo-600/20 hover:text-indigo-300 flex items-center justify-between text-slate-300 transition" data-cmd="/schedule ">
           <span class="font-bold text-emerald-400">/schedule</span>
@@ -175,6 +179,10 @@
         <button type="button" class="slash-item w-full text-left px-2.5 py-1.5 rounded-xl hover:bg-indigo-600/20 hover:text-indigo-300 flex items-center justify-between text-slate-300 transition" data-cmd="/learn ">
           <span class="font-bold text-sky-400">/learn</span>
           <span class="text-[10px] text-slate-400 font-sans">記憶行為模式</span>
+        </button>
+        <button type="button" class="slash-item w-full text-left px-2.5 py-1.5 rounded-xl hover:bg-rose-600/20 hover:text-rose-300 flex items-center justify-between text-slate-300 transition" data-action="clear" data-cmd="/clear">
+          <span class="font-bold text-rose-400">/clear</span>
+          <span class="text-[10px] text-slate-400 font-sans">清空畫面 / 開啟新對話</span>
         </button>
       </div>
 
@@ -196,6 +204,9 @@
       <div class="flex items-center gap-1.5 overflow-x-auto py-0.5 px-0.5 no-scrollbar select-none text-[11px] font-medium shrink-0">
         <button type="button" id="gps-chip" class="shrink-0 px-2.5 py-1 rounded-full bg-rose-950/50 hover:bg-rose-900/70 border border-rose-500/60 text-rose-300 flex items-center gap-1 transition active:scale-95 shadow-sm font-semibold">
           <span>📍</span><span>即時定位</span>
+        </button>
+        <button type="button" class="quick-chip shrink-0 px-2.5 py-1 rounded-full bg-slate-900/90 hover:bg-teal-950/80 border border-slate-700/80 hover:border-teal-500/60 text-slate-300 hover:text-teal-300 flex items-center gap-1.5 transition active:scale-95 shadow-sm" data-fill="/btw 順帶一提，">
+          <span>💬</span><span>/btw 順帶一提</span>
         </button>
         <button type="button" class="quick-chip shrink-0 px-2.5 py-1 rounded-full bg-slate-900/90 hover:bg-emerald-950/80 border border-slate-700/80 hover:border-emerald-500/60 text-slate-300 hover:text-emerald-300 flex items-center gap-1.5 transition active:scale-95 shadow-sm" data-fill="請推薦周邊景點並附上 Google 地圖一鍵導航卡片：">
           <span>🗺️</span><span>景點導航</span>
@@ -341,10 +352,10 @@
         <!-- Section 5 -->
         <div class="p-2.5 rounded-xl bg-slate-950/80 border border-purple-900/50 space-y-1">
           <div class="font-bold text-purple-400 flex items-center gap-1.5">
-            <span>⚡</span><span>5. 專業快捷指令 (/plan, /goal, /schedule, /grill-me)</span>
+            <span>⚡</span><span>5. 專業快捷指令 (/plan, /goal, /btw, /schedule, /clear)</span>
           </div>
           <p class="text-[11px] text-slate-400">
-            在輸入框輸入 <code class="text-purple-300">/</code> 即可快速呼叫自主目標規劃、定時排程提醒與需求對齊助手。
+            在輸入框輸入 <code class="text-purple-300">/</code> 即可快速呼叫自主目標規劃、定時排程、順帶一提（<code class="text-teal-300">/btw</code>）與一鍵清空重置（<code class="text-rose-300">/clear</code>）。
           </p>
         </div>
 
