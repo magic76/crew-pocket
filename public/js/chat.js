@@ -409,6 +409,7 @@ async function sendMessage() {
   currentAbortController = new AbortController();
   setStreamingState(true);
 
+  const isNewConversation = !currentConversationId;
   const isBtwQuery = /^\s*\/btw\b/i.test(text);
 
   let userDisplay = text;
@@ -692,6 +693,11 @@ async function sendMessage() {
               }
 
               if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+
+              // 🏷️ Auto-generate AI conversation title for new conversations
+              if (isNewConversation && currentConversationId && text) {
+                generateConversationTitle(currentConversationId, text, accumulatedText);
+              }
             }
           } catch (e) {}
         }
@@ -806,5 +812,62 @@ function handleSendClick(e) {
     if (navigator.vibrate) navigator.vibrate(25);
     if (slashMenu) slashMenu.classList.add('hidden');
     sendMessage();
+  }
+}
+
+// 🏷️ Auto-generate AI conversation title (fires in background, non-blocking)
+async function generateConversationTitle(convId, userMessage, assistantResponse) {
+  try {
+    // Show a temporary shimmer on the header title
+    if (headerTitle) {
+      headerTitle.innerHTML = `<span class="inline-flex items-center gap-1 text-slate-400"><span class="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse"></span> 標題生成中...</span>`;
+    }
+
+    const res = await fetch('/api/generate-title', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        conversation_id: convId,
+        user_message: userMessage,
+        assistant_response: assistantResponse
+      })
+    });
+
+    const data = await res.json();
+    if (data.success && data.title) {
+      // Update header title
+      if (headerTitle) {
+        headerTitle.textContent = data.title;
+      }
+
+      // Update sidebar entry if visible
+      if (convList) {
+        const sidebarEntries = convList.querySelectorAll('div');
+        sidebarEntries.forEach(entry => {
+          const titleSpan = entry.querySelector('.truncate');
+          if (titleSpan && entry.textContent.includes(convId.slice(0, 8))) {
+            titleSpan.textContent = data.title;
+          }
+        });
+      }
+
+      // Also refresh sidebar to ensure consistency
+      if (typeof loadConversations === 'function') {
+        loadConversations();
+      }
+
+      console.log(`[AutoTitle] Generated: "${data.title}" (cached: ${data.cached})`);
+    } else {
+      // Fallback: use first 18 chars of user message
+      if (headerTitle) {
+        headerTitle.textContent = userMessage.slice(0, 18) + (userMessage.length > 18 ? '...' : '');
+      }
+    }
+  } catch (err) {
+    console.warn('[AutoTitle] Failed:', err.message);
+    // Fallback
+    if (headerTitle) {
+      headerTitle.textContent = userMessage.slice(0, 18) + (userMessage.length > 18 ? '...' : '');
+    }
   }
 }

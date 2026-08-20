@@ -20,6 +20,7 @@ const { handleListConversations, handleGetHistory, handleDeleteConversation } = 
 const { handleRunCode } = require('./lib/sandbox');
 const { handleUsage } = require('./lib/usage');
 const { handleListFiles, handleReadFile } = require('./lib/files');
+const { handleGenerateTitle, getCachedTitle } = require('./lib/title');
 
 // 🤖 List Available Models
 function handleGetModels(res) {
@@ -302,6 +303,8 @@ const server = http.createServer(async (req, res) => {
     return handleUpload(req, res);
   } else if (pathname === '/api/run-code' && req.method === 'POST') {
     return handleRunCode(req, res);
+  } else if (pathname === '/api/generate-title' && req.method === 'POST') {
+    return handleGenerateTitle(req, res);
   } else if (pathname === '/api/models' && req.method === 'GET') {
     return handleGetModels(res);
   } else if (pathname === '/api/usage' && req.method === 'GET') {
