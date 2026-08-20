@@ -68,19 +68,20 @@ class ActiveSessionManager {
   }
 
   // Get or initialize persistent session
-  async getOrCreateSession(targetConversationId) {
-    // If targetConversationId is specified AND matches current running session, reuse it!
+  async getOrCreateSession(targetConversationId, targetModel) {
+    // If targetConversationId matches current running session AND model matches (if specified), reuse it!
     if (targetConversationId && this.current && this.current.process && !this.current.process.killed) {
-      if (this.current.conversationId === targetConversationId) {
+      const modelMatches = !targetModel || this.current.model === targetModel;
+      if (this.current.conversationId === targetConversationId && modelMatches) {
         this.resetIdleTimer();
         return this.current;
       }
     }
 
-    // Otherwise (new session requested, or switching to different session): spawn new process
+    // Otherwise (new session requested, switching conversation or switching model): spawn new process
     this.closeActiveSession();
 
-    console.log(`[SessionManager] Spawning resident agy process for session: ${targetConversationId || 'NEW'}`);
+    console.log(`[SessionManager] Spawning resident agy process for session: ${targetConversationId || 'NEW'} (Model: ${targetModel || 'default'})`);
     
     // Check if target conversation exists in brain directory
     let validConvId = targetConversationId;
@@ -98,6 +99,10 @@ class ActiveSessionManager {
       '--dangerously-skip-permissions'
     ];
 
+    if (targetModel) {
+      args.push('--model', targetModel);
+    }
+
     if (validConvId) {
       args.push('--conversation', validConvId);
     }
@@ -112,6 +117,7 @@ class ActiveSessionManager {
 
     const sessionObj = {
       conversationId: validConvId || null,
+      model: targetModel || 'gemini-3.7-flash-high',
       process: child,
       emitter,
       isBusy: false,
@@ -612,6 +618,20 @@ async function handleRunCode(req, res) {
   }
 }
 
+// 🤖 List Available Models
+const AVAILABLE_MODELS = [
+  { id: 'gemini-3.7-flash-high', name: 'Gemini 3.7 Flash', desc: '極速綜合推理 · 預設推薦', icon: '✨', badge: '推薦', badgeColor: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40' },
+  { id: 'claude-sonnet-4-6', name: 'Claude Sonnet 4.6', desc: '深度思考 · 代碼與架構大師', icon: '🟣', badge: 'Thinking', badgeColor: 'bg-purple-500/20 text-purple-300 border-purple-500/40' },
+  { id: 'claude-opus-4-6-thinking', name: 'Claude Opus 4.6', desc: '最強旗艦 · 複雜邏輯思維', icon: '👑', badge: '旗艦', badgeColor: 'bg-amber-500/20 text-amber-300 border-amber-500/40' },
+  { id: 'gemini-3.1-pro-high', name: 'Gemini 3.1 Pro', desc: '深度多模態推理', icon: '🔵', badge: 'Pro', badgeColor: 'bg-sky-500/20 text-sky-300 border-sky-500/40' },
+  { id: 'gpt-oss-120b-medium', name: 'GPT-OSS 120B', desc: '千億級開源大模型', icon: '🟢', badge: '開源', badgeColor: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' }
+];
+
+function handleGetModels(res) {
+  res.writeHead(200, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify({ models: AVAILABLE_MODELS }));
+}
+
 // SSE Chat using Resident Pipe
 async function handleChat(req, res) {
   let body;
@@ -622,7 +642,7 @@ async function handleChat(req, res) {
     return res.end(JSON.stringify({ error: 'Invalid JSON body' }));
   }
 
-  const { prompt, conversation_id, image_path } = body;
+  const { prompt, conversation_id, image_path, model } = body;
   if (!prompt && !image_path) {
     res.writeHead(400, { 'Content-Type': 'application/json' });
     return res.end(JSON.stringify({ error: 'Prompt or image is required' }));
@@ -646,10 +666,10 @@ async function handleChat(req, res) {
   };
 
   try {
-    const session = await sessionManager.getOrCreateSession(conversation_id);
+    const session = await sessionManager.getOrCreateSession(conversation_id, model);
     session.isBusy = true;
 
-    sendEvent('init', { conversation_id: session.conversationId });
+    sendEvent('init', { conversation_id: session.conversationId, model: session.model });
 
     let fullResponse = '';
 
@@ -801,6 +821,8 @@ const server = http.createServer(async (req, res) => {
     return handleUpload(req, res);
   } else if (pathname === '/api/run-code' && req.method === 'POST') {
     return handleRunCode(req, res);
+  } else if (pathname === '/api/models' && req.method === 'GET') {
+    return handleGetModels(res);
   } else if (pathname === '/api/usage' && req.method === 'GET') {
     return handleUsage(res);
   } else if (pathname === '/api/image' && req.method === 'GET') {

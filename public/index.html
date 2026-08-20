@@ -135,7 +135,12 @@
           <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0"></span>
           <h1 id="header-title" class="font-semibold text-xs sm:text-sm text-white truncate">Antigravity 隨身助理</h1>
         </div>
-        <span id="header-subtitle" class="text-[11px] text-slate-400 truncate">Gemini 3.7 • 本地原生</span>
+        <!-- Interactive Model Selector Trigger -->
+        <button id="model-selector-btn" class="flex items-center gap-1 text-[10px] text-slate-300 hover:text-white bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 px-1.5 py-0.5 rounded-md transition active:scale-95 text-left w-fit mt-0.5" title="點擊切換 AI 模型 (Gemini / Claude / GPT)">
+          <span id="model-badge-icon">✨</span>
+          <span id="model-display-name" class="font-semibold text-slate-200 truncate max-w-[130px]">Gemini 3.7 Flash</span>
+          <svg class="w-2.5 h-2.5 text-slate-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+        </button>
       </div>
     </div>
     
@@ -455,6 +460,28 @@
     </div>
   </div>
 
+  <!-- MODEL SELECTOR MODAL -->
+  <div id="model-modal" class="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-3 opacity-0 pointer-events-none transition-opacity duration-200">
+    <div class="bg-slate-900 border border-slate-700/80 rounded-2xl w-full max-w-sm flex flex-col shadow-2xl overflow-hidden">
+      <!-- Header -->
+      <div class="px-4 py-3 border-b border-slate-800 flex items-center justify-between bg-slate-950/60">
+        <div class="flex items-center gap-2">
+          <span class="text-lg">🤖</span>
+          <div>
+            <h2 class="text-xs font-bold text-white tracking-wide">選擇 AI 核心大模型</h2>
+            <div class="text-[10px] text-slate-400">支援 Claude 4.6 / Opus / GPT / Gemini</div>
+          </div>
+        </div>
+        <button id="close-model-btn" class="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition text-xs font-mono">✕</button>
+      </div>
+
+      <!-- Models List -->
+      <div class="p-3 space-y-2 max-h-[65dvh] overflow-y-auto" id="model-options-container">
+        <!-- Loaded dynamically from /api/models -->
+      </div>
+    </div>
+  </div>
+
   <!-- IMAGE LIGHTBOX MODAL -->
   <div id="lightbox" class="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4 opacity-0 pointer-events-none transition-opacity duration-200">
     <button id="close-lightbox-btn" class="absolute top-4 right-4 p-2 text-white bg-slate-800/80 rounded-full">
@@ -477,6 +504,8 @@
 
     // State
     let currentConversationId = null;
+    let currentModel = localStorage.getItem('agy_current_model') || 'gemini-3.7-flash-high';
+    let availableModels = [];
     let uploadedImagePath = null;
     let isStreaming = false;
     let currentAbortController = null;
@@ -785,6 +814,93 @@
         if (e.target === usageModal) toggleUsageModal(false);
       });
     }
+
+    // Model Selector Modal Handlers
+    const modelSelectorBtn = document.getElementById('model-selector-btn');
+    const modelModal = document.getElementById('model-modal');
+    const closeModelBtn = document.getElementById('close-model-btn');
+    const modelOptionsContainer = document.getElementById('model-options-container');
+    const modelBadgeIcon = document.getElementById('model-badge-icon');
+    const modelDisplayName = document.getElementById('model-display-name');
+
+    function updateModelUI() {
+      const found = availableModels.find(m => m.id === currentModel);
+      if (found) {
+        if (modelBadgeIcon) modelBadgeIcon.textContent = found.icon;
+        if (modelDisplayName) modelDisplayName.textContent = found.name;
+      } else {
+        if (modelBadgeIcon) modelBadgeIcon.textContent = '✨';
+        if (modelDisplayName) modelDisplayName.textContent = currentModel.replace('gemini-', 'Gemini ').replace('claude-', 'Claude ');
+      }
+    }
+
+    function toggleModelModal(open) {
+      if (!modelModal) return;
+      if (open) {
+        modelModal.classList.remove('opacity-0', 'pointer-events-none');
+        loadModelsList();
+      } else {
+        modelModal.classList.add('opacity-0', 'pointer-events-none');
+      }
+    }
+
+    async function loadModelsList() {
+      if (!modelOptionsContainer) return;
+      try {
+        if (availableModels.length === 0) {
+          const res = await fetch('/api/models');
+          const data = await res.json();
+          availableModels = data.models || [];
+        }
+
+        modelOptionsContainer.innerHTML = availableModels.map(m => {
+          const isSelected = (m.id === currentModel);
+          const activeRing = isSelected ? 'ring-2 ring-indigo-500 bg-indigo-950/50 border-indigo-500/80' : 'bg-slate-950/80 border-slate-800 hover:border-slate-700';
+
+          return `
+            <button type="button" class="w-full text-left p-3 rounded-xl border ${activeRing} transition active:scale-[0.98] flex items-center justify-between gap-2 shadow-sm font-sans" onclick="selectModel('${m.id}')">
+              <div class="flex items-center gap-2.5 min-w-0">
+                <span class="text-xl shrink-0">${m.icon}</span>
+                <div class="min-w-0">
+                  <div class="flex items-center gap-1.5">
+                    <span class="font-bold text-xs text-white truncate">${escapeHtml(m.name)}</span>
+                    <span class="text-[9px] px-1.5 py-0.5 rounded border font-mono ${m.badgeColor}">${m.badge}</span>
+                  </div>
+                  <div class="text-[11px] text-slate-400 truncate mt-0.5">${escapeHtml(m.desc)}</div>
+                </div>
+              </div>
+              ${isSelected ? '<span class="text-indigo-400 font-bold text-sm shrink-0">✓</span>' : ''}
+            </button>
+          `;
+        }).join('');
+
+      } catch (e) {
+        modelOptionsContainer.innerHTML = `<div class="p-3 text-xs text-rose-400">載入模型清單失敗</div>`;
+      }
+    }
+
+    window.selectModel = function(modelId) {
+      currentModel = modelId;
+      localStorage.setItem('agy_current_model', currentModel);
+      updateModelUI();
+      toggleModelModal(false);
+      if (navigator.vibrate) navigator.vibrate(20);
+      console.log(`🤖 已切換 AI 核心模型至: ${currentModel}`);
+    };
+
+    if (modelSelectorBtn) modelSelectorBtn.addEventListener('click', () => toggleModelModal(true));
+    if (closeModelBtn) closeModelBtn.addEventListener('click', () => toggleModelModal(false));
+    if (modelModal) {
+      modelModal.addEventListener('click', (e) => {
+        if (e.target === modelModal) toggleModelModal(false);
+      });
+    }
+
+    // Initialize model on load
+    fetch('/api/models').then(r => r.json()).then(data => {
+      availableModels = data.models || [];
+      updateModelUI();
+    }).catch(() => {});
 
     // Quick Action Chips Fill Handler
     document.querySelectorAll('.quick-chip').forEach(chip => {
@@ -1729,7 +1845,8 @@
           body: JSON.stringify({
             prompt: text,
             conversation_id: currentConversationId,
-            image_path: imgPath
+            image_path: imgPath,
+            model: currentModel
           }),
           signal: currentAbortController.signal
         });
