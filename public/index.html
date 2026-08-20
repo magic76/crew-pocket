@@ -23,6 +23,8 @@
   </script>
   <!-- Marked.js for Markdown -->
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <!-- Chart.js for Live Data Visualization -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <!-- Highlight.js for Code Highlighting -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
@@ -615,82 +617,41 @@
           actionsContainer.className = 'flex items-center gap-1.5';
 
           const lowerLang = lang.toLowerCase();
-          const isExecutable = ['python', 'py', 'javascript', 'js', 'node', 'bash', 'sh', 'shell', 'zsh'].includes(lowerLang);
+          const isJs = ['javascript', 'js', 'node'].includes(lowerLang);
+          const isOtherExecutable = ['python', 'py', 'bash', 'sh', 'shell', 'zsh'].includes(lowerLang);
 
-          if (isExecutable) {
+          if (isJs) {
+            // 🌐 Browser Sandbox Runner (DOM / Canvas / Chart.js / Audio)
+            const browserRunBtn = document.createElement('button');
+            browserRunBtn.type = 'button';
+            browserRunBtn.className = 'px-2 py-0.5 rounded bg-indigo-950/80 border border-indigo-700/60 hover:bg-indigo-900 text-indigo-300 text-[10px] font-mono flex items-center gap-1 transition active:scale-95';
+            browserRunBtn.innerHTML = `<svg class="w-3 h-3 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg><span>瀏覽器渲染</span>`;
+            browserRunBtn.onclick = (e) => {
+              e.stopPropagation();
+              runInBrowserSandbox(rawCode, pre);
+            };
+            actionsContainer.appendChild(browserRunBtn);
+
+            // 💻 Backend Node.js Runner
+            const nodeRunBtn = document.createElement('button');
+            nodeRunBtn.type = 'button';
+            nodeRunBtn.className = 'px-2 py-0.5 rounded bg-emerald-950/80 border border-emerald-700/60 hover:bg-emerald-900 text-emerald-300 text-[10px] font-mono flex items-center gap-1 transition active:scale-95';
+            nodeRunBtn.innerHTML = `<svg class="w-3 h-3 text-emerald-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd"/></svg><span>Node.js</span>`;
+            nodeRunBtn.onclick = (e) => {
+              e.stopPropagation();
+              runInBackendSandbox(rawCode, 'javascript', pre, nodeRunBtn);
+            };
+            actionsContainer.appendChild(nodeRunBtn);
+          } else if (isOtherExecutable) {
+            // Python / Bash Backend Runner
             const runBtn = document.createElement('button');
             runBtn.type = 'button';
             runBtn.className = 'px-2 py-0.5 rounded bg-emerald-950/80 border border-emerald-700/60 hover:bg-emerald-900 text-emerald-300 text-[10px] font-mono flex items-center gap-1 transition active:scale-95';
             runBtn.innerHTML = `<svg class="w-3 h-3 text-emerald-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd"/></svg><span>執行</span>`;
-            
-            runBtn.onclick = async (e) => {
+            runBtn.onclick = (e) => {
               e.stopPropagation();
-              const originalBtnHtml = runBtn.innerHTML;
-              runBtn.disabled = true;
-              runBtn.innerHTML = `<span class="inline-block w-2.5 h-2.5 rounded-full border-2 border-emerald-400 border-t-transparent animate-spin"></span><span>執行中...</span>`;
-
-              let outputBox = pre.nextElementSibling;
-              if (!outputBox || !outputBox.classList.contains('code-output-box')) {
-                outputBox = document.createElement('div');
-                outputBox.className = 'code-output-box mt-2 p-2.5 rounded-xl bg-black/95 border border-slate-700 font-mono text-[11px] select-text shadow-lg';
-                pre.parentNode.insertBefore(outputBox, pre.nextSibling);
-              }
-
-              outputBox.innerHTML = `
-                <div class="flex items-center justify-between text-[10px] text-slate-400 border-b border-slate-800 pb-1 mb-1.5 select-none">
-                  <span class="flex items-center gap-1.5 text-indigo-400 font-semibold font-mono">
-                    <span class="inline-block w-2 h-2 rounded-full bg-indigo-400 animate-ping"></span>
-                    直譯執行中...
-                  </span>
-                </div>
-                <div class="text-slate-500 text-[11px] font-mono animate-pulse">正在 Termux 環境中調度直譯器...</div>
-              `;
-
-              try {
-                const res = await fetch('/api/run-code', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ code: rawCode, language: lowerLang })
-                });
-                const data = await res.json();
-
-                const isSuccess = data.success;
-                const statusColor = isSuccess ? 'text-emerald-400' : 'text-rose-400';
-                const statusDot = isSuccess ? 'bg-emerald-400' : 'bg-rose-400';
-                const displayText = (data.output || '') + (data.error ? (data.output ? '\n' : '') + data.error : '');
-
-                outputBox.innerHTML = `
-                  <div class="flex items-center justify-between text-[10px] text-slate-400 border-b border-slate-800 pb-1 mb-1.5 select-none">
-                    <span class="flex items-center gap-1.5 ${statusColor} font-semibold font-mono">
-                      <span class="w-1.5 h-1.5 rounded-full ${statusDot}"></span>
-                      ${isSuccess ? '執行完成' : '執行異常'} (${data.duration_ms || 0}ms)
-                    </span>
-                    <button type="button" class="close-output-btn text-slate-500 hover:text-slate-200 text-[10px] px-1.5 py-0.5 rounded hover:bg-slate-800 transition">✕ 關閉</button>
-                  </div>
-                  <pre class="whitespace-pre-wrap leading-relaxed ${isSuccess ? 'text-slate-200' : 'text-rose-300'} font-mono overflow-x-auto text-[11px] max-h-60 overflow-y-auto bg-transparent border-0 p-0 m-0">${escapeHtml(displayText || '(無輸出內容)')}</pre>
-                `;
-
-                outputBox.querySelector('.close-output-btn').onclick = () => {
-                  outputBox.remove();
-                };
-
-                if (navigator.vibrate) navigator.vibrate(30);
-
-              } catch (err) {
-                outputBox.innerHTML = `
-                  <div class="flex items-center justify-between text-[10px] text-rose-400 border-b border-slate-800 pb-1 mb-1.5">
-                    <span>執行請求失敗</span>
-                    <button type="button" class="close-output-btn text-slate-500 hover:text-slate-200 text-[10px]">✕</button>
-                  </div>
-                  <div class="text-rose-400 text-[11px]">${escapeHtml(err.message)}</div>
-                `;
-                outputBox.querySelector('.close-output-btn').onclick = () => outputBox.remove();
-              } finally {
-                runBtn.disabled = false;
-                runBtn.innerHTML = originalBtnHtml;
-              }
+              runInBackendSandbox(rawCode, lowerLang, pre, runBtn);
             };
-
             actionsContainer.appendChild(runBtn);
           }
 
@@ -708,6 +669,142 @@
           pre.insertBefore(header, pre.firstChild);
         }
       });
+    }
+
+    // Helper: Execute in Termux Backend (Python, Node.js, Bash)
+    async function runInBackendSandbox(rawCode, lang, pre, btn) {
+      const originalBtnHtml = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = `<span class="inline-block w-2.5 h-2.5 rounded-full border-2 border-emerald-400 border-t-transparent animate-spin"></span><span>執行中...</span>`;
+
+      let outputBox = pre.nextElementSibling;
+      if (!outputBox || !outputBox.classList.contains('code-output-box')) {
+        outputBox = document.createElement('div');
+        outputBox.className = 'code-output-box mt-2 p-2.5 rounded-xl bg-black/95 border border-slate-700 font-mono text-[11px] select-text shadow-lg';
+        pre.parentNode.insertBefore(outputBox, pre.nextSibling);
+      }
+
+      outputBox.innerHTML = `
+        <div class="flex items-center justify-between text-[10px] text-slate-400 border-b border-slate-800 pb-1 mb-1.5 select-none">
+          <span class="flex items-center gap-1.5 text-indigo-400 font-semibold font-mono">
+            <span class="inline-block w-2 h-2 rounded-full bg-indigo-400 animate-ping"></span>
+            直譯執行中 (${lang})...
+          </span>
+        </div>
+        <div class="text-slate-500 text-[11px] font-mono animate-pulse">正在 Termux 環境中調度直譯器...</div>
+      `;
+
+      try {
+        const res = await fetch('/api/run-code', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code: rawCode, language: lang })
+        });
+        const data = await res.json();
+
+        const isSuccess = data.success;
+        const statusColor = isSuccess ? 'text-emerald-400' : 'text-rose-400';
+        const statusDot = isSuccess ? 'bg-emerald-400' : 'bg-rose-400';
+        const displayText = (data.output || '') + (data.error ? (data.output ? '\n' : '') + data.error : '');
+
+        outputBox.innerHTML = `
+          <div class="flex items-center justify-between text-[10px] text-slate-400 border-b border-slate-800 pb-1 mb-1.5 select-none">
+            <span class="flex items-center gap-1.5 ${statusColor} font-semibold font-mono">
+              <span class="w-1.5 h-1.5 rounded-full ${statusDot}"></span>
+              ${isSuccess ? '執行完成' : '執行異常'} (${data.duration_ms || 0}ms)
+            </span>
+            <button type="button" class="close-output-btn text-slate-500 hover:text-slate-200 text-[10px] px-1.5 py-0.5 rounded hover:bg-slate-800 transition">✕ 關閉</button>
+          </div>
+          <pre class="whitespace-pre-wrap leading-relaxed ${isSuccess ? 'text-slate-200' : 'text-rose-300'} font-mono overflow-x-auto text-[11px] max-h-60 overflow-y-auto bg-transparent border-0 p-0 m-0">${escapeHtml(displayText || '(無輸出內容)')}</pre>
+        `;
+
+        outputBox.querySelector('.close-output-btn').onclick = () => outputBox.remove();
+        if (navigator.vibrate) navigator.vibrate(30);
+
+      } catch (err) {
+        outputBox.innerHTML = `
+          <div class="flex items-center justify-between text-[10px] text-rose-400 border-b border-slate-800 pb-1 mb-1.5">
+            <span>執行請求失敗</span>
+            <button type="button" class="close-output-btn text-slate-500 hover:text-slate-200 text-[10px]">✕</button>
+          </div>
+          <div class="text-rose-400 text-[11px]">${escapeHtml(err.message)}</div>
+        `;
+        outputBox.querySelector('.close-output-btn').onclick = () => outputBox.remove();
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalBtnHtml;
+      }
+    }
+
+    // Helper: Execute in Browser Sandbox (DOM / Canvas / Chart.js / Web Audio)
+    function runInBrowserSandbox(rawCode, pre) {
+      let outputBox = pre.nextElementSibling;
+      if (!outputBox || !outputBox.classList.contains('code-output-box')) {
+        outputBox = document.createElement('div');
+        outputBox.className = 'code-output-box mt-2 p-3 rounded-2xl bg-slate-950 border border-indigo-500/40 font-mono text-[11px] select-text shadow-xl';
+        pre.parentNode.insertBefore(outputBox, pre.nextSibling);
+      }
+
+      const startTs = performance.now();
+
+      outputBox.innerHTML = `
+        <div class="flex items-center justify-between text-[10px] text-slate-400 border-b border-slate-800 pb-1.5 mb-2 select-none">
+          <span class="flex items-center gap-1.5 text-indigo-300 font-semibold font-mono">
+            <span class="w-2 h-2 rounded-full bg-indigo-400 animate-pulse"></span>
+            🌐 瀏覽器動態渲染視窗
+          </span>
+          <button type="button" class="close-output-btn text-slate-500 hover:text-slate-200 text-[10px] px-1.5 py-0.5 rounded hover:bg-slate-800 transition">✕ 關閉</button>
+        </div>
+        <div class="render-target w-full min-h-0 mb-2 overflow-x-auto flex flex-col items-center justify-center gap-2"></div>
+        <pre class="console-box whitespace-pre-wrap leading-relaxed text-emerald-300 font-mono text-[11px] max-h-40 overflow-y-auto bg-black/60 p-2 rounded-lg border border-slate-800 hidden"></pre>
+      `;
+
+      outputBox.querySelector('.close-output-btn').onclick = () => outputBox.remove();
+
+      const renderTarget = outputBox.querySelector('.render-target');
+      const consoleBox = outputBox.querySelector('.console-box');
+
+      const logs = [];
+      const customConsole = {
+        log: (...args) => {
+          logs.push(args.map(a => typeof a === 'object' ? JSON.stringify(a, null, 2) : String(a)).join(' '));
+          consoleBox.classList.remove('hidden');
+          consoleBox.textContent = logs.join('\n');
+        },
+        error: (...args) => {
+          logs.push('[ERR] ' + args.map(a => typeof a === 'object' ? JSON.stringify(a, null, 2) : String(a)).join(' '));
+          consoleBox.classList.remove('hidden');
+          consoleBox.textContent = logs.join('\n');
+        },
+        warn: (...args) => {
+          logs.push('[WARN] ' + args.map(a => typeof a === 'object' ? JSON.stringify(a, null, 2) : String(a)).join(' '));
+          consoleBox.classList.remove('hidden');
+          consoleBox.textContent = logs.join('\n');
+        }
+      };
+
+      // Create an automatic Canvas context
+      const canvas = document.createElement('canvas');
+      canvas.className = 'max-w-full rounded-xl border border-slate-800 bg-slate-900/60 shadow-inner';
+      const canvasWidth = Math.min(window.innerWidth - 64, 480);
+      canvas.width = canvasWidth;
+      canvas.height = Math.round(canvasWidth * 0.62);
+      const ctx = canvas.getContext('2d');
+      renderTarget.appendChild(canvas);
+
+      try {
+        const fn = new Function('container', 'canvas', 'ctx', 'console', 'Chart', rawCode);
+        const result = fn(renderTarget, canvas, ctx, customConsole, window.Chart);
+        if (result !== undefined && result !== null) {
+          customConsole.log(result);
+        }
+        const elapsed = (performance.now() - startTs).toFixed(1);
+        outputBox.querySelector('span.font-mono').innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-400"></span> 🌐 瀏覽器渲染完成 (${elapsed}ms)`;
+        if (navigator.vibrate) navigator.vibrate(30);
+      } catch (err) {
+        customConsole.error(err.message);
+        outputBox.querySelector('span.font-mono').innerHTML = `<span class="w-2 h-2 rounded-full bg-rose-400"></span> 🌐 執行報錯`;
+      }
     }
 
     // TTS Web Speech Synthesis
