@@ -2,7 +2,7 @@
 <html lang="zh-TW" class="dark h-full w-full">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content">
   <meta name="theme-color" content="#0f172a">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -33,7 +33,8 @@
   <!-- Highlight.js for Code Highlighting -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
+  <!-- DOMPurify Local for Offline & Zero-Latency Sanitization -->
+  <script src="/dompurify.min.js"></script>
   <style>
     *, *::before, *::after {
       box-sizing: border-box;
@@ -120,13 +121,13 @@
     .recording-pulse { animation: pulse-ring 1.5s infinite; }
   </style>
 </head>
-<body class="bg-slate-950 text-slate-100 flex flex-col h-[100dvh] w-full max-w-full overflow-hidden select-none">
+<body class="bg-slate-950 text-slate-100 flex flex-col h-[100dvh] w-full max-w-full overflow-hidden">
 
   <!-- TOP HEADER -->
-  <header class="bg-slate-900/95 backdrop-blur border-b border-slate-800 px-3 py-2.5 flex items-center justify-between z-20 shrink-0 w-full max-w-full">
-    <div class="flex items-center gap-2.5 min-w-0">
+  <header class="bg-slate-900/95 backdrop-blur border-b border-slate-800 px-2.5 py-2 flex items-center justify-between z-20 shrink-0 w-full max-w-full min-w-0">
+    <div class="flex items-center gap-1.5 sm:gap-2.5 min-w-0 flex-1">
       <!-- Drawer Menu Button -->
-      <button id="menu-btn" class="p-2 rounded-lg hover:bg-slate-800 text-slate-300 hover:text-white transition active:scale-95 shrink-0">
+      <button id="menu-btn" class="p-1.5 sm:p-2 rounded-lg hover:bg-slate-800 text-slate-300 hover:text-white transition active:scale-95 shrink-0" aria-label="歷史對話選單">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
         </svg>
@@ -134,45 +135,45 @@
       <div class="flex flex-col min-w-0">
         <div class="flex items-center gap-1.5 min-w-0">
           <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0"></span>
-          <h1 id="header-title" class="font-semibold text-xs sm:text-sm text-white truncate">Antigravity 隨身助理</h1>
+          <h1 id="header-title" class="font-semibold text-xs text-white truncate max-w-[110px] sm:max-w-[160px]">Antigravity 隨身助理</h1>
         </div>
         <!-- Interactive Model Selector Trigger -->
-        <button id="model-selector-btn" class="flex items-center gap-1 text-[10px] text-slate-300 hover:text-white bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 px-1.5 py-0.5 rounded-md transition active:scale-95 text-left w-fit mt-0.5" title="點擊切換 AI 模型 (Gemini / Claude / GPT)">
-          <span id="model-badge-icon">✨</span>
-          <span id="model-display-name" class="font-semibold text-slate-200 truncate max-w-[130px]">Gemini 3.7 Flash</span>
+        <button id="model-selector-btn" class="flex items-center gap-1 text-[10px] text-slate-300 hover:text-white bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 px-1.5 py-0.5 rounded-md transition active:scale-95 text-left w-fit max-w-[130px] sm:max-w-[180px] mt-0.5" title="點擊切換 AI 模型 (Gemini / Claude / GPT)">
+          <span id="model-badge-icon" class="shrink-0">✨</span>
+          <span id="model-display-name" class="font-semibold text-slate-200 truncate">Gemini 3.7 Flash</span>
           <svg class="w-2.5 h-2.5 text-slate-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
         </button>
       </div>
     </div>
     
-    <div class="flex items-center gap-1 shrink-0">
+    <div class="flex items-center gap-0.5 sm:gap-1 shrink-0">
       <!-- Usage Quota Button -->
-      <button id="usage-btn" class="p-2 rounded-lg hover:bg-slate-800 text-sky-400 hover:text-sky-300 transition active:scale-95 shrink-0" title="📊 模型配額用量 (/usage)">
+      <button id="usage-btn" class="p-1.5 sm:p-2 rounded-lg hover:bg-slate-800 text-sky-400 hover:text-sky-300 transition active:scale-95 shrink-0" title="📊 模型配額用量 (/usage)" aria-label="模型用量">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
         </svg>
       </button>
 
       <!-- Capabilities Cheat Sheet Button -->
-      <button id="cheat-sheet-btn" class="p-2 rounded-lg hover:bg-slate-800 text-amber-400 hover:text-amber-300 transition active:scale-95 shrink-0" title="💡 超能力功能錦囊">
+      <button id="cheat-sheet-btn" class="p-1.5 sm:p-2 rounded-lg hover:bg-slate-800 text-amber-400 hover:text-amber-300 transition active:scale-95 shrink-0" title="💡 超能力功能錦囊" aria-label="功能錦囊">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
         </svg>
       </button>
 
       <!-- Notification Toggle Button -->
-      <button id="notify-btn" class="p-2 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition active:scale-95 shrink-0" title="系統推播通知">
+      <button id="notify-btn" class="p-1.5 sm:p-2 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition active:scale-95 shrink-0" title="系統推播通知" aria-label="通知開關">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
         </svg>
       </button>
       
       <!-- New Chat Button -->
-      <button id="new-chat-btn" class="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium transition shadow-md shadow-indigo-600/30 active:scale-95 shrink-0">
+      <button id="new-chat-btn" class="flex items-center gap-1 px-2 sm:px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium transition shadow-md shadow-indigo-600/30 active:scale-95 shrink-0" title="開啟新對話">
         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
         </svg>
-        <span>新對話</span>
+        <span class="hidden sm:inline">新對話</span>
       </button>
     </div>
   </header>
@@ -1249,7 +1250,7 @@
           const prefix = e.data.method === 'error' ? '[ERR] ' : e.data.method === 'warn' ? '[WARN] ' : '';
           logs.push(prefix + e.data.args.join(' '));
           consoleBox.classList.remove('hidden');
-          consoleBox.textContent = logs.join('\\n');
+          consoleBox.textContent = logs.join('\n');
         } else if (e.data.type === 'done') {
           const elapsed = (performance.now() - startTs).toFixed(1);
           outputBox.querySelector('span.font-mono').innerHTML = \`<span class="w-2 h-2 rounded-full bg-emerald-400"></span> 🌐 瀏覽器渲染完成 (\${elapsed}ms)\`;
@@ -1368,7 +1369,15 @@
         return codeBlocks[index];
       });
 
-      return DOMPurify.sanitize(marked.parse(formatted), { ADD_ATTR: ['target'], ALLOW_DATA_ATTR: false });
+      const rawHtml = marked.parse(formatted);
+      if (typeof DOMPurify !== 'undefined') {
+        return DOMPurify.sanitize(rawHtml, {
+          ADD_ATTR: ['target', 'class', 'style', 'data-enhanced', 'data-cmd', 'data-desc', 'data-fill'],
+          ADD_TAGS: ['iframe', 'canvas', 'details', 'summary', 'svg', 'path', 'g', 'rect', 'circle', 'line'],
+          USE_PROFILES: { html: true, svg: true }
+        });
+      }
+      return rawHtml;
     }
 
     // Helper: format tool info with rich metadata, category badges & icons
