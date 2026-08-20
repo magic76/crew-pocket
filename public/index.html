@@ -170,8 +170,9 @@
       </button>
       <div class="flex flex-col min-w-0">
         <div class="flex items-center gap-1.5 min-w-0">
-          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0"></span>
+          <span id="network-dot" class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" title="網路連線正常 (可正常與 AI 對話)"></span>
           <h1 id="header-title" class="font-semibold text-xs text-white truncate max-w-[110px] sm:max-w-[160px]">Antigravity 隨身助理</h1>
+          <span id="network-offline-badge" class="hidden text-[9px] px-1.5 py-0.2 rounded bg-rose-500/20 text-rose-300 border border-rose-500/40 font-mono shrink-0">離線</span>
         </div>
         <!-- Interactive Model Selector Trigger -->
         <button id="model-selector-btn" class="flex items-center gap-1 text-[10px] text-slate-300 hover:text-white bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 px-1.5 py-0.5 rounded-md transition active:scale-95 text-left w-fit max-w-[130px] sm:max-w-[180px] mt-0.5" title="點擊切換 AI 模型 (Gemini / Claude / GPT)">
@@ -586,6 +587,64 @@
     const lightbox = document.getElementById('lightbox');
     const lightboxImg = document.getElementById('lightbox-img');
     const closeLightboxBtn = document.getElementById('close-lightbox-btn');
+
+    // 🌐 Real-time Network Connectivity Monitor
+    const networkDot = document.getElementById('network-dot');
+    const networkOfflineBadge = document.getElementById('network-offline-badge');
+    let isOnline = navigator.onLine;
+
+    function updateNetworkUI(online) {
+      isOnline = online;
+      if (online) {
+        if (networkDot) {
+          networkDot.className = 'w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0';
+          networkDot.title = '網路連線正常 (可正常與 AI 對話)';
+        }
+        if (networkOfflineBadge) networkOfflineBadge.classList.add('hidden');
+      } else {
+        if (networkDot) {
+          networkDot.className = 'w-2 h-2 rounded-full bg-rose-500 animate-ping shrink-0';
+          networkDot.title = '手機無網路連線 (請檢查 Wi-Fi/行動數據)';
+        }
+        if (networkOfflineBadge) networkOfflineBadge.classList.remove('hidden');
+      }
+    }
+
+    async function checkInternetConnection() {
+      if (!navigator.onLine) {
+        updateNetworkUI(false);
+        return false;
+      }
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 2500);
+        await fetch('https://www.gstatic.com/generate_204', { mode: 'no-cors', cache: 'no-store', signal: controller.signal });
+        clearTimeout(timeoutId);
+        updateNetworkUI(true);
+        return true;
+      } catch (e) {
+        updateNetworkUI(navigator.onLine);
+        return navigator.onLine;
+      }
+    }
+
+    window.addEventListener('online', () => {
+      updateNetworkUI(true);
+      checkInternetConnection();
+      if (navigator.vibrate) navigator.vibrate(20);
+    });
+
+    window.addEventListener('offline', () => {
+      updateNetworkUI(false);
+      if (navigator.vibrate) navigator.vibrate([40, 40, 40]);
+    });
+
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) checkInternetConnection();
+    });
+
+    setInterval(checkInternetConnection, 30000);
+    checkInternetConnection();
 
     // 🔔 Push Notification & Service Worker Management
     let notificationsEnabled = localStorage.getItem('agy_notify_enabled') !== 'false';
@@ -1934,6 +1993,12 @@
 
       if (!text && !imgPath) return;
       if (isStreaming) return;
+
+      if (!isOnline && !navigator.onLine) {
+        alert('⚠️ 手機目前處於離線狀態，請檢查 Wi-Fi 或行動數據連線！');
+        if (navigator.vibrate) navigator.vibrate([40, 80, 40]);
+        return;
+      }
 
       currentAbortController = new AbortController();
       setStreamingState(true);
