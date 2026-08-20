@@ -1198,46 +1198,47 @@
       iframe.className = "w-full border-0";
       iframe.style.minHeight = "300px";
       
-      const htmlContent = `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-          <style>
-            body { margin: 0; display: flex; flex-direction: column; align-items: center; background: transparent; color: white; font-family: monospace; }
-            canvas { max-width: 100%; border-radius: 0.5rem; border: 1px solid #1e293b; background: rgba(15, 23, 42, 0.6); }
-          </style>
-        </head>
-        <body>
-          <div id="container" style="width: 100%; display: flex; flex-direction: column; align-items: center;">
-            <canvas id="canvas"></canvas>
-          </div>
-          <script>
-            ['log', 'error', 'warn'].forEach(method => {
-              const original = console[method];
-              console[method] = function(...args) {
-                window.parent.postMessage({ type: 'console', method, args: args.map(a => typeof a === 'object' ? JSON.stringify(a, null, 2) : String(a)) }, '*');
-                original.apply(console, args);
-              };
-            });
-            try {
-              const container = document.getElementById('container');
-              const canvas = document.getElementById('canvas');
-              canvas.width = Math.min(window.innerWidth - 32, 480);
-              canvas.height = Math.round(canvas.width * 0.62);
-              const ctx = canvas.getContext('2d');
-              
-              ${rawCode}
-              
-              window.parent.postMessage({ type: 'done' }, '*');
-            } catch (err) {
-              console.error(err.message);
-              window.parent.postMessage({ type: 'error' }, '*');
-            }
-          </script>
-        </body>
-        </html>
-      `;
+      const escapedCode = JSON.stringify(rawCode);
+      const htmlContent = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"><\/script>
+  <style>
+    body { margin: 0; padding: 4px; display: flex; flex-direction: column; align-items: center; background: transparent; color: white; font-family: monospace; }
+    canvas { max-width: 100%; border-radius: 0.5rem; border: 1px solid #1e293b; background: rgba(15, 23, 42, 0.6); }
+  </style>
+</head>
+<body>
+  <div id="container" style="width: 100%; display: flex; flex-direction: column; align-items: center;">
+    <canvas id="canvas"></canvas>
+  </div>
+  <script>
+    ['log', 'error', 'warn'].forEach(method => {
+      const original = console[method];
+      console[method] = function(...args) {
+        window.parent.postMessage({ type: 'console', method, args: args.map(a => typeof a === 'object' ? JSON.stringify(a, null, 2) : String(a)) }, '*');
+        original.apply(console, args);
+      };
+    });
+    try {
+      const container = document.getElementById('container');
+      const canvas = document.getElementById('canvas');
+      canvas.width = Math.min(window.innerWidth - 32, 480);
+      canvas.height = Math.round(canvas.width * 0.62);
+      const ctx = canvas.getContext('2d');
+      
+      const runner = new Function('container', 'canvas', 'ctx', 'console', 'Chart', ${escapedCode});
+      runner(container, canvas, ctx, console, window.Chart);
+      
+      window.parent.postMessage({ type: 'done' }, '*');
+    } catch (err) {
+      console.error(err.message);
+      window.parent.postMessage({ type: 'error' }, '*');
+    }
+  <\/script>
+</body>
+</html>`;
       
       iframe.srcdoc = htmlContent;
       renderTarget.appendChild(iframe);
