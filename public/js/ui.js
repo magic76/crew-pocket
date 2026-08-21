@@ -365,7 +365,7 @@ async function triggerDoneNotification(text) {
 
   if (swRegistration && swRegistration.showNotification) {
     try {
-      await swRegistration.showNotification('Antigravity 隨身助理', notifOptions);
+      await swRegistration.showNotification('Crew Pocket', notifOptions);
       return;
     } catch (e) {
       console.warn('[SW showNotification error]', e);
@@ -373,7 +373,7 @@ async function triggerDoneNotification(text) {
   }
 
   try {
-    const n = new Notification('Antigravity 隨身助理', notifOptions);
+    const n = new Notification('Crew Pocket', notifOptions);
     n.onclick = () => {
       window.focus();
       n.close();

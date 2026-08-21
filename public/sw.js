@@ -1,5 +1,5 @@
-// Service Worker for Antigravity Web Push, Notifications & PWA
-const CACHE_NAME = 'agy-pwa-v1';
+// Service Worker for Crew Pocket Web Push, Notifications & PWA
+const CACHE_NAME = 'crew-pocket-pwa-v2';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
