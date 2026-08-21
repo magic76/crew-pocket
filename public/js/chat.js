@@ -366,7 +366,7 @@ async function loadConversations() {
             </svg>
             <span class="truncate font-medium">${escapeHtml(conv.title)}</span>
           </div>
-          <span class="text-[10px] text-slate-500 font-mono shrink-0 pl-1 pointer-events-none select-none">‹ 滑動刪除</span>
+          ${isCurrent ? '<span class="text-[9px] px-1.5 py-0.2 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 font-mono shrink-0 ml-1.5">目前</span>' : ''}
         </div>
       `;
 
