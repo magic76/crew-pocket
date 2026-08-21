@@ -2,7 +2,7 @@
 
 // Global State
 let currentConversationId = null;
-let currentModel = localStorage.getItem('agy_current_model') || 'gemini-3.7-flash-high';
+let currentModel = localStorage.getItem('agy_current_model') || 'gemini-3.7-flash-low';
 let availableModels = [];
 let uploadedImagePath = null;
 let isStreaming = false;

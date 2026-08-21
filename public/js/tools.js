@@ -445,7 +445,7 @@ function toggleSpeech(rawText, btn) {
 
   const utterance = new SpeechSynthesisUtterance(cleanText);
   utterance.lang = /[\u4e00-\u9fa5]/.test(cleanText) ? 'zh-TW' : 'en-US';
-  utterance.rate = 1.0;
+  utterance.rate = 1.25; // Snappy conversational reading rate
   utterance.pitch = 1.0;
 
   utterance.onstart = () => {
@@ -545,7 +545,7 @@ class StreamingTTSPlayer {
     const text = this.queue.shift();
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = /[\u4e00-\u9fa5]/.test(text) ? 'zh-TW' : 'en-US';
-    utterance.rate = 1.08; // Natural brisk conversational cadence
+    utterance.rate = 1.28; // Snappy, lively conversational walkie-talkie cadence
     utterance.pitch = 1.0;
 
     this.activeUtterance = utterance;
