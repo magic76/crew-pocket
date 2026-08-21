@@ -580,8 +580,8 @@ async function sendMessage() {
     ${avatarHtml}
     <div class="${bubbleClass}">
       
-      <!-- Live Cyberpunk Status Bar with Shimmer Line (Idea 2) -->
-      <div class="live-status mb-2.5 rounded-2xl bg-gradient-to-b ${statusBorderClass} border overflow-hidden shadow-lg select-none">
+      <!-- Live Cyberpunk Status Bar with Universal Aurora Glow (All Models) -->
+      <div class="live-status mb-2.5 rounded-2xl bg-gradient-to-b ${statusBorderClass} ${isBtwQuery ? 'aurora-glow-box-teal' : 'aurora-glow-box'} border overflow-hidden shadow-lg select-none">
         <div class="${shimmerClass} h-[2px] w-full"></div>
         <div class="p-2.5 flex flex-col gap-2">
           <!-- Top Row: Phase + Counters -->
