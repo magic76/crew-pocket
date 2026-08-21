@@ -20,22 +20,64 @@
 
 ---
 
-## 🚀 快速啟動 (Quick Start)
+## 📲 Android Termux 安裝與環境設定指南
+
+### 步驟 1：下載並安裝 Termux
+> ⚠️ **重要提示**：請**勿**從 Google Play 商店下載（Play 商店版本已停止維護，無法正常更新套件）。
+
+請選擇以下官方管道下載並安裝 Termux：
+* 📥 **F-Droid 推薦下載**：[Termux on F-Droid](https://f-droid.org/en/packages/com.termux/)
+* 📥 **GitHub Releases**：[Termux GitHub Releases](https://github.com/termux/termux-app/releases) *(下載 `termux-app_v..._universal.apk` 或對應您手機架構的 `arm64-v8a.apk`)*
+
+---
+
+### 步驟 2：初始化 Termux 環境與權限
+
+打開 Termux App，依序執行以下指令：
+
+```bash
+# 1. 取得手機儲存空間存取權限（手機彈窗請點「允許」）
+termux-setup-storage
+
+# 2. 更新套件庫索引與系統套件
+pkg update && pkg upgrade -y
+
+# 3. 安裝 Node.js、Git、Python 與網路工具
+pkg install -y git nodejs python curl gh
+```
+
+---
+
+### 步驟 3：下載 Crew Pocket 專案
+
+在 Termux 終端中複製本專案：
+
+```bash
+git clone https://github.com/magic76/crew-pocket.git ~/agy-web
+```
+
+---
+
+## 🚀 啟動與使用 (Usage)
 
 ### 1. 啟動 Web 服務
 ```bash
-bash ~/start-web.sh
+cd ~/agy-web
+node server.js
 ```
-或直接執行：
-```bash
-node ~/agy-web/server.js
-```
+*或是建立背景啟動腳本執行：`bash ~/start-web.sh`*
 
-### 2. 瀏覽器訪問
-打開手機或電腦瀏覽器：
+### 2. 打開手機瀏覽器
+在手機瀏覽器輸入網址：
 ```
 http://127.0.0.1:8000
 ```
+
+### 3. 📱 升級為全螢幕 App（PWA）
+1. 在手機 Chrome / Edge / Safari 瀏覽器打開 `http://127.0.0.1:8000`。
+2. 點選瀏覽器選單（右上角或底部的 `⋮` / 分享按鈕）。
+3. 點擊 **「加到主畫面」 (Add to Home screen)** 或 **「安裝應用程式」**。
+4. 手機桌面即會產生 **Crew Pocket** 專屬圖標，點開即享沉浸式無邊框 App 體驗！🎉
 
 ---
 
