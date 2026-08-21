@@ -2,9 +2,8 @@
 node_modules/
 package-lock.json
 
-# Temporary Uploads (keep uploads directory)
-uploads/*
-!uploads/.gitkeep
+# Temporary Uploads
+uploads/
 
 # System & OS
 .DS_Store
