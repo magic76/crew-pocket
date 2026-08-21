@@ -1,8 +1,8 @@
 {
   "id": "/",
-  "name": "Antigravity 隨身助理",
-  "short_name": "Antigravity",
-  "description": "Antigravity AI 掌上型隨身助手與互動開發工作台",
+  "name": "Crew Pocket 隨身助理",
+  "short_name": "Crew Pocket",
+  "description": "Crew Pocket - Antigravity 掌上型隨身特勤助手與開發工作台",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

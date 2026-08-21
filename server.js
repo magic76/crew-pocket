@@ -370,6 +370,6 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, HOST, () => {
   console.log(`=================================================`);
-  console.log(`🚀 Antigravity Web UI (Resident Pipe) at: http://${HOST}:${PORT}`);
+  console.log(`🚀 Crew Pocket Web UI (Resident Pipe) at: http://${HOST}:${PORT}`);
   console.log(`=================================================`);
 });
