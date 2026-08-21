@@ -419,6 +419,12 @@ async function renameConversationDirect(convId, currentTitle) {
 
 // Load History for a Conversation
 async function loadConversationHistory(convId) {
+  // 🛡️ Abort any ongoing stream from previous session to prevent cross-session state pollution
+  if (currentAbortController) {
+    try { currentAbortController.abort(); } catch(e) {}
+    currentAbortController = null;
+  }
+
   currentConversationId = convId;
   localStorage.setItem('agy_active_conv_id', convId);
   revokeAllBlobUrls();
@@ -839,7 +845,8 @@ async function sendMessage() {
   currentAbortController = new AbortController();
   setStreamingState(true);
 
-  const isNewConversation = !currentConversationId;
+  const activeStreamConvId = currentConversationId;
+  const isNewConversation = !activeStreamConvId;
   const isBtwQuery = /^\s*\/btw\b/i.test(text);
 
   let userDisplay = text;
@@ -978,7 +985,7 @@ async function sendMessage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         prompt: text,
-        conversation_id: currentConversationId,
+        conversation_id: activeStreamConvId,
         image_path: imgPath,
         model: currentModel,
         effort: (typeof currentEffort !== 'undefined') ? currentEffort : 'low'
@@ -1010,8 +1017,11 @@ async function sendMessage() {
           try {
             const data = JSON.parse(rawData);
             if (currentEvent === 'init' && data.conversation_id) {
-              currentConversationId = data.conversation_id;
-              localStorage.setItem('agy_active_conv_id', currentConversationId);
+              // 🛡️ Only update global currentConversationId if user hasn't switched to another conversation
+              if (currentConversationId === activeStreamConvId || currentConversationId === null) {
+                currentConversationId = data.conversation_id;
+                localStorage.setItem('agy_active_conv_id', currentConversationId);
+              }
             } else if (currentEvent === 'thought') {
               const initStep = pipelineSteps.get('init');
               if (initStep) initStep.status = 'done';
@@ -1066,8 +1076,9 @@ async function sendMessage() {
               clearInterval(liveTimerInterval);
               liveStatusElem.style.display = 'none';
 
-              if (data.conversation_id) {
-                currentConversationId = data.conversation_id;
+              const targetDoneConvId = data.conversation_id || activeStreamConvId;
+              if (targetDoneConvId && (currentConversationId === activeStreamConvId || currentConversationId === null)) {
+                currentConversationId = targetDoneConvId;
                 localStorage.setItem('agy_active_conv_id', currentConversationId);
               }
               if (data.response) accumulatedText = data.response;
@@ -1142,8 +1153,8 @@ async function sendMessage() {
               if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
 
               // 🏷️ Auto-generate AI conversation title for new conversations
-              if (isNewConversation && currentConversationId && text) {
-                generateConversationTitle(currentConversationId, text, accumulatedText);
+              if (isNewConversation && targetDoneConvId && text) {
+                generateConversationTitle(targetDoneConvId, text, accumulatedText);
               }
             }
           } catch (e) {}

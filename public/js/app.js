@@ -274,6 +274,11 @@ document.addEventListener('DOMContentLoaded', () => {
   // New Chat Action
   if (newChatBtn) {
     newChatBtn.addEventListener('click', () => {
+      // 🛡️ Abort any running stream when creating new chat
+      if (currentAbortController) {
+        try { currentAbortController.abort(); } catch(e) {}
+        currentAbortController = null;
+      }
       currentConversationId = null;
       localStorage.removeItem('agy_active_conv_id');
       revokeAllBlobUrls();
