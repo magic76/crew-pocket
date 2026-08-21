@@ -191,14 +191,14 @@ async function handleChat(req, res) {
         session.emitter.removeListener('event', onEvent);
         session.emitter.removeListener('raw', onRaw);
         if (session.process) session.process.removeListener('close', onClose);
+        sessionManager.resetIdleTimer(session);
       }
-      sessionManager.resetIdleTimer();
     }
 
     req.on('close', () => {
       if (session && session.isBusy) {
-        console.log(`[Chat Aborted] Client closed connection while session was busy. Stopping active session.`);
-        sessionManager.closeActiveSession();
+        console.log(`[Chat Aborted] Client closed connection while session was busy. Stopping session: ${session.conversationId}`);
+        sessionManager.closeSession(session.conversationId);
       }
       cleanup();
     });
@@ -224,12 +224,10 @@ async function handleChat(req, res) {
 // 🛑 Abort Active Generation
 async function handleStop(req, res) {
   try {
-    console.log('[Stop Request] Aborting active generation session...');
-    if (sessionManager.current) {
-      sessionManager.closeActiveSession();
-    }
+    console.log('[Stop Request] Aborting all active generation sessions...');
+    sessionManager.closeActiveSession();
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ success: true, message: 'Generation interrupted' }));
+    res.end(JSON.stringify({ success: true, message: 'All generations interrupted' }));
   } catch (err) {
     res.writeHead(500, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: err.message }));
