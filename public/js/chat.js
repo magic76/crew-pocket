@@ -4,17 +4,25 @@
 function formatMessageContent(content) {
   if (!content) return '';
   
+  let formatted = content;
+
+  // 🛡️ Streaming Markdown Guard: Auto-close open code blocks if odd number of triple backticks
+  const tripleBackticks = formatted.match(/```/g);
+  if (tripleBackticks && tripleBackticks.length % 2 !== 0) {
+    formatted += '\n```';
+  }
+
   const codeBlocks = [];
-  let currentContent = content.replace(/```[\s\S]*?```/g, (match) => {
+  let currentContent = formatted.replace(/```[\s\S]*?```/g, (match) => {
     codeBlocks.push(match);
     return `__CODE_BLOCK_${codeBlocks.length - 1}__`;
   });
   
-  let formatted = currentContent.replace(/((\/data\/data\/|\/storage\/|\/sdcard\/)[^\s\)\"\'\<\>]+\.(png|jpg|jpeg|webp|svg|gif))/gi, (match) => {
+  currentContent = currentContent.replace(/((\/data\/data\/|\/storage\/|\/sdcard\/)[^\s\)\"\'\<\>]+\.(png|jpg|jpeg|webp|svg|gif))/gi, (match) => {
     return `/api/image?path=${encodeURIComponent(match)}`;
   });
   
-  formatted = formatted.replace(/__CODE_BLOCK_(\d+)__/g, (match, index) => {
+  formatted = currentContent.replace(/__CODE_BLOCK_(\d+)__/g, (match, index) => {
     return codeBlocks[index];
   });
 

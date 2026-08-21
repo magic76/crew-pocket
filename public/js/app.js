@@ -8,7 +8,11 @@ if (typeof marked !== 'undefined') {
     const tableHtml = originalTable(header, body);
     return `<div class="table-wrapper">${tableHtml}</div>`;
   };
-  marked.setOptions({ renderer: renderer });
+  marked.setOptions({
+    renderer: renderer,
+    breaks: true,
+    gfm: true
+  });
 }
 
 // 2. Service Worker Registration (Offline & Push Notifications)

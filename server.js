@@ -241,8 +241,10 @@ async function handleChat(req, res) {
     };
 
     const onRaw = (line) => {
-      fullResponse += line + '\n';
-      sendEvent('chunk', { delta: line + '\n', accumulated: fullResponse });
+      // Non-JSON terminal output should be logged on server only, not injected into user chat text
+      if (line && line.trim()) {
+        console.log(`[Resident agy stdout note] ${line.trim()}`);
+      }
     };
 
     const onClose = (code) => {
