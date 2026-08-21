@@ -606,6 +606,89 @@ async function sendMessage() {
     return;
   }
 
+  // 📦 /compact - Memory Compaction & Context Pruning
+  if (/^\/compact\b/i.test(text)) {
+    promptInput.value = '';
+    promptInput.style.height = 'auto';
+    uploadedImagePath = null;
+    if (cameraInput) cameraInput.value = '';
+    if (imagePreviewContainer) imagePreviewContainer.classList.add('hidden');
+
+    if (!currentConversationId) {
+      appendMessage('assistant', '⚠️ 當前為新對話，尚未有歷史紀錄可供壓縮。請在對話累積後再執行 `/compact` 進行精簡！');
+      return;
+    }
+
+    const focusText = text.replace(/^\/compact\s*/i, '').trim();
+    appendMessage('user', text, undefined, [], '', false);
+
+    const compactingMsgDiv = document.createElement('div');
+    compactingMsgDiv.className = 'flex gap-2.5 w-full max-w-2xl mx-auto justify-start min-w-0';
+    compactingMsgDiv.innerHTML = `
+      <div class="w-7 h-7 rounded-full bg-cyan-600/30 border border-cyan-500/50 flex items-center justify-center text-cyan-300 shrink-0 text-xs font-bold mt-0.5">📦</div>
+      <div class="bg-slate-900/90 border border-cyan-500/50 text-slate-200 rounded-2xl rounded-tl-none p-3.5 text-xs sm:text-sm shadow-xl flex-1 min-w-0 prose thinking-active-glow">
+        <div class="flex items-center gap-2 text-cyan-300 font-bold mb-1.5">
+          <span class="w-2 h-2 rounded-full bg-cyan-400 animate-ping"></span>
+          <span>📦 正在深度提煉並精簡壓縮對話記憶...</span>
+        </div>
+        <p class="text-slate-400 text-xs leading-relaxed">
+          AI 正在梳理核心目標、已完成模組、關鍵檔案與當前脈絡，為您釋放 Token 並精簡上下文...
+        </p>
+      </div>
+    `;
+    messagesContainer.appendChild(compactingMsgDiv);
+    scrollToBottom(true);
+
+    try {
+      const res = await fetch('/api/compact', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          conversation_id: currentConversationId,
+          focus: focusText
+        })
+      });
+      const data = await res.json();
+      compactingMsgDiv.remove();
+
+      if (data.success && data.summary) {
+        messagesContainer.innerHTML = '';
+        
+        const cardDiv = document.createElement('div');
+        cardDiv.className = 'flex gap-2.5 w-full max-w-2xl mx-auto justify-start min-w-0 my-2';
+        cardDiv.innerHTML = `
+          <div class="w-7 h-7 rounded-full bg-cyan-600/30 border border-cyan-500/50 flex items-center justify-center text-cyan-300 shrink-0 text-xs font-bold mt-0.5">📦</div>
+          <div class="bg-gradient-to-b from-slate-900 via-slate-900 to-cyan-950/30 border border-cyan-500/60 text-slate-200 rounded-2xl rounded-tl-none p-4 text-xs sm:text-sm shadow-2xl flex-1 min-w-0 prose">
+            <div class="flex items-center justify-between border-b border-cyan-800/60 pb-2 mb-3 select-none">
+              <span class="px-2.5 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 text-[11px] font-mono font-bold flex items-center gap-1.5">
+                <span>📦</span>
+                <span>對話記憶已精簡壓縮 (Compacted Memory)</span>
+              </span>
+              <span class="text-[10px] text-emerald-400 font-mono font-semibold">✓ 釋放 ~85% Tokens</span>
+            </div>
+            <div class="text-slate-300 leading-relaxed space-y-2">
+              ${formatMessageContent(data.summary)}
+            </div>
+            <div class="mt-3 pt-2 border-t border-slate-800 text-[11px] text-slate-400 flex items-center justify-between">
+              <span>💡 後續提問將自動繼承這份精華記憶繼續展開</span>
+              <span class="text-[10px] text-slate-500 font-mono">${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+            </div>
+          </div>
+        `;
+        messagesContainer.appendChild(cardDiv);
+        if (typeof enhanceCodeBlocks === 'function') enhanceCodeBlocks(cardDiv);
+        if (navigator.vibrate) navigator.vibrate([30, 50, 30]);
+        scrollToBottom(true);
+      } else {
+        appendMessage('assistant', `⚠️ 壓縮失敗：${data.error || '未知錯誤'}`);
+      }
+    } catch (e) {
+      compactingMsgDiv.remove();
+      appendMessage('assistant', `⚠️ 壓縮請求失敗：${e.message}`);
+    }
+    return;
+  }
+
   if (!isOnline && !navigator.onLine) {
     alert('⚠️ 手機目前處於離線狀態，請檢查 Wi-Fi 或行動數據連線！');
     if (navigator.vibrate) navigator.vibrate([40, 80, 40]);

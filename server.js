@@ -21,6 +21,7 @@ const { handleRunCode } = require('./lib/sandbox');
 const { handleUsage } = require('./lib/usage');
 const { handleListFiles, handleReadFile } = require('./lib/files');
 const { handleGenerateTitle, getCachedTitle } = require('./lib/title');
+const { handleCompact } = require('./lib/compact');
 
 // 🤖 List Available Models
 function handleGetModels(res) {
@@ -358,6 +359,8 @@ const server = http.createServer(async (req, res) => {
     return handleRunCode(req, res);
   } else if (pathname === '/api/generate-title' && req.method === 'POST') {
     return handleGenerateTitle(req, res);
+  } else if (pathname === '/api/compact' && req.method === 'POST') {
+    return handleCompact(req, res);
   } else if (pathname === '/api/rewind' && req.method === 'POST') {
     return handleRewindConversation(req, res);
   } else if (pathname === '/api/set-icon' && req.method === 'POST') {
