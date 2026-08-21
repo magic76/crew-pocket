@@ -474,6 +474,109 @@ function toggleSpeech(rawText, btn) {
   window.speechSynthesis.speak(utterance);
 }
 
+// 🎙️ Streaming Sentence-by-Sentence Instant TTS Player (Walkie-Talkie Mode)
+class StreamingTTSPlayer {
+  constructor() {
+    this.queue = [];
+    this.isPlaying = false;
+    this.buffer = '';
+    this.enabled = false;
+    this.activeUtterance = null;
+  }
+
+  start() {
+    this.stop();
+    this.enabled = true;
+    this.queue = [];
+    this.buffer = '';
+    this.isPlaying = false;
+  }
+
+  feedChunk(deltaText) {
+    if (!this.enabled || !('speechSynthesis' in window) || !deltaText) return;
+    this.buffer += deltaText;
+
+    // Avoid splitting if currently inside an unclosed code block
+    const backticks = (this.buffer.match(/```/g) || []).length;
+    if (backticks % 2 !== 0) return;
+
+    // Detect complete sentences ending with 。, ！, ？, \n, !, ?
+    const sentenceRegex = /([^。！？!\?\n]+[。！？!\?\n]+)/g;
+    let match;
+    let lastIndex = 0;
+
+    while ((match = sentenceRegex.exec(this.buffer)) !== null) {
+      const sentence = match[1].trim();
+      if (sentence.length > 0) {
+        this.enqueue(sentence);
+      }
+      lastIndex = sentenceRegex.lastIndex;
+    }
+
+    if (lastIndex > 0) {
+      this.buffer = this.buffer.slice(lastIndex);
+    }
+  }
+
+  finish() {
+    if (!this.enabled || !('speechSynthesis' in window)) return;
+    if (this.buffer.trim().length > 0) {
+      this.enqueue(this.buffer.trim());
+      this.buffer = '';
+    }
+  }
+
+  enqueue(rawSentence) {
+    const clean = stripMarkdownForTTS(rawSentence);
+    if (!clean || clean.length < 1) return;
+    this.queue.push(clean);
+    if (!this.isPlaying) {
+      this.playNext();
+    }
+  }
+
+  playNext() {
+    if (!this.enabled || this.queue.length === 0) {
+      this.isPlaying = false;
+      return;
+    }
+
+    this.isPlaying = true;
+    const text = this.queue.shift();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = /[\u4e00-\u9fa5]/.test(text) ? 'zh-TW' : 'en-US';
+    utterance.rate = 1.08; // Natural brisk conversational cadence
+    utterance.pitch = 1.0;
+
+    this.activeUtterance = utterance;
+
+    utterance.onend = () => {
+      this.activeUtterance = null;
+      this.playNext();
+    };
+
+    utterance.onerror = () => {
+      this.activeUtterance = null;
+      this.playNext();
+    };
+
+    window.speechSynthesis.speak(utterance);
+  }
+
+  stop() {
+    this.enabled = false;
+    this.queue = [];
+    this.buffer = '';
+    this.isPlaying = false;
+    this.activeUtterance = null;
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
+  }
+}
+
+const streamingTTS = new StreamingTTSPlayer();
+
 // 📍 Browser GPS Geolocation Initializer
 function initGpsHandler() {
   if (!gpsChip) return;

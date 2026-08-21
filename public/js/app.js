@@ -326,7 +326,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Web Speech Recognition
+  // 🎙️ Walkie-Talkie Push-to-Talk (PTT) & Web Speech Recognition
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (SpeechRecognition && micBtn) {
     recognition = new SpeechRecognition();
@@ -334,9 +334,20 @@ document.addEventListener('DOMContentLoaded', () => {
     recognition.interimResults = true;
     recognition.lang = 'zh-TW';
 
+    let isPttMode = false;
+    let pttStartTime = 0;
+    let capturedTranscript = '';
+
     recognition.onstart = () => {
       isRecording = true;
-      micBtn.classList.add('bg-rose-600', 'text-white', 'recording-pulse');
+      capturedTranscript = '';
+      if (typeof streamingTTS !== 'undefined') streamingTTS.stop();
+      if (isPttMode) {
+        micBtn.classList.add('walkie-talkie-active');
+        if (promptInput) promptInput.placeholder = '🎙️ 正在對講錄音中...（放開立即發送）';
+      } else {
+        micBtn.classList.add('bg-rose-600', 'text-white', 'recording-pulse');
+      }
     };
 
     recognition.onresult = (event) => {
@@ -344,30 +355,100 @@ document.addEventListener('DOMContentLoaded', () => {
       for (let i = event.resultIndex; i < event.results.length; i++) {
         transcript += event.results[i][0].transcript;
       }
-      if (promptInput) {
-        promptInput.value = transcript;
-        promptInput.dispatchEvent(new Event('input'));
+      if (transcript.trim()) {
+        capturedTranscript = transcript;
+        if (promptInput) {
+          promptInput.value = transcript;
+          promptInput.dispatchEvent(new Event('input'));
+        }
       }
     };
 
     recognition.onerror = (e) => {
       console.error('Speech recognition error:', e);
       isRecording = false;
-      micBtn.classList.remove('bg-rose-600', 'text-white', 'recording-pulse');
+      micBtn.classList.remove('bg-rose-600', 'text-white', 'recording-pulse', 'walkie-talkie-active');
+      if (promptInput) promptInput.placeholder = '輸入訊息，或輸入 / 選擇指令...';
     };
 
     recognition.onend = () => {
       isRecording = false;
-      micBtn.classList.remove('bg-rose-600', 'text-white', 'recording-pulse');
+      const wasPtt = isPttMode;
+      isPttMode = false;
+      micBtn.classList.remove('bg-rose-600', 'text-white', 'recording-pulse', 'walkie-talkie-active');
+      if (promptInput) promptInput.placeholder = '輸入訊息，或輸入 / 選擇指令...';
+
+      if (wasPtt) {
+        // Auto-send with Voice mode for sub-second streaming speech output!
+        const text = (capturedTranscript || (promptInput ? promptInput.value : '')).trim();
+        if (text) {
+          if (promptInput) promptInput.value = text;
+          if (typeof sendMessage === 'function') {
+            sendMessage(true); // isVoice = true
+          }
+        }
+      }
     };
 
-    micBtn.addEventListener('click', () => {
-      if (isRecording) {
-        recognition.stop();
-      } else {
+    // --- Walkie-Talkie Push-to-Talk (PTT) Event Listeners ---
+    const startPtt = (e) => {
+      if (isStreaming && typeof stopGeneration === 'function') {
+        stopGeneration();
+      }
+      if (typeof streamingTTS !== 'undefined') {
+        streamingTTS.stop();
+      }
+      isPttMode = true;
+      pttStartTime = Date.now();
+      if (navigator.vibrate) navigator.vibrate(30);
+      try {
         recognition.start();
+      } catch (err) {}
+    };
+
+    const stopPtt = (e) => {
+      if (!isPttMode) return;
+      const duration = Date.now() - pttStartTime;
+      if (navigator.vibrate) navigator.vibrate([15, 20]);
+
+      // If held for more than 320ms, it's a push-to-talk action: stop and auto-send!
+      if (duration > 320) {
+        try {
+          recognition.stop();
+        } catch (err) {}
+      } else {
+        // Short tap: cancel PTT auto-send mode, keep regular recording active
+        isPttMode = false;
+        micBtn.classList.remove('walkie-talkie-active');
+        micBtn.classList.add('bg-rose-600', 'text-white', 'recording-pulse');
+      }
+    };
+
+    // Touch events for mobile
+    micBtn.addEventListener('touchstart', (e) => {
+      startPtt(e);
+    }, { passive: true });
+
+    micBtn.addEventListener('touchend', (e) => {
+      stopPtt(e);
+    }, { passive: true });
+
+    // Mouse events for desktop
+    micBtn.addEventListener('mousedown', (e) => {
+      startPtt(e);
+    });
+
+    micBtn.addEventListener('mouseup', (e) => {
+      stopPtt(e);
+    });
+
+    // Fallback click listener for single tap toggle
+    micBtn.addEventListener('click', (e) => {
+      if (isRecording && !isPttMode) {
+        recognition.stop();
       }
     });
+
   } else if (micBtn) {
     micBtn.classList.add('opacity-40');
     micBtn.title = '此瀏覽器不支援語音辨識';
