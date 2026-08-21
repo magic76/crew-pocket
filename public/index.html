@@ -41,8 +41,8 @@
   <!-- DOMPurify Local for Offline & Zero-Latency Sanitization -->
   <script src="/dompurify.min.js"></script>
 
-  <!-- Modular Stylesheet (v3.4) -->
-  <link rel="stylesheet" href="/css/style.css?v=3.4">
+  <!-- Modular Stylesheet (v3.5) -->
+  <link rel="stylesheet" href="/css/style.css?v=3.5">
 </head>
 <body class="bg-slate-950 text-slate-100 flex flex-col h-[100dvh] w-full max-w-full overflow-hidden">
 
@@ -94,20 +94,12 @@
           <h1 id="header-title" class="font-semibold text-xs text-white truncate max-w-[110px] sm:max-w-[160px]">Crew Pocket</h1>
           <span id="network-offline-badge" class="hidden text-[9px] px-1.5 py-0.2 rounded bg-rose-500/20 text-rose-300 border border-rose-500/40 font-mono shrink-0">離線</span>
         </div>
-        <div class="flex items-center gap-1 mt-0.5">
-          <!-- Interactive Model Selector Trigger -->
-          <button id="model-selector-btn" class="flex items-center gap-1 text-[10px] text-slate-300 hover:text-white bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 px-1.5 py-0.5 rounded-md transition active:scale-95 text-left w-fit max-w-[130px] sm:max-w-[180px]" title="點擊切換 AI 模型 (Gemini / Claude / GPT)">
-            <span id="model-badge-icon" class="shrink-0">✨</span>
-            <span id="model-display-name" class="font-semibold text-slate-200 truncate">Gemini 3.7 Flash</span>
-            <svg class="w-2.5 h-2.5 text-slate-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
-          </button>
-
-          <!-- Interactive Thinking Effort Trigger -->
-          <button id="effort-selector-btn" class="flex items-center gap-1 text-[10px] text-slate-300 hover:text-white bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 px-1.5 py-0.5 rounded-md transition active:scale-95 text-left w-fit shrink-0" title="點擊切換思考強度 (Low / Medium / High)">
-            <span id="effort-badge-icon" class="shrink-0 text-emerald-400">⚡</span>
-            <span id="effort-display-name" class="font-semibold text-emerald-300">極速 (Low)</span>
-          </button>
-        </div>
+        <!-- Interactive Model Selector Trigger -->
+        <button id="model-selector-btn" class="flex items-center gap-1 text-[10px] text-slate-300 hover:text-white bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 px-1.5 py-0.5 rounded-md transition active:scale-95 text-left w-fit max-w-[130px] sm:max-w-[180px] mt-0.5" title="點擊切換 AI 模型與思考強度 (Gemini / Claude / GPT)">
+          <span id="model-badge-icon" class="shrink-0">✨</span>
+          <span id="model-display-name" class="font-semibold text-slate-200 truncate">Gemini 3.7 Flash</span>
+          <svg class="w-2.5 h-2.5 text-slate-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+        </button>
       </div>
     </div>
     
@@ -567,10 +559,10 @@
     <img id="lightbox-img" src="" class="max-w-full max-h-full object-contain rounded-lg" alt="Enlarged">
   </div>
 
-  <!-- Modular Scripts (Cache-busted v3.4) -->
-  <script src="/js/ui.js?v=3.4"></script>
-  <script src="/js/tools.js?v=3.4"></script>
-  <script src="/js/chat.js?v=3.4"></script>
-  <script src="/js/app.js?v=3.4"></script>
+  <!-- Modular Scripts (Cache-busted v3.5) -->
+  <script src="/js/ui.js?v=3.5"></script>
+  <script src="/js/tools.js?v=3.5"></script>
+  <script src="/js/chat.js?v=3.5"></script>
+  <script src="/js/app.js?v=3.5"></script>
 </body>
 </html>
