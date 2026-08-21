@@ -1,0 +1,11 @@
+# Dependencies
+node_modules/
+package-lock.json
+
+# Temporary Uploads (keep uploads directory)
+uploads/*
+!uploads/.gitkeep
+
+# System & OS
+.DS_Store
+*.log
