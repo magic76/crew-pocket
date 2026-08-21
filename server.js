@@ -93,6 +93,48 @@ async function handleUpload(req, res) {
   }
 }
 
+// 🎨 Set Active App Icon (Copies chosen icon to icon.jpg, icon-192.jpg, icon-512.jpg)
+async function handleSetIcon(req, res) {
+  try {
+    const body = await parseJsonBody(req);
+    const { icon } = body;
+    const validIcons = {
+      quantum: 'icon_quantum.jpg',
+      geometric: 'icon_geometric_ag.jpg',
+      holographic: 'icon_holographic.jpg'
+    };
+
+    const targetFile = validIcons[icon];
+    if (!targetFile) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({ error: 'Invalid icon identifier' }));
+    }
+
+    const srcPath = path.join(PUBLIC_DIR, 'icons', targetFile);
+    if (!fs.existsSync(srcPath)) {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({ error: 'Source icon file not found' }));
+    }
+
+    const destMain = path.join(PUBLIC_DIR, 'icon.jpg');
+    const dest192 = path.join(PUBLIC_DIR, 'icon-192.jpg');
+    const dest512 = path.join(PUBLIC_DIR, 'icon-512.jpg');
+
+    await fsPromises.copyFile(srcPath, destMain);
+    await fsPromises.copyFile(srcPath, dest192);
+    await fsPromises.copyFile(srcPath, dest512);
+
+    console.log(`[Icon] Successfully applied ${icon} as active App Icon.`);
+
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: true, icon }));
+  } catch (err) {
+    res.writeHead(500, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: err.message }));
+  }
+}
+
+
 // 💬 SSE Chat Streaming with Resident Pipe
 async function handleChat(req, res) {
   let body;
@@ -303,6 +345,8 @@ const server = http.createServer(async (req, res) => {
     return handleRunCode(req, res);
   } else if (pathname === '/api/generate-title' && req.method === 'POST') {
     return handleGenerateTitle(req, res);
+  } else if (pathname === '/api/set-icon' && req.method === 'POST') {
+    return handleSetIcon(req, res);
   } else if (pathname === '/api/models' && req.method === 'GET') {
     return handleGetModels(res);
   } else if (pathname === '/api/usage' && req.method === 'GET') {
