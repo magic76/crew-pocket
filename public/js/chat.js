@@ -385,6 +385,38 @@ async function deleteConversationDirect(convId, wrapperElement) {
   }
 }
 
+// ✏️ Rename Conversation Action
+async function renameConversationDirect(convId, currentTitle) {
+  const defaultVal = currentTitle && !currentTitle.startsWith('對話 ') ? currentTitle : '';
+  const newTitle = window.prompt('請輸入自定義對話標題：', defaultVal);
+  if (newTitle === null) return; // User canceled
+  const cleanTitle = newTitle.trim();
+  if (!cleanTitle) {
+    alert('標題不能為空白');
+    return;
+  }
+
+  try {
+    const res = await fetch('/api/rename-conversation', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ conversation_id: convId, title: cleanTitle })
+    });
+    const data = await res.json();
+    if (data.success) {
+      if (currentConversationId === convId && headerTitle) {
+        headerTitle.textContent = cleanTitle;
+      }
+      loadConversations();
+      if (navigator.vibrate) navigator.vibrate(25);
+    } else {
+      alert('重新命名失敗：' + (data.error || '未知錯誤'));
+    }
+  } catch (err) {
+    alert('重新命名失敗：' + err.message);
+  }
+}
+
 // Load History for a Conversation
 async function loadConversationHistory(convId) {
   currentConversationId = convId;
@@ -400,6 +432,7 @@ async function loadConversationHistory(convId) {
   }
   uploadedImagePath = null;
   if (cameraInput) cameraInput.value = '';
+  if (typeof attachInput !== 'undefined' && attachInput) attachInput.value = '';
   if (imagePreviewContainer) imagePreviewContainer.classList.add('hidden');
   setStreamingState(false);
 
@@ -413,9 +446,15 @@ async function loadConversationHistory(convId) {
         appendMessage(msg.role, msg.content, msg.timestamp, msg.tools || [], msg.thinking || '', isBtw);
       });
       const firstUserMsg = data.messages.find(m => m.role === 'user');
-      if (headerTitle) headerTitle.textContent = (firstUserMsg && firstUserMsg.content) ? firstUserMsg.content.slice(0, 18) : '對話紀錄';
+      if (headerTitle) {
+        if (data.title) {
+          headerTitle.textContent = data.title;
+        } else {
+          headerTitle.textContent = (firstUserMsg && firstUserMsg.content) ? firstUserMsg.content.slice(0, 18) : '對話紀錄';
+        }
+      }
     } else {
-      if (headerTitle) headerTitle.textContent = '新對話';
+      if (headerTitle) headerTitle.textContent = data.title || '新對話';
       appendMessage('assistant', '你好！已為你開啟此對話。有什麼可以幫你的？');
     }
 
@@ -527,11 +566,28 @@ async function loadConversations() {
             </svg>
             <span class="truncate font-medium">${escapeHtml(conv.title)}</span>
           </div>
-          ${isCurrent ? '<span class="text-[9px] px-1.5 py-0.2 rounded-full bg-indigo-900 text-indigo-200 border border-indigo-500/60 font-mono shrink-0 ml-1.5">目前</span>' : ''}
+          <div class="flex items-center gap-1 shrink-0 ml-1.5">
+            ${isCurrent ? '<span class="text-[9px] px-1.5 py-0.2 rounded-full bg-indigo-900 text-indigo-200 border border-indigo-500/60 font-mono shrink-0">目前</span>' : ''}
+            <button type="button" class="rename-conv-btn p-1 rounded-lg hover:bg-slate-700/80 text-slate-400 hover:text-indigo-300 transition active:scale-95 shrink-0" title="修改對話標題">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+              </svg>
+            </button>
+          </div>
         </div>
       `;
 
       const contentEl = wrapper.querySelector('.swipe-item-content');
+      const renameBtn = wrapper.querySelector('.rename-conv-btn');
+
+      if (renameBtn) {
+        renameBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          renameConversationDirect(conv.id, conv.title);
+        });
+        renameBtn.addEventListener('pointerdown', (e) => e.stopPropagation());
+        renameBtn.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });
+      }
 
       // Swipe Gesture Handling
       let startX = 0;
@@ -619,7 +675,8 @@ async function loadConversations() {
       });
 
       // Click to open conversation history (only when not swiping)
-      contentEl.addEventListener('click', () => {
+      contentEl.addEventListener('click', (e) => {
+        if (e.target.closest('.rename-conv-btn')) return;
         if (!isDeleted && Math.abs(currentDiffX) < 10) {
           loadConversationHistory(conv.id);
         }

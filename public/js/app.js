@@ -291,6 +291,19 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  // ✏️ Header Title Rename Listeners
+  const headerRenameBtn = document.getElementById('header-rename-btn');
+  const triggerHeaderRename = () => {
+    if (currentConversationId && typeof renameConversationDirect === 'function') {
+      renameConversationDirect(currentConversationId, headerTitle ? headerTitle.textContent : '');
+    } else {
+      alert('請先發送訊息建立對話後，即可自定義對話標題！');
+    }
+  };
+
+  if (headerRenameBtn) headerRenameBtn.addEventListener('click', triggerHeaderRename);
+  if (headerTitle) headerTitle.addEventListener('click', triggerHeaderRename);
+
   // Camera & Image Upload Handlers (with HEIC support & lightweight AI-vision compression)
   async function handleImageSelection(file) {
     if (!file) return;

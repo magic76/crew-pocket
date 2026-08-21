@@ -21,7 +21,7 @@ const { handleListConversations, handleGetHistory, handleDeleteConversation, han
 const { handleRunCode } = require('./lib/sandbox');
 const { handleUsage } = require('./lib/usage');
 const { handleListFiles, handleReadFile } = require('./lib/files');
-const { handleGenerateTitle, getCachedTitle } = require('./lib/title');
+const { handleGenerateTitle, handleRenameConversation, getCachedTitle } = require('./lib/title');
 const { handleCompact } = require('./lib/compact');
 
 // 🤖 List Available Models & Thinking Efforts
@@ -345,6 +345,8 @@ const server = http.createServer(async (req, res) => {
     sessionManager.prewarm();
     res.writeHead(200, { 'Content-Type': 'application/json' });
     return res.end(JSON.stringify({ success: true, prewarmed: true }));
+  } else if (pathname === '/api/rename-conversation' && req.method === 'POST') {
+    return handleRenameConversation(req, res);
   } else if (pathname === '/api/models' && req.method === 'GET') {
     return handleGetModels(res);
   } else if (pathname === '/api/session-status' && req.method === 'GET') {
