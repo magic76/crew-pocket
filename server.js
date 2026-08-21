@@ -228,7 +228,7 @@ async function handleChat(req, res) {
       } else if (item.event === 'result' && item.result) {
         if (item.result.conversation_id) session.conversationId = item.result.conversation_id;
         if (item.result.thinking) sendEvent('thought', { fullThinking: item.result.thinking });
-        if (item.result.response && !fullResponse) fullResponse = item.result.response;
+        if (item.result.response) fullResponse = item.result.response;
 
         sendEvent('done', {
           response: fullResponse,
