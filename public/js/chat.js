@@ -358,7 +358,7 @@ async function loadConversations() {
 
         <!-- Foreground content card (slides horizontally) -->
         <div class="swipe-item-content relative z-10 p-2.5 rounded-xl cursor-pointer flex items-center justify-between text-xs transition-transform duration-75 touch-pan-y ${
-          isCurrent ? 'bg-indigo-950/80 text-indigo-200 border border-indigo-500/40 shadow-sm' : 'bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800/80'
+          isCurrent ? 'bg-indigo-950 text-indigo-200 border border-indigo-500/60 shadow-md' : 'bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800'
         }">
           <div class="flex items-center gap-2 truncate min-w-0 flex-1 pointer-events-none">
             <svg class="w-3.5 h-3.5 shrink-0 ${isCurrent ? 'text-indigo-400' : 'text-slate-400'}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -366,7 +366,7 @@ async function loadConversations() {
             </svg>
             <span class="truncate font-medium">${escapeHtml(conv.title)}</span>
           </div>
-          ${isCurrent ? '<span class="text-[9px] px-1.5 py-0.2 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 font-mono shrink-0 ml-1.5">目前</span>' : ''}
+          ${isCurrent ? '<span class="text-[9px] px-1.5 py-0.2 rounded-full bg-indigo-900 text-indigo-200 border border-indigo-500/60 font-mono shrink-0 ml-1.5">目前</span>' : ''}
         </div>
       `;
 
