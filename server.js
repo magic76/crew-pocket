@@ -379,6 +379,10 @@ const server = http.createServer(async (req, res) => {
     return handleCompact(req, res);
   } else if (pathname === '/api/rewind' && req.method === 'POST') {
     return handleRewindConversation(req, res);
+  } else if (pathname === '/api/prewarm' && req.method === 'POST') {
+    sessionManager.prewarm();
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify({ success: true, prewarmed: true }));
   } else if (pathname === '/api/set-icon' && req.method === 'POST') {
     return handleSetIcon(req, res);
   } else if (pathname === '/api/models' && req.method === 'GET') {
@@ -410,5 +414,10 @@ server.listen(PORT, HOST, () => {
   console.log(`=================================================`);
   console.log(`🚀 Crew Pocket Web UI (Resident Pipe) at: http://${HOST}:${PORT}`);
   console.log(`=================================================`);
+  
+  // 🔥 Pre-warm standby resident process immediately on server boot
+  setTimeout(() => {
+    sessionManager.prewarm('gemini-3.7-flash-low');
+  }, 1000);
 });
 

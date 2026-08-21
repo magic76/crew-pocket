@@ -283,6 +283,9 @@ document.addEventListener('DOMContentLoaded', () => {
       if (messagesContainer) messagesContainer.innerHTML = '';
       appendMessage('assistant', '你好！已為你開啟新對話。有什麼可以幫你的？');
       toggleDrawer(false);
+
+      // 🔥 Pre-warm standby resident process in background
+      fetch('/api/prewarm', { method: 'POST' }).catch(() => {});
     });
   }
 
