@@ -176,8 +176,11 @@ async function handleChat(req, res) {
 
   // 🏷️ System environment anchor for Crew Pocket (injected on first turn of new conversations)
   if (!conversation_id) {
-    const systemContext = `[Context: You are interacting with the user inside "Crew Pocket (口袋特勤隊)", a flagship mobile AI assistant running locally on Android Termux. When the user mentions "Crew Pocket" or "這個 App", they mean this exact assistant. Proactively leverage Crew Pocket's built-in superpowers: HTML/SVG live sandbox, Chart.js visualization, GPS Google Maps navigation cards, camera vision/voice, Termux code execution, /btw note cards, and local files explorer. Do NOT search the web for external third-party tools.]\n`;
-    finalPrompt = `${systemContext}\n${finalPrompt}`;
+    const isVoicePrompt = prompt && prompt.includes('[系統指示：本則為隨身對講機語音提問');
+    if (!isVoicePrompt) {
+      const systemContext = `[Context: You are interacting with the user inside "Crew Pocket (口袋特勤隊)", a flagship mobile AI assistant running locally on Android Termux. Leverage HTML sandbox, Chart.js, GPS, vision/voice, and Termux tools when relevant.]\n`;
+      finalPrompt = `${systemContext}\n${finalPrompt}`;
+    }
   }
 
   if (image_path) {
