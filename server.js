@@ -31,33 +31,34 @@ function handleGetModels(res) {
 
 // 🖼️ Safe Image Proxy Handler (Directory Whitelisted)
 async function handleImageProxy(parsedUrl, res) {
-  const imgPath = parsedUrl.query.path;
-  if (!imgPath) {
-    res.writeHead(404, { 'Content-Type': 'text/plain' });
-    return res.end('Image not found');
-  }
-
-  const HOME_DIR = '/data/data/com.termux/files/home';
-  const isAllowed = resolvedPath.startsWith(UPLOADS_DIR) ||
-                    resolvedPath.startsWith(BRAIN_DIR) ||
-                    resolvedPath.startsWith(HOME_DIR) ||
-                    resolvedPath.startsWith('/sdcard') ||
-                    resolvedPath.startsWith('/storage');
-
-  if (!isAllowed) {
-    res.writeHead(403, { 'Content-Type': 'text/plain' });
-    return res.end('Forbidden');
-  }
-
-  if (!fs.existsSync(resolvedPath)) {
-    res.writeHead(404, { 'Content-Type': 'text/plain' });
-    return res.end('Image not found');
-  }
-
-  const ext = path.extname(resolvedPath).toLowerCase();
-  const contentType = MIME_TYPES[ext] || 'application/octet-stream';
-
   try {
+    const imgPath = parsedUrl.query.path;
+    if (!imgPath) {
+      res.writeHead(404, { 'Content-Type': 'text/plain' });
+      return res.end('Image not found');
+    }
+
+    const resolvedPath = path.resolve(imgPath);
+    const HOME_DIR = '/data/data/com.termux/files/home';
+    const isAllowed = resolvedPath.startsWith(UPLOADS_DIR) ||
+                      resolvedPath.startsWith(BRAIN_DIR) ||
+                      resolvedPath.startsWith(HOME_DIR) ||
+                      resolvedPath.startsWith('/sdcard') ||
+                      resolvedPath.startsWith('/storage');
+
+    if (!isAllowed) {
+      res.writeHead(403, { 'Content-Type': 'text/plain' });
+      return res.end('Forbidden');
+    }
+
+    if (!fs.existsSync(resolvedPath)) {
+      res.writeHead(404, { 'Content-Type': 'text/plain' });
+      return res.end('Image not found');
+    }
+
+    const ext = path.extname(resolvedPath).toLowerCase();
+    const contentType = MIME_TYPES[ext] || 'application/octet-stream';
+
     const data = await fsPromises.readFile(resolvedPath);
     res.writeHead(200, {
       'Content-Type': contentType,
@@ -380,8 +381,17 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
+process.on('uncaughtException', (err) => {
+  console.error('[Uncaught Exception]', err);
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.error('[Unhandled Rejection]', reason);
+});
+
 server.listen(PORT, HOST, () => {
   console.log(`=================================================`);
   console.log(`🚀 Crew Pocket Web UI (Resident Pipe) at: http://${HOST}:${PORT}`);
   console.log(`=================================================`);
 });
+
