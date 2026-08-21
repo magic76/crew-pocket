@@ -1,5 +1,27 @@
 // Antigravity Web UI - Chat Messaging, SSE Streaming, and History Management
 
+// Configure marked.js to render all Markdown links with target="_blank" and rel="noopener noreferrer"
+if (typeof marked !== 'undefined' && marked.use) {
+  marked.use({
+    renderer: {
+      link(arg1, arg2, arg3) {
+        let href, title, text;
+        if (typeof arg1 === 'object' && arg1 !== null) {
+          href = arg1.href || '';
+          title = arg1.title || '';
+          text = arg1.text || '';
+        } else {
+          href = arg1 || '';
+          title = arg2 || '';
+          text = arg3 || '';
+        }
+        const titleAttr = title ? ` title="${escapeHtml(title)}"` : '';
+        return `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer"${titleAttr} class="text-indigo-400 hover:text-indigo-300 underline underline-offset-2 transition">${text}</a>`;
+      }
+    }
+  });
+}
+
 // Transform local image paths into proxy URL and sanitize with DOMPurify
 function formatMessageContent(content) {
   if (!content) return '';
@@ -29,7 +51,7 @@ function formatMessageContent(content) {
   const rawHtml = marked.parse(formatted);
   if (typeof DOMPurify !== 'undefined') {
     return DOMPurify.sanitize(rawHtml, {
-      ADD_ATTR: ['target', 'class', 'style', 'data-enhanced', 'data-cmd', 'data-desc', 'data-fill'],
+      ADD_ATTR: ['target', 'rel', 'class', 'style', 'data-enhanced', 'data-cmd', 'data-desc', 'data-fill'],
       ADD_TAGS: ['iframe', 'canvas', 'details', 'summary', 'svg', 'path', 'g', 'rect', 'circle', 'line'],
       USE_PROFILES: { html: true, svg: true }
     });
@@ -1329,3 +1351,15 @@ async function generateConversationTitle(convId, userMessage, assistantResponse)
     }
   }
 }
+
+// 🌐 Global Link Interceptor: Guarantee all links in messages open in new tab with security attributes
+document.addEventListener('click', (e) => {
+  const link = e.target.closest('#messages-container a[href]');
+  if (link && link.href) {
+    const hrefAttr = link.getAttribute('href') || '';
+    if (!hrefAttr.startsWith('#') && !hrefAttr.startsWith('javascript:')) {
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+    }
+  }
+});
