@@ -2,8 +2,14 @@
 
 // Global State
 let currentConversationId = null;
-let currentModel = localStorage.getItem('agy_current_model') || 'gemini-3.7-flash-low';
+let currentModel = localStorage.getItem('agy_current_model') || 'gemini-3.7-flash';
+let currentEffort = localStorage.getItem('agy_current_effort') || 'low';
 let availableModels = [];
+let availableEfforts = [
+  { id: 'low', name: 'Low (極速)', desc: '⚡ 0~1s 秒回 · 日常對話', icon: '⚡', color: 'emerald' },
+  { id: 'medium', name: 'Medium (平衡)', desc: '⚖️ 基礎推理 · 平衡模式', icon: '⚖️', color: 'amber' },
+  { id: 'high', name: 'High (深度)', desc: '🧠 深度邏輯 · 複雜架構', icon: '🧠', color: 'indigo' }
+];
 let uploadedImagePath = null;
 let isStreaming = false;
 let currentAbortController = null;
@@ -68,6 +74,11 @@ const closeModelBtn = document.getElementById('close-model-btn');
 const modelOptionsContainer = document.getElementById('model-options-container');
 const modelBadgeIcon = document.getElementById('model-badge-icon');
 const modelDisplayName = document.getElementById('model-display-name');
+const effortSelectorBtn = document.getElementById('effort-selector-btn');
+const effortBadgeIcon = document.getElementById('effort-badge-icon');
+const effortDisplayName = document.getElementById('effort-display-name');
+const effortOptionsContainer = document.getElementById('effort-options-container');
+const effortActiveHint = document.getElementById('effort-active-hint');
 const networkDot = document.getElementById('network-dot');
 const networkOfflineBadge = document.getElementById('network-offline-badge');
 const gpsChip = document.getElementById('gps-chip');
@@ -205,7 +216,7 @@ async function loadUsageData() {
   }
 }
 
-// Model Selector Modal Handlers
+// Model & Thinking Effort Handlers
 function updateModelUI() {
   const found = availableModels.find(m => m.id === currentModel);
   if (found) {
@@ -217,11 +228,54 @@ function updateModelUI() {
   }
 }
 
+function updateEffortUI() {
+  const effortConfig = {
+    low: { name: '極速 (Low)', icon: '⚡', color: 'text-emerald-300', iconColor: 'text-emerald-400' },
+    medium: { name: '平衡 (Med)', icon: '⚖️', color: 'text-amber-300', iconColor: 'text-amber-400' },
+    high: { name: '深度 (High)', icon: '🧠', color: 'text-indigo-300', iconColor: 'text-indigo-400' }
+  };
+  const conf = effortConfig[currentEffort] || effortConfig.low;
+  if (effortBadgeIcon) {
+    effortBadgeIcon.textContent = conf.icon;
+  }
+  if (effortDisplayName) {
+    effortDisplayName.textContent = conf.name;
+    effortDisplayName.className = `font-semibold ${conf.color} truncate`;
+  }
+  if (effortActiveHint) {
+    effortActiveHint.textContent = `${conf.name} · 生效中`;
+  }
+}
+
+function renderEffortOptions() {
+  if (!effortOptionsContainer) return;
+  const efforts = [
+    { id: 'low', name: 'Low (極速)', subtitle: '⚡ 0~1s 秒回', color: 'emerald' },
+    { id: 'medium', name: 'Medium (平衡)', subtitle: '⚖️ 基礎推理', color: 'amber' },
+    { id: 'high', name: 'High (深度)', subtitle: '🧠 深度演算', color: 'indigo' }
+  ];
+
+  effortOptionsContainer.innerHTML = efforts.map(e => {
+    const isSelected = (e.id === currentEffort);
+    const activeClass = isSelected
+      ? `bg-${e.color}-950/80 border-${e.color}-500/80 ring-2 ring-${e.color}-500 text-white`
+      : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700';
+
+    return `
+      <button type="button" class="p-2 rounded-xl border ${activeClass} transition active:scale-95 flex flex-col items-center text-center gap-0.5" onclick="selectEffort('${e.id}')">
+        <span class="text-xs font-bold">${e.name}</span>
+        <span class="text-[9px] text-slate-400 font-mono">${e.subtitle}</span>
+      </button>
+    `;
+  }).join('');
+}
+
 function toggleModelModal(open) {
   if (!modelModal) return;
   if (open) {
     modelModal.classList.remove('opacity-0', 'pointer-events-none');
     loadModelsList();
+    renderEffortOptions();
   } else {
     modelModal.classList.add('opacity-0', 'pointer-events-none');
   }
@@ -269,6 +323,25 @@ window.selectModel = function(modelId) {
   toggleModelModal(false);
   if (navigator.vibrate) navigator.vibrate(20);
   console.log(`🤖 已切換 AI 核心模型至: ${currentModel}`);
+  fetch('/api/prewarm', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model: currentModel, effort: currentEffort })
+  }).catch(() => {});
+};
+
+window.selectEffort = function(effortId) {
+  currentEffort = effortId;
+  localStorage.setItem('agy_current_effort', currentEffort);
+  updateEffortUI();
+  renderEffortOptions();
+  if (navigator.vibrate) navigator.vibrate(20);
+  console.log(`🧠 已切換思考強度至: ${currentEffort}`);
+  fetch('/api/prewarm', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model: currentModel, effort: currentEffort })
+  }).catch(() => {});
 };
 
 // Push Notification Helpers

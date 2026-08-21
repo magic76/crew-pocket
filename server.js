@@ -12,6 +12,7 @@ const {
   BRAIN_DIR,
   MIME_TYPES,
   AVAILABLE_MODELS,
+  THINKING_EFFORTS,
   parseJsonBody
 } = require('./lib/config');
 
@@ -23,10 +24,10 @@ const { handleListFiles, handleReadFile } = require('./lib/files');
 const { handleGenerateTitle, getCachedTitle } = require('./lib/title');
 const { handleCompact } = require('./lib/compact');
 
-// 🤖 List Available Models
+// 🤖 List Available Models & Thinking Efforts
 function handleGetModels(res) {
   res.writeHead(200, { 'Content-Type': 'application/json' });
-  res.end(JSON.stringify({ models: AVAILABLE_MODELS }));
+  res.end(JSON.stringify({ models: AVAILABLE_MODELS, efforts: THINKING_EFFORTS }));
 }
 
 // ⚡ Check Conversation Session Busy Status
@@ -166,7 +167,7 @@ async function handleChat(req, res) {
     return res.end(JSON.stringify({ error: 'Invalid JSON body' }));
   }
 
-  const { prompt, conversation_id, image_path, model } = body;
+  const { prompt, conversation_id, image_path, model, effort } = body;
   if (!prompt && !image_path) {
     res.writeHead(400, { 'Content-Type': 'application/json' });
     return res.end(JSON.stringify({ error: 'Prompt or image is required' }));
@@ -176,11 +177,8 @@ async function handleChat(req, res) {
 
   // 🏷️ System environment anchor for Crew Pocket (injected on first turn of new conversations)
   if (!conversation_id) {
-    const isVoicePrompt = prompt && prompt.includes('[系統指示：本則為隨身對講機語音提問');
-    if (!isVoicePrompt) {
-      const systemContext = `[Context: You are interacting with the user inside "Crew Pocket (口袋特勤隊)", a flagship mobile AI assistant running locally on Android Termux. Leverage HTML sandbox, Chart.js, GPS, vision/voice, and Termux tools when relevant.]\n`;
-      finalPrompt = `${systemContext}\n${finalPrompt}`;
-    }
+    const systemContext = `[Context: You are interacting with the user inside "Crew Pocket (口袋特勤隊)", a flagship mobile AI assistant running locally on Android Termux. Proactively leverage HTML sandbox, Chart.js, GPS Google Maps, camera vision, and Termux tools when requested.]\n`;
+    finalPrompt = `${systemContext}\n${finalPrompt}`;
   }
 
   if (image_path) {
@@ -203,10 +201,10 @@ async function handleChat(req, res) {
   };
 
   try {
-    const session = await sessionManager.getOrCreateSession(conversation_id, model);
+    const session = await sessionManager.getOrCreateSession(conversation_id, model, effort);
     session.isBusy = true;
 
-    sendEvent('init', { conversation_id: session.conversationId, model: session.model });
+    sendEvent('init', { conversation_id: session.conversationId, model: session.model, effort: session.effort });
 
     let fullResponse = '';
 

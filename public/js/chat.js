@@ -672,16 +672,12 @@ async function stopGeneration() {
 }
 
 // Send Message with Live Streaming, Tools Logging, and Abort Support
-async function sendMessage(isVoice = false) {
+async function sendMessage() {
   const text = promptInput.value.trim();
   const imgPath = uploadedImagePath;
 
   if (!text && !imgPath) return;
   if (isStreaming) return;
-
-  if (isVoice && typeof streamingTTS !== 'undefined') {
-    streamingTTS.start();
-  }
 
   if (text.toLowerCase() === '/clear') {
     promptInput.value = '';
@@ -919,18 +915,15 @@ async function sendMessage(isVoice = false) {
   let abortedHandled = false;
 
   try {
-    const finalPrompt = isVoice
-      ? `${text}\n[系統指示：本則為隨身對講機語音提問，請用繁體中文以自然口語、精煉扼要直接回答，適合語音聆聽，無需輸出大篇幅代碼或 Markdown 表格]`
-      : text;
-
     const response = await fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        prompt: finalPrompt,
+        prompt: text,
         conversation_id: currentConversationId,
         image_path: imgPath,
-        model: currentModel
+        model: currentModel,
+        effort: (typeof currentEffort !== 'undefined') ? currentEffort : 'low'
       }),
       signal: currentAbortController.signal
     });
@@ -1005,11 +998,6 @@ async function sendMessage(isVoice = false) {
               accumulatedText = data.accumulated;
               contentElem.innerHTML = formatMessageContent(accumulatedText);
 
-              // 🎙️ Stream-Sentence Instant TTS Feed
-              if (isVoice && typeof streamingTTS !== 'undefined' && data.delta) {
-                streamingTTS.feedChunk(data.delta);
-              }
-
               if (liveThinking) thinkingContainerElem.innerHTML = buildThinkingBlockHtml(liveThinking, false);
               if (userScrolledUp) {
                 const scrollBadge = document.getElementById('scroll-bottom-badge');
@@ -1019,11 +1007,6 @@ async function sendMessage(isVoice = false) {
             } else if (currentEvent === 'done') {
               clearInterval(liveTimerInterval);
               liveStatusElem.style.display = 'none';
-
-              // 🎙️ Complete Stream-Sentence TTS
-              if (isVoice && typeof streamingTTS !== 'undefined') {
-                streamingTTS.finish();
-              }
 
               if (data.conversation_id) {
                 currentConversationId = data.conversation_id;

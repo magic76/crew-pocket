@@ -118,8 +118,9 @@ document.addEventListener('DOMContentLoaded', () => {
   if (refreshUsageBtn) refreshUsageBtn.addEventListener('click', loadUsageData);
   if (usageModal) usageModal.addEventListener('click', (e) => { if (e.target === usageModal) toggleUsageModal(false); });
 
-  // Model Selector listeners
+  // Model & Effort Selector listeners
   if (modelSelectorBtn) modelSelectorBtn.addEventListener('click', () => toggleModelModal(true));
+  if (effortSelectorBtn) effortSelectorBtn.addEventListener('click', () => toggleModelModal(true));
   if (closeModelBtn) closeModelBtn.addEventListener('click', () => toggleModelModal(false));
   if (modelModal) modelModal.addEventListener('click', (e) => { if (e.target === modelModal) toggleModelModal(false); });
 
@@ -329,7 +330,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // 🎙️ Walkie-Talkie Push-to-Talk (PTT) & Web Speech Recognition
+  // Web Speech Recognition (Click to toggle voice transcription)
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (SpeechRecognition && micBtn) {
     recognition = new SpeechRecognition();
@@ -337,20 +338,11 @@ document.addEventListener('DOMContentLoaded', () => {
     recognition.interimResults = true;
     recognition.lang = 'zh-TW';
 
-    let isPttMode = false;
-    let pttStartTime = 0;
-    let capturedTranscript = '';
-
     recognition.onstart = () => {
       isRecording = true;
-      capturedTranscript = '';
-      if (typeof streamingTTS !== 'undefined') streamingTTS.stop();
-      if (isPttMode) {
-        micBtn.classList.add('walkie-talkie-active');
-        if (promptInput) promptInput.placeholder = '🎙️ 正在對講錄音中...（放開立即發送）';
-      } else {
-        micBtn.classList.add('bg-rose-600', 'text-white', 'recording-pulse');
-      }
+      micBtn.classList.add('bg-rose-600', 'text-white', 'recording-pulse');
+      if (promptInput) promptInput.placeholder = '🎙️ 正在聆聽語音...';
+      if (navigator.vibrate) navigator.vibrate(20);
     };
 
     recognition.onresult = (event) => {
@@ -358,97 +350,33 @@ document.addEventListener('DOMContentLoaded', () => {
       for (let i = event.resultIndex; i < event.results.length; i++) {
         transcript += event.results[i][0].transcript;
       }
-      if (transcript.trim()) {
-        capturedTranscript = transcript;
-        if (promptInput) {
-          promptInput.value = transcript;
-          promptInput.dispatchEvent(new Event('input'));
-        }
+      if (promptInput && transcript.trim()) {
+        promptInput.value = transcript;
+        promptInput.dispatchEvent(new Event('input'));
       }
     };
 
     recognition.onerror = (e) => {
       console.error('Speech recognition error:', e);
       isRecording = false;
-      micBtn.classList.remove('bg-rose-600', 'text-white', 'recording-pulse', 'walkie-talkie-active');
-      if (promptInput) promptInput.placeholder = '輸入訊息，或輸入 / 選擇指令...';
+      micBtn.classList.remove('bg-rose-600', 'text-white', 'recording-pulse');
+      if (promptInput) promptInput.placeholder = '問任何問題... (Ctrl+Enter 發送)';
     };
 
     recognition.onend = () => {
       isRecording = false;
-      const wasPtt = isPttMode;
-      isPttMode = false;
-      micBtn.classList.remove('bg-rose-600', 'text-white', 'recording-pulse', 'walkie-talkie-active');
-      if (promptInput) promptInput.placeholder = '輸入訊息，或輸入 / 選擇指令...';
-
-      if (wasPtt) {
-        // Auto-send with Voice mode for sub-second streaming speech output!
-        const text = (capturedTranscript || (promptInput ? promptInput.value : '')).trim();
-        if (text) {
-          if (promptInput) promptInput.value = text;
-          if (typeof sendMessage === 'function') {
-            sendMessage(true); // isVoice = true
-          }
-        }
-      }
+      micBtn.classList.remove('bg-rose-600', 'text-white', 'recording-pulse');
+      if (promptInput) promptInput.placeholder = '問任何問題... (Ctrl+Enter 發送)';
+      if (navigator.vibrate) navigator.vibrate([15, 15]);
     };
 
-    // --- Walkie-Talkie Push-to-Talk (PTT) Event Listeners ---
-    const startPtt = (e) => {
-      if (isStreaming && typeof stopGeneration === 'function') {
-        stopGeneration();
-      }
-      if (typeof streamingTTS !== 'undefined') {
-        streamingTTS.stop();
-      }
-      isPttMode = true;
-      pttStartTime = Date.now();
-      if (navigator.vibrate) navigator.vibrate(30);
-      try {
-        recognition.start();
-      } catch (err) {}
-    };
-
-    const stopPtt = (e) => {
-      if (!isPttMode) return;
-      const duration = Date.now() - pttStartTime;
-      if (navigator.vibrate) navigator.vibrate([15, 20]);
-
-      // If held for more than 320ms, it's a push-to-talk action: stop and auto-send!
-      if (duration > 320) {
-        try {
-          recognition.stop();
-        } catch (err) {}
-      } else {
-        // Short tap: cancel PTT auto-send mode, keep regular recording active
-        isPttMode = false;
-        micBtn.classList.remove('walkie-talkie-active');
-        micBtn.classList.add('bg-rose-600', 'text-white', 'recording-pulse');
-      }
-    };
-
-    // Touch events for mobile
-    micBtn.addEventListener('touchstart', (e) => {
-      startPtt(e);
-    }, { passive: true });
-
-    micBtn.addEventListener('touchend', (e) => {
-      stopPtt(e);
-    }, { passive: true });
-
-    // Mouse events for desktop
-    micBtn.addEventListener('mousedown', (e) => {
-      startPtt(e);
-    });
-
-    micBtn.addEventListener('mouseup', (e) => {
-      stopPtt(e);
-    });
-
-    // Fallback click listener for single tap toggle
-    micBtn.addEventListener('click', (e) => {
-      if (isRecording && !isPttMode) {
+    micBtn.addEventListener('click', () => {
+      if (isRecording) {
         recognition.stop();
+      } else {
+        try {
+          recognition.start();
+        } catch (e) {}
       }
     });
 
@@ -462,11 +390,16 @@ document.addEventListener('DOMContentLoaded', () => {
     sendBtn.addEventListener('click', handleSendClick);
   }
 
-  // Initialize available models list
+  // Initialize available models & thinking efforts list
   fetch('/api/models').then(r => r.json()).then(data => {
     availableModels = data.models || [];
+    if (data.efforts) availableEfforts = data.efforts;
     updateModelUI();
-  }).catch(() => {});
+    updateEffortUI();
+  }).catch(() => {
+    updateModelUI();
+    updateEffortUI();
+  });
 
   // Initial load: Restore last active conversation or load most recent
   (async function initApp() {
