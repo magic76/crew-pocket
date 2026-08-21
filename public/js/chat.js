@@ -170,7 +170,7 @@ function appendMessage(role, content, timestamp, tools = [], thinking = '', isBt
 
   const avatar = isUser
     ? `<div class="w-7 h-7 rounded-full ${isUserBtw ? 'bg-teal-600 text-white' : 'bg-slate-700 text-slate-300'} flex items-center justify-center shrink-0 text-xs font-bold order-2 mt-0.5 shadow-sm">我</div>`
-    : `<div class="w-7 h-7 rounded-full ${isBtw ? 'bg-teal-600/30 border-teal-500/50 text-teal-300' : 'bg-indigo-600/30 border-indigo-500/50 text-indigo-400'} border flex items-center justify-center shrink-0 text-xs font-bold mt-0.5">AG</div>`;
+    : `<div class="w-7 h-7 rounded-full ${isBtw ? 'bg-teal-600/30 border-teal-500/50 text-teal-300' : 'bg-indigo-600/30 border-indigo-500/50 text-indigo-400'} border flex items-center justify-center shrink-0 text-xs font-bold mt-0.5">CP</div>`;
 
   const thinkingHtml = (!isUser && thinking) ? buildThinkingBlockHtml(thinking) : '';
   const toolsHtml = (!isUser && tools && tools.length > 0) ? buildToolsAccordionHtml(tools) : '';
@@ -722,8 +722,8 @@ async function sendMessage() {
   assistantMsgDiv.className = 'flex gap-2.5 w-full max-w-2xl mx-auto justify-start min-w-0';
 
   const avatarHtml = isBtwQuery
-    ? `<div class="w-7 h-7 rounded-full bg-teal-600/30 border border-teal-500/50 flex items-center justify-center text-teal-300 shrink-0 text-xs font-bold mt-0.5">AG</div>`
-    : `<div class="w-7 h-7 rounded-full bg-indigo-600/30 border border-indigo-500/50 flex items-center justify-center text-indigo-400 shrink-0 text-xs font-bold mt-0.5">AG</div>`;
+    ? `<div class="w-7 h-7 rounded-full bg-teal-600/30 border border-teal-500/50 flex items-center justify-center text-teal-300 shrink-0 text-xs font-bold mt-0.5">CP</div>`
+    : `<div class="w-7 h-7 rounded-full bg-indigo-600/30 border border-indigo-500/50 flex items-center justify-center text-indigo-400 shrink-0 text-xs font-bold mt-0.5">CP</div>`;
 
   const bubbleClass = isBtwQuery
     ? 'btw-card bg-gradient-to-b from-slate-900 via-slate-900 to-teal-950/40 border border-teal-500/50 text-slate-200 rounded-2xl rounded-tl-none p-3.5 text-xs sm:text-sm shadow-lg shadow-teal-950/30 flex-1 min-w-0 prose'
