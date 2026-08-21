@@ -188,6 +188,10 @@ function appendMessage(role, content, timestamp, tools = [], thinking = '', isBt
 
   let bodyHtml = '';
   if (isUser) {
+    const userTurnIndex = document.querySelectorAll('#messages-container > div[data-role="user"]').length;
+    msgDiv.setAttribute('data-role', 'user');
+    msgDiv.setAttribute('data-turn-index', userTurnIndex);
+
     let userText = content;
     let imgHtml = '';
     const match = userText.match(/\[Uploaded Image:\s*([^\]]+)\]/);
@@ -196,8 +200,25 @@ function appendMessage(role, content, timestamp, tools = [], thinking = '', isBt
       imgHtml = `<img src="/api/image?path=${encodeURIComponent(imgP)}" class="max-h-48 sm:max-h-56 max-w-full rounded-xl object-contain border border-indigo-400/40 cursor-pointer shadow-md mb-2 bg-black/20 block" alt="Uploaded Photo">`;
       userText = userText.replace(/\[Uploaded Image:\s*([^\]]+)\]/, '').trim();
     }
+    msgDiv.setAttribute('data-raw-text', userText);
+
     const btwBadge = isUserBtw ? `<div class="mb-1 flex items-center gap-1"><span class="px-1.5 py-0.2 rounded bg-teal-500/30 border border-teal-400/50 text-[10px] font-mono font-semibold text-teal-200">💬 順帶一提</span></div>` : '';
-    bodyHtml = `${imgHtml}${btwBadge}<div class="whitespace-pre-wrap leading-relaxed break-words">${escapeHtml(userText)}</div>`;
+
+    const editRewindBtn = `
+      <button type="button" class="edit-rewind-btn opacity-70 hover:opacity-100 hover:text-white bg-indigo-700/50 hover:bg-indigo-700 px-1.5 py-0.5 rounded transition active:scale-95 flex items-center gap-1 font-sans cursor-pointer text-[10px]" title="編輯此問題並回溯對話">
+        <svg class="w-2.5 h-2.5 text-indigo-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+        <span>編輯回溯</span>
+      </button>
+    `;
+
+    const userFooter = `
+      <div class="flex items-center justify-between gap-2 mt-1.5 pt-1 border-t border-indigo-400/30 text-[10px] text-indigo-200/80 select-none">
+        <span class="font-mono text-[9px] opacity-70">#${userTurnIndex + 1}</span>
+        ${editRewindBtn}
+      </div>
+    `;
+
+    bodyHtml = `${imgHtml}${btwBadge}<div class="whitespace-pre-wrap leading-relaxed break-words">${escapeHtml(userText)}</div>${userFooter}`;
   } else {
     const timeStr = timestamp ? new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
     const btwHeader = isBtw ? `
@@ -241,6 +262,60 @@ function appendMessage(role, content, timestamp, tools = [], thinking = '', isBt
         toggleBtn.textContent = isCollapsed ? '展開 ▼' : '收合 ▲';
       });
     }
+  }
+
+  // ⏪ Edit & Rewind Action for User Message (Idea A)
+  const editBtn = msgDiv.querySelector('.edit-rewind-btn');
+  if (editBtn) {
+    editBtn.addEventListener('click', async () => {
+      if (isStreaming) {
+        alert('請先等待當前回覆完成或點擊中斷生成！');
+        return;
+      }
+      const rawText = msgDiv.getAttribute('data-raw-text') || '';
+      const turnIndex = parseInt(msgDiv.getAttribute('data-turn-index'), 10);
+
+      // Populate input with original user question
+      if (promptInput) {
+        promptInput.value = rawText;
+        promptInput.style.height = 'auto';
+        promptInput.style.height = Math.min(promptInput.scrollHeight, 120) + 'px';
+        promptInput.focus();
+      }
+
+      if (navigator.vibrate) navigator.vibrate([20, 30]);
+
+      // Collect all sibling message elements starting from this msgDiv to the end
+      const allMsgs = Array.from(messagesContainer.children);
+      const startIdx = allMsgs.indexOf(msgDiv);
+      if (startIdx !== -1) {
+        const toRemove = allMsgs.slice(startIdx);
+        toRemove.forEach(el => {
+          el.style.transition = 'all 0.2s ease-out';
+          el.style.opacity = '0';
+          el.style.transform = 'translateY(10px) scale(0.98)';
+        });
+        setTimeout(() => {
+          toRemove.forEach(el => el.remove());
+        }, 220);
+      }
+
+      // If persistent conversation, call /api/rewind
+      if (currentConversationId && !isNaN(turnIndex)) {
+        try {
+          await fetch('/api/rewind', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              conversation_id: currentConversationId,
+              user_turn_index: turnIndex
+            })
+          });
+        } catch (e) {
+          console.error('[Rewind error]', e);
+        }
+      }
+    });
   }
 
   msgDiv.querySelectorAll('img').forEach(img => {
