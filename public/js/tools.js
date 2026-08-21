@@ -964,15 +964,20 @@ async function openImageCropper(fileOrBase64, onConfirmCallback) {
           dragMode: 'crop',
           autoCrop: true,
           autoCropArea: 0.88,
-          responsive: true,
+          responsive: false,
+          restore: false,
+          checkCrossOrigin: false,
+          checkOrientation: false,
+          modal: true,
           guides: true,
           center: true,
           highlight: false,
           background: false,
           movable: true,
-          zoomable: true,
+          zoomable: false,
           rotatable: true,
-          scalable: true
+          scalable: false,
+          toggleDragModeOnDblclick: false
         });
       }
     };
