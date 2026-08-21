@@ -929,3 +929,130 @@ function initClipboardSmartSensors() {
     });
   }
 }
+
+// ✂️ Mobile Interactive Image Cropper (Cropper.js integration)
+let activeCropperInstance = null;
+let currentCropperSourceBase64 = null;
+
+async function openImageCropper(fileOrBase64, onConfirmCallback) {
+  const cropModal = document.getElementById('crop-modal');
+  const cropperImg = document.getElementById('cropper-image');
+  const cropRotateBtn = document.getElementById('crop-rotate-btn');
+  const cropCancelBtn = document.getElementById('crop-cancel-btn');
+  const cropFullBtn = document.getElementById('crop-full-btn');
+  const cropConfirmBtn = document.getElementById('crop-confirm-btn');
+
+  if (!cropModal || !cropperImg) return;
+
+  // Cleanup old instance
+  if (activeCropperInstance) {
+    activeCropperInstance.destroy();
+    activeCropperInstance = null;
+  }
+
+  const initCropper = (base64Url) => {
+    currentCropperSourceBase64 = base64Url;
+    cropperImg.src = base64Url;
+    cropModal.classList.remove('hidden');
+
+    // Wait for image render before attaching Cropper
+    cropperImg.onload = () => {
+      if (typeof Cropper !== 'undefined') {
+        if (activeCropperInstance) activeCropperInstance.destroy();
+        activeCropperInstance = new Cropper(cropperImg, {
+          viewMode: 1,
+          dragMode: 'crop',
+          autoCrop: true,
+          autoCropArea: 0.88,
+          responsive: true,
+          guides: true,
+          center: true,
+          highlight: false,
+          background: false,
+          movable: true,
+          zoomable: true,
+          rotatable: true,
+          scalable: true
+        });
+      }
+    };
+  };
+
+  if (typeof fileOrBase64 === 'string') {
+    initCropper(fileOrBase64);
+  } else {
+    // Process HEIC/HEIF if applicable
+    let sourceBlob = fileOrBase64;
+    const isHeic = (fileOrBase64.name && (/\.heic$/i.test(fileOrBase64.name) || /\.heif$/i.test(fileOrBase64.name))) ||
+                   fileOrBase64.type === 'image/heic' || fileOrBase64.type === 'image/heif';
+
+    if (isHeic && typeof heic2any !== 'undefined') {
+      try {
+        const conv = await heic2any({ blob: fileOrBase64, toType: 'image/jpeg', quality: 0.88 });
+        sourceBlob = Array.isArray(conv) ? conv[0] : conv;
+      } catch(e) {}
+    }
+
+    const reader = new FileReader();
+    reader.onload = (e) => initCropper(e.target.result);
+    reader.readAsDataURL(sourceBlob);
+  }
+
+  // Button Listeners
+  if (cropRotateBtn) {
+    cropRotateBtn.onclick = () => {
+      if (activeCropperInstance) activeCropperInstance.rotate(90);
+      if (navigator.vibrate) navigator.vibrate(15);
+    };
+  }
+
+  if (cropCancelBtn) {
+    cropCancelBtn.onclick = () => {
+      closeCropperModal();
+    };
+  }
+
+  if (cropFullBtn) {
+    cropFullBtn.onclick = () => {
+      closeCropperModal();
+      if (onConfirmCallback) {
+        onConfirmCallback(currentCropperSourceBase64, false);
+      }
+    };
+  }
+
+  if (cropConfirmBtn) {
+    cropConfirmBtn.onclick = () => {
+      if (activeCropperInstance) {
+        try {
+          const canvas = activeCropperInstance.getCroppedCanvas({
+            maxWidth: 1280,
+            maxHeight: 1280,
+            imageSmoothingEnabled: true,
+            imageSmoothingQuality: 'high'
+          });
+          const croppedBase64 = canvas.toDataURL('image/jpeg', 0.82);
+          closeCropperModal();
+          if (onConfirmCallback) {
+            onConfirmCallback(croppedBase64, true);
+          }
+        } catch (err) {
+          closeCropperModal();
+          if (onConfirmCallback) onConfirmCallback(currentCropperSourceBase64, false);
+        }
+      } else {
+        closeCropperModal();
+        if (onConfirmCallback) onConfirmCallback(currentCropperSourceBase64, false);
+      }
+    };
+  }
+}
+
+function closeCropperModal() {
+  const cropModal = document.getElementById('crop-modal');
+  if (cropModal) cropModal.classList.add('hidden');
+  if (activeCropperInstance) {
+    activeCropperInstance.destroy();
+    activeCropperInstance = null;
+  }
+}

@@ -309,28 +309,33 @@ document.addEventListener('DOMContentLoaded', () => {
   if (headerRenameBtn) headerRenameBtn.addEventListener('click', triggerHeaderRename);
   if (headerTitle) headerTitle.addEventListener('click', triggerHeaderRename);
 
-  // Camera & Image Upload Handlers (with HEIC support & lightweight AI-vision compression)
-  async function handleImageSelection(file) {
-    if (!file) return;
+  // Camera & Image Upload Handlers (with Interactive Cropping & HEIC support & AI-vision compression)
+  let currentSelectedImageSource = null;
+  const cropImageBtn = document.getElementById('crop-image-btn');
+
+  async function processAndUploadImageBase64(base64Data, filename, wasCropped) {
     try {
-      if (previewFilename) previewFilename.textContent = '圖片壓縮處理中...';
-      if (previewFilesize) previewFilesize.textContent = '最佳化中...';
+      if (previewFilename) previewFilename.textContent = filename || 'photo.jpg';
+      if (previewFilesize) previewFilesize.textContent = '處理上傳中...';
       if (imagePreviewContainer) imagePreviewContainer.classList.remove('hidden');
 
-      const { base64, kb } = await compressImageFile(file, 1280, 0.8);
-      if (previewThumb) previewThumb.src = base64;
-      if (previewFilename) previewFilename.textContent = file.name || 'image.jpg';
-      if (previewFilesize) previewFilesize.textContent = `已壓縮至 ${kb} KB (AI 視覺最佳化)`;
+      const kb = Math.round((base64Data.length * 3 / 4) / 1024);
+      if (previewThumb) previewThumb.src = base64Data;
+      if (previewFilesize) {
+        previewFilesize.textContent = wasCropped ? `已框選裁切 (${kb} KB)` : `已最佳化壓縮 (${kb} KB)`;
+      }
 
       const res = await fetch('/api/upload', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imageBase64: base64, filename: file.name || 'image.jpg' })
+        body: JSON.stringify({ imageBase64: base64Data, filename: filename || 'photo.jpg' })
       });
       const data = await res.json();
       if (data.success) {
         uploadedImagePath = data.filePath;
         if (navigator.vibrate) navigator.vibrate(25);
+      } else {
+        alert('圖片上傳失敗：' + (data.error || '未知錯誤'));
       }
     } catch (err) {
       alert('圖片處理失敗：' + err.message);
@@ -338,23 +343,55 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  async function handleImageSelection(file) {
+    if (!file) return;
+    currentSelectedImageSource = file;
+    if (typeof openImageCropper === 'function') {
+      openImageCropper(file, (finalBase64, wasCropped) => {
+        processAndUploadImageBase64(finalBase64, file.name, wasCropped);
+      });
+    } else {
+      try {
+        const { base64 } = await compressImageFile(file, 1280, 0.8);
+        processAndUploadImageBase64(base64, file.name, false);
+      } catch(err) {
+        alert('圖片壓縮失敗：' + err.message);
+      }
+    }
+  }
+
+  if (cropImageBtn) {
+    cropImageBtn.addEventListener('click', () => {
+      if (currentSelectedImageSource && typeof openImageCropper === 'function') {
+        openImageCropper(currentSelectedImageSource, (finalBase64, wasCropped) => {
+          processAndUploadImageBase64(finalBase64, currentSelectedImageSource.name || 'photo.jpg', wasCropped);
+        });
+      }
+    });
+  }
+
   if (camBtn && cameraInput) {
     camBtn.addEventListener('click', () => cameraInput.click());
     cameraInput.addEventListener('change', (e) => {
-      handleImageSelection(e.target.files[0]);
+      if (e.target.files && e.target.files[0]) {
+        handleImageSelection(e.target.files[0]);
+      }
     });
   }
 
   if (attachBtn && attachInput) {
     attachBtn.addEventListener('click', () => attachInput.click());
     attachInput.addEventListener('change', (e) => {
-      handleImageSelection(e.target.files[0]);
+      if (e.target.files && e.target.files[0]) {
+        handleImageSelection(e.target.files[0]);
+      }
     });
   }
 
   if (removeImageBtn) {
     removeImageBtn.addEventListener('click', () => {
       uploadedImagePath = null;
+      currentSelectedImageSource = null;
       if (cameraInput) cameraInput.value = '';
       if (attachInput) attachInput.value = '';
       if (imagePreviewContainer) imagePreviewContainer.classList.add('hidden');
