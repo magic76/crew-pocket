@@ -230,7 +230,26 @@ function enhanceCodeBlocks(container) {
     const isHtml = lang === 'HTML' || lang === 'XML' || lang === 'SVG' || /^\s*<(!DOCTYPE|html|svg)/i.test(rawCode);
 
     if (isHtml) {
-      const blob = new Blob([rawCode], { type: 'text/html;charset=utf-8' });
+      let processedCode = rawCode;
+
+      // 1. Inject <base href="..."> so relative paths (e.g. icons/..., uploads/..., css/...) resolve directly to our server origin
+      const baseOrigin = window.location.origin;
+      const baseTag = `<base href="${baseOrigin}/">`;
+
+      if (/<head\b[^>]*>/i.test(processedCode)) {
+        processedCode = processedCode.replace(/(<head\b[^>]*>)/i, `$1\n  ${baseTag}`);
+      } else if (/<html\b[^>]*>/i.test(processedCode)) {
+        processedCode = processedCode.replace(/(<html\b[^>]*>)/i, `$1\n<head>\n  ${baseTag}\n</head>`);
+      } else {
+        processedCode = `${baseTag}\n${processedCode}`;
+      }
+
+      // 2. Smart Path Rewriter: Auto-convert local absolute paths (/data/data/..., /sdcard/..., /storage/...) to /api/image?path=...
+      processedCode = processedCode.replace(/(src|href|url)\s*=\s*(["'])((\/data\/data\/|\/storage\/|\/sdcard\/)[^\s"'>]+\.(png|jpg|jpeg|webp|svg|gif|ico))\2/gi, (match, attr, quote, localPath) => {
+        return `${attr}=${quote}/api/image?path=${encodeURIComponent(localPath)}${quote}`;
+      });
+
+      const blob = new Blob([processedCode], { type: 'text/html;charset=utf-8' });
       const blobUrl = URL.createObjectURL(blob);
       activeBlobUrls.add(blobUrl);
       const typeLabel = lang === 'SVG' ? 'SVG 視覺圖形' : 'HTML 網頁產物';

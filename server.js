@@ -36,8 +36,14 @@ async function handleImageProxy(parsedUrl, res) {
     return res.end('Image not found');
   }
 
-  const resolvedPath = path.resolve(imgPath);
-  if (!resolvedPath.startsWith(UPLOADS_DIR + path.sep) && !resolvedPath.startsWith(BRAIN_DIR + path.sep)) {
+  const HOME_DIR = '/data/data/com.termux/files/home';
+  const isAllowed = resolvedPath.startsWith(UPLOADS_DIR) ||
+                    resolvedPath.startsWith(BRAIN_DIR) ||
+                    resolvedPath.startsWith(HOME_DIR) ||
+                    resolvedPath.startsWith('/sdcard') ||
+                    resolvedPath.startsWith('/storage');
+
+  if (!isAllowed) {
     res.writeHead(403, { 'Content-Type': 'text/plain' });
     return res.end('Forbidden');
   }
