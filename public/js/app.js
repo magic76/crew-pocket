@@ -78,6 +78,20 @@ checkInternetConnection();
 
 // 4. Bind Global UI Listeners
 document.addEventListener('DOMContentLoaded', () => {
+  // 🚀 Holographic Quantum Splash Screen Dismissal (Option 1)
+  const splashScreen = document.getElementById('app-splash-screen');
+  if (splashScreen) {
+    if (navigator.vibrate) {
+      try { navigator.vibrate([20, 30]); } catch (e) {}
+    }
+    setTimeout(() => {
+      splashScreen.classList.add('splash-dismissed');
+      setTimeout(() => {
+        if (splashScreen && splashScreen.parentNode) splashScreen.remove();
+      }, 500);
+    }, 950);
+  }
+
   // Drawer listeners
   if (menuBtn) menuBtn.addEventListener('click', () => toggleDrawer(true));
   if (closeDrawerBtn) closeDrawerBtn.addEventListener('click', () => toggleDrawer(false));

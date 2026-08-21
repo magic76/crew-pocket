@@ -200,3 +200,65 @@ html, body {
   transform: translateY(12px) scale(0.85);
 }
 
+/* 🚀 Holographic Quantum Splash Animations (Option 1) */
+@keyframes quantum-spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes quantum-spin-reverse {
+  0% { transform: rotate(360deg); }
+  100% { transform: rotate(0deg); }
+}
+
+@keyframes quantum-pulse {
+  0%, 100% { transform: scale(0.94); opacity: 0.35; }
+  50% { transform: scale(1.08); opacity: 0.75; }
+}
+
+.quantum-orbit-slow {
+  animation: quantum-spin 10s linear infinite;
+}
+
+.quantum-orbit-fast {
+  animation: quantum-spin-reverse 6s linear infinite;
+}
+
+.quantum-pulse-glow {
+  animation: quantum-pulse 2.2s ease-in-out infinite;
+}
+
+.splash-icon-glow {
+  box-shadow: 0 0 35px rgba(99, 102, 241, 0.55), 0 0 70px rgba(6, 182, 212, 0.35);
+  animation: aurora-border 3.5s ease-in-out infinite;
+}
+
+@keyframes splash-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.splash-title-shimmer {
+  background-size: 200% auto;
+  animation: splash-shimmer 2.2s linear infinite;
+}
+
+@keyframes laser-sweep {
+  0% { width: 0%; transform: translateX(-20%); }
+  50% { width: 75%; transform: translateX(10%); }
+  100% { width: 100%; transform: translateX(0%); }
+}
+
+.splash-laser-bar {
+  animation: laser-sweep 0.85s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+#app-splash-screen.splash-dismissed {
+  opacity: 0 !important;
+  pointer-events: none !important;
+  transform: scale(1.08);
+  visibility: hidden;
+  transition: opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1), transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), visibility 0.4s;
+}
+
+
