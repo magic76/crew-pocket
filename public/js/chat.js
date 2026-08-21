@@ -393,6 +393,16 @@ async function loadConversationHistory(convId) {
   messagesContainer.innerHTML = '';
   toggleDrawer(false);
 
+  // 🔄 Reset input box and Send/Stop button to initial idle state
+  if (promptInput) {
+    promptInput.value = '';
+    promptInput.style.height = 'auto';
+  }
+  uploadedImagePath = null;
+  if (cameraInput) cameraInput.value = '';
+  if (imagePreviewContainer) imagePreviewContainer.classList.add('hidden');
+  setStreamingState(false);
+
   try {
     const res = await fetch(`/api/history?id=${convId}`);
     const data = await res.json();
@@ -415,6 +425,7 @@ async function loadConversationHistory(convId) {
       if (statusRes.ok) {
         const statusData = await statusRes.json();
         if (statusData.isBusy) {
+          setStreamingState(true);
           const existingLive = document.getElementById('resumed-live-card');
           if (!existingLive) {
             const liveCard = document.createElement('div');
@@ -444,6 +455,7 @@ async function loadConversationHistory(convId) {
                   const checkData = await checkRes.json();
                   if (!checkData.isBusy) {
                     clearInterval(pollInterval);
+                    setStreamingState(false);
                     const card = document.getElementById('resumed-live-card');
                     if (card) card.remove();
 
@@ -463,6 +475,8 @@ async function loadConversationHistory(convId) {
               } catch (e) {}
             }, 1200);
           }
+        } else {
+          setStreamingState(false);
         }
       }
     } catch (e) {}

@@ -271,6 +271,14 @@ document.addEventListener('DOMContentLoaded', () => {
       currentConversationId = null;
       localStorage.removeItem('agy_active_conv_id');
       revokeAllBlobUrls();
+      if (typeof setStreamingState === 'function') setStreamingState(false);
+      if (promptInput) {
+        promptInput.value = '';
+        promptInput.style.height = 'auto';
+      }
+      uploadedImagePath = null;
+      if (cameraInput) cameraInput.value = '';
+      if (imagePreviewContainer) imagePreviewContainer.classList.add('hidden');
       if (headerTitle) headerTitle.textContent = '新對話';
       if (messagesContainer) messagesContainer.innerHTML = '';
       appendMessage('assistant', '你好！已為你開啟新對話。有什麼可以幫你的？');
