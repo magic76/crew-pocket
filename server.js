@@ -29,6 +29,19 @@ function handleGetModels(res) {
   res.end(JSON.stringify({ models: AVAILABLE_MODELS }));
 }
 
+// ⚡ Check Conversation Session Busy Status
+function handleSessionStatus(parsedUrl, res) {
+  const convId = parsedUrl.query.id;
+  if (!convId) {
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify({ error: 'Missing convId' }));
+  }
+  const session = sessionManager.sessions.get(convId);
+  const isBusy = session ? Boolean(session.isBusy) : false;
+  res.writeHead(200, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify({ conversation_id: convId, isBusy }));
+}
+
 // 🖼️ Safe Image Proxy Handler (Directory Whitelisted)
 async function handleImageProxy(parsedUrl, res) {
   try {
@@ -368,6 +381,8 @@ const server = http.createServer(async (req, res) => {
     return handleSetIcon(req, res);
   } else if (pathname === '/api/models' && req.method === 'GET') {
     return handleGetModels(res);
+  } else if (pathname === '/api/session-status' && req.method === 'GET') {
+    return handleSessionStatus(parsedUrl, res);
   } else if (pathname === '/api/usage' && req.method === 'GET') {
     return handleUsage(res);
   } else if (pathname === '/api/files' && req.method === 'GET') {

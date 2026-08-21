@@ -400,6 +400,65 @@ async function loadConversationHistory(convId) {
       if (headerTitle) headerTitle.textContent = '新對話';
       appendMessage('assistant', '你好！已為你開啟此對話。有什麼可以幫你的？');
     }
+
+    // ⚡ Check if this conversation is actively generating in background and auto-resume loading UI
+    try {
+      const statusRes = await fetch(`/api/session-status?id=${convId}`);
+      if (statusRes.ok) {
+        const statusData = await statusRes.json();
+        if (statusData.isBusy) {
+          const existingLive = document.getElementById('resumed-live-card');
+          if (!existingLive) {
+            const liveCard = document.createElement('div');
+            liveCard.id = 'resumed-live-card';
+            liveCard.className = 'flex gap-2.5 w-full max-w-2xl mx-auto justify-start min-w-0';
+            liveCard.innerHTML = `
+              <div class="w-7 h-7 rounded-full bg-indigo-600/30 border border-indigo-500/50 flex items-center justify-center text-indigo-400 shrink-0 text-xs font-bold mt-0.5">CP</div>
+              <div class="bg-slate-900 border border-indigo-500/50 text-slate-200 rounded-2xl rounded-tl-none p-3.5 text-xs sm:text-sm shadow-md flex-1 min-w-0 aurora-glow-box">
+                <div class="flex items-center gap-2 text-indigo-300 font-medium">
+                  <span class="w-2 h-2 rounded-full bg-indigo-400 animate-ping"></span>
+                  <span>⚡ AI 正在背景持續生成回覆中...</span>
+                </div>
+              </div>
+            `;
+            messagesContainer.appendChild(liveCard);
+            scrollToBottom(true);
+
+            // Poll until generation completes
+            const pollInterval = setInterval(async () => {
+              if (currentConversationId !== convId) {
+                clearInterval(pollInterval);
+                return;
+              }
+              try {
+                const checkRes = await fetch(`/api/session-status?id=${convId}`);
+                if (checkRes.ok) {
+                  const checkData = await checkRes.json();
+                  if (!checkData.isBusy) {
+                    clearInterval(pollInterval);
+                    const card = document.getElementById('resumed-live-card');
+                    if (card) card.remove();
+
+                    // Reload latest history to smoothly display the completed assistant response
+                    const freshRes = await fetch(`/api/history?id=${convId}`);
+                    if (freshRes.ok) {
+                      const freshData = await freshRes.json();
+                      if (freshData.messages && freshData.messages.length > 0) {
+                        const lastMsg = freshData.messages[freshData.messages.length - 1];
+                        if (lastMsg.role === 'assistant') {
+                          appendMessage('assistant', lastMsg.content, lastMsg.timestamp, lastMsg.tools || [], lastMsg.thinking || '', false);
+                        }
+                      }
+                    }
+                  }
+                }
+              } catch (e) {}
+            }, 1200);
+          }
+        }
+      }
+    } catch (e) {}
+
   } catch (err) {
     console.error(err);
     messagesContainer.innerHTML = `<div class="p-4 text-center text-xs text-rose-400">載入歷史對話失敗：${err.message}</div>`;
