@@ -279,6 +279,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       uploadedImagePath = null;
       if (cameraInput) cameraInput.value = '';
+      if (attachInput) attachInput.value = '';
       if (imagePreviewContainer) imagePreviewContainer.classList.add('hidden');
       if (headerTitle) headerTitle.textContent = '新對話';
       if (messagesContainer) messagesContainer.innerHTML = '';
@@ -290,35 +291,46 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Camera & Image Upload
+  // Camera & Image Upload Handlers (with HEIC support & lightweight AI-vision compression)
+  async function handleImageSelection(file) {
+    if (!file) return;
+    try {
+      if (previewFilename) previewFilename.textContent = '圖片壓縮處理中...';
+      if (previewFilesize) previewFilesize.textContent = '最佳化中...';
+      if (imagePreviewContainer) imagePreviewContainer.classList.remove('hidden');
+
+      const { base64, kb } = await compressImageFile(file, 1280, 0.8);
+      if (previewThumb) previewThumb.src = base64;
+      if (previewFilename) previewFilename.textContent = file.name || 'image.jpg';
+      if (previewFilesize) previewFilesize.textContent = `已壓縮至 ${kb} KB (AI 視覺最佳化)`;
+
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageBase64: base64, filename: file.name || 'image.jpg' })
+      });
+      const data = await res.json();
+      if (data.success) {
+        uploadedImagePath = data.filePath;
+        if (navigator.vibrate) navigator.vibrate(25);
+      }
+    } catch (err) {
+      alert('圖片處理失敗：' + err.message);
+      if (imagePreviewContainer) imagePreviewContainer.classList.add('hidden');
+    }
+  }
+
   if (camBtn && cameraInput) {
     camBtn.addEventListener('click', () => cameraInput.click());
-    cameraInput.addEventListener('change', async (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
+    cameraInput.addEventListener('change', (e) => {
+      handleImageSelection(e.target.files[0]);
+    });
+  }
 
-      try {
-        if (previewFilename) previewFilename.textContent = '壓縮中...';
-        if (imagePreviewContainer) imagePreviewContainer.classList.remove('hidden');
-
-        const { base64, kb } = await compressImageFile(file, 1280, 0.8);
-        if (previewThumb) previewThumb.src = base64;
-        if (previewFilename) previewFilename.textContent = file.name || 'photo.jpg';
-        if (previewFilesize) previewFilesize.textContent = `已優化至 ${kb} KB`;
-
-        const res = await fetch('/api/upload', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ imageBase64: base64, filename: 'photo.jpg' })
-        });
-        const data = await res.json();
-        if (data.success) {
-          uploadedImagePath = data.filePath;
-        }
-      } catch (err) {
-        alert('圖片處理失敗：' + err.message);
-        if (imagePreviewContainer) imagePreviewContainer.classList.add('hidden');
-      }
+  if (attachBtn && attachInput) {
+    attachBtn.addEventListener('click', () => attachInput.click());
+    attachInput.addEventListener('change', (e) => {
+      handleImageSelection(e.target.files[0]);
     });
   }
 
@@ -326,6 +338,7 @@ document.addEventListener('DOMContentLoaded', () => {
     removeImageBtn.addEventListener('click', () => {
       uploadedImagePath = null;
       if (cameraInput) cameraInput.value = '';
+      if (attachInput) attachInput.value = '';
       if (imagePreviewContainer) imagePreviewContainer.classList.add('hidden');
     });
   }

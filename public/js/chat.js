@@ -792,8 +792,9 @@ async function sendMessage() {
   promptInput.value = '';
   promptInput.style.height = 'auto';
   uploadedImagePath = null;
-  cameraInput.value = '';
-  imagePreviewContainer.classList.add('hidden');
+  if (cameraInput) cameraInput.value = '';
+  if (typeof attachInput !== 'undefined' && attachInput) attachInput.value = '';
+  if (imagePreviewContainer) imagePreviewContainer.classList.add('hidden');
 
   const liveTools = [];
   let liveThinking = '';

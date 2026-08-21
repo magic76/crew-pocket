@@ -41,8 +41,11 @@
   <!-- DOMPurify Local for Offline & Zero-Latency Sanitization -->
   <script src="/dompurify.min.js"></script>
 
-  <!-- Modular Stylesheet (v3.5) -->
-  <link rel="stylesheet" href="/css/style.css?v=3.5">
+  <!-- HEIC/HEIF Converter for iPhone & Mobile Photo Library -->
+  <script src="/heic2any.min.js"></script>
+
+  <!-- Modular Stylesheet (v3.6) -->
+  <link rel="stylesheet" href="/css/style.css?v=3.6">
 </head>
 <body class="bg-slate-950 text-slate-100 flex flex-col h-[100dvh] w-full max-w-full overflow-hidden">
 
@@ -298,19 +301,27 @@
       <!-- Input Row -->
       <div class="flex items-center gap-1.5 w-full min-w-0">
         
-        <!-- Hidden Photo Input -->
+        <!-- Hidden Photo Inputs -->
         <input type="file" id="camera-input" accept="image/*" capture="environment" class="hidden">
+        <input type="file" id="attach-input" accept="image/*, .heic, .heif" class="hidden">
+
+        <!-- Attach Image (Gallery / HEIC) Button -->
+        <button id="attach-btn" type="button" title="附加相簿圖片 (支援 HEIC/JPG/PNG 自動壓縮)" class="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-slate-300 hover:text-indigo-400 transition active:scale-95 shrink-0 border border-slate-700 flex items-center justify-center">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/>
+          </svg>
+        </button>
 
         <!-- Camera Button -->
-        <button id="cam-btn" type="button" title="拍照/相簿" class="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-slate-300 hover:text-indigo-400 transition active:scale-95 shrink-0 border border-slate-700 flex items-center justify-center">
+        <button id="cam-btn" type="button" title="相機即時拍照" class="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-slate-300 hover:text-indigo-400 transition active:scale-95 shrink-0 border border-slate-700 flex items-center justify-center">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/>
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/>
           </svg>
         </button>
 
-        <!-- Mic / Walkie-Talkie Button -->
-        <button id="mic-btn" type="button" title="🎙️ 長按對講機發話 / 點擊語音辨識" class="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-slate-300 hover:text-teal-400 transition active:scale-95 shrink-0 border border-slate-700 flex items-center justify-center select-none touch-none">
+        <!-- Mic / Voice Input Button -->
+        <button id="mic-btn" type="button" title="🎙️ 語音辨識輸入" class="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-slate-300 hover:text-teal-400 transition active:scale-95 shrink-0 border border-slate-700 flex items-center justify-center select-none touch-none">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/>
           </svg>
@@ -559,10 +570,10 @@
     <img id="lightbox-img" src="" class="max-w-full max-h-full object-contain rounded-lg" alt="Enlarged">
   </div>
 
-  <!-- Modular Scripts (Cache-busted v3.5) -->
-  <script src="/js/ui.js?v=3.5"></script>
-  <script src="/js/tools.js?v=3.5"></script>
-  <script src="/js/chat.js?v=3.5"></script>
-  <script src="/js/app.js?v=3.5"></script>
+  <!-- Modular Scripts (Cache-busted v3.6) -->
+  <script src="/js/ui.js?v=3.6"></script>
+  <script src="/js/tools.js?v=3.6"></script>
+  <script src="/js/chat.js?v=3.6"></script>
+  <script src="/js/app.js?v=3.6"></script>
 </body>
 </html>

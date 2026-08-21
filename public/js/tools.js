@@ -1,10 +1,34 @@
 // Antigravity Web UI - Tools (GPS, Sandbox Runners, Code Highlighter, Image Compressor, TTS)
 
-// ⚡ Fast Client-Side Image Compression (Max 1280px, ~150KB JPEG)
-function compressImageFile(file, maxWidth = 1280, quality = 0.8) {
+// ⚡ Fast Client-Side Image Compression (Max 1280px, ~120KB JPEG, HEIC/HEIF supported for AI Vision)
+async function compressImageFile(file, maxWidth = 1280, quality = 0.8) {
+  let sourceBlob = file;
+
+  // 🍏 HEIC/HEIF Automatic Decoding (iPhone / Samsung Gallery)
+  const isHeic = (file.name && (/\.heic$/i.test(file.name) || /\.heif$/i.test(file.name))) ||
+                 file.type === 'image/heic' || file.type === 'image/heif';
+
+  if (isHeic) {
+    if (typeof heic2any !== 'undefined') {
+      try {
+        console.log('[ImageCompressor] 🍏 Converting HEIC/HEIF to JPEG...');
+        const conversionResult = await heic2any({
+          blob: file,
+          toType: 'image/jpeg',
+          quality: 0.85
+        });
+        sourceBlob = Array.isArray(conversionResult) ? conversionResult[0] : conversionResult;
+      } catch (err) {
+        console.warn('[ImageCompressor] HEIC conversion warning:', err);
+      }
+    } else {
+      console.warn('[ImageCompressor] heic2any library not loaded, attempting standard decode');
+    }
+  }
+
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.readAsDataURL(file);
+    reader.readAsDataURL(sourceBlob);
     reader.onload = (event) => {
       const img = new Image();
       img.src = event.target.result;
@@ -12,6 +36,7 @@ function compressImageFile(file, maxWidth = 1280, quality = 0.8) {
         let width = img.width;
         let height = img.height;
 
+        // Scale down for AI vision analysis (lightweight, ~100-150KB)
         if (width > maxWidth || height > maxWidth) {
           if (width > height) {
             height = Math.round((height * maxWidth) / width);
@@ -32,7 +57,7 @@ function compressImageFile(file, maxWidth = 1280, quality = 0.8) {
         const approxKb = Math.round((compressedBase64.length * 3) / 4 / 1024);
         resolve({ base64: compressedBase64, kb: approxKb });
       };
-      img.onerror = (err) => reject(err);
+      img.onerror = (err) => reject(new Error('圖片載入失敗，格式可能不受支援或檔案損毀'));
     };
     reader.onerror = (err) => reject(err);
   });
