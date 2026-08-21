@@ -935,6 +935,15 @@ async function sendMessage() {
               <span>🧠 思考分析</span>
             </span>
           </div>
+
+          <!-- ⚡ Cyberpunk Live Terminal Ticker (Realtime Output & Thinking line) -->
+          <div class="live-ticker-bar bg-black/60 border border-slate-800/80 rounded-xl px-2.5 py-1.5 flex items-center gap-1.5 text-[11px] font-mono text-slate-300">
+            <span class="text-indigo-400 font-bold shrink-0">&gt;</span>
+            <span class="live-ticker-text truncate flex-1 text-slate-200">
+              準備分析任務...
+            </span>
+            <span class="w-1.5 h-3.5 bg-indigo-400 animate-pulse shrink-0"></span>
+          </div>
         </div>
       </div>
 
@@ -951,9 +960,21 @@ async function sendMessage() {
   const liveTokensElem = assistantMsgDiv.querySelector('.live-tokens');
   const liveSpeedElem = assistantMsgDiv.querySelector('.live-speed');
   const livePipelineElem = assistantMsgDiv.querySelector('.live-pipeline');
+  const liveTickerTextElem = assistantMsgDiv.querySelector('.live-ticker-text');
   const thinkingContainerElem = assistantMsgDiv.querySelector('.thinking-container');
   const toolsContainerElem = assistantMsgDiv.querySelector('.tools-container');
   scrollToBottom();
+
+  function updateLiveTicker(rawText, prefix = '') {
+    if (!liveTickerTextElem || !rawText) return;
+    const lines = rawText.trim().split('\n').filter(l => l.trim().length > 0);
+    if (lines.length === 0) return;
+    let latest = lines[lines.length - 1].trim();
+    latest = latest.replace(/^[#*`\->:\s]+/, '').trim();
+    if (latest) {
+      liveTickerTextElem.textContent = prefix ? `${prefix} ${latest}` : latest;
+    }
+  }
 
   // Pipeline State Tracker
   const pipelineSteps = new Map();
@@ -1053,6 +1074,7 @@ async function sendMessage() {
               liveThinking += (data.delta || data.thinking || data.fullThinking || '');
               thinkingContainerElem.innerHTML = buildThinkingBlockHtml(liveThinking, true);
               statusTextElem.textContent = '💡 深度推理思考中...';
+              updateLiveTicker(liveThinking, '🧠');
               if (userScrolledUp) {
                 const scrollBadge = document.getElementById('scroll-bottom-badge');
                 if (scrollBadge) scrollBadge.classList.remove('hidden');
@@ -1070,6 +1092,9 @@ async function sendMessage() {
               renderPipeline();
 
               statusTextElem.textContent = `${d.icon} ${d.label}: ${d.desc}`;
+              if (liveTickerTextElem && d) {
+                liveTickerTextElem.textContent = `${d.icon} ${d.label}: ${d.desc}`;
+              }
               toolsContainerElem.innerHTML = buildToolsAccordionHtml(liveTools);
               if (userScrolledUp) {
                 const scrollBadge = document.getElementById('scroll-bottom-badge');
@@ -1086,6 +1111,7 @@ async function sendMessage() {
 
               statusTextElem.textContent = '✍️ 回覆組織撰寫中...';
               accumulatedText = data.accumulated;
+              updateLiveTicker(accumulatedText, '✍️');
               contentElem.innerHTML = formatMessageContent(accumulatedText);
 
               if (liveThinking) thinkingContainerElem.innerHTML = buildThinkingBlockHtml(liveThinking, false);
