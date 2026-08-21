@@ -47,7 +47,7 @@
 <body class="bg-slate-950 text-slate-100 flex flex-col h-[100dvh] w-full max-w-full overflow-hidden">
 
   <!-- TOP HEADER -->
-  <header class="bg-slate-900/95 backdrop-blur border-b border-slate-800 px-2.5 py-2 flex items-center justify-between z-20 shrink-0 w-full max-w-full min-w-0">
+  <header class="bg-slate-950/80 backdrop-blur-xl border-b border-slate-800/80 px-2.5 py-2 flex items-center justify-between z-20 shrink-0 w-full max-w-full min-w-0">
     <div class="flex items-center gap-1.5 sm:gap-2.5 min-w-0 flex-1">
       <!-- Drawer Menu Button -->
       <button id="menu-btn" class="p-1.5 sm:p-2 rounded-lg hover:bg-slate-800 text-slate-300 hover:text-white transition active:scale-95 shrink-0" aria-label="歷史對話選單">
@@ -154,10 +154,21 @@
         </div>
       </div>
     </main>
+    
+    <!-- SCROLL TO BOTTOM FLOATING ACTION BUTTON (FAB) (Idea 2) -->
+    <button id="scroll-bottom-btn" class="hidden-fab fixed bottom-24 right-4 sm:right-8 z-20 px-3 py-2 rounded-full bg-slate-900/90 hover:bg-slate-800 text-slate-200 border border-indigo-500/40 shadow-2xl backdrop-blur-xl transition-all duration-200 active:scale-95 flex items-center gap-1.5 font-mono text-xs cursor-pointer shadow-indigo-950/60" title="回到底部">
+      <svg class="w-3.5 h-3.5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 14l-7 7m0 0l-7-7m7 7V3"/>
+      </svg>
+      <span id="scroll-bottom-badge" class="hidden text-[10px] font-bold text-indigo-300 font-sans flex items-center gap-1">
+        <span class="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-ping"></span>新訊息
+      </span>
+      <span id="scroll-bottom-text" class="text-[10px] text-slate-400 font-sans">回到底部</span>
+    </button>
   </div>
 
-  <!-- BOTTOM INPUT BAR -->
-  <footer class="bg-slate-900/95 backdrop-blur border-t border-slate-800 p-2 sm:p-3 shrink-0 z-10 w-full max-w-full">
+  <!-- BOTTOM INPUT BAR (Glassmorphism 2.0) -->
+  <footer class="bg-slate-950/85 backdrop-blur-xl border-t border-slate-800/80 p-2 sm:p-3 shrink-0 z-10 w-full max-w-full">
     <div class="max-w-2xl mx-auto flex flex-col gap-1.5 relative w-full">
       
       <!-- Slash Command Autocomplete Popover -->

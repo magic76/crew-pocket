@@ -143,13 +143,40 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Scroll tracker
+  // Scroll tracker with Scroll-To-Bottom FAB (Idea 2)
   if (messagesContainer) {
+    const scrollBtn = document.getElementById('scroll-bottom-btn');
+    const scrollBadge = document.getElementById('scroll-bottom-badge');
+
     messagesContainer.addEventListener('scroll', () => {
-      const threshold = 80;
-      const isAtBottom = messagesContainer.scrollHeight - messagesContainer.scrollTop - messagesContainer.clientHeight <= threshold;
+      const threshold = 120;
+      const distanceFromBottom = messagesContainer.scrollHeight - messagesContainer.scrollTop - messagesContainer.clientHeight;
+      const isAtBottom = distanceFromBottom <= threshold;
       userScrolledUp = !isAtBottom;
+
+      if (scrollBtn) {
+        if (!isAtBottom) {
+          scrollBtn.classList.remove('hidden-fab');
+          scrollBtn.classList.add('visible');
+        } else {
+          scrollBtn.classList.remove('visible');
+          scrollBtn.classList.add('hidden-fab');
+          if (scrollBadge) scrollBadge.classList.add('hidden');
+        }
+      }
     });
+
+    if (scrollBtn) {
+      scrollBtn.addEventListener('click', () => {
+        messagesContainer.scrollTo({
+          top: messagesContainer.scrollHeight,
+          behavior: 'smooth'
+        });
+        userScrolledUp = false;
+        if (navigator.vibrate) navigator.vibrate(20);
+        if (scrollBadge) scrollBadge.classList.add('hidden');
+      });
+    }
   }
 
   // Prompt Input Auto-resize & Slash Menu

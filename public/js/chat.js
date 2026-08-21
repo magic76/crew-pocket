@@ -139,14 +139,19 @@ function buildToolsAccordionHtml(tools) {
   `;
 }
 
-// Render collapsible thinking block
-function buildThinkingBlockHtml(thinking) {
+// Render collapsible thinking block with Aurora flowing glow (Idea 5)
+function buildThinkingBlockHtml(thinking, isStreamingThinking = false) {
   if (!thinking || !thinking.trim()) return '';
+  const glowClass = isStreamingThinking ? 'thinking-active-glow border-purple-500/80 shadow-lg shadow-purple-950/40' : 'border-purple-900/40';
+  const headerIcon = isStreamingThinking
+    ? '<span class="w-2 h-2 rounded-full bg-purple-400 animate-ping shrink-0"></span><span class="text-purple-300 font-bold">💡 深度思考推理中...</span>'
+    : '<span class="text-purple-300">💡 深度思考推理過程</span>';
+
   return `
-    <details class="my-2 bg-slate-950/60 border border-purple-900/40 rounded-xl overflow-hidden text-xs">
+    <details class="my-2 bg-slate-950/70 border ${glowClass} rounded-xl overflow-hidden text-xs transition-all duration-300" ${isStreamingThinking ? 'open' : ''}>
       <summary class="px-3 py-1.5 bg-purple-950/30 text-purple-300 font-mono text-[11px] cursor-pointer flex items-center justify-between select-none">
-        <span class="flex items-center gap-1.5">💡 深度思考推理過程</span>
-        <span class="text-[10px] text-purple-400">展開 ▼</span>
+        <span class="flex items-center gap-1.5">${headerIcon}</span>
+        <span class="text-[10px] text-purple-400 font-mono">${isStreamingThinking ? '即時' : '展開 ▼'}</span>
       </summary>
       <div class="p-3 text-slate-300 font-mono text-[11px] leading-relaxed whitespace-pre-wrap border-t border-purple-900/30 bg-slate-950/90">
         ${escapeHtml(thinking.trim())}
@@ -713,8 +718,12 @@ async function sendMessage() {
               renderPipeline();
 
               liveThinking += (data.delta || data.thinking || data.fullThinking || '');
-              thinkingContainerElem.innerHTML = buildThinkingBlockHtml(liveThinking);
+              thinkingContainerElem.innerHTML = buildThinkingBlockHtml(liveThinking, true);
               statusTextElem.textContent = '💡 深度推理思考中...';
+              if (userScrolledUp) {
+                const scrollBadge = document.getElementById('scroll-bottom-badge');
+                if (scrollBadge) scrollBadge.classList.remove('hidden');
+              }
               scrollToBottom();
             } else if (currentEvent === 'tool') {
               const initStep = pipelineSteps.get('init');
@@ -729,6 +738,10 @@ async function sendMessage() {
 
               statusTextElem.textContent = `${d.icon} ${d.label}: ${d.desc}`;
               toolsContainerElem.innerHTML = buildToolsAccordionHtml(liveTools);
+              if (userScrolledUp) {
+                const scrollBadge = document.getElementById('scroll-bottom-badge');
+                if (scrollBadge) scrollBadge.classList.remove('hidden');
+              }
               scrollToBottom();
             } else if (currentEvent === 'chunk' && data.accumulated) {
               const initStep = pipelineSteps.get('init');
@@ -741,6 +754,11 @@ async function sendMessage() {
               statusTextElem.textContent = '✍️ 回覆組織撰寫中...';
               accumulatedText = data.accumulated;
               contentElem.innerHTML = formatMessageContent(accumulatedText);
+              if (liveThinking) thinkingContainerElem.innerHTML = buildThinkingBlockHtml(liveThinking, false);
+              if (userScrolledUp) {
+                const scrollBadge = document.getElementById('scroll-bottom-badge');
+                if (scrollBadge) scrollBadge.classList.remove('hidden');
+              }
               scrollToBottom();
             } else if (currentEvent === 'done') {
               clearInterval(liveTimerInterval);
