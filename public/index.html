@@ -44,8 +44,8 @@
   <!-- HEIC/HEIF Converter for iPhone & Mobile Photo Library -->
   <script src="/heic2any.min.js"></script>
 
-  <!-- Modular Stylesheet (v3.8) -->
-  <link rel="stylesheet" href="/css/style.css?v=3.8">
+  <!-- Modular Stylesheet (v3.9) -->
+  <link rel="stylesheet" href="/css/style.css?v=3.9">
 </head>
 <body class="bg-slate-950 text-slate-100 flex flex-col h-[100dvh] w-full max-w-full overflow-hidden">
 
@@ -266,8 +266,31 @@
         </button>
       </div>
 
+      <!-- 📋 Clipboard Smart Sensing Capsule -->
+      <div id="clipboard-smart-capsule" class="hidden flex items-center justify-between gap-2 p-2 px-3 bg-gradient-to-r from-slate-900 via-indigo-950/90 to-slate-900 border border-indigo-500/50 rounded-2xl shadow-xl shadow-indigo-950/40 backdrop-blur-xl transition-all duration-300 max-w-full min-w-0 mb-1 select-none">
+        <div class="flex items-center gap-2 min-w-0 flex-1">
+          <span id="clipboard-type-icon" class="text-base shrink-0">📋</span>
+          <div class="flex flex-col min-w-0 flex-1">
+            <div class="flex items-center gap-1.5">
+              <span id="clipboard-type-label" class="text-[10px] font-semibold text-indigo-300 font-mono">偵測到剪貼簿</span>
+              <span id="clipboard-length-badge" class="text-[9px] text-slate-400 font-mono">0 字</span>
+            </div>
+            <span id="clipboard-preview-text" class="text-xs text-slate-200 truncate font-mono">...</span>
+          </div>
+        </div>
+        <div id="clipboard-actions-container" class="flex items-center gap-1.5 shrink-0 overflow-x-auto no-scrollbar">
+          <!-- Dynamic Action Chips -->
+        </div>
+        <button id="clipboard-close-btn" type="button" title="關閉提示" class="p-1 text-slate-400 hover:text-slate-200 transition rounded-lg hover:bg-slate-800 shrink-0 ml-1">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+
       <!-- Quick Action Chips Bar (Horizontally scrollable) -->
       <div class="flex items-center gap-1.5 overflow-x-auto py-0.5 px-0.5 no-scrollbar select-none text-[11px] font-medium shrink-0">
+        <button type="button" id="clipboard-chip" class="shrink-0 px-2.5 py-1 rounded-full bg-indigo-950/50 hover:bg-indigo-900/70 border border-indigo-500/60 text-indigo-300 flex items-center gap-1 transition active:scale-95 shadow-sm font-semibold" title="感應並讀取手機剪貼簿">
+          <span>📋</span><span>感應剪貼簿</span>
+        </button>
         <button type="button" id="gps-chip" class="shrink-0 px-2.5 py-1 rounded-full bg-rose-950/50 hover:bg-rose-900/70 border border-rose-500/60 text-rose-300 flex items-center gap-1 transition active:scale-95 shadow-sm font-semibold">
           <span>📍</span><span>即時定位</span>
         </button>
@@ -575,10 +598,10 @@
     <img id="lightbox-img" src="" class="max-w-full max-h-full object-contain rounded-lg" alt="Enlarged">
   </div>
 
-  <!-- Modular Scripts (Cache-busted v3.8) -->
-  <script src="/js/ui.js?v=3.8"></script>
-  <script src="/js/tools.js?v=3.8"></script>
-  <script src="/js/chat.js?v=3.8"></script>
-  <script src="/js/app.js?v=3.8"></script>
+  <!-- Modular Scripts (Cache-busted v3.9) -->
+  <script src="/js/ui.js?v=3.9"></script>
+  <script src="/js/tools.js?v=3.9"></script>
+  <script src="/js/chat.js?v=3.9"></script>
+  <script src="/js/app.js?v=3.9"></script>
 </body>
 </html>

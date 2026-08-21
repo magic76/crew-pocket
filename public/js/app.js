@@ -266,6 +266,11 @@ document.addEventListener('DOMContentLoaded', () => {
     initGpsHandler();
   }
 
+  // 📋 Initialize Clipboard Smart Sensors
+  if (typeof initClipboardSmartSensors === 'function') {
+    initClipboardSmartSensors();
+  }
+
   // New Chat Action
   if (newChatBtn) {
     newChatBtn.addEventListener('click', () => {

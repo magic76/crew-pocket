@@ -657,3 +657,275 @@ function initGpsHandler() {
     );
   });
 }
+
+// 📋 Clipboard Smart Sensing Engine (100% Local Instant Regex Intent Classifier)
+let lastSeenClipboardText = '';
+let clipboardAutoDismissTimer = null;
+
+function detectClipboardIntent(rawText) {
+  if (!rawText || typeof rawText !== 'string') return null;
+  const text = rawText.trim();
+  if (!text || text.length < 2) return null;
+
+  // 1. 🔗 URL Detection
+  if (/^https?:\/\/[^\s]+$/i.test(text)) {
+    let domain = '';
+    try { domain = new URL(text).hostname; } catch(e) {}
+    return {
+      type: 'url',
+      icon: '🔗',
+      label: `網頁連結 (${domain || 'URL'})`,
+      preview: text,
+      actions: [
+        { label: '📰 總結網頁', prompt: `請閱讀並詳細分析這個網頁的重點內容與核心摘要：\n${text}` },
+        { label: '📥 填入', fillOnly: true }
+      ]
+    };
+  }
+
+  // 2. ⚠️ Error / Stack Trace Detection
+  if (/(Error|Exception|Traceback|errno|FAIL|TypeError|SyntaxError|ReferenceError|NullPointerException|panic:|fatal error)/i.test(text) || (text.includes('at ') && text.includes('.js:'))) {
+    return {
+      type: 'error',
+      icon: '🛠️',
+      label: '錯誤報錯 (Error/Trace)',
+      preview: text,
+      actions: [
+        { label: '🛠️ 除錯分析', prompt: `請幫我分析以下程式報錯的原因，並提供具體的修復步驟與改進代碼：\n\`\`\`\n${text}\n\`\`\`` },
+        { label: '📥 填入', fillOnly: true }
+      ]
+    };
+  }
+
+  // 3. 📊 JSON / Structured Data
+  if ((text.startsWith('{') && text.endsWith('}')) || (text.startsWith('[') && text.endsWith(']'))) {
+    try {
+      JSON.parse(text);
+      return {
+        type: 'json',
+        icon: '📊',
+        label: 'JSON 結構化資料',
+        preview: text,
+        actions: [
+          { label: '✨ 格式美化', prompt: `請幫我排版美化這段 JSON 資料並簡要說明其結構用途：\n\`\`\`json\n${text}\n\`\`\`` },
+          { label: '📈 轉為圖表', prompt: `請分析以下資料並使用 Chart.js 繪製適當的視覺化圖表：\n\`\`\`json\n${text}\n\`\`\`` },
+          { label: '📥 填入', fillOnly: true }
+        ]
+      };
+    } catch(e) {}
+  }
+
+  // 4. 💻 Code Snippet Detection
+  if (/^(<[\s\S]+>|import\s+|export\s+|function\s+|const\s+|let\s+|var\s+|class\s+|def\s+|public\s+class|package\s+|SELECT\s+|FROM\s+|curl\s+|docker\s+|npm\s+|git\s+)/i.test(text) ||
+      (text.includes('{') && text.includes('}') && (text.includes(';') || text.includes('\n')))) {
+    return {
+      type: 'code',
+      icon: '💻',
+      label: '程式碼片段',
+      preview: text,
+      actions: [
+        { label: '📖 解釋代碼', prompt: `請詳細解釋這段程式碼的邏輯、運作機制與用途：\n\`\`\`\n${text}\n\`\`\`` },
+        { label: '⚡ 優化審查', prompt: `請幫我審查並優化這段程式碼，指出潛在效能問題與改進建議：\n\`\`\`\n${text}\n\`\`\`` },
+        { label: '📥 填入', fillOnly: true }
+      ]
+    };
+  }
+
+  // 5. 🌐 Foreign Language (English / Japanese)
+  const hasChinese = /[\u4e00-\u9fa5]/.test(text);
+  const isJapanese = /[\u3040-\u30ff]/.test(text) && !hasChinese;
+  const isEnglish = /[a-zA-Z]{6,}/.test(text) && !hasChinese && ((text.match(/[a-zA-Z]/g) || []).length / text.length > 0.5);
+
+  if (isJapanese) {
+    return {
+      type: 'japanese',
+      icon: '🎌',
+      label: '日語內容',
+      preview: text,
+      actions: [
+        { label: '🀄 翻譯繁中', prompt: `請將以下日文內容翻譯為流暢自然的繁體中文：\n\n${text}` },
+        { label: '📥 填入', fillOnly: true }
+      ]
+    };
+  }
+
+  if (isEnglish) {
+    return {
+      type: 'english',
+      icon: '🌐',
+      label: '英文內容',
+      preview: text,
+      actions: [
+        { label: '🀄 翻譯繁中', prompt: `請將以下英文內容精準翻譯為自然通順的繁體中文：\n\n${text}` },
+        { label: '✍️ 潤飾文法', prompt: `請幫我潤飾並改善這段英文，修正文法錯誤並提供更母語化的表達：\n\n${text}` },
+        { label: '📥 填入', fillOnly: true }
+      ]
+    };
+  }
+
+  // 6. 📝 Long Text / Paragraphs
+  if (text.length > 40) {
+    return {
+      type: 'longtext',
+      icon: '📝',
+      label: `長文字 (${text.length} 字)`,
+      preview: text,
+      actions: [
+        { label: '📝 萃取重點', prompt: `請幫我萃取以下文字的核心重點與結論，以精簡條列式呈現：\n\n${text}` },
+        { label: '📥 填入', fillOnly: true }
+      ]
+    };
+  }
+
+  // 7. Short text fallback
+  return {
+    type: 'text',
+    icon: '📋',
+    label: `剪貼簿 (${text.length} 字)`,
+    preview: text,
+    actions: [
+      { label: '📥 填入輸入框', fillOnly: true },
+      { label: '🚀 發送給 AI', prompt: text }
+    ]
+  };
+}
+
+function showClipboardCapsule(intent, rawText) {
+  const capsule = document.getElementById('clipboard-smart-capsule');
+  const typeIcon = document.getElementById('clipboard-type-icon');
+  const typeLabel = document.getElementById('clipboard-type-label');
+  const lengthBadge = document.getElementById('clipboard-length-badge');
+  const previewText = document.getElementById('clipboard-preview-text');
+  const actionsContainer = document.getElementById('clipboard-actions-container');
+  const closeBtn = document.getElementById('clipboard-close-btn');
+
+  if (!capsule || !intent) return;
+
+  if (clipboardAutoDismissTimer) clearTimeout(clipboardAutoDismissTimer);
+
+  if (typeIcon) typeIcon.textContent = intent.icon;
+  if (typeLabel) typeLabel.textContent = intent.label;
+  if (lengthBadge) lengthBadge.textContent = `${rawText.length} 字`;
+  if (previewText) previewText.textContent = rawText.replace(/\s+/g, ' ').slice(0, 45);
+
+  if (actionsContainer) {
+    actionsContainer.innerHTML = '';
+    intent.actions.forEach((action, idx) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      const isPrimary = idx === 0;
+      btn.className = `px-2.5 py-1 rounded-xl text-[11px] font-medium transition active:scale-95 shrink-0 flex items-center gap-1 shadow-sm ${
+        isPrimary
+          ? 'bg-indigo-600 hover:bg-indigo-500 text-white font-semibold shadow-indigo-600/30'
+          : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700'
+      }`;
+      btn.textContent = action.label;
+
+      btn.onclick = () => {
+        hideClipboardCapsule();
+        if (navigator.vibrate) navigator.vibrate(20);
+
+        if (action.fillOnly) {
+          if (promptInput) {
+            promptInput.value = rawText;
+            promptInput.focus();
+            promptInput.dispatchEvent(new Event('input'));
+          }
+        } else if (action.prompt) {
+          const finalPrompt = typeof action.prompt === 'function' ? action.prompt(rawText) : action.prompt;
+          if (promptInput) {
+            promptInput.value = finalPrompt;
+            promptInput.dispatchEvent(new Event('input'));
+          }
+          if (typeof sendMessage === 'function') {
+            sendMessage();
+          }
+        }
+      };
+
+      actionsContainer.appendChild(btn);
+    });
+  }
+
+  capsule.classList.remove('hidden');
+
+  if (closeBtn) {
+    closeBtn.onclick = () => hideClipboardCapsule();
+  }
+
+  // Auto-dismiss after 10s of inactivity
+  clipboardAutoDismissTimer = setTimeout(() => {
+    hideClipboardCapsule();
+  }, 10000);
+}
+
+function hideClipboardCapsule() {
+  const capsule = document.getElementById('clipboard-smart-capsule');
+  if (capsule) capsule.classList.add('hidden');
+  if (clipboardAutoDismissTimer) {
+    clearTimeout(clipboardAutoDismissTimer);
+    clipboardAutoDismissTimer = null;
+  }
+}
+
+// Check and trigger sensing
+async function checkClipboardSmartly(forceManual = false) {
+  if (!navigator.clipboard || !navigator.clipboard.readText) {
+    if (forceManual) alert('您的瀏覽器不支援直接讀取剪貼簿 API');
+    return;
+  }
+  try {
+    const text = await navigator.clipboard.readText();
+    if (!text || !text.trim()) {
+      if (forceManual) alert('目前剪貼簿內無任何文字內容！');
+      return;
+    }
+
+    const cleanText = text.trim();
+    if (!forceManual && cleanText === lastSeenClipboardText) {
+      return; // Already sensed this text
+    }
+
+    lastSeenClipboardText = cleanText;
+    const intent = detectClipboardIntent(cleanText);
+    if (intent) {
+      showClipboardCapsule(intent, cleanText);
+      if (navigator.vibrate) navigator.vibrate(15);
+    }
+  } catch (err) {
+    // Clipboard permission denied or needs user gesture
+    if (forceManual) {
+      alert('無法讀取剪貼簿，請在瀏覽器權限中允許存取剪貼簿：' + err.message);
+    }
+  }
+}
+
+// Initializer
+function initClipboardSmartSensors() {
+  const clipboardChip = document.getElementById('clipboard-chip');
+  if (clipboardChip) {
+    clipboardChip.addEventListener('click', () => {
+      checkClipboardSmartly(true);
+    });
+  }
+
+  // Auto-sense on app focus / visibility change
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) {
+      setTimeout(() => checkClipboardSmartly(false), 300);
+    }
+  });
+
+  window.addEventListener('focus', () => {
+    setTimeout(() => checkClipboardSmartly(false), 300);
+  });
+
+  // Hide capsule when typing
+  if (promptInput) {
+    promptInput.addEventListener('input', () => {
+      if (promptInput.value.length > 0) {
+        hideClipboardCapsule();
+      }
+    });
+  }
+}
