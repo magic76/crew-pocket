@@ -371,7 +371,10 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   if (camBtn && cameraInput) {
-    camBtn.addEventListener('click', () => cameraInput.click());
+    camBtn.addEventListener('click', () => {
+      cameraInput.value = '';
+      cameraInput.click();
+    });
     cameraInput.addEventListener('change', (e) => {
       if (e.target.files && e.target.files[0]) {
         handleImageSelection(e.target.files[0]);
@@ -380,13 +383,44 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   if (attachBtn && attachInput) {
-    attachBtn.addEventListener('click', () => attachInput.click());
+    attachBtn.addEventListener('click', () => {
+      attachInput.value = '';
+      attachInput.click();
+    });
     attachInput.addEventListener('change', (e) => {
       if (e.target.files && e.target.files[0]) {
         handleImageSelection(e.target.files[0]);
       }
     });
   }
+
+  // 📋 Direct Image Paste Support (e.g. pasted screenshots or copied photos from gallery/web)
+  window.addEventListener('paste', (e) => {
+    if (e.clipboardData && e.clipboardData.items) {
+      for (const item of e.clipboardData.items) {
+        if (item.type && item.type.startsWith('image/')) {
+          const file = item.getAsFile();
+          if (file) {
+            e.preventDefault();
+            handleImageSelection(file);
+            break;
+          }
+        }
+      }
+    }
+  });
+
+  // 📂 Direct Image Drag & Drop Support
+  window.addEventListener('dragover', (e) => e.preventDefault());
+  window.addEventListener('drop', (e) => {
+    e.preventDefault();
+    if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]) {
+      const file = e.dataTransfer.files[0];
+      if (file.type.startsWith('image/')) {
+        handleImageSelection(file);
+      }
+    }
+  });
 
   if (removeImageBtn) {
     removeImageBtn.addEventListener('click', () => {
