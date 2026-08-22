@@ -900,7 +900,7 @@ async function checkClipboardSmartly(forceManual = false) {
   }
 }
 
-// Initializer
+// Initializer (Manual on-demand only, zero background hijacking)
 function initClipboardSmartSensors() {
   const clipboardChip = document.getElementById('clipboard-chip');
   if (clipboardChip) {
@@ -908,17 +908,6 @@ function initClipboardSmartSensors() {
       checkClipboardSmartly(true);
     });
   }
-
-  // Auto-sense on app focus / visibility change
-  document.addEventListener('visibilitychange', () => {
-    if (!document.hidden) {
-      setTimeout(() => checkClipboardSmartly(false), 300);
-    }
-  });
-
-  window.addEventListener('focus', () => {
-    setTimeout(() => checkClipboardSmartly(false), 300);
-  });
 
   // Hide capsule when typing
   if (promptInput) {
