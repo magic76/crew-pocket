@@ -105,6 +105,24 @@ document.addEventListener('DOMContentLoaded', () => {
   if (closeLightboxBtn) closeLightboxBtn.addEventListener('click', () => lightbox.classList.add('opacity-0', 'pointer-events-none'));
   if (lightbox) lightbox.addEventListener('click', (e) => { if (e.target === lightbox) lightbox.classList.add('opacity-0', 'pointer-events-none'); });
 
+  // 🧰 Tools Menu Dropdown listeners
+  if (toolsMenuBtn && toolsMenuDropdown) {
+    toolsMenuBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toolsMenuDropdown.classList.toggle('hidden');
+    });
+
+    document.addEventListener('click', (e) => {
+      if (!toolsMenuDropdown.contains(e.target) && !toolsMenuBtn.contains(e.target)) {
+        toolsMenuDropdown.classList.add('hidden');
+      }
+    });
+
+    [filesBtn, usageBtn, cheatSheetBtn, notifyBtn].forEach(btn => {
+      if (btn) btn.addEventListener('click', () => toolsMenuDropdown.classList.add('hidden'));
+    });
+  }
+
   // Cheat Sheet listeners
   if (cheatSheetBtn) cheatSheetBtn.addEventListener('click', () => toggleCheatSheet(true));
   if (openCheatChip) openCheatChip.addEventListener('click', () => toggleCheatSheet(true));

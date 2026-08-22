@@ -53,8 +53,10 @@ const drawer = document.getElementById('drawer');
 const drawerOverlay = document.getElementById('drawer-overlay');
 const closeDrawerBtn = document.getElementById('close-drawer-btn');
 const convList = document.getElementById('conv-list');
-const newChatBtn = document.getElementById('new-chat-btn');
 const notifyBtn = document.getElementById('notify-btn');
+const notifyStatusSubtext = document.getElementById('notify-status-subtext');
+const toolsMenuBtn = document.getElementById('tools-menu-btn');
+const toolsMenuDropdown = document.getElementById('tools-menu-dropdown');
 const headerTitle = document.getElementById('header-title');
 const slashMenu = document.getElementById('slash-menu');
 const lightbox = document.getElementById('lightbox');
@@ -391,10 +393,12 @@ function updateNotifyBtnUI() {
     notifyBtn.classList.add('text-indigo-400', 'bg-indigo-600/20');
     notifyBtn.classList.remove('text-slate-400');
     notifyBtn.title = '通知已開啟 (點擊測試/關閉)';
+    if (notifyStatusSubtext) notifyStatusSubtext.innerHTML = '<span class="text-emerald-400">已開啟 ✓</span>';
   } else {
     notifyBtn.classList.remove('text-indigo-400', 'bg-indigo-600/20');
     notifyBtn.classList.add('text-slate-400');
     notifyBtn.title = '通知已關閉 (點擊開啟)';
+    if (notifyStatusSubtext) notifyStatusSubtext.innerHTML = '<span class="text-slate-500">已關閉</span>';
   }
 }
 

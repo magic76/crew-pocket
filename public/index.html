@@ -116,7 +116,7 @@
       </div>
     </div>
     
-    <div class="flex items-center gap-0.5 sm:gap-1 shrink-0">
+    <div class="relative flex items-center gap-1 sm:gap-1.5 shrink-0">
       <!-- 🎙️ Gemini 2.0 Live Full-Duplex Voice Call Button -->
       <button id="live-voice-btn" class="p-1.5 sm:p-2 rounded-lg bg-gradient-to-r from-teal-500/20 via-indigo-500/20 to-purple-500/20 hover:from-teal-500/30 hover:to-purple-500/30 text-teal-300 hover:text-white transition active:scale-95 shrink-0 border border-teal-500/40 shadow-sm shadow-teal-500/20 flex items-center gap-1.5" title="🎙️ Gemini 2.0 Live 原生雙向全雙工通話 (端到端音訊)">
         <span class="w-1.5 h-1.5 rounded-full bg-teal-400 animate-ping shrink-0"></span>
@@ -126,36 +126,67 @@
         <span class="text-[11px] font-extrabold tracking-tight hidden sm:inline text-teal-200 font-mono">Live 通話</span>
       </button>
 
-      <!-- Termux Files Explorer Button -->
-      <button id="files-btn" class="p-1.5 sm:p-2 rounded-lg hover:bg-slate-800 text-emerald-400 hover:text-emerald-300 transition active:scale-95 shrink-0" title="📁 Termux 本地檔案總管" aria-label="檔案總管">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
+      <!-- 🧰 Unified Tools Dropdown Trigger Button -->
+      <button id="tools-menu-btn" class="p-1.5 sm:p-2 rounded-lg bg-slate-900/90 hover:bg-slate-800 text-slate-300 hover:text-white transition active:scale-95 shrink-0 border border-slate-700/80 flex items-center gap-1" title="🧰 工具與功能選單 (檔案 / 用量 / 錦囊 / 通知)">
+        <svg class="w-4 h-4 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/>
         </svg>
+        <svg class="w-2.5 h-2.5 text-slate-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
       </button>
 
-      <!-- Usage Quota Button -->
-      <button id="usage-btn" class="p-1.5 sm:p-2 rounded-lg hover:bg-slate-800 text-sky-400 hover:text-sky-300 transition active:scale-95 shrink-0" title="📊 模型配額用量 (/usage)" aria-label="模型用量">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
-        </svg>
-      </button>
+      <!-- 🧰 Tools Dropdown Popover Menu -->
+      <div id="tools-menu-dropdown" class="hidden absolute right-16 top-11 z-50 bg-slate-900/95 border border-slate-700/90 rounded-2xl shadow-2xl backdrop-blur-xl p-1.5 w-52 space-y-1 select-none animate-fadeIn">
+        
+        <!-- 1. Files Explorer -->
+        <button id="files-btn" class="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-xs text-slate-200 hover:bg-slate-800/90 hover:text-emerald-300 transition text-left group">
+          <div class="w-6 h-6 rounded-lg bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 group-hover:scale-105 transition shrink-0">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
+          </div>
+          <div class="flex flex-col min-w-0">
+            <span class="font-semibold text-slate-100 group-hover:text-emerald-300">本地檔案總管</span>
+            <span class="text-[10px] text-slate-400">瀏覽 Termux 檔案與專案</span>
+          </div>
+        </button>
 
-      <!-- Capabilities Cheat Sheet Button -->
-      <button id="cheat-sheet-btn" class="p-1.5 sm:p-2 rounded-lg hover:bg-slate-800 text-amber-400 hover:text-amber-300 transition active:scale-95 shrink-0" title="💡 超能力功能錦囊" aria-label="功能錦囊">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
-        </svg>
-      </button>
+        <!-- 2. Usage Quota -->
+        <button id="usage-btn" class="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-xs text-slate-200 hover:bg-slate-800/90 hover:text-sky-300 transition text-left group">
+          <div class="w-6 h-6 rounded-lg bg-sky-500/20 border border-sky-500/30 flex items-center justify-center text-sky-400 group-hover:scale-105 transition shrink-0">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+          </div>
+          <div class="flex flex-col min-w-0">
+            <span class="font-semibold text-slate-100 group-hover:text-sky-300">模型配額用量</span>
+            <span class="text-[10px] text-slate-400">查詢今日 / 5hr API 配額</span>
+          </div>
+        </button>
 
-      <!-- Notification Toggle Button -->
-      <button id="notify-btn" class="p-1.5 sm:p-2 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition active:scale-95 shrink-0" title="系統推播通知" aria-label="通知開關">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
-        </svg>
-      </button>
+        <!-- 3. Capabilities Cheat Sheet -->
+        <button id="cheat-sheet-btn" class="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-xs text-slate-200 hover:bg-slate-800/90 hover:text-amber-300 transition text-left group">
+          <div class="w-6 h-6 rounded-lg bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400 group-hover:scale-105 transition shrink-0">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
+          </div>
+          <div class="flex flex-col min-w-0">
+            <span class="font-semibold text-slate-100 group-hover:text-amber-300">功能錦囊與指令</span>
+            <span class="text-[10px] text-slate-400">快捷指令與超能力清單</span>
+          </div>
+        </button>
+
+        <div class="border-t border-slate-800 my-1"></div>
+
+        <!-- 4. System Push Notifications Toggle -->
+        <button id="notify-btn" class="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-xs text-slate-200 hover:bg-slate-800/90 hover:text-indigo-300 transition text-left group">
+          <div class="w-6 h-6 rounded-lg bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400 group-hover:scale-105 transition shrink-0">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
+          </div>
+          <div class="flex flex-col min-w-0">
+            <span class="font-semibold text-slate-100 group-hover:text-indigo-300">系統推播通知</span>
+            <span id="notify-status-subtext" class="text-[10px] text-slate-400">點擊開啟 / 關閉</span>
+          </div>
+        </button>
+
+      </div>
       
       <!-- New Chat Button -->
-      <button id="new-chat-btn" class="flex items-center gap-1 px-2 sm:px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium transition shadow-md shadow-indigo-600/30 active:scale-95 shrink-0" title="開啟新對話">
+      <button id="new-chat-btn" class="flex items-center gap-1 px-2.5 sm:px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium transition shadow-md shadow-indigo-600/30 active:scale-95 shrink-0" title="開啟新對話">
         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
         </svg>
@@ -769,11 +800,11 @@
     <img id="lightbox-img" src="" class="max-w-full max-h-full object-contain rounded-lg" alt="Enlarged">
   </div>
 
-  <!-- Modular Scripts (Cache-busted v4.6) -->
-  <script src="/js/ui.js?v=4.6"></script>
-  <script src="/js/tools.js?v=4.6"></script>
-  <script src="/js/chat.js?v=4.6"></script>
-  <script src="/js/live.js?v=1.1"></script>
-  <script src="/js/app.js?v=4.6"></script>
+  <!-- Modular Scripts (Cache-busted v4.7) -->
+  <script src="/js/ui.js?v=4.7"></script>
+  <script src="/js/tools.js?v=4.7"></script>
+  <script src="/js/chat.js?v=4.7"></script>
+  <script src="/js/live.js?v=1.2"></script>
+  <script src="/js/app.js?v=4.7"></script>
 </body>
 </html>
