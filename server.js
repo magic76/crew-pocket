@@ -77,14 +77,17 @@ async function handleCodexCompact(req, res) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
       return res.end(JSON.stringify({ error: 'Invalid conversation_id' }));
     }
+    const isEnglish = body.locale === 'en';
     await getProvider('codex').compactConversation(body.conversation_id);
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
       success: true,
       provider: 'codex',
       conversation_id: body.conversation_id,
-      summary: 'Codex 已使用原生 context compaction 精簡較早的對話內容，並保留繼續執行目前工作的必要脈絡。',
-      message: 'Codex 對話上下文已成功精簡！'
+      summary: isEnglish
+        ? 'Codex used native context compaction to condense earlier conversation content while keeping the context needed to continue the current work.'
+        : 'Codex 已使用原生 context compaction 精簡較早的對話內容，並保留繼續執行目前工作的必要脈絡。',
+      message: isEnglish ? 'Codex conversation context compacted successfully.' : 'Codex 對話上下文已成功精簡！'
     }));
   } catch (err) {
     console.error('[Codex Compact Error]', err);
@@ -254,6 +257,12 @@ const CREW_POCKET_SYSTEM_GUIDE = `[Context: You are the core intelligence of "Cr
 4. 🎯 Tone & Precision:
    - Be concise, direct, helpful, and sharp. Avoid boilerplate disclaimers.]`;
 
+function languageInstruction(locale) {
+  return locale === 'en'
+    ? '[Response Language: Reply in clear, natural English unless the user explicitly asks for another language.]'
+    : '[回覆語言：除非使用者明確指定其他語言，請使用自然的繁體中文（台灣）回覆。]';
+}
+
 // 💬 SSE Chat Streaming with Resident Pipe
 async function handleChat(req, res) {
   let body;
@@ -265,6 +274,7 @@ async function handleChat(req, res) {
   }
 
   const { prompt, conversation_id, image_path, model, effort } = body;
+  const locale = body.locale === 'en' ? 'en' : 'zh-TW';
   const providerId = normalizeProviderId(body.provider);
   if (!prompt && !image_path) {
     res.writeHead(400, { 'Content-Type': 'application/json' });
@@ -275,9 +285,9 @@ async function handleChat(req, res) {
 
   // 🏷️ System environment anchor for Crew Pocket (Full guide on turn 1, lightweight anchor on follow-up turns)
   if (!conversation_id) {
-    finalPrompt = `${CREW_POCKET_SYSTEM_GUIDE}\n\n[User Request]:\n${finalPrompt}`;
+    finalPrompt = `${CREW_POCKET_SYSTEM_GUIDE}\n\n${languageInstruction(locale)}\n\n[User Request]:\n${finalPrompt}`;
   } else {
-    finalPrompt = `[Context: Operating in Crew Pocket Mobile. Proactively provide complete \`\`\`html sandbox cards for interactive UI requests, Chart.js for data, and Google Maps links for locations.]\n\n${finalPrompt}`;
+    finalPrompt = `[Context: Operating in Crew Pocket Mobile. Proactively provide complete \`\`\`html sandbox cards for interactive UI requests, Chart.js for data, and Google Maps links for locations.]\n\n${languageInstruction(locale)}\n\n${finalPrompt}`;
   }
 
   if (image_path) {

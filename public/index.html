@@ -177,7 +177,16 @@
 
         <div class="border-t border-slate-800 my-1"></div>
 
-        <!-- 4. System Push Notifications Toggle -->
+        <!-- 4. Interface Language -->
+        <button id="language-toggle-btn" class="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-xs text-slate-200 hover:bg-slate-800/90 hover:text-cyan-300 transition text-left group" title="切換介面語言">
+          <div class="w-6 h-6 rounded-lg bg-cyan-500/20 border border-cyan-500/30 flex items-center justify-center text-cyan-400 group-hover:scale-105 transition shrink-0">🌐</div>
+          <div class="flex flex-col min-w-0">
+            <span data-language-label class="font-semibold text-slate-100 group-hover:text-cyan-300">語言：繁中</span>
+            <span class="text-[10px] text-slate-400">繁體中文 / English</span>
+          </div>
+        </button>
+
+        <!-- 5. System Push Notifications Toggle -->
         <button id="notify-btn" class="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-xs text-slate-200 hover:bg-slate-800/90 hover:text-indigo-300 transition text-left group">
           <div class="w-6 h-6 rounded-lg bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400 group-hover:scale-105 transition shrink-0">
             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
@@ -774,7 +783,8 @@
     <img id="lightbox-img" src="" class="max-w-full max-h-full object-contain rounded-lg" alt="Enlarged">
   </div>
 
-  <!-- Modular Scripts (Cache-busted v6.49) -->
+  <!-- Modular Scripts (Cache-busted v6.50) -->
+  <script src="/js/i18n.js?v=2"></script>
   <script src="/js/ui.js?v=6.49"></script>
   <script src="/js/tools.js?v=6.49"></script>
   <script src="/js/chat.js?v=6.49"></script>

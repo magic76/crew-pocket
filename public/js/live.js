@@ -445,7 +445,7 @@
       speechRecognizer = new SpeechRecognition();
       speechRecognizer.continuous = true;
       speechRecognizer.interimResults = true;
-      speechRecognizer.lang = 'zh-TW';
+      speechRecognizer.lang = (typeof getCrewLocale === 'function' && getCrewLocale() === 'en') ? 'en-US' : 'zh-TW';
 
       speechRecognizer.onresult = (event) => {
         let interim = '';
@@ -845,7 +845,9 @@
             systemInstruction: {
               parts: [
                 {
-                  text: "You are Crew Pocket (口袋特勤隊), an expert AI handheld companion assisting the user with travel, coding, and daily tasks. You are speaking directly with the user over high-fidelity real-time voice. Keep your replies concise, warm, natural, and friendly in Traditional Chinese (Taiwan). Be proactive and conversational. Always output the exact Traditional Chinese text transcript of everything you speak in the text parts."
+                  text: (typeof getCrewLocale === 'function' && getCrewLocale() === 'en')
+                    ? "You are Crew Pocket, an expert AI handheld companion assisting the user with travel, coding, and daily tasks. You are speaking directly with the user over high-fidelity real-time voice. Keep replies concise, warm, natural, proactive, and conversational. Speak English and always output the exact English transcript of everything you speak in the text parts."
+                    : "You are Crew Pocket (口袋特勤隊), an expert AI handheld companion assisting the user with travel, coding, and daily tasks. You are speaking directly with the user over high-fidelity real-time voice. Keep your replies concise, warm, natural, and friendly in Traditional Chinese (Taiwan). Be proactive and conversational. Always output the exact Traditional Chinese text transcript of everything you speak in the text parts."
                 }
               ]
             }

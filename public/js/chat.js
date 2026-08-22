@@ -1041,7 +1041,8 @@ async function sendMessage() {
         body: JSON.stringify({
           conversation_id: currentConversationId,
           focus: focusText,
-          provider: currentProvider
+          provider: currentProvider,
+          locale: typeof getCrewLocale === 'function' ? getCrewLocale() : 'zh-TW'
         })
       });
       const data = await res.json();
@@ -1234,7 +1235,8 @@ async function sendMessage() {
         conversation_id: activeStreamConvId,
         image_path: imgPath,
         model: currentModel,
-        effort: (typeof currentEffort !== 'undefined') ? currentEffort : 'low'
+        effort: (typeof currentEffort !== 'undefined') ? currentEffort : 'low',
+        locale: typeof getCrewLocale === 'function' ? getCrewLocale() : 'zh-TW'
       }),
       signal: currentAbortController.signal
     });
@@ -1574,7 +1576,8 @@ async function generateConversationTitle(convId, userMessage, assistantResponse)
       body: JSON.stringify({
         conversation_id: convId,
         user_message: userMessage,
-        assistant_response: assistantResponse
+        assistant_response: assistantResponse,
+        locale: typeof getCrewLocale === 'function' ? getCrewLocale() : 'zh-TW'
       })
     });
 
