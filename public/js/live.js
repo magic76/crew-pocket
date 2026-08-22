@@ -1,6 +1,6 @@
 /**
- * 🎙️ Crew Pocket - Option A: Inline Live Multimodal Assistant
- * Embedded Directly Inside the Chat Timeline with Mute, Camera Vision & Real-time Transcription.
+ * 🎙️ Crew Pocket - Option A: Pure Inline Live Voice Card (No Distracting Background Sync)
+ * Direct Real-Time Multimodal Communication in Dedicated Live Card UI.
  */
 
 (function() {
@@ -29,14 +29,9 @@
   let analyser = null;
   let animFrameId = null;
   let audioSendBuffer = [];
-  let isSyncing = false;
   
-  // Real-time STT & Audio Accumulation
+  // Real-time STT
   let speechRecognizer = null;
-  let turnUserPcmChunks = [];
-  let turnModelPcmChunks = [];
-  let currentTurnModelText = '';
-  let currentTurnUserText = '';
 
   // DOM References
   const liveVoiceBtn = document.getElementById('live-voice-btn');
@@ -102,7 +97,7 @@
   }
 
   // ==========================================
-  // 🧮 Audio Data & WAV Conversion Utilities
+  // 🧮 Audio Data Conversion Utilities
   // ==========================================
   function floatTo16BitPCM(float32Array) {
     const buffer = new ArrayBuffer(float32Array.length * 2);
@@ -113,55 +108,6 @@
       view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
     }
     return buffer;
-  }
-
-  function writeString(view, offset, string) {
-    for (let i = 0; i < string.length; i++) {
-      view.setUint8(offset + i, string.charCodeAt(i));
-    }
-  }
-
-  function pcmFloat32ArrayToWavBase64(float32Chunks, sampleRate) {
-    let totalLength = 0;
-    for (const chunk of float32Chunks) totalLength += chunk.length;
-    if (totalLength === 0) return '';
-
-    const merged = new Float32Array(totalLength);
-    let offset = 0;
-    for (const chunk of float32Chunks) {
-      merged.set(chunk, offset);
-      offset += chunk.length;
-    }
-
-    const numChannels = 1;
-    const bitsPerSample = 16;
-    const byteRate = sampleRate * numChannels * (bitsPerSample / 8);
-    const blockAlign = numChannels * (bitsPerSample / 8);
-    const dataSize = totalLength * 2;
-    const buffer = new ArrayBuffer(44 + dataSize);
-    const view = new DataView(buffer);
-
-    writeString(view, 0, 'RIFF');
-    view.setUint32(4, 36 + dataSize, true);
-    writeString(view, 8, 'WAVE');
-    writeString(view, 12, 'fmt ');
-    view.setUint32(16, 16, true);
-    view.setUint16(20, 1, true);
-    view.setUint16(22, numChannels, true);
-    view.setUint32(24, sampleRate, true);
-    view.setUint32(28, byteRate, true);
-    view.setUint16(32, blockAlign, true);
-    view.setUint16(34, bitsPerSample, true);
-    writeString(view, 36, 'data');
-    view.setUint32(40, dataSize, true);
-
-    let pcmOffset = 44;
-    for (let i = 0; i < totalLength; i++, pcmOffset += 2) {
-      let s = Math.max(-1, Math.min(1, merged[i]));
-      view.setInt16(pcmOffset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
-    }
-
-    return arrayBufferToBase64(buffer);
   }
 
   function arrayBufferToBase64(buffer) {
@@ -295,9 +241,9 @@
           <canvas id="live-card-canvas" width="280" height="32" class="w-full h-full"></canvas>
         </div>
 
-        <!-- Real-time Dialogue Subtitles (簡潔字幕區) -->
-        <div id="live-card-transcript" class="space-y-1.5 text-xs max-h-36 overflow-y-auto pr-1">
-          <div class="text-slate-500 text-center text-[11px] font-mono py-1">💬 請說話...</div>
+        <!-- Real-time Dialogue Subtitles (純 Live 對話區) -->
+        <div id="live-card-transcript" class="space-y-1.5 text-xs max-h-48 overflow-y-auto pr-1">
+          <div id="live-card-placeholder" class="text-slate-500 text-center text-[11px] font-mono py-1">💬 請說話...</div>
         </div>
 
       </div>
@@ -311,12 +257,12 @@
     // Attach Inline Controls
     const voiceSelect = card.querySelector('#live-card-voice-select');
     if (voiceSelect) {
-      voiceSelect.addEventListener('change', () => {
+      voiceSelect.addEventListener('change', async () => {
         const newVoice = voiceSelect.value;
         localStorage.setItem(VOICE_KEY, newVoice);
         if (liveVoiceSelect) liveVoiceSelect.value = newVoice;
         if (isConnected) {
-          endLiveSession();
+          await endLiveSession();
           setTimeout(startLiveSession, 300);
         }
       });
@@ -356,6 +302,9 @@
       } else if (state === 'error') {
         statusDot.className = 'w-2 h-2 rounded-full bg-rose-500';
         if (statusText) statusText.className = 'text-rose-400 font-bold text-xs font-mono truncate';
+      } else if (state === 'connecting') {
+        statusDot.className = 'w-2 h-2 rounded-full bg-amber-400 animate-pulse';
+        if (statusText) statusText.className = 'text-amber-300 font-bold text-xs font-mono truncate';
       } else {
         statusDot.className = 'w-2 h-2 rounded-full bg-teal-400 animate-pulse';
         if (statusText) statusText.className = 'text-teal-300 font-bold text-xs font-mono truncate';
@@ -367,10 +316,8 @@
     const drawer = document.getElementById('live-card-transcript');
     if (!drawer || !text) return;
 
-    // Clear initial placeholder if present
-    if (drawer.children.length === 1 && drawer.children[0].classList.contains('text-slate-400')) {
-      drawer.innerHTML = '';
-    }
+    const placeholder = document.getElementById('live-card-placeholder');
+    if (placeholder) placeholder.remove();
 
     const p = document.createElement('div');
     p.className = `p-2 rounded-xl border leading-relaxed text-xs transition-all ${
@@ -482,7 +429,6 @@
         }
         const spoken = (final || interim).trim();
         if (spoken) {
-          currentTurnUserText = spoken;
           console.log('[Live STT Transcribed]', spoken);
           appendCardTranscript('user', spoken);
         }
@@ -630,7 +576,7 @@
   }
 
   // ==========================================
-  // 🔌 WebSocket Live Session Manager
+  // 🔌 WebSocket Live Session Manager (Singleton)
   // ==========================================
   function getApiKey() {
     return (localStorage.getItem(STORAGE_KEY) || '').trim();
@@ -646,89 +592,14 @@
     return m;
   }
 
-  // ⚡ Transcribe and Sync Full Dialogue into Active Session
-  async function processTurnAndSync() {
-    if (isSyncing) return;
-    const userChunks = turnUserPcmChunks.slice();
-    const modelChunks = turnModelPcmChunks.slice();
-    
-    // Clear buffer for next turn
-    turnUserPcmChunks = [];
-    turnModelPcmChunks = [];
-
-    const apiKey = getApiKey();
-    const userWav = pcmFloat32ArrayToWavBase64(userChunks, 16000);
-    const modelWav = pcmFloat32ArrayToWavBase64(modelChunks, 24000);
-
-    if (!userWav && !modelWav && !currentTurnUserText && !currentTurnModelText) return;
-
-    isSyncing = true;
-    let finalUser = currentTurnUserText;
-    let finalModel = currentTurnModelText;
-
-    try {
-      // 1. If text is missing, transcribe audio clips via Gemini Flash
-      if ((!finalUser && userWav) || (!finalModel && modelWav)) {
-        const transRes = await fetch('/api/live-transcribe', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            api_key: apiKey,
-            user_audio: (!finalUser && userWav) ? userWav : null,
-            model_audio: (!finalModel && modelWav) ? modelWav : null
-          })
-        });
-
-        const transData = await transRes.json();
-        console.log('[Live Transcribe Result]', transData);
-        if (transData.success) {
-          if (transData.user_text && !finalUser) finalUser = transData.user_text;
-          if (transData.model_text && !finalModel) finalModel = transData.model_text;
-        }
-      }
-
-      finalUser = finalUser || (userWav ? '🗣️ (語音輸入)' : '');
-      finalModel = finalModel || (modelWav ? '🎙️ (已完成語音回覆)' : '');
-
-      if (!finalUser && !finalModel) return;
-
-      // 2. Show in card transcript drawer
-      if (finalUser && finalUser !== '🗣️ (語音輸入)') appendCardTranscript('user', finalUser);
-      if (finalModel && finalModel !== '🎙️ (已完成語音回覆)') appendCardTranscript('model', finalModel);
-
-      // 3. Save to backend session logs
-      const activeConvId = (typeof currentConversationId !== 'undefined' && currentConversationId) ? currentConversationId : null;
-      const syncRes = await fetch('/api/live-sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          conversation_id: activeConvId,
-          user_message: finalUser,
-          assistant_message: finalModel
-        })
-      });
-
-      const syncData = await syncRes.json();
-      
-      // 4. Update session reference
-      if (syncData.success && syncData.conversation_id) {
-        currentConversationId = syncData.conversation_id;
-        localStorage.setItem('agy_active_conv_id', syncData.conversation_id);
-        if (typeof loadConversations === 'function') loadConversations();
-      }
-
-      // 5. Reset turn texts
-      currentTurnUserText = '';
-      currentTurnModelText = '';
-
-    } catch (err) {
-      console.error('[Process Turn Sync Error]', err);
-    } finally {
-      isSyncing = false;
-    }
-  }
-
   async function startLiveSession() {
+    // Prevent duplicate sessions
+    if (isConnected || ws) {
+      console.warn('[Live] Session already active, resetting...');
+      await endLiveSession();
+      await new Promise(r => setTimeout(r, 200));
+    }
+
     const apiKey = getApiKey();
     if (!apiKey) {
       showKeyModal();
@@ -738,12 +609,15 @@
     // 1. Create Inline Live Card in Chat Timeline
     createInlineCardElement();
     updateCardStatus('connecting', '⚡ 準備中...');
+
+    // Update Header Live Button
+    if (liveVoiceBtn) {
+      liveVoiceBtn.classList.add('bg-rose-950/80', 'text-rose-300', 'border-rose-500/50');
+      const span = liveVoiceBtn.querySelector('span:last-child');
+      if (span) span.textContent = '通話中';
+    }
     
     audioSendBuffer = [];
-    turnUserPcmChunks = [];
-    turnModelPcmChunks = [];
-    currentTurnModelText = '';
-    currentTurnUserText = '';
     isMuted = false;
     isCameraOn = false;
 
@@ -792,10 +666,6 @@
       const model = getSelectedModel();
       const wsUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent?key=${encodeURIComponent(apiKey)}`;
       
-      if (ws) {
-        try { ws.close(); } catch (e) {}
-      }
-
       ws = new WebSocket(wsUrl);
 
       ws.onopen = () => {
@@ -859,7 +729,6 @@
             console.log('[Gemini Live] Interrupted by user!');
             audioPlayer.stopAll();
             updateCardStatus('listening', '🎙️ 聆聽中...');
-            processTurnAndSync();
             return;
           }
 
@@ -870,19 +739,12 @@
               const inlineData = part.inlineData || part.inline_data;
               if (inlineData && inlineData.data) {
                 const float32 = base64ToFloat32PCM(inlineData.data);
-                turnModelPcmChunks.push(float32);
                 audioPlayer.playChunk(float32, 24000);
               }
               if (part.text) {
-                currentTurnModelText += part.text;
                 appendCardTranscript('model', part.text);
               }
             }
-          }
-
-          const isTurnDone = sc.turnComplete || sc.turn_complete;
-          if (isTurnDone) {
-            processTurnAndSync();
           }
         }
       };
@@ -911,8 +773,6 @@
         if (!isConnected || isMuted || !ws || ws.readyState !== WebSocket.OPEN) return;
         const inputData = e.inputBuffer.getChannelData(0);
         const downsampled = downsampleBuffer(inputData, audioContext.sampleRate, 16000);
-        
-        turnUserPcmChunks.push(new Float32Array(downsampled));
 
         for (let i = 0; i < downsampled.length; i++) {
           audioSendBuffer.push(downsampled[i]);
@@ -989,21 +849,15 @@
       ws = null;
     }
 
-    // Process last turn and replace card with permanent chat timeline
-    await processTurnAndSync();
-    
-    // Remove active inline card
+    // Reset Header Live Button
+    if (liveVoiceBtn) {
+      liveVoiceBtn.classList.remove('bg-rose-950/80', 'text-rose-300', 'border-rose-500/50');
+      const span = liveVoiceBtn.querySelector('span:last-child');
+      if (span) span.textContent = 'Live 通話';
+    }
+
+    // Remove active inline card cleanly
     removeInlineCard();
-
-    // Reload permanent history
-    const activeConvId = (typeof currentConversationId !== 'undefined' && currentConversationId) ? currentConversationId : null;
-    if (activeConvId && typeof loadConversationHistory === 'function') {
-      await loadConversationHistory(activeConvId);
-    }
-
-    if (typeof loadConversations === 'function') {
-      loadConversations();
-    }
   }
 
   // Key Modal Handlers
