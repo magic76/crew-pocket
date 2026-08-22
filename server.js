@@ -104,6 +104,11 @@ async function handleProviderHistory(parsedUrl, res) {
     const provider = getProvider(providerId);
     if (!provider.metadata.capabilities.history || typeof provider.getHistory !== 'function') throw new Error('Provider does not support conversation history');
     const history = await provider.getHistory(parsedUrl.query.id);
+    if (Array.isArray(history.messages)) {
+      history.messages = history.messages.map(message => message.role === 'user'
+        ? { ...message, content: stripLegacyLanguageInstruction(message.content) }
+        : message);
+    }
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(history));
   } catch (err) {
@@ -257,10 +262,11 @@ const CREW_POCKET_SYSTEM_GUIDE = `[Context: You are the core intelligence of "Cr
 4. 🎯 Tone & Precision:
    - Be concise, direct, helpful, and sharp. Avoid boilerplate disclaimers.]`;
 
-function languageInstruction(locale) {
-  return locale === 'en'
-    ? '[Response Language: Reply in clear, natural English unless the user explicitly asks for another language.]'
-    : '[回覆語言：除非使用者明確指定其他語言，請使用自然的繁體中文（台灣）回覆。]';
+function stripLegacyLanguageInstruction(content) {
+  if (typeof content !== 'string') return content;
+  return content
+    .replace(/\[回覆語言：除非使用者明確指定其他語言，請使用自然的繁體中文（台灣）回覆。\]\s*/g, '')
+    .replace(/\[Response Language: Reply in clear, natural English unless the user explicitly asks for another language\.\]\s*/g, '');
 }
 
 // 💬 SSE Chat Streaming with Resident Pipe
@@ -274,7 +280,6 @@ async function handleChat(req, res) {
   }
 
   const { prompt, conversation_id, image_path, model, effort } = body;
-  const locale = body.locale === 'en' ? 'en' : 'zh-TW';
   const providerId = normalizeProviderId(body.provider);
   if (!prompt && !image_path) {
     res.writeHead(400, { 'Content-Type': 'application/json' });
@@ -285,9 +290,9 @@ async function handleChat(req, res) {
 
   // 🏷️ System environment anchor for Crew Pocket (Full guide on turn 1, lightweight anchor on follow-up turns)
   if (!conversation_id) {
-    finalPrompt = `${CREW_POCKET_SYSTEM_GUIDE}\n\n${languageInstruction(locale)}\n\n[User Request]:\n${finalPrompt}`;
+    finalPrompt = `${CREW_POCKET_SYSTEM_GUIDE}\n\n[User Request]:\n${finalPrompt}`;
   } else {
-    finalPrompt = `[Context: Operating in Crew Pocket Mobile. Proactively provide complete \`\`\`html sandbox cards for interactive UI requests, Chart.js for data, and Google Maps links for locations.]\n\n${languageInstruction(locale)}\n\n${finalPrompt}`;
+    finalPrompt = `[Context: Operating in Crew Pocket Mobile. Proactively provide complete \`\`\`html sandbox cards for interactive UI requests, Chart.js for data, and Google Maps links for locations.]\n\n${finalPrompt}`;
   }
 
   if (image_path) {

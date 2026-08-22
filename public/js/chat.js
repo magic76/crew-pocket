@@ -1242,8 +1242,7 @@ async function sendMessage() {
         conversation_id: activeStreamConvId,
         image_path: imgPath,
         model: currentModel,
-        effort: (typeof currentEffort !== 'undefined') ? currentEffort : 'low',
-        locale: typeof getCrewLocale === 'function' ? getCrewLocale() : 'zh-TW'
+        effort: (typeof currentEffort !== 'undefined') ? currentEffort : 'low'
       }),
       signal: currentAbortController.signal
     });
