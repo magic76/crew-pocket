@@ -1,0 +1,602 @@
+/**
+ * 🎙️ Crew Pocket - Gemini 2.0 Multimodal Live API (Full-Duplex Audio & Vision)
+ * Real-time Speech-to-Speech over WebSockets with 16kHz PCM input and 24kHz PCM output.
+ */
+
+(function() {
+  'use strict';
+
+  const STORAGE_KEY = 'crew_pocket_gemini_api_key';
+  const VOICE_KEY = 'crew_pocket_live_voice';
+  const DEFAULT_VOICE = 'Puck'; // Options: 'Puck', 'Charon', 'Kore', 'Fenrir', 'Aoede'
+  const MODEL_NAME = 'models/gemini-2.0-flash-exp';
+
+  // State
+  let ws = null;
+  let audioContext = null;
+  let micMediaStream = null;
+  let micAudioSource = null;
+  let micProcessorNode = null;
+  let audioPlayer = null;
+  let isConnected = false;
+  let isMuted = false;
+  let isCameraOn = false;
+  let cameraStream = null;
+  let cameraInterval = null;
+  let analyser = null;
+  let animFrameId = null;
+
+  // DOM Elements
+  const liveVoiceBtn = document.getElementById('live-voice-btn');
+  const liveCallModal = document.getElementById('live-call-modal');
+  const liveKeyModal = document.getElementById('live-key-modal');
+  const liveApiKeyInput = document.getElementById('live-api-key-input');
+  const liveSaveKeyBtn = document.getElementById('live-save-key-btn');
+  const liveCloseKeyBtn = document.getElementById('live-close-key-btn');
+  const liveStatusPill = document.getElementById('live-status-pill');
+  const liveStatusText = document.getElementById('live-status-text');
+  const liveEndCallBtn = document.getElementById('live-end-call-btn');
+  const liveMuteBtn = document.getElementById('live-mute-btn');
+  const liveCameraBtn = document.getElementById('live-camera-btn');
+  const liveSettingsBtn = document.getElementById('live-settings-btn');
+  const liveVoiceSelect = document.getElementById('live-voice-select');
+  const liveCanvas = document.getElementById('live-visualizer-canvas');
+  const liveVideoPreview = document.getElementById('live-video-preview');
+  const liveTranscriptText = document.getElementById('live-transcript-text');
+
+  // ==========================================
+  // 🔊 Gapless 24kHz PCM Audio Stream Player
+  // ==========================================
+  class LiveAudioPlayer {
+    constructor(ctx) {
+      this.ctx = ctx;
+      this.nextStartTime = 0;
+      this.activeSources = [];
+    }
+
+    playChunk(float32Array, sampleRate = 24000) {
+      if (!float32Array || float32Array.length === 0) return;
+      if (this.ctx.state === 'suspended') {
+        this.ctx.resume();
+      }
+
+      const audioBuffer = this.ctx.createBuffer(1, float32Array.length, sampleRate);
+      audioBuffer.getChannelData(0).set(float32Array);
+
+      const source = this.ctx.createBufferSource();
+      source.buffer = audioBuffer;
+      source.connect(this.ctx.destination);
+
+      // Connect to visualizer analyzer
+      if (analyser) {
+        source.connect(analyser);
+      }
+
+      const currentTime = this.ctx.currentTime;
+      const startTime = Math.max(currentTime, this.nextStartTime);
+      source.start(startTime);
+      this.nextStartTime = startTime + audioBuffer.duration;
+
+      this.activeSources.push(source);
+      source.onended = () => {
+        const idx = this.activeSources.indexOf(source);
+        if (idx > -1) this.activeSources.splice(idx, 1);
+        if (this.activeSources.length === 0 && isConnected && !isMuted) {
+          updateStatus('listening', '🎙️ 聆聽中 (隨時說話)');
+        }
+      };
+    }
+
+    stopAll() {
+      for (const src of this.activeSources) {
+        try { src.stop(); } catch (e) {}
+      }
+      this.activeSources = [];
+      if (this.ctx) {
+        this.nextStartTime = this.ctx.currentTime;
+      }
+    }
+  }
+
+  // ==========================================
+  // 🧮 Audio Data Conversion Utilities
+  // ==========================================
+  function floatTo16BitPCM(float32Array) {
+    const buffer = new ArrayBuffer(float32Array.length * 2);
+    const view = new DataView(buffer);
+    let offset = 0;
+    for (let i = 0; i < float32Array.length; i++, offset += 2) {
+      let s = Math.max(-1, Math.min(1, float32Array[i]));
+      view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+    }
+    return buffer;
+  }
+
+  function arrayBufferToBase64(buffer) {
+    let binary = '';
+    const bytes = new Uint8Array(buffer);
+    const len = bytes.byteLength;
+    for (let i = 0; i < len; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    return window.btoa(binary);
+  }
+
+  function base64ToFloat32PCM(base64) {
+    const binaryString = window.atob(base64);
+    const len = binaryString.length;
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    const dataView = new DataView(bytes.buffer);
+    const numSamples = Math.floor(len / 2);
+    const float32 = new Float32Array(numSamples);
+    for (let i = 0; i < numSamples; i++) {
+      const int16 = dataView.getInt16(i * 2, true);
+      float32[i] = int16 / 32768.0;
+    }
+    return float32;
+  }
+
+  // Resample helper (from device input sampleRate to target 16kHz)
+  function downsampleBuffer(buffer, inputSampleRate, outputSampleRate = 16000) {
+    if (inputSampleRate === outputSampleRate) return buffer;
+    if (inputSampleRate < outputSampleRate) return buffer;
+    const sampleRateRatio = inputSampleRate / outputSampleRate;
+    const newLength = Math.round(buffer.length / sampleRateRatio);
+    const result = new Float32Array(newLength);
+    let offsetResult = 0;
+    let offsetBuffer = 0;
+    while (offsetResult < result.length) {
+      const nextOffsetBuffer = Math.round((offsetResult + 1) * sampleRateRatio);
+      let accum = 0, count = 0;
+      for (let i = offsetBuffer; i < nextOffsetBuffer && i < buffer.length; i++) {
+        accum += buffer[i];
+        count++;
+      }
+      result[offsetResult] = count > 0 ? accum / count : 0;
+      offsetResult++;
+      offsetBuffer = nextOffsetBuffer;
+    }
+    return result;
+  }
+
+  // ==========================================
+  // 🎨 Real-time Audio Spectrum Visualizer
+  // ==========================================
+  function startVisualizer() {
+    if (!liveCanvas) return;
+    const canvasCtx = liveCanvas.getContext('2d');
+    const bufferLength = analyser ? analyser.frequencyBinCount : 64;
+    const dataArray = new Uint8Array(bufferLength);
+
+    function draw() {
+      animFrameId = requestAnimationFrame(draw);
+      const width = liveCanvas.width;
+      const height = liveCanvas.height;
+
+      if (analyser) {
+        analyser.getByteFrequencyData(dataArray);
+      }
+
+      canvasCtx.clearRect(0, 0, width, height);
+
+      // Draw futuristic pulsing cyber waves
+      const barCount = 32;
+      const barWidth = (width / barCount) * 0.7;
+      const gap = (width / barCount) * 0.3;
+      
+      let sum = 0;
+      for (let i = 0; i < barCount; i++) {
+        const val = dataArray[i * 2] || 0;
+        sum += val;
+        const percent = val / 255;
+        const barHeight = Math.max(4, percent * height * 0.85);
+        const x = i * (barWidth + gap) + gap / 2;
+        const y = (height - barHeight) / 2;
+
+        const gradient = canvasCtx.createLinearGradient(0, y, 0, y + barHeight);
+        if (isConnected) {
+          gradient.addColorStop(0, '#38bdf8'); // sky blue
+          gradient.addColorStop(0.5, '#6366f1'); // indigo
+          gradient.addColorStop(1, '#ec4899'); // pink
+        } else {
+          gradient.addColorStop(0, '#64748b');
+          gradient.addColorStop(1, '#334155');
+        }
+
+        canvasCtx.fillStyle = gradient;
+        canvasCtx.beginPath();
+        canvasCtx.roundRect(x, y, barWidth, barHeight, 4);
+        canvasCtx.fill();
+      }
+
+      // Dynamic Halo Glow intensity
+      const avg = sum / barCount;
+      const halo = document.getElementById('live-halo-ring');
+      if (halo) {
+        const scale = 1 + (avg / 255) * 0.35;
+        const opacity = 0.3 + (avg / 255) * 0.7;
+        halo.style.transform = `scale(${scale})`;
+        halo.style.opacity = `${opacity}`;
+      }
+    }
+    draw();
+  }
+
+  function stopVisualizer() {
+    if (animFrameId) {
+      cancelAnimationFrame(animFrameId);
+      animFrameId = null;
+    }
+  }
+
+  // ==========================================
+  // 🔌 WebSocket Live Session Manager
+  // ==========================================
+  function getApiKey() {
+    return localStorage.getItem(STORAGE_KEY) || '';
+  }
+
+  function getSelectedVoice() {
+    return localStorage.getItem(VOICE_KEY) || DEFAULT_VOICE;
+  }
+
+  function updateStatus(state, text) {
+    if (!liveStatusText || !liveStatusPill) return;
+    liveStatusText.textContent = text;
+    
+    liveStatusPill.className = 'px-3 py-1 rounded-full text-xs font-semibold font-mono flex items-center gap-1.5 transition-all shadow-lg ' +
+      (state === 'connected' || state === 'listening' ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-500/50 shadow-emerald-500/20' :
+       state === 'speaking' ? 'bg-indigo-950/80 text-indigo-300 border border-indigo-500/50 shadow-indigo-500/20 animate-pulse' :
+       state === 'connecting' ? 'bg-amber-950/80 text-amber-300 border border-amber-500/50' :
+       'bg-slate-900/90 text-slate-400 border border-slate-700');
+  }
+
+  function appendTranscript(role, text) {
+    if (!liveTranscriptText) return;
+    const p = document.createElement('div');
+    p.className = `text-xs leading-relaxed ${role === 'user' ? 'text-indigo-300 text-right' : 'text-slate-200 text-left'}`;
+    p.textContent = (role === 'user' ? '🗣️ 我: ' : '✨ Gemini: ') + text;
+    liveTranscriptText.appendChild(p);
+    liveTranscriptText.scrollTop = liveTranscriptText.scrollHeight;
+  }
+
+  async function startLiveSession() {
+    const apiKey = getApiKey();
+    if (!apiKey) {
+      showKeyModal();
+      return;
+    }
+
+    try {
+      updateStatus('connecting', '⚡ 連線 Google Gemini Live...');
+      liveCallModal.classList.remove('hidden');
+
+      // 1. Initialize Web Audio Context
+      const AudioCtxClass = window.AudioContext || window.webkitAudioContext;
+      audioContext = new AudioCtxClass();
+      if (audioContext.state === 'suspended') {
+        await audioContext.resume();
+      }
+
+      analyser = audioContext.createAnalyser();
+      analyser.fftSize = 128;
+      analyser.smoothingTimeConstant = 0.8;
+
+      audioPlayer = new LiveAudioPlayer(audioContext);
+
+      // 2. Capture Microphone Stream
+      micMediaStream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          channelCount: 1,
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        }
+      });
+
+      micAudioSource = audioContext.createMediaStreamSource(micMediaStream);
+      micAudioSource.connect(analyser);
+
+      // ScriptProcessor for 16kHz PCM streaming (512 or 1024 buffer size for ~30ms chunks)
+      micProcessorNode = audioContext.createScriptProcessor(1024, 1, 1);
+      micAudioSource.connect(micProcessorNode);
+      micProcessorNode.connect(audioContext.destination);
+
+      // 3. Connect to Google Gemini Bidi WebSocket
+      const wsUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent?key=${apiKey}`;
+      ws = new WebSocket(wsUrl);
+
+      ws.onopen = () => {
+        console.log('[Gemini Live] WebSocket connection opened.');
+        isConnected = true;
+        updateStatus('connected', '✨ 正在初始化語音通道...');
+
+        // Send Setup Message
+        const voiceName = getSelectedVoice();
+        const setupMessage = {
+          setup: {
+            model: MODEL_NAME,
+            generationConfig: {
+              responseModalities: ["AUDIO"],
+              speechConfig: {
+                voiceConfig: {
+                  prebuiltVoiceConfig: {
+                    voiceName: voiceName
+                  }
+                }
+              }
+            },
+            systemInstruction: {
+              parts: [
+                {
+                  text: "You are Crew Pocket (口袋特勤隊), an expert AI handheld companion assisting the user with travel, coding, and daily tasks. You are directly speaking to the user over high-fidelity real-time voice. Keep your replies concise, warm, natural, and friendly in Traditional Chinese (Taiwan). Be proactive and conversational."
+                }
+              ]
+            }
+          }
+        };
+        ws.send(JSON.stringify(setupMessage));
+        startVisualizer();
+      };
+
+      ws.onmessage = async (event) => {
+        let response;
+        if (event.data instanceof Blob) {
+          response = JSON.parse(await event.data.text());
+        } else {
+          response = JSON.parse(event.data);
+        }
+
+        // 1. Setup Complete
+        if (response.setupComplete) {
+          console.log('[Gemini Live] Setup complete, ready to talk!');
+          updateStatus('listening', '🎙️ 正在聆聽 (雙向全雙工)...');
+          return;
+        }
+
+        // 2. Server Content (Audio / Text Stream)
+        if (response.serverContent) {
+          const sc = response.serverContent;
+
+          // Barge-in (User interrupted model)
+          if (sc.interrupted) {
+            console.log('[Gemini Live] Interrupted by user!');
+            audioPlayer.stopAll();
+            updateStatus('listening', '🎙️ 正在聆聽...');
+            return;
+          }
+
+          if (sc.modelTurn && sc.modelTurn.parts) {
+            updateStatus('speaking', '🔊 Gemini 正在說話...');
+            for (const part of sc.modelTurn.parts) {
+              if (part.inlineData && part.inlineData.data) {
+                const float32 = base64ToFloat32PCM(part.inlineData.data);
+                audioPlayer.playChunk(float32, 24000);
+              }
+              if (part.text) {
+                appendTranscript('model', part.text);
+              }
+            }
+          }
+
+          if (sc.turnComplete) {
+            console.log('[Gemini Live] Turn completed.');
+          }
+        }
+      };
+
+      ws.onerror = (err) => {
+        console.error('[Gemini Live Error]', err);
+        updateStatus('error', '⚠️ 連線出錯，請檢查 API Key');
+      };
+
+      ws.onclose = (e) => {
+        console.log('[Gemini Live] Closed:', e.code, e.reason);
+        endLiveSession();
+      };
+
+      // 4. Mic Audio Stream Handler
+      micProcessorNode.onaudioprocess = (e) => {
+        if (!isConnected || isMuted || !ws || ws.readyState !== WebSocket.OPEN) return;
+        const inputData = e.inputBuffer.getChannelData(0);
+        const downsampled = downsampleBuffer(inputData, audioContext.sampleRate, 16000);
+        const pcmBuffer = floatTo16BitPCM(downsampled);
+        const base64Audio = arrayBufferToBase64(pcmBuffer);
+
+        const realTimeMessage = {
+          realtimeInput: {
+            mediaChunks: [
+              {
+                mimeType: "audio/pcm;rate=16000",
+                data: base64Audio
+              }
+            ]
+          }
+        };
+        ws.send(JSON.stringify(realTimeMessage));
+      };
+
+    } catch (err) {
+      console.error('[Live Session Start Failed]', err);
+      alert('無法開啟麥克風或連線失敗：' + err.message);
+      endLiveSession();
+    }
+  }
+
+  function endLiveSession() {
+    isConnected = false;
+    stopVisualizer();
+
+    if (cameraInterval) {
+      clearInterval(cameraInterval);
+      cameraInterval = null;
+    }
+    if (cameraStream) {
+      cameraStream.getTracks().forEach(t => t.stop());
+      cameraStream = null;
+      if (liveVideoPreview) {
+        liveVideoPreview.srcObject = null;
+        liveVideoPreview.classList.add('hidden');
+      }
+    }
+    isCameraOn = false;
+    if (liveCameraBtn) liveCameraBtn.classList.remove('bg-indigo-600', 'text-white');
+
+    if (audioPlayer) {
+      audioPlayer.stopAll();
+      audioPlayer = null;
+    }
+
+    if (micProcessorNode) {
+      try { micProcessorNode.disconnect(); } catch (e) {}
+      micProcessorNode = null;
+    }
+    if (micAudioSource) {
+      try { micAudioSource.disconnect(); } catch (e) {}
+      micAudioSource = null;
+    }
+    if (micMediaStream) {
+      micMediaStream.getTracks().forEach(t => t.stop());
+      micMediaStream = null;
+    }
+    if (audioContext) {
+      try { audioContext.close(); } catch (e) {}
+      audioContext = null;
+    }
+    if (ws) {
+      try { ws.close(); } catch (e) {}
+      ws = null;
+    }
+
+    if (liveCallModal) liveCallModal.classList.add('hidden');
+    updateStatus('idle', '已掛斷通話');
+  }
+
+  // Camera Video Stream (1 FPS JPEG Chunks for Multimodal Vision)
+  async function toggleCamera() {
+    if (isCameraOn) {
+      // Turn off
+      if (cameraInterval) clearInterval(cameraInterval);
+      if (cameraStream) cameraStream.getTracks().forEach(t => t.stop());
+      cameraStream = null;
+      isCameraOn = false;
+      liveVideoPreview.classList.add('hidden');
+      liveCameraBtn.classList.remove('bg-indigo-600', 'text-white');
+    } else {
+      // Turn on
+      try {
+        cameraStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'environment', width: { ideal: 640 }, height: { ideal: 480 } }
+        });
+        liveVideoPreview.srcObject = cameraStream;
+        liveVideoPreview.classList.remove('hidden');
+        isCameraOn = true;
+        liveCameraBtn.classList.add('bg-indigo-600', 'text-white');
+
+        const tempCanvas = document.createElement('canvas');
+        const tempCtx = tempCanvas.getContext('2d');
+
+        cameraInterval = setInterval(() => {
+          if (!isConnected || !ws || ws.readyState !== WebSocket.OPEN || !isCameraOn) return;
+          if (liveVideoPreview.videoWidth > 0) {
+            tempCanvas.width = 480;
+            tempCanvas.height = Math.round((liveVideoPreview.videoHeight / liveVideoPreview.videoWidth) * 480);
+            tempCtx.drawImage(liveVideoPreview, 0, 0, tempCanvas.width, tempCanvas.height);
+            const jpegDataUrl = tempCanvas.toDataURL('image/jpeg', 0.6);
+            const cleanBase64 = jpegDataUrl.replace(/^data:image\/\w+;base64,/, '');
+
+            const videoMsg = {
+              realtimeInput: {
+                mediaChunks: [
+                  {
+                    mimeType: "image/jpeg",
+                    data: cleanBase64
+                  }
+                ]
+              }
+            };
+            ws.send(JSON.stringify(videoMsg));
+          }
+        }, 1000); // 1 frame per second
+      } catch (e) {
+        alert('無法存取相機：' + e.message);
+      }
+    }
+  }
+
+  // Key Modal Handlers
+  function showKeyModal() {
+    liveApiKeyInput.value = getApiKey();
+    liveKeyModal.classList.remove('hidden');
+  }
+
+  function hideKeyModal() {
+    liveKeyModal.classList.add('hidden');
+  }
+
+  // Event Listeners
+  if (liveVoiceBtn) {
+    liveVoiceBtn.addEventListener('click', () => {
+      startLiveSession();
+    });
+  }
+
+  if (liveEndCallBtn) {
+    liveEndCallBtn.addEventListener('click', () => {
+      endLiveSession();
+    });
+  }
+
+  if (liveMuteBtn) {
+    liveMuteBtn.addEventListener('click', () => {
+      isMuted = !isMuted;
+      if (isMuted) {
+        liveMuteBtn.classList.add('bg-rose-600', 'text-white');
+        updateStatus('muted', '🔇 麥克風已靜音');
+      } else {
+        liveMuteBtn.classList.remove('bg-rose-600', 'text-white');
+        updateStatus('listening', '🎙️ 正在聆聽...');
+      }
+    });
+  }
+
+  if (liveCameraBtn) {
+    liveCameraBtn.addEventListener('click', toggleCamera);
+  }
+
+  if (liveSettingsBtn) {
+    liveSettingsBtn.addEventListener('click', showKeyModal);
+  }
+
+  if (liveCloseKeyBtn) {
+    liveCloseKeyBtn.addEventListener('click', hideKeyModal);
+  }
+
+  if (liveSaveKeyBtn) {
+    liveSaveKeyBtn.addEventListener('click', () => {
+      const key = liveApiKeyInput.value.trim();
+      if (key) {
+        localStorage.setItem(STORAGE_KEY, key);
+        hideKeyModal();
+        alert('Google Gemini API Key 已成功儲存！');
+        if (!isConnected) {
+          startLiveSession();
+        }
+      } else {
+        localStorage.removeItem(STORAGE_KEY);
+        hideKeyModal();
+      }
+    });
+  }
+
+  if (liveVoiceSelect) {
+    liveVoiceSelect.value = getSelectedVoice();
+    liveVoiceSelect.addEventListener('change', () => {
+      localStorage.setItem(VOICE_KEY, liveVoiceSelect.value);
+    });
+  }
+
+})();

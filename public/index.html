@@ -117,6 +117,15 @@
     </div>
     
     <div class="flex items-center gap-0.5 sm:gap-1 shrink-0">
+      <!-- 🎙️ Gemini 2.0 Live Full-Duplex Voice Call Button -->
+      <button id="live-voice-btn" class="p-1.5 sm:p-2 rounded-lg bg-gradient-to-r from-teal-500/20 via-indigo-500/20 to-purple-500/20 hover:from-teal-500/30 hover:to-purple-500/30 text-teal-300 hover:text-white transition active:scale-95 shrink-0 border border-teal-500/40 shadow-sm shadow-teal-500/20 flex items-center gap-1.5" title="🎙️ Gemini 2.0 Live 原生雙向全雙工通話 (端到端音訊)">
+        <span class="w-1.5 h-1.5 rounded-full bg-teal-400 animate-ping shrink-0"></span>
+        <svg class="w-4 h-4 text-teal-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/>
+        </svg>
+        <span class="text-[11px] font-extrabold tracking-tight hidden sm:inline text-teal-200 font-mono">Live 通話</span>
+      </button>
+
       <!-- Termux Files Explorer Button -->
       <button id="files-btn" class="p-1.5 sm:p-2 rounded-lg hover:bg-slate-800 text-emerald-400 hover:text-emerald-300 transition active:scale-95 shrink-0" title="📁 Termux 本地檔案總管" aria-label="檔案總管">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -639,6 +648,117 @@
     </div>
   </div>
 
+  <!-- 🎙️ GEMINI 2.0 LIVE MULTIMODAL CALL MODAL (FULL-DUPLEX VOICE & VISION) -->
+  <div id="live-call-modal" class="hidden fixed inset-0 z-50 bg-[#030712]/95 backdrop-blur-2xl flex flex-col justify-between p-4 sm:p-6 select-none animate-fadeIn">
+    
+    <!-- Top Status Bar & Action Controls -->
+    <div class="flex items-center justify-between w-full max-w-lg mx-auto shrink-0 z-10">
+      <div class="flex items-center gap-2">
+        <div id="live-status-pill" class="px-3 py-1 rounded-full text-xs font-semibold font-mono flex items-center gap-1.5 bg-emerald-950/80 text-emerald-300 border border-emerald-500/50 shadow-lg shadow-emerald-500/20">
+          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+          <span id="live-status-text">🎙️ 聆聽中 (雙向全雙工)</span>
+        </div>
+      </div>
+      
+      <div class="flex items-center gap-2">
+        <!-- Voice Character Dropdown -->
+        <select id="live-voice-select" class="bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg px-2 py-1 outline-none font-mono" title="選擇語音音色">
+          <option value="Puck">音色: Puck (預設)</option>
+          <option value="Charon">音色: Charon (沉穩)</option>
+          <option value="Kore">音色: Kore (溫柔)</option>
+          <option value="Fenrir">音色: Fenrir (低沉)</option>
+          <option value="Aoede">音色: Aoede (明亮)</option>
+        </select>
+        
+        <!-- Settings Button -->
+        <button id="live-settings-btn" class="p-1.5 rounded-lg bg-slate-900 border border-slate-700 text-slate-400 hover:text-white" title="API Key 設定">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Center Stage: Holographic Audio Sphere & Spectrum Canvas -->
+    <div class="relative flex-1 flex flex-col items-center justify-center min-h-0 my-auto">
+      
+      <!-- Video Element (When Camera Vision is On) -->
+      <video id="live-video-preview" autoplay playsinline muted class="hidden absolute inset-0 w-full h-full object-cover rounded-3xl opacity-30 pointer-events-none"></video>
+
+      <!-- Outer Pulsing Neon Rings -->
+      <div id="live-halo-ring" class="absolute w-44 h-44 sm:w-56 sm:h-56 rounded-full bg-gradient-to-r from-teal-500/20 via-indigo-500/20 to-pink-500/20 blur-2xl transition-all duration-150"></div>
+      <div class="absolute w-36 h-36 sm:w-44 sm:h-44 rounded-full border border-indigo-500/30 animate-ping opacity-25"></div>
+      <div class="absolute w-28 h-28 sm:w-36 sm:h-36 rounded-full border border-cyan-400/30 border-dashed animate-spin duration-1000"></div>
+
+      <!-- Core Icon Sphere -->
+      <div class="relative w-20 h-20 sm:w-24 sm:h-24 rounded-3xl bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 border border-teal-400/60 p-2 shadow-2xl flex items-center justify-center z-10 shadow-teal-500/30">
+        <svg class="w-10 h-10 text-teal-300 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/>
+        </svg>
+      </div>
+
+      <!-- Real-time Cyber Wave Spectrum Canvas -->
+      <div class="w-full max-w-xs sm:max-w-sm h-20 mt-6 z-10 flex items-center justify-center">
+        <canvas id="live-visualizer-canvas" width="300" height="70" class="w-full h-full"></canvas>
+      </div>
+
+      <!-- Live Transcripts Drawer -->
+      <div id="live-transcript-text" class="w-full max-w-md max-h-24 overflow-y-auto px-4 py-2 mt-2 bg-slate-950/70 border border-slate-800/80 rounded-2xl text-xs space-y-1 z-10 backdrop-blur-md">
+        <div class="text-slate-400 text-center text-[11px] font-mono">💬 雙向語音已就緒，請隨時說話...</div>
+      </div>
+    </div>
+
+    <!-- Bottom Controls: Mute, Camera, End Call -->
+    <div class="w-full max-w-md mx-auto flex items-center justify-center gap-4 sm:gap-6 shrink-0 pt-3 z-10">
+      
+      <!-- Mute Mic Button -->
+      <button id="live-mute-btn" class="w-12 h-12 rounded-full bg-slate-800/90 hover:bg-slate-700 active:scale-95 border border-slate-700 text-slate-200 flex items-center justify-center transition shadow-lg" title="靜音 / 開啟麥克風">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3l18 18"/></svg>
+      </button>
+
+      <!-- End Call Button (Big Red) -->
+      <button id="live-end-call-btn" class="w-16 h-16 rounded-full bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 active:scale-95 text-white flex items-center justify-center transition shadow-2xl shadow-rose-600/50 border border-rose-400" title="掛斷通話">
+        <svg class="w-7 h-7 transform rotate-[135deg]" fill="currentColor" viewBox="0 0 24 24"><path d="M6.62 10.79a15.053 15.053 0 006.59 6.59l2.2-2.2a1 1 0 011.11-.21 11.72 11.72 0 003.68.59 1 1 0 011 1V20a1 1 0 01-1 1A17 17 0 013 4a1 1 0 011-1h3.5a1 1 0 011 1 11.72 11.72 0 00.59 3.68 1 1 0 01-.21 1.11l-2.26 2z"/></svg>
+      </button>
+
+      <!-- Camera Vision Stream Button -->
+      <button id="live-camera-btn" class="w-12 h-12 rounded-full bg-slate-800/90 hover:bg-slate-700 active:scale-95 border border-slate-700 text-slate-200 flex items-center justify-center transition shadow-lg" title="開啟/關閉鏡頭 (視覺同步)">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+      </button>
+
+    </div>
+  </div>
+
+  <!-- 🔑 GEMINI API KEY SETUP MODAL -->
+  <div id="live-key-modal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 select-none">
+    <div class="bg-slate-900 border border-slate-800 rounded-3xl p-5 sm:p-6 w-full max-w-sm shadow-2xl flex flex-col space-y-4">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <span class="text-xl">🎙️</span>
+          <h3 class="font-bold text-sm sm:text-base text-white">Gemini Live 語音設定</h3>
+        </div>
+        <button id="live-close-key-btn" class="text-slate-400 hover:text-white p-1">✕</button>
+      </div>
+
+      <div class="text-xs text-slate-300 space-y-2 leading-relaxed">
+        <p>Gemini 2.0 Live 原生雙向語音使用 Google 官方全雙工 WebSockets 通道。</p>
+        <p class="text-slate-400">請貼上您的 Google AI Studio API Key：</p>
+      </div>
+
+      <div>
+        <input id="live-api-key-input" type="password" placeholder="AIzaSy..." class="w-full bg-slate-950 border border-slate-700 focus:border-teal-500 rounded-xl px-3 py-2.5 text-xs text-slate-100 placeholder-slate-600 outline-none font-mono">
+        <div class="text-[10px] text-slate-500 mt-1.5 flex justify-between">
+          <a href="https://aistudio.google.com/apikey" target="_blank" class="text-teal-400 hover:underline">👉 前往 Google 免費獲取 Key</a>
+          <span>安全儲存於手機本機</span>
+        </div>
+      </div>
+
+      <div class="flex gap-2 pt-2">
+        <button id="live-save-key-btn" class="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-teal-500 to-indigo-600 hover:from-teal-400 hover:to-indigo-500 text-white font-bold text-xs shadow-lg shadow-teal-500/20 active:scale-95 transition">
+          儲存並啟動通話
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- IMAGE LIGHTBOX MODAL -->
   <div id="lightbox" class="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4 opacity-0 pointer-events-none transition-opacity duration-200">
     <button id="close-lightbox-btn" class="absolute top-4 right-4 p-2 text-white bg-slate-800/80 rounded-full">
@@ -649,10 +769,11 @@
     <img id="lightbox-img" src="" class="max-w-full max-h-full object-contain rounded-lg" alt="Enlarged">
   </div>
 
-  <!-- Modular Scripts (Cache-busted v4.5) -->
-  <script src="/js/ui.js?v=4.5"></script>
-  <script src="/js/tools.js?v=4.5"></script>
-  <script src="/js/chat.js?v=4.5"></script>
-  <script src="/js/app.js?v=4.5"></script>
+  <!-- Modular Scripts (Cache-busted v4.6) -->
+  <script src="/js/ui.js?v=4.6"></script>
+  <script src="/js/tools.js?v=4.6"></script>
+  <script src="/js/chat.js?v=4.6"></script>
+  <script src="/js/live.js?v=1.0"></script>
+  <script src="/js/app.js?v=4.6"></script>
 </body>
 </html>
