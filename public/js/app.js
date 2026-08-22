@@ -455,59 +455,93 @@ function initAppAndListeners() {
     });
   }
 
-  // Web Speech Recognition (Click to toggle voice transcription)
+  // Web Speech Recognition (Robust Multi-Tap Speech-to-Text Input)
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (SpeechRecognition && micBtn) {
-    recognition = new SpeechRecognition();
-    recognition.continuous = false;
-    recognition.interimResults = true;
-    recognition.lang = 'zh-TW';
+  let activeSpeechRecognizer = null;
 
-    recognition.onstart = () => {
-      isRecording = true;
-      micBtn.classList.add('bg-rose-600', 'text-white', 'recording-pulse');
-      if (promptInput) promptInput.placeholder = '🎙️ 正在聆聽語音...';
-      if (navigator.vibrate) navigator.vibrate(20);
-    };
-
-    recognition.onresult = (event) => {
-      let transcript = '';
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        transcript += event.results[i][0].transcript;
-      }
-      if (promptInput && transcript.trim()) {
-        promptInput.value = transcript;
-        promptInput.dispatchEvent(new Event('input'));
-      }
-    };
-
-    recognition.onerror = (e) => {
-      console.error('Speech recognition error:', e);
-      isRecording = false;
+  function stopDictation() {
+    isRecording = false;
+    if (activeSpeechRecognizer) {
+      try { activeSpeechRecognizer.stop(); } catch (e) {}
+      activeSpeechRecognizer = null;
+    }
+    if (micBtn) {
       micBtn.classList.remove('bg-rose-600', 'text-white', 'recording-pulse');
-      if (promptInput) promptInput.placeholder = '問任何問題... (Ctrl+Enter 發送)';
-    };
+      micBtn.classList.add('bg-slate-800', 'text-slate-300');
+    }
+    if (promptInput) {
+      promptInput.placeholder = '問任何問題... (Ctrl+Enter 發送)';
+    }
+  }
 
-    recognition.onend = () => {
-      isRecording = false;
-      micBtn.classList.remove('bg-rose-600', 'text-white', 'recording-pulse');
-      if (promptInput) promptInput.placeholder = '問任何問題... (Ctrl+Enter 發送)';
-      if (navigator.vibrate) navigator.vibrate([15, 15]);
-    };
+  function startDictation() {
+    if (!SpeechRecognition) {
+      alert('您的瀏覽器不支援語音輸入，請使用 Chrome 瀏覽器');
+      return;
+    }
 
-    micBtn.addEventListener('click', () => {
+    stopDictation();
+
+    try {
+      activeSpeechRecognizer = new SpeechRecognition();
+      activeSpeechRecognizer.continuous = true;
+      activeSpeechRecognizer.interimResults = true;
+      activeSpeechRecognizer.lang = 'zh-TW';
+
+      activeSpeechRecognizer.onstart = () => {
+        isRecording = true;
+        if (micBtn) {
+          micBtn.classList.remove('bg-slate-800', 'text-slate-300');
+          micBtn.classList.add('bg-rose-600', 'text-white', 'recording-pulse');
+        }
+        if (promptInput) {
+          promptInput.placeholder = '🎙️ 正在聆聽語音... (再次點擊結束)';
+        }
+        if (navigator.vibrate) navigator.vibrate(25);
+      };
+
+      activeSpeechRecognizer.onresult = (event) => {
+        let transcript = '';
+        for (let i = 0; i < event.results.length; i++) {
+          transcript += event.results[i][0].transcript;
+        }
+        if (promptInput && transcript.trim()) {
+          promptInput.value = transcript;
+          promptInput.dispatchEvent(new Event('input'));
+          if (typeof autoResizePromptInput === 'function') {
+            autoResizePromptInput();
+          }
+        }
+      };
+
+      activeSpeechRecognizer.onerror = (e) => {
+        console.warn('[Speech Input Warning]', e.error);
+        if (e.error !== 'no-speech') {
+          stopDictation();
+        }
+      };
+
+      activeSpeechRecognizer.onend = () => {
+        stopDictation();
+        if (navigator.vibrate) navigator.vibrate([15, 15]);
+      };
+
+      activeSpeechRecognizer.start();
+    } catch (err) {
+      console.error('[Speech Input Error]', err);
+      stopDictation();
+    }
+  }
+
+  if (micBtn) {
+    micBtn.addEventListener('click', (e) => {
+      e.preventDefault();
       if (isRecording) {
-        recognition.stop();
+        stopDictation();
       } else {
-        try {
-          recognition.start();
-        } catch (e) {}
+        startDictation();
       }
     });
-
-  } else if (micBtn) {
-    micBtn.classList.add('opacity-40');
-    micBtn.title = '此瀏覽器不支援語音辨識';
   }
 
   // Send Button Listener
