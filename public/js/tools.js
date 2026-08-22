@@ -942,11 +942,14 @@ async function openImageCropper(fileOrBase64, onConfirmCallback) {
   const cropFullBtn = document.getElementById('crop-full-btn');
   const cropConfirmBtn = document.getElementById('crop-confirm-btn');
 
-  if (!cropModal || !cropperImg) return;
+  if (!cropModal || !cropperImg) {
+    console.error('[Cropper] Modal or Image element missing!');
+    return;
+  }
 
   // Cleanup old instance
   if (activeCropperInstance) {
-    activeCropperInstance.destroy();
+    try { activeCropperInstance.destroy(); } catch (e) {}
     activeCropperInstance = null;
   }
 
@@ -954,10 +957,12 @@ async function openImageCropper(fileOrBase64, onConfirmCallback) {
     currentCropperSourceBase64 = base64Url;
     cropModal.classList.remove('hidden');
 
-    // Register onload BEFORE setting src to guarantee Cropper initialization
-    cropperImg.onload = () => {
+    const startCropper = () => {
       if (typeof Cropper !== 'undefined') {
-        if (activeCropperInstance) activeCropperInstance.destroy();
+        if (activeCropperInstance) {
+          try { activeCropperInstance.destroy(); } catch (e) {}
+          activeCropperInstance = null;
+        }
         activeCropperInstance = new Cropper(cropperImg, {
           viewMode: 1,
           dragMode: 'crop',
@@ -980,7 +985,12 @@ async function openImageCropper(fileOrBase64, onConfirmCallback) {
         });
       }
     };
+
+    cropperImg.onload = startCropper;
     cropperImg.src = base64Url;
+    if (cropperImg.complete && cropperImg.naturalWidth > 0) {
+      startCropper();
+    }
   };
 
   if (typeof fileOrBase64 === 'string') {
@@ -1000,6 +1010,7 @@ async function openImageCropper(fileOrBase64, onConfirmCallback) {
 
     const reader = new FileReader();
     reader.onload = (e) => initCropper(e.target.result);
+    reader.onerror = (e) => console.error('[FileReader Error]', e);
     reader.readAsDataURL(sourceBlob);
   }
 
