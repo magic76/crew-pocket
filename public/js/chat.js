@@ -286,7 +286,7 @@ function updateContextPill(stats) {
   if (!pill || !textEl) return;
 
   if (!stats || typeof stats.active_tokens !== 'number' || stats.active_tokens === 0) {
-    textEl.textContent = '0 tok';
+    textEl.textContent = stats?.active_tokens_formatted || '0 tok';
     if (indicator) indicator.className = 'w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0';
     return;
   }
@@ -334,7 +334,8 @@ function showContextModal() {
   if (savedPercentEl) savedPercentEl.textContent = `${stats.saved_percent || 0}%`;
   if (turnsEl) turnsEl.textContent = `${stats.user_turns || 0} 輪對話`;
 
-  const pct = Math.min(100, Math.max(3, Math.round((stats.active_tokens / 80000) * 100)));
+  const contextLimit = stats.context_window || 80000;
+  const pct = Math.min(100, Math.max(3, Math.round((stats.active_tokens / contextLimit) * 100)));
   if (barEl) {
     barEl.style.width = `${pct}%`;
     if (stats.status_level === 'red') {
@@ -474,6 +475,10 @@ function appendMessage(role, content, timestamp, tools = [], thinking = '', isBt
   const editBtn = msgDiv.querySelector('.edit-rewind-btn');
   if (editBtn) {
     editBtn.addEventListener('click', async () => {
+      if (currentProvider === 'codex') {
+        alert('Codex provider 第一版暫不支援編輯回溯。');
+        return;
+      }
       if (isStreaming) {
         alert('請先等待當前回覆完成或點擊中斷生成！');
         return;
@@ -513,6 +518,7 @@ function appendMessage(role, content, timestamp, tools = [], thinking = '', isBt
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
+              provider: currentProvider,
               conversation_id: currentConversationId,
               user_turn_index: turnIndex
             })
@@ -539,7 +545,7 @@ function appendMessage(role, content, timestamp, tools = [], thinking = '', isBt
 }
 
 // Delete Conversation Action (Instant Silent Deletion with Animation)
-async function deleteConversationDirect(convId, wrapperElement) {
+async function deleteConversationDirect(convId, wrapperElement, conversationProvider = currentProvider) {
   if (navigator.vibrate) navigator.vibrate([30, 20]);
 
   // Animate slide out to the left and vertical collapse
@@ -560,10 +566,10 @@ async function deleteConversationDirect(convId, wrapperElement) {
   }
 
   try {
-    const res = await fetch(`/api/conversation?id=${convId}`, { method: 'DELETE' });
+    const res = await fetch(`/api/conversation?id=${convId}&provider=${encodeURIComponent(conversationProvider)}`, { method: 'DELETE' });
     const data = await res.json();
     if (data.success) {
-      if (currentConversationId === convId) {
+      if (currentConversationId === convId && currentProvider === conversationProvider) {
         currentConversationId = null;
         if (headerTitle) headerTitle.textContent = '新對話';
         messagesContainer.innerHTML = '';
@@ -584,7 +590,7 @@ async function deleteConversationDirect(convId, wrapperElement) {
 }
 
 // ✏️ Rename Conversation Action
-async function renameConversationDirect(convId, currentTitle) {
+async function renameConversationDirect(convId, currentTitle, conversationProvider = currentProvider) {
   const defaultVal = currentTitle && !currentTitle.startsWith('對話 ') ? currentTitle : '';
   const newTitle = window.prompt('請輸入自定義對話標題：', defaultVal);
   if (newTitle === null) return; // User canceled
@@ -598,7 +604,7 @@ async function renameConversationDirect(convId, currentTitle) {
     const res = await fetch('/api/rename-conversation', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ conversation_id: convId, title: cleanTitle })
+      body: JSON.stringify({ provider: conversationProvider, conversation_id: convId, title: cleanTitle })
     });
     const data = await res.json();
     if (data.success) {
@@ -624,7 +630,7 @@ async function loadConversationHistory(convId) {
   }
 
   currentConversationId = convId;
-  localStorage.setItem('agy_active_conv_id', convId);
+  localStorage.setItem(activeConversationStorageKey(), convId);
   revokeAllBlobUrls();
   messagesContainer.innerHTML = '';
   toggleDrawer(false);
@@ -641,7 +647,7 @@ async function loadConversationHistory(convId) {
   setStreamingState(false);
 
   try {
-    const res = await fetch(`/api/history?id=${convId}`);
+    const res = await fetch(`/api/history?id=${convId}&${providerQuery()}`);
     const data = await res.json();
     
     // 🧠 Update Top Context Usage Pill
@@ -677,7 +683,7 @@ async function loadConversationHistory(convId) {
 
     // ⚡ Check if this conversation is actively generating in background and auto-resume loading UI
     try {
-      const statusRes = await fetch(`/api/session-status?id=${convId}`);
+      const statusRes = await fetch(`/api/session-status?id=${convId}&${providerQuery()}`);
       if (statusRes.ok) {
         const statusData = await statusRes.json();
         if (statusData.isBusy) {
@@ -705,7 +711,7 @@ async function loadConversationHistory(convId) {
                 return;
               }
               try {
-                const checkRes = await fetch(`/api/session-status?id=${convId}`);
+                const checkRes = await fetch(`/api/session-status?id=${convId}&${providerQuery()}`);
                 if (checkRes.ok) {
                   const checkData = await checkRes.json();
                   if (!checkData.isBusy) {
@@ -715,7 +721,7 @@ async function loadConversationHistory(convId) {
                     if (card) card.remove();
 
                     // Reload latest history to smoothly display the completed assistant response
-                    const freshRes = await fetch(`/api/history?id=${convId}`);
+                    const freshRes = await fetch(`/api/history?id=${convId}&${providerQuery()}`);
                     if (freshRes.ok) {
                       const freshData = await freshRes.json();
                       if (freshData.context_stats) updateContextPill(freshData.context_stats);
@@ -747,8 +753,17 @@ async function loadConversationHistory(convId) {
 async function loadConversations() {
   if (!convList) return;
   try {
-    const res = await fetch('/api/conversations');
-    const data = await res.json();
+    const providerIds = ['antigravity', 'codex'];
+    const results = await Promise.all(providerIds.map(async provider => {
+      try {
+        const response = await fetch('/api/conversations?provider=' + encodeURIComponent(provider));
+        const data = await response.json();
+        return (data.conversations || []).map(conversation => ({ ...conversation, provider }));
+      } catch (_) {
+        return [];
+      }
+    }));
+    const data = { conversations: results.flat().sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)) };
     convList.innerHTML = '';
 
     if (!data.conversations || data.conversations.length === 0) {
@@ -757,7 +772,10 @@ async function loadConversations() {
     }
 
     data.conversations.forEach(conv => {
-      const isCurrent = conv.id === currentConversationId;
+      const conversationProvider = conv.provider || 'antigravity';
+      const isCurrent = conv.id === currentConversationId && conversationProvider === currentProvider;
+      const providerLabel = conversationProvider === 'codex' ? 'Codex' : 'AGY';
+      const providerBadgeClass = conversationProvider === 'codex' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' : 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40';
       const wrapper = document.createElement('div');
       wrapper.className = 'swipe-item-wrapper relative overflow-hidden rounded-xl mb-1.5 select-none transition-all duration-200';
       wrapper.style.maxHeight = '80px';
@@ -784,6 +802,7 @@ async function loadConversations() {
               <svg class="w-3.5 h-3.5 shrink-0 ${isCurrent ? 'text-indigo-400' : 'text-slate-400'}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/>
               </svg>
+              <span class="text-[9px] px-1 py-0.2 rounded border font-mono shrink-0 ${providerBadgeClass}">${providerLabel}</span>
               <span class="truncate font-medium">${escapeHtml(conv.title)}</span>
             </div>
             <!-- Conversation Sub-meta: Turns & Context Tokens -->
@@ -811,7 +830,7 @@ async function loadConversations() {
       if (renameBtn) {
         renameBtn.addEventListener('click', (e) => {
           e.stopPropagation();
-          renameConversationDirect(conv.id, conv.title);
+          renameConversationDirect(conv.id, conv.title, conversationProvider);
         });
         renameBtn.addEventListener('pointerdown', (e) => e.stopPropagation());
         renameBtn.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });
@@ -868,7 +887,7 @@ async function loadConversations() {
         // Threshold for triggering direct delete: swiped left more than 75px
         if (currentDiffX < -75) {
           isDeleted = true;
-          deleteConversationDirect(conv.id, wrapper);
+          deleteConversationDirect(conv.id, wrapper, conversationProvider);
         } else {
           // Snap back smoothly
           contentEl.style.transition = 'transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1)';
@@ -906,6 +925,15 @@ async function loadConversations() {
       contentEl.addEventListener('click', (e) => {
         if (e.target.closest('.rename-conv-btn')) return;
         if (!isDeleted && Math.abs(currentDiffX) < 10) {
+          if (conversationProvider !== currentProvider) {
+            currentProvider = conversationProvider;
+            localStorage.setItem('crew_current_provider', currentProvider);
+            const providerModels = availableModels.filter(model => (model.provider || 'antigravity') === currentProvider);
+            const modelKey = currentProvider === 'codex' ? 'codex_current_model' : 'agy_current_model';
+            currentModel = localStorage.getItem(modelKey) || (providerModels[0] && providerModels[0].id) || 'gemini-3.7-flash';
+            renderProviderOptions();
+            updateModelUI();
+          }
           loadConversationHistory(conv.id);
         }
       });
@@ -948,7 +976,7 @@ async function stopGeneration() {
     currentAbortController = null;
   }
   try {
-    await fetch('/api/stop', { method: 'POST' });
+    await fetch('/api/stop', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ provider: currentProvider }) });
   } catch (e) {}
   if (navigator.vibrate) {
     navigator.vibrate([40, 40, 40]);
@@ -1011,12 +1039,14 @@ async function sendMessage() {
     scrollToBottom(true);
 
     try {
-      const res = await fetch('/api/compact', {
+      const compactEndpoint = currentProvider === 'codex' ? '/api/codex/compact' : '/api/compact';
+      const res = await fetch(compactEndpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           conversation_id: currentConversationId,
-          focus: focusText
+          focus: focusText,
+          provider: currentProvider
         })
       });
       const data = await res.json();
@@ -1204,6 +1234,7 @@ async function sendMessage() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        provider: currentProvider,
         prompt: text,
         conversation_id: activeStreamConvId,
         image_path: imgPath,
@@ -1240,7 +1271,7 @@ async function sendMessage() {
               // 🛡️ Only update global currentConversationId if user hasn't switched to another conversation
               if (currentConversationId === activeStreamConvId || currentConversationId === null) {
                 currentConversationId = data.conversation_id;
-                localStorage.setItem('agy_active_conv_id', currentConversationId);
+                localStorage.setItem(activeConversationStorageKey(), currentConversationId);
               }
             } else if (currentEvent === 'thought') {
               const initStep = pipelineSteps.get('init');
@@ -1257,6 +1288,8 @@ async function sendMessage() {
                 if (scrollBadge) scrollBadge.classList.remove('hidden');
               }
               scrollToBottom();
+            } else if (currentEvent === 'context') {
+              updateContextPill(data);
             } else if (currentEvent === 'tool') {
               const initStep = pipelineSteps.get('init');
               if (initStep) initStep.status = 'done';
@@ -1311,9 +1344,10 @@ async function sendMessage() {
               const targetDoneConvId = data.conversation_id || activeStreamConvId;
               if (targetDoneConvId && (currentConversationId === activeStreamConvId || currentConversationId === null)) {
                 currentConversationId = targetDoneConvId;
-                localStorage.setItem('agy_active_conv_id', currentConversationId);
+                localStorage.setItem(activeConversationStorageKey(), currentConversationId);
               }
-              if (data.response) accumulatedText = data.response;
+              if (data.error) accumulatedText = `⚠️ ${data.error}`;
+              else if (data.response) accumulatedText = data.response;
               contentElem.innerHTML = formatMessageContent(accumulatedText);
               toolsContainerElem.innerHTML = buildToolsAccordionHtml(liveTools);
               if (liveThinking) {
@@ -1322,7 +1356,7 @@ async function sendMessage() {
 
               // 🧠 Refresh Context Usage Stats
               if (targetDoneConvId) {
-                fetch(`/api/history?id=${targetDoneConvId}`).then(r => r.json()).then(hData => {
+                fetch(`/api/history?id=${targetDoneConvId}&${providerQuery()}`).then(r => r.json()).then(hData => {
                   if (hData.context_stats) updateContextPill(hData.context_stats);
                 }).catch(() => {});
               }
@@ -1446,7 +1480,7 @@ async function sendMessage() {
           const checkHistory = async () => {
             attempts++;
             try {
-              const hRes = await fetch(`/api/history?id=${currentConversationId}`);
+              const hRes = await fetch(`/api/history?id=${currentConversationId}&${providerQuery()}`);
               if (hRes.ok) {
                 const hData = await hRes.json();
                 if (hData.messages && hData.messages.length > 0) {
@@ -1528,6 +1562,10 @@ function handleSendClick(e) {
 
 // 🏷️ Auto-generate AI conversation title (fires in background, non-blocking)
 async function generateConversationTitle(convId, userMessage, assistantResponse) {
+  if (currentProvider === 'codex') {
+    if (headerTitle) headerTitle.textContent = userMessage.slice(0, 18) + (userMessage.length > 18 ? '...' : '');
+    return;
+  }
   try {
     // Show a temporary shimmer on the header title
     if (headerTitle) {

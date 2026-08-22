@@ -336,7 +336,7 @@ function initAppAndListeners() {
         currentAbortController = null;
       }
       currentConversationId = null;
-      localStorage.removeItem('agy_active_conv_id');
+      localStorage.removeItem(activeConversationStorageKey());
       revokeAllBlobUrls();
       if (typeof setStreamingState === 'function') setStreamingState(false);
       if (promptInput) {
@@ -353,7 +353,7 @@ function initAppAndListeners() {
       toggleDrawer(false);
 
       // 🔥 Pre-warm standby resident process in background
-      fetch('/api/prewarm', { method: 'POST' }).catch(() => {});
+      fetch('/api/prewarm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ provider: currentProvider, model: currentModel, effort: currentEffort }) }).catch(() => {});
     });
   }
 
@@ -468,6 +468,14 @@ function initAppAndListeners() {
   // Initialize available models & thinking efforts list
   fetch('/api/models').then(r => r.json()).then(data => {
     availableModels = data.models || [];
+    const providerModels = availableModels.filter(model => (model.provider || 'antigravity') === currentProvider);
+    const modelKey = currentProvider === 'codex' ? 'codex_current_model' : 'agy_current_model';
+    currentModel = localStorage.getItem(modelKey) || (providerModels.find(model => model.isDefault) || providerModels[0] || {}).id || 'gemini-3.7-flash';
+    const selectedModel = providerModels.find(model => model.id === currentModel);
+    const effortKey = currentProvider === 'codex' ? 'codex_current_effort' : 'agy_current_effort';
+    const supported = selectedModel?.supportedReasoningEfforts || ['low', 'medium', 'high'];
+    currentEffort = localStorage.getItem(effortKey) || selectedModel?.defaultReasoningEffort || 'low';
+    if (!supported.includes(currentEffort)) currentEffort = selectedModel?.defaultReasoningEffort || supported[0] || 'low';
     if (data.efforts) availableEfforts = data.efforts;
     updateModelUI();
     updateEffortUI();
@@ -479,8 +487,8 @@ function initAppAndListeners() {
   // Initial load: Restore last active conversation or load most recent
   (async function initApp() {
     try {
-      const savedConvId = localStorage.getItem('agy_active_conv_id');
-      const res = await fetch('/api/conversations');
+      const savedConvId = localStorage.getItem(activeConversationStorageKey());
+      const res = await fetch(`/api/conversations?${providerQuery()}`);
       const data = await res.json();
       if (data.conversations && data.conversations.length > 0) {
         const targetId = (savedConvId && data.conversations.some(c => c.id === savedConvId))

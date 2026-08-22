@@ -17,6 +17,7 @@ const {
 } = require('./lib/config');
 
 const { sessionManager } = require('./lib/session');
+const { getProvider, normalizeProviderId } = require('./lib/providers');
 const { handleListConversations, handleGetHistory, handleDeleteConversation, handleRewindConversation, handleLiveSync, handleLiveTranscribe } = require('./lib/history');
 const { handleRunCode } = require('./lib/sandbox');
 const { handleUsage } = require('./lib/usage');
@@ -25,9 +26,17 @@ const { handleGenerateTitle, handleRenameConversation, getCachedTitle } = requir
 const { handleCompact } = require('./lib/compact');
 
 // 🤖 List Available Models & Thinking Efforts
-function handleGetModels(res) {
+async function handleGetModels(res) {
+  const antigravityModels = AVAILABLE_MODELS.filter(model => (model.provider || 'antigravity') === 'antigravity');
+  let codexModels = AVAILABLE_MODELS.filter(model => model.provider === 'codex');
+  try {
+    const discovered = await getProvider('codex').listModels();
+    if (discovered.length > 0) codexModels = discovered;
+  } catch (err) {
+    console.warn('[Codex Models] Dynamic discovery failed:', err.message);
+  }
   res.writeHead(200, { 'Content-Type': 'application/json' });
-  res.end(JSON.stringify({ models: AVAILABLE_MODELS, efforts: THINKING_EFFORTS }));
+  res.end(JSON.stringify({ models: [...antigravityModels, ...codexModels], efforts: THINKING_EFFORTS }));
 }
 
 // ⚡ Check Conversation Session Busy Status
@@ -37,10 +46,77 @@ function handleSessionStatus(parsedUrl, res) {
     res.writeHead(400, { 'Content-Type': 'application/json' });
     return res.end(JSON.stringify({ error: 'Missing convId' }));
   }
-  const session = sessionManager.sessions.get(convId);
-  const isBusy = session ? Boolean(session.isBusy) : false;
+  const providerId = normalizeProviderId(parsedUrl.query.provider);
+  const status = getProvider(providerId).getStatus(convId);
   res.writeHead(200, { 'Content-Type': 'application/json' });
-  res.end(JSON.stringify({ conversation_id: convId, isBusy }));
+  res.end(JSON.stringify({ ...status, provider: providerId }));
+}
+
+async function handleProviderConversations(parsedUrl, res) {
+  const providerId = normalizeProviderId(parsedUrl.query.provider);
+  if (providerId === 'antigravity') return handleListConversations(res);
+  try {
+    const conversations = await getProvider(providerId).listConversations();
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ conversations }));
+  } catch (err) {
+    res.writeHead(503, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: err.message, conversations: [] }));
+  }
+}
+
+async function handleCodexCompact(req, res) {
+  try {
+    const body = await parseJsonBody(req);
+    const providerId = normalizeProviderId(body.provider);
+    if (providerId !== 'codex') {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({ error: 'This endpoint only supports the Codex provider' }));
+    }
+    if (!body.conversation_id || !/^[a-zA-Z0-9_-]+$/.test(body.conversation_id)) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({ error: 'Invalid conversation_id' }));
+    }
+    await getProvider('codex').compactConversation(body.conversation_id);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      success: true,
+      provider: 'codex',
+      conversation_id: body.conversation_id,
+      summary: 'Codex 已使用原生 context compaction 精簡較早的對話內容，並保留繼續執行目前工作的必要脈絡。',
+      message: 'Codex 對話上下文已成功精簡！'
+    }));
+  } catch (err) {
+    console.error('[Codex Compact Error]', err);
+    res.writeHead(500, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: err.message || 'Codex 壓縮對話失敗' }));
+  }
+}
+
+async function handleProviderHistory(parsedUrl, res) {
+  const providerId = normalizeProviderId(parsedUrl.query.provider);
+  if (providerId === 'antigravity') return handleGetHistory(parsedUrl, res);
+  try {
+    const history = await getProvider(providerId).getHistory(parsedUrl.query.id);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(history));
+  } catch (err) {
+    res.writeHead(404, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: err.message }));
+  }
+}
+
+async function handleProviderDelete(parsedUrl, res) {
+  const providerId = normalizeProviderId(parsedUrl.query.provider);
+  if (providerId === 'antigravity') return handleDeleteConversation(parsedUrl, res);
+  try {
+    await getProvider(providerId).deleteConversation(parsedUrl.query.id);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: true, id: parsedUrl.query.id, provider: providerId }));
+  } catch (err) {
+    res.writeHead(500, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: err.message }));
+  }
 }
 
 // 🖼️ Safe Image Proxy Handler (Directory Whitelisted)
@@ -154,6 +230,7 @@ async function handleChat(req, res) {
   }
 
   const { prompt, conversation_id, image_path, model, effort } = body;
+  const providerId = normalizeProviderId(body.provider);
   if (!prompt && !image_path) {
     res.writeHead(400, { 'Content-Type': 'application/json' });
     return res.end(JSON.stringify({ error: 'Prompt or image is required' }));
@@ -188,91 +265,48 @@ async function handleChat(req, res) {
   };
 
   try {
-    const session = await sessionManager.getOrCreateSession(conversation_id, model, effort);
-    session.isBusy = true;
-
-    sendEvent('init', { conversation_id: session.conversationId, model: session.model, effort: session.effort });
-
-    let fullResponse = '';
-
-    const onEvent = (item) => {
-      if (item.event === 'step_update' && item.step_update) {
-        const su = item.step_update;
-        if (su.step_type === 'agent_response' && su.text_delta) {
-          fullResponse += su.text_delta;
-          sendEvent('chunk', { delta: su.text_delta, accumulated: fullResponse });
-        } else if (su.step_type === 'thought' || su.thinking_delta || su.thinking) {
-          const tDelta = su.thinking_delta || su.thinking || su.text || '';
-          if (tDelta) sendEvent('thought', { delta: tDelta });
-        } else if (su.step_type === 'tool') {
-          sendEvent('tool', {
-            state: su.state,
-            tool_name: su.tool_name,
-            tool_info: su.tool_info,
-            duration_seconds: su.duration_seconds
-          });
-        }
-      } else if (item.event === 'result' && item.result) {
-        if (item.result.conversation_id) session.conversationId = item.result.conversation_id;
-        if (item.result.thinking) sendEvent('thought', { fullThinking: item.result.thinking });
-        if (item.result.response) fullResponse = item.result.response;
-
-        sendEvent('done', {
-          response: fullResponse,
-          conversation_id: session.conversationId,
-          status: item.result.status
-        });
-
-        cleanup();
-        res.end();
-      }
-    };
-
-    const onRaw = (line) => {
-      // Non-JSON terminal output should be logged on server only, not injected into user chat text
-      if (line && line.trim()) {
-        console.log(`[Resident agy stdout note] ${line.trim()}`);
-      }
-    };
-
-    const onClose = (code) => {
-      sendEvent('done', { error: `agy process crashed or closed with code ${code}` });
-      cleanup();
+    const provider = getProvider(providerId);
+    let ended = false;
+    let abortTurn = () => {};
+    const finish = (payload) => {
+      if (ended) return;
+      ended = true;
+      sendEvent('done', payload);
       res.end();
     };
 
-    session.emitter.on('event', onEvent);
-    session.emitter.on('raw', onRaw);
-    if (session.process) session.process.on('close', onClose);
-
-    function cleanup() {
-      if (session) {
-        session.isBusy = false;
-        session.emitter.removeListener('event', onEvent);
-        session.emitter.removeListener('raw', onRaw);
-        if (session.process) session.process.removeListener('close', onClose);
-        sessionManager.resetIdleTimer(session);
-      }
-    }
-
     req.on('close', () => {
-      if (session && session.isBusy) {
-        console.log(`[Chat Aborted] Client closed connection while session was busy. Stopping session: ${session.conversationId}`);
-        sessionManager.closeSession(session.conversationId);
-      }
-      cleanup();
+      if (!ended) abortTurn();
     });
 
-    const payload = {
-      type: 'user',
-      message: {
-        role: 'user',
-        content: [{ type: 'text', text: finalPrompt }]
+    await provider.startTurn({
+      conversationId: conversation_id,
+      model,
+      effort,
+      prompt: finalPrompt,
+      imagePath: image_path,
+      onAbort(handler) { abortTurn = handler; },
+      onEvent(event) {
+        if (ended) return;
+        if (event.type === 'session_started') {
+          sendEvent('init', { conversation_id: event.conversationId, provider: providerId, model: event.model, effort: event.effort });
+        } else if (event.type === 'text_delta') {
+          sendEvent('chunk', { delta: event.delta, accumulated: event.accumulated });
+        } else if (event.type === 'reasoning_delta') {
+          sendEvent('thought', { delta: event.delta });
+        } else if (event.type === 'reasoning_complete') {
+          sendEvent('thought', { fullThinking: event.thinking });
+        } else if (event.type === 'tool') {
+          sendEvent('tool', { state: event.state, tool_name: event.name, tool_info: event.info, duration_seconds: event.durationSeconds });
+        } else if (event.type === 'context_usage') {
+          sendEvent('context', event.stats);
+        } else if (event.type === 'error') {
+          finish({ error: event.message, provider: providerId, conversation_id });
+        } else if (event.type === 'turn_completed') {
+          finish({ response: event.response, conversation_id: event.conversationId, provider: providerId, status: event.status });
+        }
       }
-    };
-
-    console.log(`[Resident Pipe] Pushing turn to active session (${session.conversationId})...`);
-    session.process.stdin.write(JSON.stringify(payload) + '\n');
+    });
 
   } catch (err) {
     console.error('[Chat Error]', err);
@@ -284,10 +318,32 @@ async function handleChat(req, res) {
 // 🛑 Abort Active Generation
 async function handleStop(req, res) {
   try {
-    console.log('[Stop Request] Aborting all active generation sessions...');
-    sessionManager.closeActiveSession();
+    const body = await parseJsonBody(req);
+    const providerId = normalizeProviderId(body.provider);
+    console.log(`[Stop Request] Aborting active ${providerId} generation sessions...`);
+    await getProvider(providerId).stop();
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ success: true, message: 'All generations interrupted' }));
+  } catch (err) {
+    res.writeHead(500, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: err.message }));
+  }
+}
+
+async function handleProviderRename(req, res) {
+  try {
+    const body = await parseJsonBody(req);
+    const providerId = normalizeProviderId(body.provider);
+    if (providerId === 'antigravity') {
+      req.body = body;
+      const synthetic = new (require('node:stream').Readable)({ read() { this.push(JSON.stringify(body)); this.push(null); } });
+      return handleRenameConversation(synthetic, res);
+    }
+    const title = String(body.title || '').trim().slice(0, 60);
+    if (!body.conversation_id || !title) throw new Error('conversation_id and title are required');
+    await getProvider(providerId).renameConversation(body.conversation_id, title);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: true, conversation_id: body.conversation_id, title, provider: providerId }));
   } catch (err) {
     res.writeHead(500, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: err.message }));
@@ -348,11 +404,11 @@ const server = http.createServer(async (req, res) => {
   const pathname = parsedUrl.pathname;
 
   if (pathname === '/api/conversations' && req.method === 'GET') {
-    return handleListConversations(res);
+    return handleProviderConversations(parsedUrl, res);
   } else if (pathname === '/api/history' && req.method === 'GET') {
-    return handleGetHistory(parsedUrl, res);
+    return handleProviderHistory(parsedUrl, res);
   } else if (pathname === '/api/conversation' && req.method === 'DELETE') {
-    return handleDeleteConversation(parsedUrl, res);
+    return handleProviderDelete(parsedUrl, res);
   } else if (pathname === '/api/chat' && req.method === 'POST') {
     return handleChat(req, res);
   } else if (pathname === '/api/stop' && req.method === 'POST') {
@@ -365,6 +421,8 @@ const server = http.createServer(async (req, res) => {
     return handleGenerateTitle(req, res);
   } else if (pathname === '/api/compact' && req.method === 'POST') {
     return handleCompact(req, res);
+  } else if (pathname === '/api/codex/compact' && req.method === 'POST') {
+    return handleCodexCompact(req, res);
   } else if (pathname === '/api/live-sync' && req.method === 'POST') {
     return handleLiveSync(req, res);
   } else if (pathname === '/api/live-transcribe' && req.method === 'POST') {
@@ -372,11 +430,13 @@ const server = http.createServer(async (req, res) => {
   } else if (pathname === '/api/rewind' && req.method === 'POST') {
     return handleRewindConversation(req, res);
   } else if (pathname === '/api/prewarm' && req.method === 'POST') {
-    sessionManager.prewarm();
+    const body = await parseJsonBody(req);
+    const providerId = normalizeProviderId(body.provider);
+    await getProvider(providerId).prewarm(body.model, body.effort);
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    return res.end(JSON.stringify({ success: true, prewarmed: true }));
+    return res.end(JSON.stringify({ success: true, prewarmed: true, provider: providerId }));
   } else if (pathname === '/api/rename-conversation' && req.method === 'POST') {
-    return handleRenameConversation(req, res);
+    return handleProviderRename(req, res);
   } else if (pathname === '/api/models' && req.method === 'GET') {
     return handleGetModels(res);
   } else if (pathname === '/api/session-status' && req.method === 'GET') {

@@ -2,8 +2,9 @@
 
 // Global State
 let currentConversationId = null;
+let currentProvider = localStorage.getItem('crew_current_provider') || 'antigravity';
 let currentModel = localStorage.getItem('agy_current_model') || 'gemini-3.7-flash';
-let currentEffort = localStorage.getItem('agy_current_effort') || 'low';
+let currentEffort = localStorage.getItem(currentProvider === 'codex' ? 'codex_current_effort' : 'agy_current_effort') || 'low';
 let availableModels = [];
 let availableEfforts = [
   { id: 'low', name: 'Low (極速)', desc: '⚡ 0~1s 秒回 · 日常對話', icon: '⚡', color: 'emerald' },
@@ -78,6 +79,7 @@ const closeModelBtn = document.getElementById('close-model-btn');
 const modelOptionsContainer = document.getElementById('model-options-container');
 const modelBadgeIcon = document.getElementById('model-badge-icon');
 const modelDisplayName = document.getElementById('model-display-name');
+const providerOptionsContainer = document.getElementById('provider-options-container');
 const effortSelectorBtn = document.getElementById('effort-selector-btn');
 const effortBadgeIcon = document.getElementById('effort-badge-icon');
 const effortDisplayName = document.getElementById('effort-display-name');
@@ -166,6 +168,10 @@ function toggleUsageModal(open) {
 
 async function loadUsageData() {
   if (!usageBarsContainer) return;
+  if (currentProvider === 'codex') {
+    usageBarsContainer.innerHTML = '<div class="p-3 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-300">Codex 用量請以 Codex CLI 帳戶資訊為準；此面板目前只支援 Antigravity。</div>';
+    return;
+  }
   usageBarsContainer.innerHTML = `
     <div class="text-center py-6 text-slate-400 text-xs flex flex-col items-center gap-2 font-sans">
       <span class="inline-block w-5 h-5 rounded-full border-2 border-indigo-400 border-t-transparent animate-spin"></span>
@@ -220,6 +226,50 @@ async function loadUsageData() {
   }
 }
 
+function providerQuery() {
+  return 'provider=' + encodeURIComponent(currentProvider);
+}
+
+function activeConversationStorageKey() {
+  return currentProvider === 'codex' ? 'codex_active_conv_id' : 'agy_active_conv_id';
+}
+
+function renderProviderOptions() {
+  if (!providerOptionsContainer) return;
+  providerOptionsContainer.querySelectorAll('.provider-option').forEach(button => {
+    const active = button.dataset.provider === currentProvider;
+    button.className = 'provider-option px-3 py-2 rounded-xl border text-xs font-bold transition active:scale-95 ' +
+      (active ? 'bg-indigo-950/80 border-indigo-500 text-white ring-2 ring-indigo-500/40' : 'bg-slate-950 border-slate-800 text-slate-400');
+  });
+}
+
+window.selectProvider = async function(providerId) {
+  if (!['antigravity', 'codex'].includes(providerId) || providerId === currentProvider) return;
+  if (currentAbortController) { try { currentAbortController.abort(); } catch (_) {} }
+  currentProvider = providerId;
+  localStorage.setItem('crew_current_provider', currentProvider);
+  currentConversationId = localStorage.getItem(activeConversationStorageKey());
+  const models = availableModels.filter(model => (model.provider || 'antigravity') === currentProvider);
+  const savedModelKey = currentProvider === 'codex' ? 'codex_current_model' : 'agy_current_model';
+  currentModel = localStorage.getItem(savedModelKey) || (models.find(model => model.isDefault) || models[0] || {}).id || 'gemini-3.7-flash';
+  const effortKey = currentProvider === 'codex' ? 'codex_current_effort' : 'agy_current_effort';
+  const selectedModel = models.find(model => model.id === currentModel);
+  const supported = selectedModel?.supportedReasoningEfforts || ['low', 'medium', 'high'];
+  currentEffort = localStorage.getItem(effortKey) || selectedModel?.defaultReasoningEffort || 'low';
+  if (!supported.includes(currentEffort)) currentEffort = selectedModel?.defaultReasoningEffort || supported[0] || 'low';
+  renderProviderOptions();
+  updateModelUI();
+  loadModelsList();
+  toggleModelModal(false);
+  if (currentConversationId) await loadConversationHistory(currentConversationId);
+  else {
+    messagesContainer.innerHTML = '';
+    appendMessage('assistant', currentProvider === 'codex' ? '你好！Codex provider 已就緒。有什麼開發任務？' : '你好！已為你開啟新對話。有什麼可以幫你的？');
+    if (headerTitle) headerTitle.textContent = '新對話';
+  }
+  loadConversations();
+};
+
 // Model & Thinking Effort Handlers
 function updateModelUI() {
   const found = availableModels.find(m => m.id === currentModel);
@@ -232,45 +282,47 @@ function updateModelUI() {
   }
 }
 
+const EFFORT_UI = {
+  low: { name: '極速 (Low)', subtitle: '⚡ 快速回應', icon: '⚡', color: 'emerald' },
+  medium: { name: '平衡 (Medium)', subtitle: '⚖️ 平衡推理', icon: '⚖️', color: 'amber' },
+  high: { name: '深度 (High)', subtitle: '🧠 深度推理', icon: '🧠', color: 'indigo' },
+  xhigh: { name: '極深 (XHigh)', subtitle: '🔬 強化推理', icon: '🔬', color: 'purple' },
+  max: { name: '最大 (Max)', subtitle: '🚀 最大推理', icon: '🚀', color: 'rose' },
+  ultra: { name: '終極 (Ultra)', subtitle: '💫 終極推理', icon: '💫', color: 'cyan' }
+};
+
+function selectedModelConfig() {
+  return availableModels.find(model => model.id === currentModel);
+}
+
+function supportedEffortsForCurrentModel() {
+  const model = selectedModelConfig();
+  return model?.supportedReasoningEfforts?.length ? model.supportedReasoningEfforts : ['low', 'medium', 'high'];
+}
+
 function updateEffortUI() {
-  const effortConfig = {
-    low: { name: '極速 (Low)', icon: '⚡', color: 'text-emerald-300', iconColor: 'text-emerald-400' },
-    medium: { name: '平衡 (Med)', icon: '⚖️', color: 'text-amber-300', iconColor: 'text-amber-400' },
-    high: { name: '深度 (High)', icon: '🧠', color: 'text-indigo-300', iconColor: 'text-indigo-400' }
-  };
-  const conf = effortConfig[currentEffort] || effortConfig.low;
-  if (effortBadgeIcon) {
-    effortBadgeIcon.textContent = conf.icon;
-  }
+  const conf = EFFORT_UI[currentEffort] || EFFORT_UI.low;
+  if (effortBadgeIcon) effortBadgeIcon.textContent = conf.icon;
   if (effortDisplayName) {
     effortDisplayName.textContent = conf.name;
-    effortDisplayName.className = `font-semibold ${conf.color} truncate`;
+    effortDisplayName.className = `font-semibold text-${conf.color}-300 truncate`;
   }
-  if (effortActiveHint) {
-    effortActiveHint.textContent = `${conf.name} · 生效中`;
-  }
+  if (effortActiveHint) effortActiveHint.textContent = `${conf.name} · 生效中`;
 }
 
 function renderEffortOptions() {
   if (!effortOptionsContainer) return;
-  const efforts = [
-    { id: 'low', name: 'Low (極速)', subtitle: '⚡ 0~1s 秒回', color: 'emerald' },
-    { id: 'medium', name: 'Medium (平衡)', subtitle: '⚖️ 基礎推理', color: 'amber' },
-    { id: 'high', name: 'High (深度)', subtitle: '🧠 深度演算', color: 'indigo' }
-  ];
-
+  const efforts = supportedEffortsForCurrentModel().map(id => ({ id, ...(EFFORT_UI[id] || { name: id, subtitle: 'Reasoning', icon: '🧠', color: 'slate' }) }));
+  effortOptionsContainer.className = efforts.length > 3 ? 'grid grid-cols-3 gap-1.5' : 'grid grid-cols-3 gap-1.5';
   effortOptionsContainer.innerHTML = efforts.map(e => {
-    const isSelected = (e.id === currentEffort);
+    const isSelected = e.id === currentEffort;
     const activeClass = isSelected
       ? `bg-${e.color}-950/80 border-${e.color}-500/80 ring-2 ring-${e.color}-500 text-white`
       : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700';
-
-    return `
-      <button type="button" class="p-2 rounded-xl border ${activeClass} transition active:scale-95 flex flex-col items-center text-center gap-0.5" onclick="selectEffort('${e.id}')">
-        <span class="text-xs font-bold">${e.name}</span>
-        <span class="text-[9px] text-slate-400 font-mono">${e.subtitle}</span>
-      </button>
-    `;
+    return `<button type="button" class="p-2 rounded-xl border ${activeClass} transition active:scale-95 flex flex-col items-center text-center gap-0.5" onclick="selectEffort('${e.id}')">
+      <span class="text-xs font-bold">${e.name}</span>
+      <span class="text-[9px] text-slate-400 font-mono">${e.subtitle}</span>
+    </button>`;
   }).join('');
 }
 
@@ -278,6 +330,7 @@ function toggleModelModal(open) {
   if (!modelModal) return;
   if (open) {
     modelModal.classList.remove('opacity-0', 'pointer-events-none');
+    renderProviderOptions();
     loadModelsList();
     renderEffortOptions();
   } else {
@@ -294,7 +347,8 @@ async function loadModelsList() {
       availableModels = data.models || [];
     }
 
-    modelOptionsContainer.innerHTML = availableModels.map(m => {
+    const providerModels = availableModels.filter(m => (m.provider || 'antigravity') === currentProvider);
+    modelOptionsContainer.innerHTML = providerModels.map(m => {
       const isSelected = (m.id === currentModel);
       const activeRing = isSelected ? 'ring-2 ring-indigo-500 bg-indigo-950/50 border-indigo-500/80' : 'bg-slate-950/80 border-slate-800 hover:border-slate-700';
 
@@ -322,21 +376,27 @@ async function loadModelsList() {
 
 window.selectModel = function(modelId) {
   currentModel = modelId;
-  localStorage.setItem('agy_current_model', currentModel);
+  const selected = selectedModelConfig();
+  const supported = supportedEffortsForCurrentModel();
+  if (!supported.includes(currentEffort)) currentEffort = selected?.defaultReasoningEffort || supported[0] || 'low';
+  localStorage.setItem(currentProvider === 'codex' ? 'codex_current_effort' : 'agy_current_effort', currentEffort);
+  localStorage.setItem(currentProvider === 'codex' ? 'codex_current_model' : 'agy_current_model', currentModel);
   updateModelUI();
+  updateEffortUI();
+  renderEffortOptions();
   toggleModelModal(false);
   if (navigator.vibrate) navigator.vibrate(20);
   console.log(`🤖 已切換 AI 核心模型至: ${currentModel}`);
   fetch('/api/prewarm', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model: currentModel, effort: currentEffort })
+    body: JSON.stringify({ provider: currentProvider, model: currentModel, effort: currentEffort })
   }).catch(() => {});
 };
 
 window.selectEffort = function(effortId) {
   currentEffort = effortId;
-  localStorage.setItem('agy_current_effort', currentEffort);
+  localStorage.setItem(currentProvider === 'codex' ? 'codex_current_effort' : 'agy_current_effort', currentEffort);
   updateEffortUI();
   renderEffortOptions();
   if (navigator.vibrate) navigator.vibrate(20);
@@ -344,7 +404,7 @@ window.selectEffort = function(effortId) {
   fetch('/api/prewarm', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model: currentModel, effort: currentEffort })
+    body: JSON.stringify({ provider: currentProvider, model: currentModel, effort: currentEffort })
   }).catch(() => {});
 };
 
