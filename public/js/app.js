@@ -393,11 +393,7 @@ function initAppAndListeners() {
     });
   }
 
-  if (camBtn && cameraInput) {
-    camBtn.addEventListener('click', () => {
-      cameraInput.value = '';
-      cameraInput.click();
-    });
+  if (cameraInput) {
     cameraInput.addEventListener('change', (e) => {
       if (e.target.files && e.target.files[0]) {
         handleImageSelection(e.target.files[0]);
@@ -405,11 +401,7 @@ function initAppAndListeners() {
     });
   }
 
-  if (attachBtn && attachInput) {
-    attachBtn.addEventListener('click', () => {
-      attachInput.value = '';
-      attachInput.click();
-    });
+  if (attachInput) {
     attachInput.addEventListener('change', (e) => {
       if (e.target.files && e.target.files[0]) {
         handleImageSelection(e.target.files[0]);
