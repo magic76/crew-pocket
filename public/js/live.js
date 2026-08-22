@@ -30,8 +30,11 @@
   let animFrameId = null;
   let audioSendBuffer = [];
   
-  // Real-time STT
+  // Real-time STT & Session Dialogue Tracker
   let speechRecognizer = null;
+  let sessionDialogueTurns = [];
+  let currentTurnUser = '';
+  let currentTurnModel = '';
 
   // DOM References
   const liveVoiceBtn = document.getElementById('live-voice-btn');
@@ -433,6 +436,7 @@
         }
         const spoken = (final || interim).trim();
         if (spoken) {
+          currentTurnUser = spoken;
           console.log('[Live STT Transcribed]', spoken);
           appendCardTranscript('user', spoken);
         }
@@ -746,8 +750,21 @@
                 audioPlayer.playChunk(float32, 24000);
               }
               if (part.text) {
+                currentTurnModel += part.text;
                 appendCardTranscript('model', part.text);
               }
+            }
+          }
+
+          const isTurnDone = sc.turnComplete || sc.turn_complete;
+          if (isTurnDone) {
+            if (currentTurnUser || currentTurnModel) {
+              sessionDialogueTurns.push({
+                user: currentTurnUser,
+                model: currentTurnModel
+              });
+              currentTurnUser = '';
+              currentTurnModel = '';
             }
           }
         }
@@ -862,6 +879,46 @@
 
     // Remove active inline card cleanly
     removeInlineCard();
+
+    // Collect any remaining turn
+    if (currentTurnUser || currentTurnModel) {
+      sessionDialogueTurns.push({
+        user: currentTurnUser,
+        model: currentTurnModel
+      });
+      currentTurnUser = '';
+      currentTurnModel = '';
+    }
+
+    // 🔒 Silent Background Sync to Brain Logs (Zero DOM reload / Zero visual interruption)
+    const turnsToSync = sessionDialogueTurns.slice();
+    sessionDialogueTurns = [];
+
+    if (turnsToSync.length > 0) {
+      const activeConvId = (typeof currentConversationId !== 'undefined' && currentConversationId) ? currentConversationId : null;
+      const combinedUser = turnsToSync.map(t => t.user).filter(Boolean).join('\n');
+      const combinedModel = turnsToSync.map(t => t.model).filter(Boolean).join('\n\n');
+
+      if (combinedUser || combinedModel) {
+        console.log('[Live Silent Sync] Writing turns to brain log in background...', { user: combinedUser, model: combinedModel });
+        fetch('/api/live-sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            conversation_id: activeConvId,
+            user_message: combinedUser,
+            assistant_message: combinedModel
+          })
+        }).then(res => res.json()).then(data => {
+          if (data.success && data.conversation_id && (typeof currentConversationId !== 'undefined' && !currentConversationId)) {
+            currentConversationId = data.conversation_id;
+            localStorage.setItem('agy_active_conv_id', data.conversation_id);
+          }
+        }).catch(err => {
+          console.warn('[Live Silent Sync Warning]', err);
+        });
+      }
+    }
   }
 
   // Key Modal Handlers
