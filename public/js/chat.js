@@ -230,13 +230,9 @@ function buildThinkingBlockHtml(thinking, isStreamingThinking = false) {
 function appendMessage(role, content, timestamp, tools = [], thinking = '', isBtw = false) {
   const isUser = role === 'user';
   const msgDiv = document.createElement('div');
-  msgDiv.className = `flex gap-2.5 w-full max-w-2xl mx-auto min-w-0 ${isUser ? 'justify-end' : 'justify-start'}`;
+  msgDiv.className = `flex w-full max-w-2xl mx-auto min-w-0 ${isUser ? 'justify-end' : 'justify-start'}`;
 
   const isUserBtw = isUser && (isBtw || /^\s*\/btw\b/i.test(content || ''));
-
-  const avatar = isUser
-    ? `<div class="w-7 h-7 rounded-full ${isUserBtw ? 'bg-teal-600 text-white' : 'bg-slate-700 text-slate-300'} flex items-center justify-center shrink-0 text-xs font-bold order-2 mt-0.5 shadow-sm">我</div>`
-    : `<div class="w-7 h-7 rounded-full ${isBtw ? 'bg-teal-600/30 border-teal-500/50 text-teal-300' : 'bg-indigo-600/30 border-indigo-500/50 text-indigo-400'} border flex items-center justify-center shrink-0 text-xs font-bold mt-0.5">CP</div>`;
 
   const thinkingHtml = (!isUser && thinking) ? buildThinkingBlockHtml(thinking) : '';
   const toolsHtml = (!isUser && tools && tools.length > 0) ? buildToolsAccordionHtml(tools) : '';
@@ -244,12 +240,12 @@ function appendMessage(role, content, timestamp, tools = [], thinking = '', isBt
   let bubbleClass = '';
   if (isUser) {
     bubbleClass = isUserBtw
-      ? 'bg-gradient-to-r from-teal-700 to-indigo-600 text-white rounded-2xl rounded-tr-none p-3 text-xs sm:text-sm shadow-md order-1 max-w-[85%] break-words border border-teal-400/30'
-      : 'bg-indigo-600 text-white rounded-2xl rounded-tr-none p-3 text-xs sm:text-sm shadow-md order-1 max-w-[85%] break-words';
+      ? 'bg-gradient-to-r from-teal-700 to-indigo-600 text-white rounded-2xl p-3 sm:p-3.5 text-xs sm:text-sm shadow-md max-w-[92%] sm:max-w-[85%] break-words border border-teal-400/30'
+      : 'bg-indigo-600 text-white rounded-2xl p-3 sm:p-3.5 text-xs sm:text-sm shadow-md max-w-[92%] sm:max-w-[85%] break-words';
   } else {
     bubbleClass = isBtw
-      ? 'btw-card bg-gradient-to-b from-slate-900 via-slate-900 to-teal-950/40 border border-teal-500/50 text-slate-200 rounded-2xl rounded-tl-none p-3.5 text-xs sm:text-sm shadow-lg shadow-teal-950/30 flex-1 min-w-0 prose'
-      : 'bg-slate-900 border border-slate-800 text-slate-200 rounded-2xl rounded-tl-none p-3.5 text-xs sm:text-sm shadow-md flex-1 min-w-0 prose';
+      ? 'btw-card bg-gradient-to-b from-slate-900 via-slate-900 to-teal-950/40 border border-teal-500/50 text-slate-200 rounded-2xl p-3.5 sm:p-4 text-xs sm:text-sm shadow-lg shadow-teal-950/30 w-full min-w-0 prose'
+      : 'bg-slate-900 border border-slate-800 text-slate-200 rounded-2xl p-3.5 sm:p-4 text-xs sm:text-sm shadow-md w-full min-w-0 prose';
   }
 
   let bodyHtml = '';
@@ -271,55 +267,59 @@ function appendMessage(role, content, timestamp, tools = [], thinking = '', isBt
     }
     msgDiv.setAttribute('data-raw-text', userText);
 
-    const btwBadge = isUserBtw ? `<div class="mb-1 flex items-center gap-1"><span class="px-1.5 py-0.2 rounded bg-teal-500/30 border border-teal-400/50 text-[10px] font-mono font-semibold text-teal-200">💬 順帶一提</span></div>` : '';
-
     const editRewindBtn = `
-      <button type="button" class="edit-rewind-btn opacity-70 hover:opacity-100 hover:text-white bg-indigo-700/50 hover:bg-indigo-700 px-1.5 py-0.5 rounded transition active:scale-95 flex items-center gap-1 font-sans cursor-pointer text-[10px]" title="編輯此問題並回溯對話">
+      <button type="button" class="edit-rewind-btn opacity-75 hover:opacity-100 hover:text-white bg-indigo-700/60 hover:bg-indigo-700 px-1.5 py-0.5 rounded transition active:scale-95 flex items-center gap-1 font-sans cursor-pointer text-[10px]" title="編輯此問題並回溯對話">
         <svg class="w-2.5 h-2.5 text-indigo-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
         <span>編輯回溯</span>
       </button>
     `;
 
-    const userFooter = `
-      <div class="flex items-center justify-between gap-2 mt-1.5 pt-1 border-t border-indigo-400/30 text-[10px] text-indigo-200/80 select-none">
-        <span class="font-mono text-[9px] opacity-70">#${userTurnIndex + 1}</span>
+    const userHeader = `
+      <div class="flex items-center justify-between gap-2 mb-1.5 pb-1 border-b border-white/15 text-[10px] text-indigo-100/90 select-none">
+        <span class="font-semibold flex items-center gap-1.5">
+          <span>🧑 我</span>
+          ${isUserBtw ? '<span class="px-1.5 py-0.2 rounded bg-teal-400/30 border border-teal-300/50 text-[9px] font-mono font-bold text-teal-100">💬 順帶一提</span>' : ''}
+          <span class="font-mono text-[9px] opacity-70">#${userTurnIndex + 1}</span>
+        </span>
         ${editRewindBtn}
       </div>
     `;
 
-    bodyHtml = `${imgHtml}${btwBadge}<div class="whitespace-pre-wrap leading-relaxed break-words">${escapeHtml(userText)}</div>${userFooter}`;
+    bodyHtml = `
+      ${userHeader}
+      ${imgHtml}
+      <div class="whitespace-pre-wrap leading-relaxed break-words">${escapeHtml(userText)}</div>
+    `;
   } else {
     const timeStr = timestamp ? new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
-    const btwHeader = isBtw ? `
-      <div class="flex items-center justify-between border-b border-teal-800/60 pb-1.5 mb-2 select-none">
-        <span class="px-2 py-0.5 rounded-full bg-teal-500/20 text-teal-300 border border-teal-500/40 text-[10px] font-mono font-semibold flex items-center gap-1">
-          <span class="w-1.5 h-1.5 rounded-full bg-teal-400 animate-pulse"></span>
-          💬 順帶一提 · 支線解答
-        </span>
-        <button type="button" class="btw-toggle-btn text-[10px] text-teal-400 hover:text-teal-200 font-mono transition px-1.5 py-0.5 rounded hover:bg-teal-900/40">收合 ▲</button>
+    
+    const assistantHeader = `
+      <div class="flex items-center justify-between gap-2 mb-2 pb-1.5 border-b border-slate-800/90 text-[11px] text-slate-400 select-none">
+        <div class="flex items-center gap-1.5 font-semibold text-slate-200">
+          <span class="text-indigo-400 font-bold">🤖 Crew Pocket</span>
+          ${isBtw ? '<span class="px-1.5 py-0.2 rounded bg-teal-500/20 text-teal-300 border border-teal-500/40 text-[9px] font-mono">順帶一提</span>' : ''}
+        </div>
+        <div class="flex items-center gap-2">
+          <button type="button" class="tts-btn px-1.5 py-0.5 rounded hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition flex items-center gap-1 active:scale-95 text-[10px]" title="語音朗讀">
+            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"/>
+            </svg>
+            <span>朗讀</span>
+          </button>
+          <span class="text-[10px] text-slate-500 font-mono">${timeStr}</span>
+        </div>
       </div>
-    ` : '';
+    `;
 
     bodyHtml = `
-      ${btwHeader}
+      ${assistantHeader}
       <div class="thinking-container">${thinkingHtml}</div>
       <div class="tools-container">${toolsHtml}</div>
       <div class="btw-content msg-content leading-relaxed min-w-0">${formatMessageContent(content)}</div>
-      <div class="msg-footer mt-2.5 pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400 select-none">
-        <div class="flex items-center gap-2">
-          <button type="button" class="tts-btn px-2 py-0.5 rounded-md hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition flex items-center gap-1 active:scale-95">
-            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"/>
-            </svg>
-            <span class="text-[10px]">朗讀</span>
-          </button>
-        </div>
-        <span class="text-[10px] text-slate-500 font-mono">${timeStr}</span>
-      </div>
     `;
   }
 
-  msgDiv.innerHTML = `${avatar}<div class="${bubbleClass}">${bodyHtml}</div>`;
+  msgDiv.innerHTML = `<div class="${bubbleClass}">${bodyHtml}</div>`;
   messagesContainer.appendChild(msgDiv);
 
   if (isBtw && !isUser) {
@@ -931,15 +931,11 @@ async function sendMessage() {
   const modelLabel = modelObj ? modelObj.name : 'AI';
 
   const assistantMsgDiv = document.createElement('div');
-  assistantMsgDiv.className = 'flex gap-2.5 w-full max-w-2xl mx-auto justify-start min-w-0';
-
-  const avatarHtml = isBtwQuery
-    ? `<div class="w-7 h-7 rounded-full bg-teal-600/30 border border-teal-500/50 flex items-center justify-center text-teal-300 shrink-0 text-xs font-bold mt-0.5">CP</div>`
-    : `<div class="w-7 h-7 rounded-full bg-indigo-600/30 border border-indigo-500/50 flex items-center justify-center text-indigo-400 shrink-0 text-xs font-bold mt-0.5">CP</div>`;
+  assistantMsgDiv.className = 'w-full max-w-2xl mx-auto justify-start min-w-0';
 
   const bubbleClass = isBtwQuery
-    ? 'btw-card bg-gradient-to-b from-slate-900 via-slate-900 to-teal-950/40 border border-teal-500/50 text-slate-200 rounded-2xl rounded-tl-none p-3.5 text-xs sm:text-sm shadow-lg shadow-teal-950/30 flex-1 min-w-0 prose'
-    : 'bg-slate-900 border border-slate-800 text-slate-200 rounded-2xl rounded-tl-none p-3.5 text-xs sm:text-sm shadow-md flex-1 min-w-0 prose';
+    ? 'btw-card bg-gradient-to-b from-slate-900 via-slate-900 to-teal-950/40 border border-teal-500/50 text-slate-200 rounded-2xl p-3.5 sm:p-4 text-xs sm:text-sm shadow-lg shadow-teal-950/30 w-full min-w-0 prose'
+    : 'bg-slate-900 border border-slate-800 text-slate-200 rounded-2xl p-3.5 sm:p-4 text-xs sm:text-sm shadow-md w-full min-w-0 prose';
 
   const shimmerClass = isBtwQuery ? 'shimmer-bar-teal' : 'shimmer-bar';
   const statusBorderClass = isBtwQuery ? 'border-teal-500/40 from-slate-900 to-teal-950/40' : 'border-indigo-500/30 from-slate-900 to-indigo-950/40';
@@ -947,7 +943,6 @@ async function sendMessage() {
   const statusInitText = isBtwQuery ? '💬 順帶一提解答中...' : '🧠 思考分析中...';
 
   assistantMsgDiv.innerHTML = `
-    ${avatarHtml}
     <div class="${bubbleClass}">
       
       <!-- Live Cyberpunk Status Bar with Universal Aurora Glow (All Models) -->
@@ -1201,6 +1196,20 @@ async function sendMessage() {
                     toggleBtn.textContent = isCollapsed ? '展開 ▼' : '收合 ▲';
                   });
                 }
+              }
+
+              const bubbleEl = assistantMsgDiv.querySelector('.btw-card') || assistantMsgDiv.querySelector('.bg-slate-900');
+              if (bubbleEl && !isBtwQuery && !assistantMsgDiv.querySelector('.assistant-top-header')) {
+                const header = document.createElement('div');
+                header.className = 'assistant-top-header flex items-center justify-between gap-2 mb-2 pb-1.5 border-b border-slate-800/90 text-[11px] text-slate-400 select-none';
+                header.innerHTML = `
+                  <div class="flex items-center gap-1.5 font-semibold text-slate-200">
+                    <span class="text-indigo-400 font-bold">🤖 Crew Pocket</span>
+                    <span class="text-[10px] text-slate-400 font-mono font-normal">(${escapeHtml(modelLabel)})</span>
+                  </div>
+                  <span class="text-[10px] text-slate-500 font-mono">⏱️ ${totalSec}s</span>
+                `;
+                bubbleEl.insertBefore(header, bubbleEl.firstChild);
               }
 
               // Append Action Footer with Stats, TTS and Copy All
