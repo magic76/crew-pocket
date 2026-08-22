@@ -185,44 +185,47 @@
 
       <div class="bg-gradient-to-b from-slate-900 via-slate-900 to-slate-950 border border-teal-500/50 rounded-2xl rounded-tl-none p-3.5 text-xs sm:text-sm shadow-2xl shadow-teal-950/50 flex-1 max-w-[92%] space-y-3 relative overflow-hidden">
         
-        <!-- CARD TOP TOOLBAR (兩排結構，乾淨寬敞舒適) -->
+        <!-- CARD TOP TOOLBAR (兩排結構，第一排整合狀態與音色選擇) -->
         <div class="border-b border-slate-800/80 pb-2.5 space-y-2">
           
-          <!-- Row 1: 狀態指示 + 掛斷按鈕 -->
+          <!-- Row 1: 狀態指示 + 音色膠囊 (點擊展開選項) + 掛斷按鈕 -->
           <div class="flex items-center justify-between gap-2">
-            <div class="flex items-center gap-1.5 min-w-0">
+            <div class="flex items-center gap-1.5 min-w-0 flex-wrap">
               <span id="live-card-status-dot" class="w-2 h-2 rounded-full bg-amber-400 animate-pulse shrink-0"></span>
-              <span id="live-card-status-text" class="text-amber-300 font-bold text-xs font-mono truncate">⚡ 準備中...</span>
+              <span id="live-card-status-text" class="text-amber-300 font-bold text-xs font-mono">⚡ 準備中...</span>
+              
+              <!-- 🗣️ Voice Selector Pill (音色切換膠囊 · 點擊直接開啟選項) -->
+              <div class="relative inline-flex items-center shrink-0">
+                <select id="live-card-voice-select" class="appearance-none bg-teal-950/80 hover:bg-teal-900 active:scale-95 border border-teal-500/50 text-teal-300 text-[11px] font-semibold rounded-full pl-2 pr-4.5 py-0.5 outline-none transition cursor-pointer shadow-sm" title="點擊切換音色">
+                  <option value="Puck" ${selectedVoice === 'Puck' ? 'selected' : ''}>🗣️ Puck (活潑)</option>
+                  <option value="Charon" ${selectedVoice === 'Charon' ? 'selected' : ''}>🗣️ Charon (沉穩)</option>
+                  <option value="Kore" ${selectedVoice === 'Kore' ? 'selected' : ''}>🗣️ Kore (溫柔)</option>
+                  <option value="Fenrir" ${selectedVoice === 'Fenrir' ? 'selected' : ''}>🗣️ Fenrir (低沉)</option>
+                  <option value="Aoede" ${selectedVoice === 'Aoede' ? 'selected' : ''}>🗣️ Aoede (明亮)</option>
+                </select>
+                <span class="pointer-events-none absolute right-1.5 text-[9px] text-teal-400 font-mono">▾</span>
+              </div>
             </div>
+
+            <!-- 🛑 掛斷按鈕 -->
             <button id="live-card-hangup-btn" type="button" class="px-3 py-1 rounded-xl bg-rose-600 hover:bg-rose-500 active:scale-95 text-white text-xs font-bold shadow-md shadow-rose-600/30 transition shrink-0">
               掛斷
             </button>
           </div>
 
-          <!-- Row 2: 音色選擇選單 + 靜音/相機控制按鈕 -->
-          <div class="flex items-center justify-between gap-2 pt-0.5">
-            <!-- 🗣️ Voice Selector Dropdown (音色切換) -->
-            <select id="live-card-voice-select" class="bg-slate-800 hover:bg-slate-700 active:scale-95 border border-slate-700 text-teal-300 text-xs font-semibold rounded-xl px-2.5 py-1.5 outline-none transition cursor-pointer shadow-sm flex-1 max-w-[155px] truncate" title="切換語音音色">
-              <option value="Puck" ${selectedVoice === 'Puck' ? 'selected' : ''}>🗣️ Puck (活潑)</option>
-              <option value="Charon" ${selectedVoice === 'Charon' ? 'selected' : ''}>🗣️ Charon (沉穩)</option>
-              <option value="Kore" ${selectedVoice === 'Kore' ? 'selected' : ''}>🗣️ Kore (溫柔)</option>
-              <option value="Fenrir" ${selectedVoice === 'Fenrir' ? 'selected' : ''}>🗣️ Fenrir (低沉)</option>
-              <option value="Aoede" ${selectedVoice === 'Aoede' ? 'selected' : ''}>🗣️ Aoede (明亮)</option>
-            </select>
+          <!-- Row 2: 靜音與相機控制按鈕 -->
+          <div class="flex items-center justify-end gap-2 pt-0.5">
+            <!-- 🔇 Mute Button -->
+            <button id="live-card-mute-btn" type="button" class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-95 border border-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition shadow-sm" title="靜音 / 開啟麥克風">
+              <span id="live-card-mute-icon">🎙️</span>
+              <span id="live-card-mute-label">靜音</span>
+            </button>
 
-            <div class="flex items-center gap-2 shrink-0">
-              <!-- 🔇 Mute Button -->
-              <button id="live-card-mute-btn" type="button" class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-95 border border-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition shadow-sm" title="靜音 / 開啟麥克風">
-                <span id="live-card-mute-icon">🎙️</span>
-                <span id="live-card-mute-label">靜音</span>
-              </button>
-
-              <!-- 📷 Camera Toggle Button -->
-              <button id="live-card-camera-btn" type="button" class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-95 border border-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition shadow-sm" title="開啟相機 (視覺辨識)">
-                <span>📷</span>
-                <span id="live-card-camera-label">相機</span>
-              </button>
-            </div>
+            <!-- 📷 Camera Toggle Button -->
+            <button id="live-card-camera-btn" type="button" class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-95 border border-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition shadow-sm" title="開啟相機 (視覺辨識)">
+              <span>📷</span>
+              <span id="live-card-camera-label">相機</span>
+            </button>
           </div>
 
         </div>
