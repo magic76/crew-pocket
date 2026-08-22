@@ -1,6 +1,6 @@
 /**
  * 🎙️ Crew Pocket - Gemini Live Multimodal Live API (Full-Duplex Audio & Vision)
- * Configured for gemini-3.1-flash-live-preview & gemini-2.0-flash-exp with 16kHz PCM input / 24kHz PCM output.
+ * Enhanced with 100ms audio chunking, dual case (camelCase & snake_case) parsing, and live diagnostics.
  */
 
 (function() {
@@ -27,6 +27,7 @@
   let cameraInterval = null;
   let analyser = null;
   let animFrameId = null;
+  let audioSendBuffer = [];
 
   // DOM Elements
   const liveVoiceBtn = document.getElementById('live-voice-btn');
@@ -110,7 +111,7 @@
     let offset = 0;
     for (let i = 0; i < float32Array.length; i++, offset += 2) {
       let s = Math.max(-1, Math.min(1, float32Array[i]));
-      view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true); // Little endian signed 16-bit PCM
+      view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true); // Little endian
     }
     return buffer;
   }
@@ -290,6 +291,7 @@
     liveCallModal.classList.remove('hidden');
     updateStatus('connecting', '⚡ 連線 Google Gemini Live...');
     if (liveTranscriptText) liveTranscriptText.innerHTML = '<div class="text-slate-400 text-center text-[11px] font-mono">⚡ 正在建立即時雙向語音通道...</div>';
+    audioSendBuffer = [];
 
     try {
       // 1. Web Audio Context
@@ -387,18 +389,18 @@
           return;
         }
 
-        // 1. Setup Complete
-        if (response.setupComplete) {
+        // 1. Setup Complete (Check camelCase & snake_case)
+        const isSetupDone = response.setupComplete || response.setup_complete;
+        if (isSetupDone) {
           console.log('[Gemini Live] Setup complete, ready to talk!');
           updateStatus('listening', '🎙️ 聆聽中 (雙向全雙工)...');
           if (liveTranscriptText) liveTranscriptText.innerHTML = `<div class="text-emerald-400 text-center text-[11px] font-mono">✅ ${model.replace('models/', '')} 語音通道已就緒！請隨時對著手機說話...</div>`;
           return;
         }
 
-        // 2. Server Content
-        if (response.serverContent) {
-          const sc = response.serverContent;
-
+        // 2. Server Content (Check camelCase & snake_case)
+        const sc = response.serverContent || response.server_content;
+        if (sc) {
           if (sc.interrupted) {
             console.log('[Gemini Live] Interrupted by user!');
             audioPlayer.stopAll();
@@ -406,11 +408,13 @@
             return;
           }
 
-          if (sc.modelTurn && sc.modelTurn.parts) {
+          const modelTurn = sc.modelTurn || sc.model_turn;
+          if (modelTurn && modelTurn.parts) {
             updateStatus('speaking', '🔊 Gemini 正在說話...');
-            for (const part of sc.modelTurn.parts) {
-              if (part.inlineData && part.inlineData.data) {
-                const float32 = base64ToFloat32PCM(part.inlineData.data);
+            for (const part of modelTurn.parts) {
+              const inlineData = part.inlineData || part.inline_data;
+              if (inlineData && inlineData.data) {
+                const float32 = base64ToFloat32PCM(inlineData.data);
                 audioPlayer.playChunk(float32, 24000);
               }
               if (part.text) {
@@ -433,30 +437,40 @@
           updateStatus('error', `⚠️ 連線中斷 (${e.code})`);
           let helpText = `連線已中斷 (代碼: ${e.code})。`;
           if (e.code === 1008) {
-            helpText += '\n• 原因 1008 通常是「API Key 設有限制 (HTTP Referer/IP Restrictions)」，請在 Google AI Studio 將 API Key 改為「無限制 (None)」。\n• 或是模型名稱需要切換為 gemini-3.1-flash-live-preview 或 gemini-2.0-flash-exp。';
+            helpText += '\n• 原因 1008 通常是「API Key 設有限制」，請在 Google AI Studio 將 API Key 改為「無限制 (None)」。';
           }
           if (e.reason) helpText += `\n• Google 回傳訊息: ${e.reason}`;
           appendTranscript('system', helpText);
         }
       };
 
-      // 4. Mic PCM Stream (16kHz 16-bit little-endian)
+      // 4. Mic PCM Stream (Buffered to ~100ms chunks = 1600 samples at 16kHz)
       micProcessorNode.onaudioprocess = (e) => {
         if (!isConnected || isMuted || !ws || ws.readyState !== WebSocket.OPEN) return;
         const inputData = e.inputBuffer.getChannelData(0);
         const downsampled = downsampleBuffer(inputData, audioContext.sampleRate, 16000);
-        const pcmBuffer = floatTo16BitPCM(downsampled);
-        const base64Audio = arrayBufferToBase64(pcmBuffer);
+        
+        for (let i = 0; i < downsampled.length; i++) {
+          audioSendBuffer.push(downsampled[i]);
+        }
 
-        const realTimeMessage = {
-          realtimeInput: {
-            audio: {
-              mimeType: "audio/pcm;rate=16000",
-              data: base64Audio
+        // Send every ~100ms
+        if (audioSendBuffer.length >= 1600) {
+          const chunkToSend = new Float32Array(audioSendBuffer);
+          audioSendBuffer = [];
+          const pcmBuffer = floatTo16BitPCM(chunkToSend);
+          const base64Audio = arrayBufferToBase64(pcmBuffer);
+
+          const realTimeMessage = {
+            realtimeInput: {
+              audio: {
+                mimeType: "audio/pcm;rate=16000",
+                data: base64Audio
+              }
             }
-          }
-        };
-        ws.send(JSON.stringify(realTimeMessage));
+          };
+          ws.send(JSON.stringify(realTimeMessage));
+        }
       };
 
     } catch (err) {
