@@ -901,116 +901,133 @@
   // ==========================================
   // 🧪 Diagnostic 3s Voice Recording & Transcribe Test
   // ==========================================
+  async function runDiagnosticVoiceTest(labelEl, boxEl, btnEl) {
+    const apiKey = (liveApiKeyInput ? liveApiKeyInput.value.trim() : '') || getApiKey();
+    if (!apiKey) {
+      alert('請先輸入 Google AI Studio API Key！');
+      showKeyModal();
+      return;
+    }
+
+    if (boxEl) {
+      boxEl.classList.remove('hidden');
+      boxEl.innerHTML = '<span class="text-amber-400">⏳ 正在請求麥克風權限...</span>';
+    }
+
+    let testStream = null;
+    let testAudioCtx = null;
+    try {
+      testStream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1 } });
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      testAudioCtx = new AudioCtx();
+      if (testAudioCtx.state === 'suspended') await testAudioCtx.resume();
+
+      const source = testAudioCtx.createMediaStreamSource(testStream);
+      const processor = testAudioCtx.createScriptProcessor(1024, 1, 1);
+      const gain = testAudioCtx.createGain();
+      gain.gain.value = 0;
+
+      const chunks = [];
+      processor.onaudioprocess = (e) => {
+        const input = e.inputBuffer.getChannelData(0);
+        const down = downsampleBuffer(input, testAudioCtx.sampleRate, 16000);
+        chunks.push(new Float32Array(down));
+      };
+
+      source.connect(processor);
+      processor.connect(gain);
+      gain.connect(testAudioCtx.destination);
+
+      let countdown = 3;
+      if (btnEl) {
+        btnEl.disabled = true;
+        btnEl.classList.add('bg-rose-900/80', 'border-rose-500');
+      }
+
+      const timer = setInterval(() => {
+        countdown--;
+        if (labelEl) labelEl.textContent = `🔴 錄音中 (${countdown}s)... 請說話`;
+        if (boxEl) boxEl.innerHTML = `<span class="text-rose-400 font-bold">🔴 錄音中，倒數 ${countdown} 秒... 請對著手機說一句中文</span>`;
+        if (countdown <= 0) {
+          clearInterval(timer);
+        }
+      }, 1000);
+
+      if (labelEl) labelEl.textContent = `🔴 錄音中 (3s)... 請說話`;
+
+      await new Promise(resolve => setTimeout(resolve, 3200));
+
+      // Stop recording
+      processor.disconnect();
+      source.disconnect();
+      gain.disconnect();
+      testStream.getTracks().forEach(t => t.stop());
+      testAudioCtx.close();
+
+      if (labelEl) labelEl.textContent = '⏳ 上傳轉錄中...';
+      if (boxEl) boxEl.innerHTML = '<span class="text-cyan-400">⚡ 正在上傳至 Google Gemini Flash 進行多模態轉錄...</span>';
+
+      const base64Wav = pcmFloat32ArrayToWavBase64(chunks, 16000);
+      console.log('[Test Recording WAV Base64 Length]', base64Wav.length);
+
+      const res = await fetch('/api/live-transcribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          api_key: apiKey,
+          user_audio: base64Wav
+        })
+      });
+
+      const data = await res.json();
+      console.log('[Test Transcribe Response]', data);
+
+      if (data.success && data.user_text) {
+        if (boxEl) {
+          boxEl.innerHTML = `
+            <div class="text-emerald-400 font-bold">✅ 轉錄成功！</div>
+            <div class="text-white mt-1 text-sm font-sans bg-slate-900 p-2 rounded-lg border border-emerald-500/30">「${escapeHtml(data.user_text)}」</div>
+            <div class="text-slate-400 text-[10px] mt-1">（採樣音訊: ${base64Wav.length} bytes）</div>
+          `;
+        }
+      } else {
+        if (boxEl) {
+          boxEl.innerHTML = `
+            <div class="text-rose-400 font-bold">⚠️ 未獲得轉錄文字</div>
+            <div class="text-slate-400 mt-1 text-[11px] bg-slate-900 p-2 rounded-lg break-all">回傳：${escapeHtml(JSON.stringify(data))}</div>
+          `;
+        }
+      }
+
+    } catch (err) {
+      console.error('[Test Rec Error]', err);
+      if (boxEl) {
+        boxEl.innerHTML = `<span class="text-rose-400">⚠️ 測試錯誤：${escapeHtml(err.message)}</span>`;
+      }
+    } finally {
+      if (btnEl) {
+        btnEl.disabled = false;
+        btnEl.classList.remove('bg-rose-900/80', 'border-rose-500');
+      }
+      if (labelEl) labelEl.textContent = '點此測試 3 秒錄音與轉錄';
+    }
+  }
+
+  const liveDirectTestBtn = document.getElementById('live-direct-test-btn');
+  const liveDirectTestLabel = document.getElementById('live-direct-test-label');
+  const liveDirectTestBox = document.getElementById('live-direct-test-box');
+  if (liveDirectTestBtn) {
+    liveDirectTestBtn.addEventListener('click', () => {
+      runDiagnosticVoiceTest(liveDirectTestLabel, liveDirectTestBox, liveDirectTestBtn);
+    });
+  }
+
   const liveTestRecBtn = document.getElementById('live-test-rec-btn');
   const liveTestRecText = document.getElementById('live-test-rec-text');
   const liveTestRecResult = document.getElementById('live-test-rec-result');
-
   if (liveTestRecBtn) {
-    liveTestRecBtn.addEventListener('click', async () => {
-      const apiKey = (liveApiKeyInput ? liveApiKeyInput.value.trim() : '') || getApiKey();
-      if (!apiKey) {
-        alert('請先輸入 Google AI Studio API Key！');
-        return;
-      }
-
-      if (liveTestRecResult) {
-        liveTestRecResult.classList.remove('hidden');
-        liveTestRecResult.innerHTML = '<span class="text-amber-400">⏳ 正在請求麥克風權限...</span>';
-      }
-
-      let testStream = null;
-      let testAudioCtx = null;
-      try {
-        testStream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1 } });
-        const AudioCtx = window.AudioContext || window.webkitAudioContext;
-        testAudioCtx = new AudioCtx();
-        if (testAudioCtx.state === 'suspended') await testAudioCtx.resume();
-
-        const source = testAudioCtx.createMediaStreamSource(testStream);
-        const processor = testAudioCtx.createScriptProcessor(1024, 1, 1);
-        const gain = testAudioCtx.createGain();
-        gain.gain.value = 0;
-
-        const chunks = [];
-        processor.onaudioprocess = (e) => {
-          const input = e.inputBuffer.getChannelData(0);
-          const down = downsampleBuffer(input, testAudioCtx.sampleRate, 16000);
-          chunks.push(new Float32Array(down));
-        };
-
-        source.connect(processor);
-        processor.connect(gain);
-        gain.connect(testAudioCtx.destination);
-
-        let countdown = 3;
-        liveTestRecBtn.disabled = true;
-        liveTestRecBtn.classList.add('bg-rose-900', 'border-rose-500');
-
-        const timer = setInterval(() => {
-          countdown--;
-          if (liveTestRecText) liveTestRecText.textContent = `🔴 錄音中 (${countdown}s)... 請說話`;
-          if (liveTestRecResult) liveTestRecResult.innerHTML = `<span class="text-rose-400 font-bold">🔴 錄音中，倒數 ${countdown} 秒... 請對著手機說一句話</span>`;
-          if (countdown <= 0) {
-            clearInterval(timer);
-          }
-        }, 1000);
-
-        if (liveTestRecText) liveTestRecText.textContent = `🔴 錄音中 (3s)... 請說話`;
-
-        await new Promise(resolve => setTimeout(resolve, 3200));
-
-        // Stop recording
-        processor.disconnect();
-        source.disconnect();
-        gain.disconnect();
-        testStream.getTracks().forEach(t => t.stop());
-        testAudioCtx.close();
-
-        if (liveTestRecText) liveTestRecText.textContent = '⏳ 正在上傳轉錄中...';
-        if (liveTestRecResult) liveTestRecResult.innerHTML = '<span class="text-cyan-400">⚡ 正在傳送至 Google Gemini Flash 進行繁體中文轉錄...</span>';
-
-        const base64Wav = pcmFloat32ArrayToWavBase64(chunks, 16000);
-        console.log('[Test Recording WAV Base64 Length]', base64Wav.length);
-
-        const res = await fetch('/api/live-transcribe', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            api_key: apiKey,
-            user_audio: base64Wav
-          })
-        });
-
-        const data = await res.json();
-        console.log('[Test Transcribe Response]', data);
-
-        if (data.success && data.user_text) {
-          if (liveTestRecResult) {
-            liveTestRecResult.innerHTML = `
-              <div class="text-emerald-400 font-bold">✅ 轉錄成功！</div>
-              <div class="text-white mt-1 text-xs">「${escapeHtml(data.user_text)}」</div>
-              <div class="text-slate-400 text-[10px] mt-1">（音訊大小: ${base64Wav.length} 字元）</div>
-            `;
-          }
-        } else {
-          if (liveTestRecResult) {
-            liveTestRecResult.innerHTML = `
-              <div class="text-rose-400 font-bold">⚠️ 未獲得轉錄文字</div>
-              <div class="text-slate-400 mt-1">回傳：${JSON.stringify(data)}</div>
-            `;
-          }
-        }
-
-      } catch (err) {
-        console.error('[Test Rec Error]', err);
-        if (liveTestRecResult) {
-          liveTestRecResult.innerHTML = `<span class="text-rose-400">⚠️ 測試錯誤：${escapeHtml(err.message)}</span>`;
-        }
-      } finally {
-        liveTestRecBtn.disabled = false;
-        liveTestRecBtn.classList.remove('bg-rose-900', 'border-rose-500');
-        if (liveTestRecText) liveTestRecText.textContent = '點擊錄音 3 秒測試轉錄 (單元測試)';
-      }
+    liveTestRecBtn.addEventListener('click', () => {
+      runDiagnosticVoiceTest(liveTestRecText, liveTestRecResult, liveTestRecBtn);
     });
   }
 
