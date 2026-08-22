@@ -14,7 +14,11 @@
 - 💬 **支線解答獨立卡片 (`/btw`)**：主副話題精準分離，可折疊收合，保持主線對話乾淨俐落。
 - 🎙️ **Gemini 2.0 Flash Realtime 語音對話 (Live Mode)**：低延遲雙向 Web Audio PCM 即時語音串流，支援多種風格音色。
 - 🧠 **思考強度自訂 (Thinking Effort)**：3 段式推理深度調節（`Low 極速` / `Medium 平衡` / `High 深度`）。
-- 🤖 **全旗艦模型支援**：支援 `Gemini 3.7 Flash`、`Claude Sonnet 4.6`、`Claude Opus 4.6`、`Gemini 3.1 Pro`、`GPT-OSS 120B`。
+- 🤖 **雙 Agent Provider**：可在介面中切換既有的 **Antigravity / agy** 與可選的 **OpenAI Codex CLI**；兩者的對話、Session 與歷史紀錄完全隔離。
+- 🧩 **持久 Codex 工作階段**：透過 `codex app-server` 常駐連線，支援串流回答、thinking、工具事件、檔案圖片輸入、模型清單、原生 context compaction 與對話回朔。
+- 🔐 **Codex 全自動執行模式**：Codex 工作回合使用 `approvalPolicy: never` 與 `dangerFullAccess` sandbox，等效於非互動式全權限開發流程；請只在你信任的本機環境與專案中使用。
+- 📈 **Context 與用量**：對話頁與歷史側欄顯示目前 context 用量；Codex 另提供前往 ChatGPT Codex 用量設定頁的連結。
+- 🤖 **多模型選單**：Antigravity 提供既有模型；Codex 啟動後會由本機 CLI 動態讀取可用模型（例如 Sol、Terra、Luna）與其支援的 reasoning effort。
 - 📎 **多模態相機與相簿附加**：支援 iPhone / Android 原生 **HEIC/HEIF** 解碼與 AI 視覺專用輕量自動壓縮。
 - 📍 **GPS 即時定位與地圖**：一鍵獲取手機 GPS 並生成可於新分頁開啟的 Google Maps 導航卡片。
 - 📁 **Termux 本地檔案總管**：行動端目錄導航、代碼預覽與直接送入 AI 對話。
@@ -59,6 +63,17 @@ pkg install -y git nodejs python curl gh
 git clone https://github.com/magic76/crew-pocket.git ~/agy-web
 ```
 
+### 步驟 4（可選）：啟用 OpenAI Codex Provider
+
+Antigravity / agy 仍是預設 Provider，不安裝 Codex 也可以照常使用。若要在模型選單中切換到 Codex，請先在 Termux 完成 Codex CLI 登入，並確認它可執行：
+
+```bash
+codex --version
+codex login
+```
+
+Crew Pocket 會在第一次選用 Codex 時啟動 `codex app-server`。Codex 模型選單由該 CLI 動態取得，因此實際可用模型取決於你的 Codex 帳號與安裝版本。
+
 ---
 
 ## 🚀 啟動與使用 (Usage)
@@ -94,11 +109,27 @@ http://127.0.0.1:8000
 | `/plan [目標]` | **自主架構規劃模式** | 複雜多模組專案逐步拆解 |
 | `/goal [目標]` | **自主特勤目標達成** | 高難度、長時程任務不達目的不停止 |
 
+> `/compact` 依目前 Provider 執行：AGY 使用 Crew Pocket 的既有記憶摘要機制；Codex 使用 CLI 原生的 context compaction。
+
+---
+
+## 🧩 Provider 與對話資料
+
+| Provider | 預設狀態 | 對話與 Session | 特有能力 |
+| :--- | :--- | :--- | :--- |
+| Antigravity / agy | 預設，原有行為不變 | 既有 resident session 與本機 brain 歷史 | `/compact` 記憶摘要、`/usage` 用量彈窗、Gemini Live 語音 |
+| OpenAI Codex | 可選 | `codex app-server` thread，與 AGY 完全隔離 | 動態模型、工具／reasoning 串流、context 用量、原生 compact、回朔到任一使用者回合 |
+
+切換 Provider 不會遷移、覆寫或刪除另一個 Provider 的對話。左側歷史列表會以 `AGY` 或 `Codex` 標籤區分來源。
+
+Codex context 用量由 app-server 在工作回合中回報；伺服器剛重啟時，舊 Codex 對話可能先顯示 `—`，完成新的 Codex 回合後即會更新。
+
 ---
 
 ## 🛠️ 技術架構 (Architecture)
 
-- **後端 (Backend)**: Node.js 原生 HTTP + Server-Sent Events (SSE) 雙向管道流 + Resident Process Pool
+- **後端 (Backend)**: Node.js 原生 HTTP + Server-Sent Events (SSE)；Provider 層將 AGY resident process 與 Codex app-server 事件正規化後送往前端
+- **Provider**: `lib/providers/antigravity.js` 保留既有 AGY 實作；`lib/providers/codex.js` 管理持久 JSON-RPC app-server 與 Codex thread
 - **前端 (Frontend)**: 原生 Modular JavaScript (`app.js`, `chat.js`, `tools.js`, `ui.js`, `live.js`) + Tailwind CSS (Glassmorphism 2.0)
 - **安全防護 (Security)**: DOMPurify 離線安全消毒 + 沙盒化 Iframe 隔離執行
 - **格式支援 (Formats)**: Marked.js + Highlight.js + heic2any + Chart.js
