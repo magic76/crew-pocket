@@ -1,10 +1,15 @@
 // Antigravity Web UI - UI State, Modals & Helpers
 
 // Global State
+const DEFAULT_PROVIDERS = [
+  { id: 'antigravity', label: 'Antigravity', shortLabel: 'AGY', icon: '✨', storagePrefix: 'agy', badgeClass: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40', greeting: '你好！已為你開啟新對話。有什麼可以幫你的？', capabilities: { history: true, rewind: true, autoTitle: true, compact: 'checkpoint', usage: { mode: 'endpoint', endpoint: '/api/usage' } } },
+  { id: 'codex', label: 'OpenAI Codex', shortLabel: 'Codex', icon: '🧩', storagePrefix: 'codex', badgeClass: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40', greeting: '你好！Codex provider 已就緒。有什麼開發任務？', capabilities: { history: true, rewind: true, autoTitle: false, compact: 'native', usage: { mode: 'external-link', url: 'https://chatgpt.com/codex/settings/usage' } } }
+];
+let availableProviders = DEFAULT_PROVIDERS;
 let currentConversationId = null;
 let currentProvider = localStorage.getItem('crew_current_provider') || 'antigravity';
 let currentModel = localStorage.getItem('agy_current_model') || 'gemini-3.7-flash';
-let currentEffort = localStorage.getItem(currentProvider === 'codex' ? 'codex_current_effort' : 'agy_current_effort') || 'low';
+let currentEffort = localStorage.getItem(providerStorageKey('current_effort')) || 'low';
 let availableModels = [];
 let availableEfforts = [
   { id: 'low', name: 'Low (極速)', desc: '⚡ 0~1s 秒回 · 日常對話', icon: '⚡', color: 'emerald' },
@@ -170,24 +175,34 @@ function toggleUsageModal(open) {
 
 async function loadUsageData() {
   if (!usageBarsContainer) return;
-  if (currentProvider === 'codex') {
-    if (usageModalSubtitle) usageModalSubtitle.textContent = 'Codex 配額由 OpenAI 帳戶頁面提供';
-    if (usageModalFooterText) usageModalFooterText.textContent = '將在瀏覽器新分頁開啟';
+  const provider = providerConfig();
+  const usage = provider.capabilities?.usage || { mode: 'unsupported' };
+  const isEnglish = typeof getCrewLocale === 'function' && getCrewLocale() === 'en';
+  if (usage.mode === 'external-link') {
+    if (usageModalSubtitle) usageModalSubtitle.textContent = isEnglish ? `${provider.shortLabel || provider.label} usage is available on the official account page` : `${provider.shortLabel || provider.label} 配額由官方帳戶頁面提供`;
+    if (usageModalFooterText) usageModalFooterText.textContent = isEnglish ? 'Opens in a new browser tab' : '將在瀏覽器新分頁開啟';
     if (refreshUsageBtn) refreshUsageBtn.classList.add('hidden');
     usageBarsContainer.innerHTML = `
       <div class="p-4 rounded-xl bg-slate-950 border border-emerald-800/70 text-xs text-slate-300 space-y-3">
         <div class="flex items-start gap-3">
-          <span class="text-2xl">🧩</span>
+          <span class="text-2xl">${provider.icon || '🤖'}</span>
           <div class="space-y-1">
-            <div class="font-bold text-white">OpenAI Codex 用量</div>
-            <p class="text-[11px] text-slate-400 leading-relaxed">查看目前方案的剩餘用量、重置時間與可購買的額外 credits。</p>
+            <div class="font-bold text-white">${escapeHtml(provider.label)} ${isEnglish ? 'usage' : '用量'}</div>
+            <p class="text-[11px] text-slate-400 leading-relaxed">${isEnglish ? 'View remaining usage, reset times, and available extra credits for the current plan.' : '查看目前方案的剩餘用量、重置時間與可購買的額外 credits。'}</p>
           </div>
         </div>
-        <a href="https://chatgpt.com/codex/settings/usage" target="_blank" rel="noopener noreferrer" class="w-full min-h-11 px-3 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold flex items-center justify-center gap-2 no-underline transition active:scale-[0.98] shadow-lg shadow-emerald-900/30">
-          <span>🌐 前往 Codex 官方用量頁</span>
+        <a href="${escapeHtml(usage.url)}" target="_blank" rel="noopener noreferrer" class="w-full min-h-11 px-3 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold flex items-center justify-center gap-2 no-underline transition active:scale-[0.98] shadow-lg shadow-emerald-900/30">
+          <span>🌐 ${isEnglish ? `Open the official ${escapeHtml(provider.shortLabel || provider.label)} usage page` : `前往 ${escapeHtml(provider.shortLabel || provider.label)} 官方用量頁`}</span>
           <span aria-hidden="true">↗</span>
         </a>
       </div>`;
+    return;
+  }
+  if (usage.mode !== 'endpoint') {
+    if (usageModalSubtitle) usageModalSubtitle.textContent = isEnglish ? `${provider.label} does not provide usage data yet` : `${provider.label} 尚未提供用量查詢`;
+    if (usageModalFooterText) usageModalFooterText.textContent = '';
+    if (refreshUsageBtn) refreshUsageBtn.classList.add('hidden');
+    usageBarsContainer.innerHTML = `<div class="p-4 text-center text-xs text-slate-400">${isEnglish ? 'Usage data is not supported by this provider yet.' : '此 Provider 尚未支援用量查詢'}</div>`;
     return;
   }
   if (usageModalSubtitle) usageModalSubtitle.textContent = '即時調用 agy /usage 獲取';
@@ -201,7 +216,7 @@ async function loadUsageData() {
   `;
 
   try {
-    const res = await fetch('/api/usage');
+    const res = await fetch(usage.endpoint);
     const data = await res.json();
 
     if (data.quotas && data.quotas.length > 0) {
@@ -251,12 +266,40 @@ function providerQuery() {
   return 'provider=' + encodeURIComponent(currentProvider);
 }
 
+function providerConfig(providerId = currentProvider) {
+  return availableProviders.find(provider => provider.id === providerId) || DEFAULT_PROVIDERS.find(provider => provider.id === providerId) || DEFAULT_PROVIDERS[0];
+}
+
+function providerStorageKey(kind, providerId = currentProvider) {
+  return `${providerConfig(providerId).storagePrefix || providerId}_${kind}`;
+}
+
+async function loadProviderCatalog() {
+  try {
+    const res = await fetch('/api/providers');
+    const data = await res.json();
+    if (Array.isArray(data.providers) && data.providers.length > 0) availableProviders = data.providers;
+  } catch (_) {}
+  if (!availableProviders.some(provider => provider.id === currentProvider)) {
+    currentProvider = availableProviders[0]?.id || 'antigravity';
+    localStorage.setItem('crew_current_provider', currentProvider);
+  }
+  renderProviderOptions();
+  return availableProviders;
+}
+
 function activeConversationStorageKey() {
-  return currentProvider === 'codex' ? 'codex_active_conv_id' : 'agy_active_conv_id';
+  return providerStorageKey('active_conv_id');
 }
 
 function renderProviderOptions() {
   if (!providerOptionsContainer) return;
+  providerOptionsContainer.style.gridTemplateColumns = `repeat(${Math.min(availableProviders.length, 3)}, minmax(0, 1fr))`;
+  providerOptionsContainer.innerHTML = availableProviders.map(provider => `
+    <button type="button" data-provider="${escapeHtml(provider.id)}" onclick="selectProvider('${escapeHtml(provider.id)}')" class="provider-option px-3 py-2 rounded-xl border text-xs font-bold transition active:scale-95">
+      ${provider.icon || '🤖'} ${escapeHtml(provider.label)}
+    </button>
+  `).join('');
   providerOptionsContainer.querySelectorAll('.provider-option').forEach(button => {
     const active = button.dataset.provider === currentProvider;
     button.className = 'provider-option px-3 py-2 rounded-xl border text-xs font-bold transition active:scale-95 ' +
@@ -265,15 +308,15 @@ function renderProviderOptions() {
 }
 
 window.selectProvider = async function(providerId) {
-  if (!['antigravity', 'codex'].includes(providerId) || providerId === currentProvider) return;
+  if (!availableProviders.some(provider => provider.id === providerId) || providerId === currentProvider) return;
   if (currentAbortController) { try { currentAbortController.abort(); } catch (_) {} }
   currentProvider = providerId;
   localStorage.setItem('crew_current_provider', currentProvider);
   currentConversationId = localStorage.getItem(activeConversationStorageKey());
   const models = availableModels.filter(model => (model.provider || 'antigravity') === currentProvider);
-  const savedModelKey = currentProvider === 'codex' ? 'codex_current_model' : 'agy_current_model';
+  const savedModelKey = providerStorageKey('current_model');
   currentModel = localStorage.getItem(savedModelKey) || (models.find(model => model.isDefault) || models[0] || {}).id || 'gemini-3.7-flash';
-  const effortKey = currentProvider === 'codex' ? 'codex_current_effort' : 'agy_current_effort';
+  const effortKey = providerStorageKey('current_effort');
   const selectedModel = models.find(model => model.id === currentModel);
   const supported = selectedModel?.supportedReasoningEfforts || ['low', 'medium', 'high'];
   currentEffort = localStorage.getItem(effortKey) || selectedModel?.defaultReasoningEffort || 'low';
@@ -285,7 +328,7 @@ window.selectProvider = async function(providerId) {
   if (currentConversationId) await loadConversationHistory(currentConversationId);
   else {
     messagesContainer.innerHTML = '';
-    appendMessage('assistant', currentProvider === 'codex' ? '你好！Codex provider 已就緒。有什麼開發任務？' : '你好！已為你開啟新對話。有什麼可以幫你的？');
+    appendMessage('assistant', providerConfig().greeting || '你好！已為你開啟新對話。有什麼可以幫你的？');
     if (headerTitle) headerTitle.textContent = '新對話';
   }
   loadConversations();
@@ -400,8 +443,8 @@ window.selectModel = function(modelId) {
   const selected = selectedModelConfig();
   const supported = supportedEffortsForCurrentModel();
   if (!supported.includes(currentEffort)) currentEffort = selected?.defaultReasoningEffort || supported[0] || 'low';
-  localStorage.setItem(currentProvider === 'codex' ? 'codex_current_effort' : 'agy_current_effort', currentEffort);
-  localStorage.setItem(currentProvider === 'codex' ? 'codex_current_model' : 'agy_current_model', currentModel);
+  localStorage.setItem(providerStorageKey('current_effort'), currentEffort);
+  localStorage.setItem(providerStorageKey('current_model'), currentModel);
   updateModelUI();
   updateEffortUI();
   renderEffortOptions();
@@ -417,7 +460,7 @@ window.selectModel = function(modelId) {
 
 window.selectEffort = function(effortId) {
   currentEffort = effortId;
-  localStorage.setItem(currentProvider === 'codex' ? 'codex_current_effort' : 'agy_current_effort', currentEffort);
+  localStorage.setItem(providerStorageKey('current_effort'), currentEffort);
   updateEffortUI();
   renderEffortOptions();
   if (navigator.vibrate) navigator.vibrate(20);

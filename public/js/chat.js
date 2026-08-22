@@ -317,6 +317,8 @@ function showContextModal() {
   const turnsEl = document.getElementById('modal-context-turns');
   const totalTokensEl = document.getElementById('modal-context-total-tokens');
   const savedPercentEl = document.getElementById('modal-context-saved-percent');
+  const compactBtn = document.getElementById('modal-trigger-compact-btn');
+  if (compactBtn) compactBtn.classList.toggle('hidden', !providerConfig().capabilities?.compact);
 
   const stats = currentContextStats || {
     active_tokens: 0,
@@ -405,12 +407,12 @@ function appendMessage(role, content, timestamp, tools = [], thinking = '', isBt
     }
     msgDiv.setAttribute('data-raw-text', userText);
 
-    const editRewindBtn = `
+    const editRewindBtn = providerConfig().capabilities?.rewind ? `
       <button type="button" class="edit-rewind-btn opacity-75 hover:opacity-100 hover:text-white bg-indigo-700/60 hover:bg-indigo-700 px-1.5 py-0.5 rounded transition active:scale-95 flex items-center gap-1 font-sans cursor-pointer text-[10px]" title="編輯此問題並回溯對話">
         <svg class="w-2.5 h-2.5 text-indigo-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
         <span>編輯回溯</span>
       </button>
-    `;
+    ` : '';
 
     const userHeader = `
       <div class="flex items-center justify-between gap-2 mb-1.5 pb-1 border-b border-white/15 text-[10px] text-indigo-100/90 select-none">
@@ -749,7 +751,7 @@ async function loadConversationHistory(convId) {
 async function loadConversations() {
   if (!convList) return;
   try {
-    const providerIds = ['antigravity', 'codex'];
+    const providerIds = availableProviders.filter(provider => provider.capabilities?.history !== false).map(provider => provider.id);
     const results = await Promise.all(providerIds.map(async provider => {
       try {
         const response = await fetch('/api/conversations?provider=' + encodeURIComponent(provider));
@@ -770,8 +772,9 @@ async function loadConversations() {
     data.conversations.forEach(conv => {
       const conversationProvider = conv.provider || 'antigravity';
       const isCurrent = conv.id === currentConversationId && conversationProvider === currentProvider;
-      const providerLabel = conversationProvider === 'codex' ? 'Codex' : 'AGY';
-      const providerBadgeClass = conversationProvider === 'codex' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' : 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40';
+      const conversationProviderConfig = providerConfig(conversationProvider);
+      const providerLabel = conversationProviderConfig.shortLabel || conversationProviderConfig.label;
+      const providerBadgeClass = conversationProviderConfig.badgeClass || 'bg-slate-500/20 text-slate-300 border-slate-500/40';
       const wrapper = document.createElement('div');
       wrapper.className = 'swipe-item-wrapper relative overflow-hidden rounded-xl mb-1.5 select-none transition-all duration-200';
       wrapper.style.maxHeight = '80px';
@@ -924,7 +927,7 @@ async function loadConversations() {
             currentProvider = conversationProvider;
             localStorage.setItem('crew_current_provider', currentProvider);
             const providerModels = availableModels.filter(model => (model.provider || 'antigravity') === currentProvider);
-            const modelKey = currentProvider === 'codex' ? 'codex_current_model' : 'agy_current_model';
+            const modelKey = providerStorageKey('current_model');
             currentModel = localStorage.getItem(modelKey) || (providerModels[0] && providerModels[0].id) || 'gemini-3.7-flash';
             renderProviderOptions();
             updateModelUI();
@@ -1008,6 +1011,11 @@ async function sendMessage() {
     if (cameraInput) cameraInput.value = '';
     if (imagePreviewContainer) imagePreviewContainer.classList.add('hidden');
 
+    if (!providerConfig().capabilities?.compact) {
+      appendMessage('assistant', '⚠️ 此 Provider 尚未支援對話精簡。');
+      return;
+    }
+
     if (!currentConversationId) {
       appendMessage('assistant', '⚠️ 當前為新對話，尚未有歷史紀錄可供壓縮。請在對話累積後再執行 `/compact` 進行精簡！');
       return;
@@ -1034,8 +1042,7 @@ async function sendMessage() {
     scrollToBottom(true);
 
     try {
-      const compactEndpoint = currentProvider === 'codex' ? '/api/codex/compact' : '/api/compact';
-      const res = await fetch(compactEndpoint, {
+      const res = await fetch('/api/compact', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1560,7 +1567,7 @@ function handleSendClick(e) {
 
 // 🏷️ Auto-generate AI conversation title (fires in background, non-blocking)
 async function generateConversationTitle(convId, userMessage, assistantResponse) {
-  if (currentProvider === 'codex') {
+  if (providerConfig().capabilities?.autoTitle === false) {
     if (headerTitle) headerTitle.textContent = userMessage.slice(0, 18) + (userMessage.length > 18 ? '...' : '');
     return;
   }

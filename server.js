@@ -11,32 +11,35 @@ const {
   UPLOADS_DIR,
   BRAIN_DIR,
   MIME_TYPES,
-  AVAILABLE_MODELS,
   THINKING_EFFORTS,
   parseJsonBody
 } = require('./lib/config');
 
 const { sessionManager } = require('./lib/session');
-const { getProvider, normalizeProviderId } = require('./lib/providers');
-const { handleListConversations, handleGetHistory, handleDeleteConversation, handleRewindConversation, handleLiveSync, handleLiveTranscribe } = require('./lib/history');
+const { getProvider, normalizeProviderId, listProviders, listProviderMetadata } = require('./lib/providers');
+const { handleLiveSync, handleLiveTranscribe } = require('./lib/history');
 const { handleRunCode } = require('./lib/sandbox');
 const { handleUsage } = require('./lib/usage');
 const { handleListFiles, handleReadFile } = require('./lib/files');
-const { handleGenerateTitle, handleRenameConversation, getCachedTitle } = require('./lib/title');
-const { handleCompact } = require('./lib/compact');
+const { handleGenerateTitle, getCachedTitle } = require('./lib/title');
 
 // 🤖 List Available Models & Thinking Efforts
 async function handleGetModels(res) {
-  const antigravityModels = AVAILABLE_MODELS.filter(model => (model.provider || 'antigravity') === 'antigravity');
-  let codexModels = AVAILABLE_MODELS.filter(model => model.provider === 'codex');
-  try {
-    const discovered = await getProvider('codex').listModels();
-    if (discovered.length > 0) codexModels = discovered;
-  } catch (err) {
-    console.warn('[Codex Models] Dynamic discovery failed:', err.message);
-  }
+  const modelGroups = await Promise.all(listProviders().map(async provider => {
+    if (!provider.metadata.capabilities.models || typeof provider.listModels !== 'function') return [];
+    try { return await provider.listModels(); }
+    catch (err) {
+      console.warn(`[${provider.id} Models] Discovery failed:`, err.message);
+      return provider.fallbackModels || [];
+    }
+  }));
   res.writeHead(200, { 'Content-Type': 'application/json' });
-  res.end(JSON.stringify({ models: [...antigravityModels, ...codexModels], efforts: THINKING_EFFORTS }));
+  res.end(JSON.stringify({ models: modelGroups.flat(), efforts: THINKING_EFFORTS }));
+}
+
+function handleGetProviders(res) {
+  res.writeHead(200, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify({ providers: listProviderMetadata() }));
 }
 
 // ⚡ Check Conversation Session Busy Status
@@ -54,9 +57,10 @@ function handleSessionStatus(parsedUrl, res) {
 
 async function handleProviderConversations(parsedUrl, res) {
   const providerId = normalizeProviderId(parsedUrl.query.provider);
-  if (providerId === 'antigravity') return handleListConversations(res);
   try {
-    const conversations = await getProvider(providerId).listConversations();
+    const provider = getProvider(providerId);
+    if (!provider.metadata.capabilities.history || typeof provider.listConversations !== 'function') throw new Error('Provider does not support conversation history');
+    const conversations = await provider.listConversations();
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ conversations }));
   } catch (err) {
@@ -65,59 +69,59 @@ async function handleProviderConversations(parsedUrl, res) {
   }
 }
 
-async function handleCodexCompact(req, res) {
+async function handleProviderCompact(req, res, forcedProviderId = null) {
   try {
     const body = await parseJsonBody(req);
-    const providerId = normalizeProviderId(body.provider);
-    if (providerId !== 'codex') {
-      res.writeHead(400, { 'Content-Type': 'application/json' });
-      return res.end(JSON.stringify({ error: 'This endpoint only supports the Codex provider' }));
-    }
+    const providerId = normalizeProviderId(forcedProviderId || body.provider);
     if (!body.conversation_id || !/^[a-zA-Z0-9_-]+$/.test(body.conversation_id)) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
       return res.end(JSON.stringify({ error: 'Invalid conversation_id' }));
     }
-    const isEnglish = body.locale === 'en';
-    await getProvider('codex').compactConversation(body.conversation_id);
+    const provider = getProvider(providerId);
+    if (!provider.metadata.capabilities.compact || typeof provider.compactConversation !== 'function') throw new Error('Provider does not support conversation compaction');
+    const result = await provider.compactConversation(body.conversation_id, {
+      focus: body.focus,
+      locale: body.locale === 'en' ? 'en' : 'zh-TW'
+    });
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
       success: true,
-      provider: 'codex',
-      conversation_id: body.conversation_id,
-      summary: isEnglish
-        ? 'Codex used native context compaction to condense earlier conversation content while keeping the context needed to continue the current work.'
-        : 'Codex 已使用原生 context compaction 精簡較早的對話內容，並保留繼續執行目前工作的必要脈絡。',
-      message: isEnglish ? 'Codex conversation context compacted successfully.' : 'Codex 對話上下文已成功精簡！'
+      provider: providerId,
+      conversation_id: result.conversationId || body.conversation_id,
+      summary: result.summary,
+      message: result.message
     }));
   } catch (err) {
-    console.error('[Codex Compact Error]', err);
-    res.writeHead(500, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: err.message || 'Codex 壓縮對話失敗' }));
+    console.error('[Provider Compact Error]', err);
+    res.writeHead(err.statusCode || 500, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: err.message || '對話壓縮失敗' }));
   }
 }
 
 async function handleProviderHistory(parsedUrl, res) {
   const providerId = normalizeProviderId(parsedUrl.query.provider);
-  if (providerId === 'antigravity') return handleGetHistory(parsedUrl, res);
   try {
-    const history = await getProvider(providerId).getHistory(parsedUrl.query.id);
+    const provider = getProvider(providerId);
+    if (!provider.metadata.capabilities.history || typeof provider.getHistory !== 'function') throw new Error('Provider does not support conversation history');
+    const history = await provider.getHistory(parsedUrl.query.id);
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(history));
   } catch (err) {
-    res.writeHead(404, { 'Content-Type': 'application/json' });
+    res.writeHead(err.statusCode || 404, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: err.message }));
   }
 }
 
 async function handleProviderDelete(parsedUrl, res) {
   const providerId = normalizeProviderId(parsedUrl.query.provider);
-  if (providerId === 'antigravity') return handleDeleteConversation(parsedUrl, res);
   try {
-    await getProvider(providerId).deleteConversation(parsedUrl.query.id);
+    const provider = getProvider(providerId);
+    if (!provider.metadata.capabilities.delete || typeof provider.deleteConversation !== 'function') throw new Error('Provider does not support deleting conversations');
+    await provider.deleteConversation(parsedUrl.query.id);
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ success: true, id: parsedUrl.query.id, provider: providerId }));
   } catch (err) {
-    res.writeHead(500, { 'Content-Type': 'application/json' });
+    res.writeHead(err.statusCode || 500, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: err.message }));
   }
 }
@@ -126,12 +130,6 @@ async function handleProviderRewind(req, res) {
   try {
     const body = await parseJsonBody(req);
     const providerId = normalizeProviderId(body.provider);
-    if (providerId === 'antigravity') {
-      const synthetic = new (require('node:stream').Readable)({
-        read() { this.push(JSON.stringify(body)); this.push(null); }
-      });
-      return handleRewindConversation(synthetic, res);
-    }
     if (!body.conversation_id || !/^[a-zA-Z0-9_-]+$/.test(body.conversation_id)) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
       return res.end(JSON.stringify({ error: 'Invalid conversation id' }));
@@ -141,18 +139,20 @@ async function handleProviderRewind(req, res) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
       return res.end(JSON.stringify({ error: 'Invalid user turn index' }));
     }
-    const result = await getProvider(providerId).rewindConversation(body.conversation_id, userTurnIndex);
+    const provider = getProvider(providerId);
+    if (!provider.metadata.capabilities.rewind || typeof provider.rewindConversation !== 'function') throw new Error('Provider does not support conversation rewind');
+    const result = await provider.rewindConversation(body.conversation_id, userTurnIndex);
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
       success: true,
       provider: providerId,
       conversation_id: result.conversationId,
       user_turn_index: userTurnIndex,
-      removed_turns: result.numTurns
+      removed_turns: result.removedTurns
     }));
   } catch (err) {
     console.error('[Provider Rewind Error]', err);
-    res.writeHead(500, { 'Content-Type': 'application/json' });
+    res.writeHead(err.statusCode || 500, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: err.message || '回溯對話失敗' }));
   }
 }
@@ -379,18 +379,15 @@ async function handleProviderRename(req, res) {
   try {
     const body = await parseJsonBody(req);
     const providerId = normalizeProviderId(body.provider);
-    if (providerId === 'antigravity') {
-      req.body = body;
-      const synthetic = new (require('node:stream').Readable)({ read() { this.push(JSON.stringify(body)); this.push(null); } });
-      return handleRenameConversation(synthetic, res);
-    }
     const title = String(body.title || '').trim().slice(0, 60);
     if (!body.conversation_id || !title) throw new Error('conversation_id and title are required');
-    await getProvider(providerId).renameConversation(body.conversation_id, title);
+    const provider = getProvider(providerId);
+    if (!provider.metadata.capabilities.rename || typeof provider.renameConversation !== 'function') throw new Error('Provider does not support renaming conversations');
+    await provider.renameConversation(body.conversation_id, title);
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ success: true, conversation_id: body.conversation_id, title, provider: providerId }));
   } catch (err) {
-    res.writeHead(500, { 'Content-Type': 'application/json' });
+    res.writeHead(err.statusCode || 500, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: err.message }));
   }
 }
@@ -465,9 +462,9 @@ const server = http.createServer(async (req, res) => {
   } else if (pathname === '/api/generate-title' && req.method === 'POST') {
     return handleGenerateTitle(req, res);
   } else if (pathname === '/api/compact' && req.method === 'POST') {
-    return handleCompact(req, res);
+    return handleProviderCompact(req, res);
   } else if (pathname === '/api/codex/compact' && req.method === 'POST') {
-    return handleCodexCompact(req, res);
+    return handleProviderCompact(req, res, 'codex');
   } else if (pathname === '/api/live-sync' && req.method === 'POST') {
     return handleLiveSync(req, res);
   } else if (pathname === '/api/live-transcribe' && req.method === 'POST') {
@@ -484,6 +481,8 @@ const server = http.createServer(async (req, res) => {
     return handleProviderRename(req, res);
   } else if (pathname === '/api/models' && req.method === 'GET') {
     return handleGetModels(res);
+  } else if (pathname === '/api/providers' && req.method === 'GET') {
+    return handleGetProviders(res);
   } else if (pathname === '/api/session-status' && req.method === 'GET') {
     return handleSessionStatus(parsedUrl, res);
   } else if (pathname === '/api/usage' && req.method === 'GET') {

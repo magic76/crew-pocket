@@ -465,28 +465,23 @@ function initAppAndListeners() {
     sendBtn.addEventListener('click', handleSendClick);
   }
 
-  // Initialize available models & thinking efforts list
-  fetch('/api/models').then(r => r.json()).then(data => {
-    availableModels = data.models || [];
-    const providerModels = availableModels.filter(model => (model.provider || 'antigravity') === currentProvider);
-    const modelKey = currentProvider === 'codex' ? 'codex_current_model' : 'agy_current_model';
-    currentModel = localStorage.getItem(modelKey) || (providerModels.find(model => model.isDefault) || providerModels[0] || {}).id || 'gemini-3.7-flash';
-    const selectedModel = providerModels.find(model => model.id === currentModel);
-    const effortKey = currentProvider === 'codex' ? 'codex_current_effort' : 'agy_current_effort';
-    const supported = selectedModel?.supportedReasoningEfforts || ['low', 'medium', 'high'];
-    currentEffort = localStorage.getItem(effortKey) || selectedModel?.defaultReasoningEffort || 'low';
-    if (!supported.includes(currentEffort)) currentEffort = selectedModel?.defaultReasoningEffort || supported[0] || 'low';
-    if (data.efforts) availableEfforts = data.efforts;
-    updateModelUI();
-    updateEffortUI();
-  }).catch(() => {
-    updateModelUI();
-    updateEffortUI();
-  });
-
-  // Initial load: Restore last active conversation or load most recent
-  (async function initApp() {
+  // Initialize providers and models, then restore the active conversation.
+  (async function initProviderState() {
     try {
+      await loadProviderCatalog();
+      const modelsRes = await fetch('/api/models');
+      const modelsData = await modelsRes.json();
+      availableModels = modelsData.models || [];
+      const providerModels = availableModels.filter(model => (model.provider || 'antigravity') === currentProvider);
+      currentModel = localStorage.getItem(providerStorageKey('current_model')) || (providerModels.find(model => model.isDefault) || providerModels[0] || {}).id || 'gemini-3.7-flash';
+      const selectedModel = providerModels.find(model => model.id === currentModel);
+      const supported = selectedModel?.supportedReasoningEfforts || ['low', 'medium', 'high'];
+      currentEffort = localStorage.getItem(providerStorageKey('current_effort')) || selectedModel?.defaultReasoningEffort || 'low';
+      if (!supported.includes(currentEffort)) currentEffort = selectedModel?.defaultReasoningEffort || supported[0] || 'low';
+      if (modelsData.efforts) availableEfforts = modelsData.efforts;
+      updateModelUI();
+      updateEffortUI();
+
       const savedConvId = localStorage.getItem(activeConversationStorageKey());
       const res = await fetch(`/api/conversations?${providerQuery()}`);
       const data = await res.json();
@@ -498,6 +493,8 @@ function initAppAndListeners() {
       }
     } catch (e) {
       console.error('Init load error:', e);
+      updateModelUI();
+      updateEffortUI();
     }
   })();
 }
