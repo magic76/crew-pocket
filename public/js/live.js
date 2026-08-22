@@ -394,8 +394,11 @@
     return div.innerHTML;
   }
 
+  let isSyncing = false;
+
   // ⚡ Transcribe and Sync Full Dialogue into Active Session
   async function processTurnAndSync() {
+    if (isSyncing) return;
     const userChunks = turnUserPcmChunks.slice();
     const modelChunks = turnModelPcmChunks.slice();
     
@@ -409,6 +412,7 @@
 
     if (!userWav && !modelWav && !currentTurnUserText && !currentTurnModelText) return;
 
+    isSyncing = true;
     let finalUser = currentTurnUserText;
     let finalModel = currentTurnModelText;
 
@@ -426,10 +430,10 @@
         });
 
         const transData = await transRes.json();
-        console.log('[Live Transcribe API Result]', transData);
+        console.log('[Live Transcribe Result]', transData);
         if (transData.success) {
-          if (transData.user_text && !finalUser) finalUser = transData.user_text;
-          if (transData.model_text && !finalModel) finalModel = transData.model_text;
+          if (transData.user_text) finalUser = transData.user_text;
+          if (transData.model_text) finalModel = transData.model_text;
         }
       }
 
@@ -439,8 +443,8 @@
       if (!finalUser && !finalModel) return;
 
       // 2. Show in live modal transcript box
-      if (finalUser) appendTranscript('user', finalUser);
-      if (finalModel) appendTranscript('model', finalModel);
+      if (finalUser && finalUser !== '🗣️ (語音輸入)') appendTranscript('user', finalUser);
+      if (finalModel && finalModel !== '🎙️ (已完成語音回覆)') appendTranscript('model', finalModel);
 
       // 3. Save to backend session logs
       const activeConvId = (typeof currentConversationId !== 'undefined' && currentConversationId) ? currentConversationId : null;
@@ -475,6 +479,8 @@
 
     } catch (err) {
       console.error('[Process Turn Sync Error]', err);
+    } finally {
+      isSyncing = false;
     }
   }
 
