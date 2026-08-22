@@ -384,6 +384,9 @@ function initAppAndListeners() {
     }
   }
 
+  window.processAndUploadImageBase64 = processAndUploadImageBase64;
+  window.handleImageSelection = handleImageSelection;
+
   if (cropImageBtn) {
     cropImageBtn.addEventListener('click', () => {
       if (currentSelectedImageSource && typeof openImageCropper === 'function') {
@@ -393,36 +396,6 @@ function initAppAndListeners() {
       }
     });
   }
-
-  window.triggerCameraInput = (e) => {
-    if (e && e.preventDefault) e.preventDefault();
-    const inp = document.getElementById('camera-input');
-    if (inp) {
-      inp.value = '';
-      inp.click();
-    }
-  };
-
-  window.triggerAttachInput = (e) => {
-    if (e && e.preventDefault) e.preventDefault();
-    const inp = document.getElementById('attach-input');
-    if (inp) {
-      inp.value = '';
-      inp.click();
-    }
-  };
-
-  window.handleFileInputChange = (input) => {
-    if (input && input.files && input.files[0]) {
-      handleImageSelection(input.files[0]);
-    }
-  };
-
-  if (camBtn) camBtn.addEventListener('click', window.triggerCameraInput);
-  if (cameraInput) cameraInput.addEventListener('change', (e) => window.handleFileInputChange(e.target));
-
-  if (attachBtn) attachBtn.addEventListener('click', window.triggerAttachInput);
-  if (attachInput) attachInput.addEventListener('change', (e) => window.handleFileInputChange(e.target));
 
   // 📋 Direct Image Paste Support (e.g. pasted screenshots or copied photos from gallery/web)
   window.addEventListener('paste', (e) => {
