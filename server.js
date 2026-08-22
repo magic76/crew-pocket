@@ -17,7 +17,7 @@ const {
 } = require('./lib/config');
 
 const { sessionManager } = require('./lib/session');
-const { handleListConversations, handleGetHistory, handleDeleteConversation, handleRewindConversation } = require('./lib/history');
+const { handleListConversations, handleGetHistory, handleDeleteConversation, handleRewindConversation, handleLiveSync } = require('./lib/history');
 const { handleRunCode } = require('./lib/sandbox');
 const { handleUsage } = require('./lib/usage');
 const { handleListFiles, handleReadFile } = require('./lib/files');
@@ -339,6 +339,8 @@ const server = http.createServer(async (req, res) => {
     return handleGenerateTitle(req, res);
   } else if (pathname === '/api/compact' && req.method === 'POST') {
     return handleCompact(req, res);
+  } else if (pathname === '/api/live-sync' && req.method === 'POST') {
+    return handleLiveSync(req, res);
   } else if (pathname === '/api/rewind' && req.method === 'POST') {
     return handleRewindConversation(req, res);
   } else if (pathname === '/api/prewarm' && req.method === 'POST') {

@@ -1,6 +1,6 @@
 /**
  * 🎙️ Crew Pocket - Gemini Live Multimodal Live API (Full-Duplex Audio & Vision)
- * Enhanced with 100ms audio chunking, dual case (camelCase & snake_case) parsing, and live diagnostics.
+ * Fully integrated with Active Brain Session & Chat History Synchronization.
  */
 
 (function() {
@@ -9,7 +9,7 @@
   const STORAGE_KEY = 'crew_pocket_gemini_api_key';
   const VOICE_KEY = 'crew_pocket_live_voice';
   const MODEL_KEY = 'crew_pocket_live_model';
-  const DEFAULT_VOICE = 'Puck'; // 'Puck', 'Charon', 'Kore', 'Fenrir', 'Aoede'
+  const DEFAULT_VOICE = 'Puck';
   const DEFAULT_MODEL = 'models/gemini-3.1-flash-live-preview';
 
   // State
@@ -28,6 +28,10 @@
   let analyser = null;
   let animFrameId = null;
   let audioSendBuffer = [];
+  
+  // Turn tracking for session history sync
+  let currentTurnModelText = '';
+  let currentTurnUserText = '';
 
   // DOM Elements
   const liveVoiceBtn = document.getElementById('live-voice-btn');
@@ -111,7 +115,7 @@
     let offset = 0;
     for (let i = 0; i < float32Array.length; i++, offset += 2) {
       let s = Math.max(-1, Math.min(1, float32Array[i]));
-      view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true); // Little endian
+      view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
     }
     return buffer;
   }
@@ -281,6 +285,42 @@
     return div.innerHTML;
   }
 
+  // 🔄 Sync Live Turn Dialogue into Current Active Session and Chat Timeline
+  async function syncTurnToActiveSession(userText, modelText) {
+    if (!modelText && !userText) return;
+    try {
+      const activeConvId = (typeof currentConversationId !== 'undefined' && currentConversationId) ? currentConversationId : null;
+      
+      const res = await fetch('/api/live-sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          conversation_id: activeConvId,
+          user_message: userText || '(Live 語音對話)',
+          assistant_message: modelText
+        })
+      });
+
+      const data = await res.json();
+      if (data.success && data.conversation_id) {
+        if (typeof currentConversationId !== 'undefined' && !currentConversationId) {
+          currentConversationId = data.conversation_id;
+          localStorage.setItem('agy_active_conv_id', data.conversation_id);
+          if (typeof loadConversations === 'function') loadConversations();
+        }
+      }
+
+      // Render into background chat timeline
+      if (typeof appendMessage === 'function') {
+        appendMessage('user', `🎙️ [Live 語音] ${userText || '(語音通話)'}`);
+        appendMessage('assistant', `🎙️ [Live 語音]\n${modelText}`);
+      }
+
+    } catch (err) {
+      console.error('[Live Sync Error]', err);
+    }
+  }
+
   async function startLiveSession() {
     const apiKey = getApiKey();
     if (!apiKey) {
@@ -292,6 +332,8 @@
     updateStatus('connecting', '⚡ 連線 Google Gemini Live...');
     if (liveTranscriptText) liveTranscriptText.innerHTML = '<div class="text-slate-400 text-center text-[11px] font-mono">⚡ 正在建立即時雙向語音通道...</div>';
     audioSendBuffer = [];
+    currentTurnModelText = '';
+    currentTurnUserText = '';
 
     try {
       // 1. Web Audio Context
@@ -389,7 +431,7 @@
           return;
         }
 
-        // 1. Setup Complete (Check camelCase & snake_case)
+        // 1. Setup Complete
         const isSetupDone = response.setupComplete || response.setup_complete;
         if (isSetupDone) {
           console.log('[Gemini Live] Setup complete, ready to talk!');
@@ -398,13 +440,18 @@
           return;
         }
 
-        // 2. Server Content (Check camelCase & snake_case)
+        // 2. Server Content
         const sc = response.serverContent || response.server_content;
         if (sc) {
           if (sc.interrupted) {
             console.log('[Gemini Live] Interrupted by user!');
             audioPlayer.stopAll();
             updateStatus('listening', '🎙️ 正在聆聽...');
+            if (currentTurnModelText) {
+              syncTurnToActiveSession(currentTurnUserText, currentTurnModelText);
+              currentTurnModelText = '';
+              currentTurnUserText = '';
+            }
             return;
           }
 
@@ -418,8 +465,18 @@
                 audioPlayer.playChunk(float32, 24000);
               }
               if (part.text) {
+                currentTurnModelText += part.text;
                 appendTranscript('model', part.text);
               }
+            }
+          }
+
+          const isTurnDone = sc.turnComplete || sc.turn_complete;
+          if (isTurnDone) {
+            if (currentTurnModelText) {
+              syncTurnToActiveSession(currentTurnUserText, currentTurnModelText);
+              currentTurnModelText = '';
+              currentTurnUserText = '';
             }
           }
         }
@@ -433,6 +490,11 @@
       ws.onclose = (e) => {
         console.log('[Gemini Live] Closed code:', e.code, 'reason:', e.reason);
         isConnected = false;
+        if (currentTurnModelText) {
+          syncTurnToActiveSession(currentTurnUserText, currentTurnModelText);
+          currentTurnModelText = '';
+          currentTurnUserText = '';
+        }
         if (e.code !== 1000) {
           updateStatus('error', `⚠️ 連線中斷 (${e.code})`);
           let helpText = `連線已中斷 (代碼: ${e.code})。`;
@@ -444,7 +506,7 @@
         }
       };
 
-      // 4. Mic PCM Stream (Buffered to ~100ms chunks = 1600 samples at 16kHz)
+      // 4. Mic PCM Stream (100ms buffering)
       micProcessorNode.onaudioprocess = (e) => {
         if (!isConnected || isMuted || !ws || ws.readyState !== WebSocket.OPEN) return;
         const inputData = e.inputBuffer.getChannelData(0);
@@ -483,6 +545,12 @@
   function endLiveSession() {
     isConnected = false;
     stopVisualizer();
+
+    if (currentTurnModelText) {
+      syncTurnToActiveSession(currentTurnUserText, currentTurnModelText);
+      currentTurnModelText = '';
+      currentTurnUserText = '';
+    }
 
     if (cameraInterval) {
       clearInterval(cameraInterval);
@@ -531,6 +599,11 @@
 
     if (liveCallModal) liveCallModal.classList.add('hidden');
     updateStatus('idle', '已掛斷通話');
+
+    // Refresh conversation list in sidebar
+    if (typeof loadConversations === 'function') {
+      setTimeout(loadConversations, 300);
+    }
   }
 
   // Camera Video Stream (1 FPS JPEG Chunks for Multimodal Vision)
