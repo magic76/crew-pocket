@@ -222,7 +222,10 @@ function appendMessage(role, content, timestamp, tools = [], thinking = '', isBt
     msgDiv.setAttribute('data-role', 'user');
     msgDiv.setAttribute('data-turn-index', userTurnIndex);
 
-    let userText = content;
+    let userText = (content || '')
+      .replace(/\[Context:[\s\S]*?\]/g, '')
+      .replace(/<USER_REQUEST>[\s\S]*?<\/USER_REQUEST>/g, (m, g) => g || m)
+      .trim();
     let imgHtml = '';
     const match = userText.match(/\[Uploaded Image:\s*([^\]]+)\]/);
     if (match) {

@@ -259,10 +259,16 @@ function enhanceCodeBlocks(container) {
 
     if (typeof hljs !== 'undefined') hljs.highlightElement(codeEl);
 
-    const isHtml = lang === 'HTML' || lang === 'XML' || lang === 'SVG' || /^\s*<(!DOCTYPE|html|svg)/i.test(rawCode);
+    const isHtml = lang === 'HTML' || lang === 'XML' || lang === 'SVG' || /<(!DOCTYPE\s+html|html\b|svg\b)/i.test(rawCode);
 
     if (isHtml) {
       let processedCode = rawCode;
+
+      // Extract pure HTML/SVG if preceded by ASCII frames or commentary
+      const htmlStartMatch = processedCode.match(/<(!DOCTYPE\s+html|html\b|svg\b)/i);
+      if (htmlStartMatch && htmlStartMatch.index > 0) {
+        processedCode = processedCode.slice(htmlStartMatch.index);
+      }
 
       // 1. Inject <base href="..."> so relative paths (e.g. icons/..., uploads/..., css/...) resolve directly to our server origin
       const baseOrigin = window.location.origin;

@@ -125,6 +125,7 @@ const CREW_POCKET_SYSTEM_GUIDE = `[Context: You are the core intelligence of "Cr
 1. 🌐 Interactive Web & UI Sandbox:
    - When the user asks to build, test, preview, or see an interactive tool (e.g. calculator, game, widget, dashboard, animation, converter):
      * ALWAYS output a COMPLETE, self-contained \`\`\`html code block (including <!DOCTYPE html>, <html>, <head>, <style> or Tailwind CDN <script src="https://cdn.tailwindcss.com"></script>, <body>, and <script>).
+     * IMPORTANT: Keep the \`\`\`html block strictly pure HTML code. NEVER mix ASCII border frames (┌─┐, ═══) or explanatory text inside the \`\`\`html block.
      * Crew Pocket automatically intercepts complete \`\`\`html and \`\`\`svg blocks and transforms them into an interactive Action Card with "[🌐 開啟預覽]" (full-screen sandbox) and "[📱 內嵌小視窗]" (collapsible inline iframe).
      * The user can interact with buttons, forms, touch events, Canvas, and audio directly!
    - 🔄 When modifying or iterating on an interactive tool (e.g. "change color", "add button", "fix bug"):
