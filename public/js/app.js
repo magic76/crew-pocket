@@ -394,35 +394,35 @@ function initAppAndListeners() {
     });
   }
 
-  if (camBtn && cameraInput) {
-    camBtn.addEventListener('click', (e) => {
-      e.preventDefault();
-      cameraInput.value = '';
-      cameraInput.click();
-    });
-  }
-  if (cameraInput) {
-    cameraInput.addEventListener('change', (e) => {
-      if (e.target.files && e.target.files[0]) {
-        handleImageSelection(e.target.files[0]);
-      }
-    });
-  }
+  window.triggerCameraInput = (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    const inp = document.getElementById('camera-input');
+    if (inp) {
+      inp.value = '';
+      inp.click();
+    }
+  };
 
-  if (attachBtn && attachInput) {
-    attachBtn.addEventListener('click', (e) => {
-      e.preventDefault();
-      attachInput.value = '';
-      attachInput.click();
-    });
-  }
-  if (attachInput) {
-    attachInput.addEventListener('change', (e) => {
-      if (e.target.files && e.target.files[0]) {
-        handleImageSelection(e.target.files[0]);
-      }
-    });
-  }
+  window.triggerAttachInput = (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    const inp = document.getElementById('attach-input');
+    if (inp) {
+      inp.value = '';
+      inp.click();
+    }
+  };
+
+  window.handleFileInputChange = (input) => {
+    if (input && input.files && input.files[0]) {
+      handleImageSelection(input.files[0]);
+    }
+  };
+
+  if (camBtn) camBtn.addEventListener('click', window.triggerCameraInput);
+  if (cameraInput) cameraInput.addEventListener('change', (e) => window.handleFileInputChange(e.target));
+
+  if (attachBtn) attachBtn.addEventListener('click', window.triggerAttachInput);
+  if (attachInput) attachInput.addEventListener('change', (e) => window.handleFileInputChange(e.target));
 
   // 📋 Direct Image Paste Support (e.g. pasted screenshots or copied photos from gallery/web)
   window.addEventListener('paste', (e) => {

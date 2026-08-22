@@ -952,10 +952,9 @@ async function openImageCropper(fileOrBase64, onConfirmCallback) {
 
   const initCropper = (base64Url) => {
     currentCropperSourceBase64 = base64Url;
-    cropperImg.src = base64Url;
     cropModal.classList.remove('hidden');
 
-    // Wait for image render before attaching Cropper
+    // Register onload BEFORE setting src to guarantee Cropper initialization
     cropperImg.onload = () => {
       if (typeof Cropper !== 'undefined') {
         if (activeCropperInstance) activeCropperInstance.destroy();
@@ -981,6 +980,7 @@ async function openImageCropper(fileOrBase64, onConfirmCallback) {
         });
       }
     };
+    cropperImg.src = base64Url;
   };
 
   if (typeof fileOrBase64 === 'string') {
