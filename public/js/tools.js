@@ -266,7 +266,9 @@ function enhanceCodeBlocks(container) {
 
       // Extract pure HTML/SVG if preceded by ASCII frames or commentary
       const htmlStartMatch = processedCode.match(/<(!DOCTYPE\s+html|html\b|svg\b)/i);
+      let asciiPrefix = '';
       if (htmlStartMatch && htmlStartMatch.index > 0) {
+        asciiPrefix = processedCode.slice(0, htmlStartMatch.index).trim();
         processedCode = processedCode.slice(htmlStartMatch.index);
       }
 
@@ -358,6 +360,12 @@ function enhanceCodeBlocks(container) {
       };
 
       if (pre.parentNode) {
+        if (asciiPrefix) {
+          const prefixPre = document.createElement('pre');
+          prefixPre.className = 'my-2 p-2.5 rounded-xl bg-slate-950/80 border border-slate-800 text-slate-300 font-mono text-xs overflow-x-auto select-text whitespace-pre';
+          prefixPre.textContent = asciiPrefix;
+          pre.parentNode.insertBefore(prefixPre, pre);
+        }
         pre.parentNode.replaceChild(card, pre);
       } else {
         container.appendChild(card);

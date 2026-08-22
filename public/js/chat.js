@@ -22,11 +22,47 @@ if (typeof marked !== 'undefined' && marked.use) {
   });
 }
 
+// 🛡️ Auto-Wrap Unfenced HTML/SVG into standalone ```html code blocks
+function autoFenceHtmlDocuments(text) {
+  if (!text) return '';
+
+  // 1. Temporarily replace all existing properly fenced code blocks
+  const existingFences = [];
+  let masked = text.replace(/```[\s\S]*?```/g, (match) => {
+    existingFences.push(match);
+    return `___EXISTING_FENCE_${existingFences.length - 1}___`;
+  });
+
+  // 2. Wrap standalone unfenced <!DOCTYPE html> ... </html> or <html ... </html>
+  masked = masked.replace(/(<!DOCTYPE\s+html[\s\S]*?(?:<\/html>|$)|<html\b[^>]*>[\s\S]*?(?:<\/html>|$))/gi, (match) => {
+    const trimmed = match.trim();
+    if (!trimmed) return match;
+    return `\n\`\`\`html\n${trimmed}\n\`\`\`\n`;
+  });
+
+  // 3. Wrap standalone unfenced <svg ... </svg>
+  masked = masked.replace(/(<svg\b[^>]*>[\s\S]*?(?:<\/svg>|$))/gi, (match) => {
+    const trimmed = match.trim();
+    if (!trimmed) return match;
+    return `\n\`\`\`svg\n${trimmed}\n\`\`\`\n`;
+  });
+
+  // 4. Restore existing fenced code blocks
+  masked = masked.replace(/___EXISTING_FENCE_(\d+)___/g, (match, index) => {
+    return existingFences[index];
+  });
+
+  return masked;
+}
+
 // Transform local image paths into proxy URL and sanitize with DOMPurify
 function formatMessageContent(content) {
   if (!content) return '';
   
   let formatted = content;
+
+  // 🛡️ Auto-detect and separate unfenced HTML / SVG into their own ```html blocks
+  formatted = autoFenceHtmlDocuments(formatted);
 
   // 🛡️ Streaming Markdown Guard: Auto-close open code blocks if odd number of triple backticks
   const tripleBackticks = formatted.match(/```/g);
