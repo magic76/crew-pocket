@@ -1,6 +1,6 @@
 /**
- * 🎙️ Crew Pocket - Gemini 2.0 Multimodal Live API (Full-Duplex Audio & Vision)
- * Robust, resilient client with clear on-screen diagnostics and error handling.
+ * 🎙️ Crew Pocket - Gemini Live Multimodal Live API (Full-Duplex Audio & Vision)
+ * Configured for gemini-3.1-flash-live-preview & gemini-2.0-flash-exp with 16kHz PCM input / 24kHz PCM output.
  */
 
 (function() {
@@ -8,8 +8,9 @@
 
   const STORAGE_KEY = 'crew_pocket_gemini_api_key';
   const VOICE_KEY = 'crew_pocket_live_voice';
+  const MODEL_KEY = 'crew_pocket_live_model';
   const DEFAULT_VOICE = 'Puck'; // 'Puck', 'Charon', 'Kore', 'Fenrir', 'Aoede'
-  const MODEL_NAME = 'models/gemini-2.0-flash-exp';
+  const DEFAULT_MODEL = 'models/gemini-3.1-flash-live-preview';
 
   // State
   let ws = null;
@@ -32,6 +33,8 @@
   const liveCallModal = document.getElementById('live-call-modal');
   const liveKeyModal = document.getElementById('live-key-modal');
   const liveApiKeyInput = document.getElementById('live-api-key-input');
+  const liveModelSelect = document.getElementById('live-model-select');
+  const liveCallModelSelect = document.getElementById('live-call-model-select');
   const liveSaveKeyBtn = document.getElementById('live-save-key-btn');
   const liveCloseKeyBtn = document.getElementById('live-close-key-btn');
   const liveStatusPill = document.getElementById('live-status-pill');
@@ -107,7 +110,7 @@
     let offset = 0;
     for (let i = 0; i < float32Array.length; i++, offset += 2) {
       let s = Math.max(-1, Math.min(1, float32Array[i]));
-      view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+      view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true); // Little endian signed 16-bit PCM
     }
     return buffer;
   }
@@ -196,9 +199,9 @@
 
         const gradient = canvasCtx.createLinearGradient(0, y, 0, y + barHeight);
         if (isConnected) {
-          gradient.addColorStop(0, '#38bdf8');
-          gradient.addColorStop(0.5, '#6366f1');
-          gradient.addColorStop(1, '#ec4899');
+          gradient.addColorStop(0, '#2dd4bf'); // teal
+          gradient.addColorStop(0.5, '#6366f1'); // indigo
+          gradient.addColorStop(1, '#ec4899'); // pink
         } else {
           gradient.addColorStop(0, '#64748b');
           gradient.addColorStop(1, '#334155');
@@ -240,6 +243,12 @@
     return localStorage.getItem(VOICE_KEY) || DEFAULT_VOICE;
   }
 
+  function getSelectedModel() {
+    let m = localStorage.getItem(MODEL_KEY) || DEFAULT_MODEL;
+    if (!m.startsWith('models/')) m = 'models/' + m;
+    return m;
+  }
+
   function updateStatus(state, text) {
     if (!liveStatusText || !liveStatusPill) return;
     liveStatusText.textContent = text;
@@ -255,10 +264,20 @@
   function appendTranscript(role, text) {
     if (!liveTranscriptText) return;
     const p = document.createElement('div');
-    p.className = `text-xs leading-relaxed py-0.5 ${role === 'user' ? 'text-indigo-300 text-right' : role === 'system' ? 'text-amber-400 text-center font-mono' : 'text-slate-200 text-left'}`;
-    p.textContent = (role === 'user' ? '🗣️ 我: ' : role === 'system' ? '⚠️ ' : '✨ Gemini: ') + text;
+    p.className = `text-xs leading-relaxed py-1 px-2.5 rounded-xl my-1 ${
+      role === 'user' ? 'bg-indigo-950/70 border border-indigo-500/30 text-indigo-200 text-right ml-6' : 
+      role === 'system' ? 'bg-amber-950/70 border border-amber-500/40 text-amber-300 text-left font-mono text-[11px]' : 
+      'bg-slate-900/80 border border-slate-800 text-slate-200 text-left mr-6'
+    }`;
+    p.innerHTML = (role === 'user' ? '🗣️ 我: ' : role === 'system' ? '⚠️ ' : '✨ Gemini: ') + escapeHtml(text);
     liveTranscriptText.appendChild(p);
     liveTranscriptText.scrollTop = liveTranscriptText.scrollHeight;
+  }
+
+  function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
   }
 
   async function startLiveSession() {
@@ -268,13 +287,12 @@
       return;
     }
 
-    // Open call modal and keep it open
     liveCallModal.classList.remove('hidden');
     updateStatus('connecting', '⚡ 連線 Google Gemini Live...');
-    if (liveTranscriptText) liveTranscriptText.innerHTML = '<div class="text-slate-400 text-center text-[11px] font-mono">⚡ 正在建立即時語音連線...</div>';
+    if (liveTranscriptText) liveTranscriptText.innerHTML = '<div class="text-slate-400 text-center text-[11px] font-mono">⚡ 正在建立即時雙向語音通道...</div>';
 
     try {
-      // 1. Initialize Web Audio Context
+      // 1. Web Audio Context
       const AudioCtxClass = window.AudioContext || window.webkitAudioContext;
       audioContext = new AudioCtxClass();
       if (audioContext.state === 'suspended') {
@@ -287,7 +305,7 @@
 
       audioPlayer = new LiveAudioPlayer(audioContext);
 
-      // 2. Capture Microphone Stream
+      // 2. Microphone Capture
       try {
         micMediaStream = await navigator.mediaDevices.getUserMedia({
           audio: {
@@ -299,14 +317,13 @@
         });
       } catch (micErr) {
         updateStatus('error', '⚠️ 麥克風存取失敗');
-        appendTranscript('system', '請允許瀏覽器麥克風權限後重試：' + micErr.message);
+        appendTranscript('system', '請允許麥克風權限以進行通話：' + micErr.message);
         return;
       }
 
       micAudioSource = audioContext.createMediaStreamSource(micMediaStream);
       micAudioSource.connect(analyser);
 
-      // Silent gain node to prevent mic feedback loop
       silentGainNode = audioContext.createGain();
       silentGainNode.gain.value = 0;
 
@@ -316,6 +333,7 @@
       silentGainNode.connect(audioContext.destination);
 
       // 3. Connect to Google Gemini Bidi WebSocket
+      const model = getSelectedModel();
       const wsUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent?key=${encodeURIComponent(apiKey)}`;
       
       if (ws) {
@@ -325,14 +343,14 @@
       ws = new WebSocket(wsUrl);
 
       ws.onopen = () => {
-        console.log('[Gemini Live] WebSocket connection opened.');
+        console.log('[Gemini Live] WebSocket opened with model:', model);
         isConnected = true;
         updateStatus('connected', '✨ 初始化語音通道...');
 
         const voiceName = getSelectedVoice();
         const setupMessage = {
           setup: {
-            model: MODEL_NAME,
+            model: model,
             generationConfig: {
               responseModalities: ["AUDIO"],
               speechConfig: {
@@ -346,7 +364,7 @@
             systemInstruction: {
               parts: [
                 {
-                  text: "You are Crew Pocket (口袋特勤隊), an expert AI handheld companion assisting the user with travel, coding, and daily tasks. You are directly speaking to the user over high-fidelity real-time voice. Keep your replies concise, warm, natural, and friendly in Traditional Chinese (Taiwan). Be proactive and conversational."
+                  text: "You are Crew Pocket (口袋特勤隊), an expert AI handheld companion assisting the user with travel, coding, and daily tasks. You are speaking directly with the user over high-fidelity real-time voice. Keep your replies concise, warm, natural, and friendly in Traditional Chinese (Taiwan). Be proactive and conversational."
                 }
               ]
             }
@@ -373,11 +391,11 @@
         if (response.setupComplete) {
           console.log('[Gemini Live] Setup complete, ready to talk!');
           updateStatus('listening', '🎙️ 聆聽中 (雙向全雙工)...');
-          if (liveTranscriptText) liveTranscriptText.innerHTML = '<div class="text-emerald-400 text-center text-[11px] font-mono">✅ 語音連線成功！請隨時對著手機說話...</div>';
+          if (liveTranscriptText) liveTranscriptText.innerHTML = `<div class="text-emerald-400 text-center text-[11px] font-mono">✅ ${model.replace('models/', '')} 語音通道已就緒！請隨時對著手機說話...</div>`;
           return;
         }
 
-        // 2. Server Content (Audio / Text Stream)
+        // 2. Server Content
         if (response.serverContent) {
           const sc = response.serverContent;
 
@@ -406,7 +424,6 @@
       ws.onerror = (err) => {
         console.error('[Gemini Live WebSocket Error]', err);
         updateStatus('error', '⚠️ 連線出錯');
-        appendTranscript('system', '連線異常，請確認 API Key 是否正確或網路狀態');
       };
 
       ws.onclose = (e) => {
@@ -414,11 +431,16 @@
         isConnected = false;
         if (e.code !== 1000) {
           updateStatus('error', `⚠️ 連線中斷 (${e.code})`);
-          appendTranscript('system', `連線已中斷 (${e.code})。如果是 1006 或 400，通常是 API Key 無效或未開通 Gemini 2.0 Live 權限。`);
+          let helpText = `連線已中斷 (代碼: ${e.code})。`;
+          if (e.code === 1008) {
+            helpText += '\n• 原因 1008 通常是「API Key 設有限制 (HTTP Referer/IP Restrictions)」，請在 Google AI Studio 將 API Key 改為「無限制 (None)」。\n• 或是模型名稱需要切換為 gemini-3.1-flash-live-preview 或 gemini-2.0-flash-exp。';
+          }
+          if (e.reason) helpText += `\n• Google 回傳訊息: ${e.reason}`;
+          appendTranscript('system', helpText);
         }
       };
 
-      // 4. Mic Audio Stream Handler
+      // 4. Mic PCM Stream (16kHz 16-bit little-endian)
       micProcessorNode.onaudioprocess = (e) => {
         if (!isConnected || isMuted || !ws || ws.readyState !== WebSocket.OPEN) return;
         const inputData = e.inputBuffer.getChannelData(0);
@@ -551,7 +573,9 @@
 
   // Key Modal Handlers
   function showKeyModal() {
-    liveApiKeyInput.value = getApiKey();
+    if (liveApiKeyInput) liveApiKeyInput.value = getApiKey();
+    if (liveModelSelect) liveModelSelect.value = getSelectedModel();
+    if (liveCallModelSelect) liveCallModelSelect.value = getSelectedModel();
     liveKeyModal.classList.remove('hidden');
   }
 
@@ -604,9 +628,11 @@
 
   if (liveSaveKeyBtn) {
     liveSaveKeyBtn.addEventListener('click', () => {
-      const key = liveApiKeyInput.value.trim();
+      const key = liveApiKeyInput ? liveApiKeyInput.value.trim() : '';
+      const model = liveModelSelect ? liveModelSelect.value : DEFAULT_MODEL;
       if (key) {
         localStorage.setItem(STORAGE_KEY, key);
+        localStorage.setItem(MODEL_KEY, model);
         hideKeyModal();
         startLiveSession();
       } else {
@@ -620,6 +646,17 @@
     liveVoiceSelect.value = getSelectedVoice();
     liveVoiceSelect.addEventListener('change', () => {
       localStorage.setItem(VOICE_KEY, liveVoiceSelect.value);
+    });
+  }
+
+  if (liveCallModelSelect) {
+    liveCallModelSelect.value = getSelectedModel();
+    liveCallModelSelect.addEventListener('change', () => {
+      localStorage.setItem(MODEL_KEY, liveCallModelSelect.value);
+      if (isConnected) {
+        endLiveSession();
+        startLiveSession();
+      }
     });
   }
 

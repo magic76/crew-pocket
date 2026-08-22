@@ -693,6 +693,13 @@
       </div>
       
       <div class="flex items-center gap-2">
+        <!-- Model Selector Dropdown -->
+        <select id="live-call-model-select" class="bg-slate-900 border border-slate-700 text-teal-300 text-xs rounded-lg px-2 py-1 outline-none font-mono" title="切換 Gemini Live 模型">
+          <option value="models/gemini-3.1-flash-live-preview">Gemini 3.1 Flash Live (推薦)</option>
+          <option value="models/gemini-2.0-flash-exp">Gemini 2.0 Flash Exp</option>
+          <option value="models/gemini-2.0-flash-realtime-exp">Gemini 2.0 Realtime</option>
+        </select>
+
         <!-- Voice Character Dropdown -->
         <select id="live-voice-select" class="bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg px-2 py-1 outline-none font-mono" title="選擇語音音色">
           <option value="Puck">音色: Puck (預設)</option>
@@ -759,7 +766,7 @@
     </div>
   </div>
 
-  <!-- 🔑 GEMINI API KEY SETUP MODAL -->
+  <!-- 🔑 GEMINI API KEY & MODEL SETUP MODAL -->
   <div id="live-key-modal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 select-none">
     <div class="bg-slate-900 border border-slate-800 rounded-3xl p-5 sm:p-6 w-full max-w-sm shadow-2xl flex flex-col space-y-4">
       <div class="flex items-center justify-between">
@@ -771,14 +778,24 @@
       </div>
 
       <div class="text-xs text-slate-300 space-y-2 leading-relaxed">
-        <p>Gemini 2.0 Live 原生雙向語音使用 Google 官方全雙工 WebSockets 通道。</p>
-        <p class="text-slate-400">請貼上您的 Google AI Studio API Key：</p>
+        <p>Gemini Live 原生雙向語音使用 Google 官方全雙工 WebSockets 通道（16kHz PCM 輸入 / 24kHz PCM 輸出）。</p>
       </div>
 
-      <div>
+      <!-- Model Selection in Settings -->
+      <div class="space-y-1">
+        <label class="text-[11px] text-slate-400 font-semibold">選擇 Live 模型：</label>
+        <select id="live-model-select" class="w-full bg-slate-950 border border-slate-700 focus:border-teal-500 rounded-xl px-3 py-2 text-xs text-slate-100 outline-none font-mono">
+          <option value="models/gemini-3.1-flash-live-preview">gemini-3.1-flash-live-preview (推薦)</option>
+          <option value="models/gemini-2.0-flash-exp">gemini-2.0-flash-exp</option>
+          <option value="models/gemini-2.0-flash-realtime-exp">gemini-2.0-flash-realtime-exp</option>
+        </select>
+      </div>
+
+      <div class="space-y-1">
+        <label class="text-[11px] text-slate-400 font-semibold">Google AI Studio API Key：</label>
         <input id="live-api-key-input" type="password" placeholder="AIzaSy..." class="w-full bg-slate-950 border border-slate-700 focus:border-teal-500 rounded-xl px-3 py-2.5 text-xs text-slate-100 placeholder-slate-600 outline-none font-mono">
-        <div class="text-[10px] text-slate-500 mt-1.5 flex justify-between">
-          <a href="https://aistudio.google.com/apikey" target="_blank" class="text-teal-400 hover:underline">👉 前往 Google 免費獲取 Key</a>
+        <div class="text-[10px] text-slate-500 mt-1 flex justify-between">
+          <a href="https://aistudio.google.com/apikey" target="_blank" class="text-teal-400 hover:underline">👉 免費申請 API Key</a>
           <span>安全儲存於手機本機</span>
         </div>
       </div>
@@ -801,11 +818,11 @@
     <img id="lightbox-img" src="" class="max-w-full max-h-full object-contain rounded-lg" alt="Enlarged">
   </div>
 
-  <!-- Modular Scripts (Cache-busted v4.8) -->
-  <script src="/js/ui.js?v=4.8"></script>
-  <script src="/js/tools.js?v=4.8"></script>
-  <script src="/js/chat.js?v=4.8"></script>
-  <script src="/js/live.js?v=1.3"></script>
-  <script src="/js/app.js?v=4.8"></script>
+  <!-- Modular Scripts (Cache-busted v4.9) -->
+  <script src="/js/ui.js?v=4.9"></script>
+  <script src="/js/tools.js?v=4.9"></script>
+  <script src="/js/chat.js?v=4.9"></script>
+  <script src="/js/live.js?v=1.4"></script>
+  <script src="/js/app.js?v=4.9"></script>
 </body>
 </html>
