@@ -806,7 +806,6 @@ async function loadConversations() {
               <span>${conv.turns || 0} 輪</span>
               <span>·</span>
               <span class="${tokenColorClass}">${conv.context_tokens_formatted || '0 tok'}</span>
-              ${conv.is_compacted ? '<span class="text-[9px] px-1 py-0.2 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">📦已提煉</span>' : ''}
             </div>
           </div>
           <div class="flex items-center gap-1 shrink-0 ml-1">
@@ -1354,6 +1353,7 @@ async function sendMessage() {
               if (targetDoneConvId) {
                 fetch(`/api/history?id=${targetDoneConvId}&${providerQuery()}`).then(r => r.json()).then(hData => {
                   if (hData.context_stats) updateContextPill(hData.context_stats);
+                  loadConversations();
                 }).catch(() => {});
               }
 
