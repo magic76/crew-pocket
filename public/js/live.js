@@ -1,6 +1,6 @@
 /**
  * 🎙️ Crew Pocket - Gemini Live Multimodal Live API (Full-Duplex Audio & Vision)
- * Fully integrated with Active Brain Session & Chat History Synchronization.
+ * Fully integrated with Real-time Speech-to-Text (STT) and Active Session History Sync.
  */
 
 (function() {
@@ -29,9 +29,12 @@
   let animFrameId = null;
   let audioSendBuffer = [];
   
-  // Turn tracking for session history sync
+  // Realtime STT and turn metrics tracking
+  let speechRecognizer = null;
   let currentTurnModelText = '';
   let currentTurnUserText = '';
+  let turnModelAudioSamples = 0;
+  let turnUserAudioSamples = 0;
 
   // DOM Elements
   const liveVoiceBtn = document.getElementById('live-voice-btn');
@@ -285,9 +288,73 @@
     return div.innerHTML;
   }
 
+  // 🎙️ Real-time Speech-to-Text (STT) for Transcribing User Speech
+  function startSpeechRecognition() {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) return;
+    try {
+      speechRecognizer = new SpeechRecognition();
+      speechRecognizer.continuous = true;
+      speechRecognizer.interimResults = true;
+      speechRecognizer.lang = 'zh-TW';
+
+      speechRecognizer.onresult = (event) => {
+        let resultText = '';
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          resultText += event.results[i][0].transcript;
+        }
+        const spoken = resultText.trim();
+        if (spoken) {
+          currentTurnUserText = spoken;
+          appendTranscript('user', spoken);
+        }
+      };
+
+      speechRecognizer.onerror = (e) => {
+        console.warn('[Live STT Warning]', e.error);
+      };
+
+      speechRecognizer.onend = () => {
+        if (isConnected && speechRecognizer) {
+          try { speechRecognizer.start(); } catch (e) {}
+        }
+      };
+
+      speechRecognizer.start();
+    } catch (e) {
+      console.warn('[SpeechRecognition start error]', e);
+    }
+  }
+
+  function stopSpeechRecognition() {
+    if (speechRecognizer) {
+      try { speechRecognizer.stop(); } catch (e) {}
+      speechRecognizer = null;
+    }
+  }
+
   // 🔄 Sync Live Turn Dialogue into Current Active Session and Chat Timeline
   async function syncTurnToActiveSession(userText, modelText) {
-    if (!modelText && !userText) return;
+    // Fill fallback text if voice audio occurred without pure text tokens
+    if (!userText && turnUserAudioSamples > 8000) {
+      userText = '🗣️ (即時語音對話)';
+    }
+    if (!modelText && turnModelAudioSamples > 12000) {
+      const seconds = Math.max(1, Math.round(turnModelAudioSamples / 24000));
+      modelText = `🎙️ (Gemini 2.0 Live 語音回覆 · ${seconds} 秒)`;
+    }
+
+    if (!userText && !modelText) return;
+
+    const finalUser = userText || '🗣️ (即時語音通話)';
+    const finalModel = modelText || '🎙️ (已完成語音回覆)';
+
+    // Reset turn metrics
+    currentTurnUserText = '';
+    currentTurnModelText = '';
+    turnModelAudioSamples = 0;
+    turnUserAudioSamples = 0;
+
     try {
       const activeConvId = (typeof currentConversationId !== 'undefined' && currentConversationId) ? currentConversationId : null;
       
@@ -296,8 +363,8 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           conversation_id: activeConvId,
-          user_message: userText || '(Live 語音對話)',
-          assistant_message: modelText
+          user_message: finalUser,
+          assistant_message: finalModel
         })
       });
 
@@ -310,10 +377,10 @@
         }
       }
 
-      // Render into background chat timeline
+      // Render into background main chat timeline
       if (typeof appendMessage === 'function') {
-        appendMessage('user', `🎙️ [Live 語音] ${userText || '(語音通話)'}`);
-        appendMessage('assistant', `🎙️ [Live 語音]\n${modelText}`);
+        appendMessage('user', `🎙️ [Live 語音] ${finalUser}`);
+        appendMessage('assistant', `🎙️ [Live 語音]\n${finalModel}`);
       }
 
     } catch (err) {
@@ -334,6 +401,8 @@
     audioSendBuffer = [];
     currentTurnModelText = '';
     currentTurnUserText = '';
+    turnModelAudioSamples = 0;
+    turnUserAudioSamples = 0;
 
     try {
       // 1. Web Audio Context
@@ -416,6 +485,7 @@
         };
         ws.send(JSON.stringify(setupMessage));
         startVisualizer();
+        startSpeechRecognition();
       };
 
       ws.onmessage = async (event) => {
@@ -447,11 +517,7 @@
             console.log('[Gemini Live] Interrupted by user!');
             audioPlayer.stopAll();
             updateStatus('listening', '🎙️ 正在聆聽...');
-            if (currentTurnModelText) {
-              syncTurnToActiveSession(currentTurnUserText, currentTurnModelText);
-              currentTurnModelText = '';
-              currentTurnUserText = '';
-            }
+            syncTurnToActiveSession(currentTurnUserText, currentTurnModelText);
             return;
           }
 
@@ -462,6 +528,7 @@
               const inlineData = part.inlineData || part.inline_data;
               if (inlineData && inlineData.data) {
                 const float32 = base64ToFloat32PCM(inlineData.data);
+                turnModelAudioSamples += float32.length;
                 audioPlayer.playChunk(float32, 24000);
               }
               if (part.text) {
@@ -473,11 +540,7 @@
 
           const isTurnDone = sc.turnComplete || sc.turn_complete;
           if (isTurnDone) {
-            if (currentTurnModelText) {
-              syncTurnToActiveSession(currentTurnUserText, currentTurnModelText);
-              currentTurnModelText = '';
-              currentTurnUserText = '';
-            }
+            syncTurnToActiveSession(currentTurnUserText, currentTurnModelText);
           }
         }
       };
@@ -490,11 +553,7 @@
       ws.onclose = (e) => {
         console.log('[Gemini Live] Closed code:', e.code, 'reason:', e.reason);
         isConnected = false;
-        if (currentTurnModelText) {
-          syncTurnToActiveSession(currentTurnUserText, currentTurnModelText);
-          currentTurnModelText = '';
-          currentTurnUserText = '';
-        }
+        syncTurnToActiveSession(currentTurnUserText, currentTurnModelText);
         if (e.code !== 1000) {
           updateStatus('error', `⚠️ 連線中斷 (${e.code})`);
           let helpText = `連線已中斷 (代碼: ${e.code})。`;
@@ -512,6 +571,8 @@
         const inputData = e.inputBuffer.getChannelData(0);
         const downsampled = downsampleBuffer(inputData, audioContext.sampleRate, 16000);
         
+        turnUserAudioSamples += downsampled.length;
+
         for (let i = 0; i < downsampled.length; i++) {
           audioSendBuffer.push(downsampled[i]);
         }
@@ -545,12 +606,9 @@
   function endLiveSession() {
     isConnected = false;
     stopVisualizer();
+    stopSpeechRecognition();
 
-    if (currentTurnModelText) {
-      syncTurnToActiveSession(currentTurnUserText, currentTurnModelText);
-      currentTurnModelText = '';
-      currentTurnUserText = '';
-    }
+    syncTurnToActiveSession(currentTurnUserText, currentTurnModelText);
 
     if (cameraInterval) {
       clearInterval(cameraInterval);
