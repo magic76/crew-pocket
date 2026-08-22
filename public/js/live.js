@@ -352,10 +352,10 @@
 
     if (!userWav && !modelWav && !currentTurnUserText && !currentTurnModelText) return;
 
-    try {
-      let finalUser = currentTurnUserText;
-      let finalModel = currentTurnModelText;
+    let finalUser = currentTurnUserText;
+    let finalModel = currentTurnModelText;
 
+    try {
       // 1. If text is missing, transcribe audio clips via Gemini Flash
       if ((!finalUser && userWav) || (!finalModel && modelWav)) {
         const transRes = await fetch('/api/live-transcribe', {
@@ -376,14 +376,14 @@
         }
       }
 
+      finalUser = finalUser || (userWav ? '🗣️ (語音輸入)' : '');
+      finalModel = finalModel || (modelWav ? '🎙️ (語音回覆)' : '');
+
       if (!finalUser && !finalModel) return;
 
-      finalUser = finalUser || '(語音輸入)';
-      finalModel = finalModel || '(語音回覆)';
-
       // 2. Show in live modal transcript box
-      if (finalUser && finalUser !== '(語音輸入)') appendTranscript('user', finalUser);
-      if (finalModel && finalModel !== '(語音回覆)') appendTranscript('model', finalModel);
+      if (finalUser) appendTranscript('user', finalUser);
+      if (finalModel) appendTranscript('model', finalModel);
 
       // 3. Save to backend session logs
       const activeConvId = (typeof currentConversationId !== 'undefined' && currentConversationId) ? currentConversationId : null;
@@ -411,6 +411,10 @@
         appendMessage('user', `🎙️ [Live 語音] ${finalUser}`);
         appendMessage('assistant', `🎙️ [Live 語音]\n${finalModel}`);
       }
+
+      // 5. Reset turn texts
+      currentTurnUserText = '';
+      currentTurnModelText = '';
 
     } catch (err) {
       console.error('[Process Turn Sync Error]', err);
@@ -506,7 +510,7 @@
             systemInstruction: {
               parts: [
                 {
-                  text: "You are Crew Pocket (口袋特勤隊), an expert AI handheld companion assisting the user with travel, coding, and daily tasks. You are speaking directly with the user over high-fidelity real-time voice. Keep your replies concise, warm, natural, and friendly in Traditional Chinese (Taiwan). Be proactive and conversational."
+                  text: "You are Crew Pocket (口袋特勤隊), an expert AI handheld companion assisting the user with travel, coding, and daily tasks. You are speaking directly with the user over high-fidelity real-time voice. Keep your replies concise, warm, natural, and friendly in Traditional Chinese (Taiwan). Be proactive and conversational. Always output the exact Traditional Chinese text transcript of everything you speak in the text parts."
                 }
               ]
             }
@@ -631,11 +635,11 @@
     }
   }
 
-  function endLiveSession() {
+  async function endLiveSession() {
     isConnected = false;
     stopVisualizer();
 
-    processTurnAndSync();
+    await processTurnAndSync();
 
     if (cameraInterval) {
       clearInterval(cameraInterval);
@@ -687,7 +691,7 @@
 
     // Refresh conversation list in sidebar
     if (typeof loadConversations === 'function') {
-      setTimeout(loadConversations, 500);
+      setTimeout(loadConversations, 300);
     }
   }
 
