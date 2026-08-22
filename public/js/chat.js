@@ -33,8 +33,8 @@ function autoFenceHtmlDocuments(text) {
     return `___EXISTING_FENCE_${existingFences.length - 1}___`;
   });
 
-  // 2. Wrap standalone unfenced <!DOCTYPE html> ... </html> or <html ... </html>
-  masked = masked.replace(/(<!DOCTYPE\s+html[\s\S]*?(?:<\/html>|$)|<html\b[^>]*>[\s\S]*?(?:<\/html>|$))/gi, (match) => {
+  // 2. Wrap standalone unfenced <!DOCTYPE ...> ... </html> or <html ... </html>
+  masked = masked.replace(/(<!DOCTYPE\b[\s\S]*?(?:<\/html>|$)|<html\b[^>]*>[\s\S]*?(?:<\/html>|$))/gi, (match) => {
     const trimmed = match.trim();
     if (!trimmed) return match;
     return `\n\`\`\`html\n${trimmed}\n\`\`\`\n`;
