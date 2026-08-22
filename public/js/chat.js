@@ -475,10 +475,6 @@ function appendMessage(role, content, timestamp, tools = [], thinking = '', isBt
   const editBtn = msgDiv.querySelector('.edit-rewind-btn');
   if (editBtn) {
     editBtn.addEventListener('click', async () => {
-      if (currentProvider === 'codex') {
-        alert('Codex provider 第一版暫不支援編輯回溯。');
-        return;
-      }
       if (isStreaming) {
         alert('請先等待當前回覆完成或點擊中斷生成！');
         return;

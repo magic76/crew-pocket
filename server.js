@@ -119,6 +119,41 @@ async function handleProviderDelete(parsedUrl, res) {
   }
 }
 
+async function handleProviderRewind(req, res) {
+  try {
+    const body = await parseJsonBody(req);
+    const providerId = normalizeProviderId(body.provider);
+    if (providerId === 'antigravity') {
+      const synthetic = new (require('node:stream').Readable)({
+        read() { this.push(JSON.stringify(body)); this.push(null); }
+      });
+      return handleRewindConversation(synthetic, res);
+    }
+    if (!body.conversation_id || !/^[a-zA-Z0-9_-]+$/.test(body.conversation_id)) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({ error: 'Invalid conversation id' }));
+    }
+    const userTurnIndex = Number(body.user_turn_index);
+    if (!Number.isInteger(userTurnIndex) || userTurnIndex < 0) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({ error: 'Invalid user turn index' }));
+    }
+    const result = await getProvider(providerId).rewindConversation(body.conversation_id, userTurnIndex);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      success: true,
+      provider: providerId,
+      conversation_id: result.conversationId,
+      user_turn_index: userTurnIndex,
+      removed_turns: result.numTurns
+    }));
+  } catch (err) {
+    console.error('[Provider Rewind Error]', err);
+    res.writeHead(500, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: err.message || '回溯對話失敗' }));
+  }
+}
+
 // 🖼️ Safe Image Proxy Handler (Directory Whitelisted)
 async function handleImageProxy(parsedUrl, res) {
   try {
@@ -428,7 +463,7 @@ const server = http.createServer(async (req, res) => {
   } else if (pathname === '/api/live-transcribe' && req.method === 'POST') {
     return handleLiveTranscribe(req, res);
   } else if (pathname === '/api/rewind' && req.method === 'POST') {
-    return handleRewindConversation(req, res);
+    return handleProviderRewind(req, res);
   } else if (pathname === '/api/prewarm' && req.method === 'POST') {
     const body = await parseJsonBody(req);
     const providerId = normalizeProviderId(body.provider);
@@ -472,4 +507,3 @@ server.listen(PORT, HOST, () => {
     sessionManager.prewarm('gemini-3.7-flash-low');
   }, 1000);
 });
-
