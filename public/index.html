@@ -800,7 +800,15 @@
         </div>
       </div>
 
-      <div class="flex gap-2 pt-2">
+      <!-- Diagnostic Test Button -->
+      <div class="pt-2 border-t border-slate-800 space-y-2">
+        <button id="live-test-rec-btn" type="button" class="w-full py-2 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-95 border border-slate-700 text-slate-200 text-xs font-semibold flex items-center justify-center gap-1.5 transition">
+          <span>🎙️</span> <span id="live-test-rec-text">點擊錄音 3 秒測試轉錄 (單元測試)</span>
+        </button>
+        <div id="live-test-rec-result" class="hidden p-2.5 rounded-xl bg-slate-950 border border-slate-800 text-[11px] font-mono leading-relaxed text-slate-300"></div>
+      </div>
+
+      <div class="flex gap-2 pt-1">
         <button id="live-save-key-btn" class="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-teal-500 to-indigo-600 hover:from-teal-400 hover:to-indigo-500 text-white font-bold text-xs shadow-lg shadow-teal-500/20 active:scale-95 transition">
           儲存並啟動通話
         </button>
@@ -818,11 +826,11 @@
     <img id="lightbox-img" src="" class="max-w-full max-h-full object-contain rounded-lg" alt="Enlarged">
   </div>
 
-  <!-- Modular Scripts (Cache-busted v5.01) -->
-  <script src="/js/ui.js?v=5.01"></script>
-  <script src="/js/tools.js?v=5.01"></script>
-  <script src="/js/chat.js?v=5.01"></script>
-  <script src="/js/live.js?v=2.5"></script>
-  <script src="/js/app.js?v=5.01"></script>
+  <!-- Modular Scripts (Cache-busted v5.02) -->
+  <script src="/js/ui.js?v=5.02"></script>
+  <script src="/js/tools.js?v=5.02"></script>
+  <script src="/js/chat.js?v=5.02"></script>
+  <script src="/js/live.js?v=2.6"></script>
+  <script src="/js/app.js?v=5.02"></script>
 </body>
 </html>
