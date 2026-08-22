@@ -1,6 +1,6 @@
 /**
  * 🎙️ Crew Pocket - Gemini Live Multimodal Live API (Full-Duplex Audio & Vision)
- * Fully integrated with Real-time Speech-to-Text (STT) and Active Session History Sync.
+ * Powered by Real-time Automatic Audio Transcription (Gemini Flash Speech-to-Text).
  */
 
 (function() {
@@ -29,12 +29,11 @@
   let animFrameId = null;
   let audioSendBuffer = [];
   
-  // Realtime STT and turn metrics tracking
-  let speechRecognizer = null;
+  // Turn Audio Recording for Background Transcription
+  let turnUserPcmChunks = [];
+  let turnModelPcmChunks = [];
   let currentTurnModelText = '';
   let currentTurnUserText = '';
-  let turnModelAudioSamples = 0;
-  let turnUserAudioSamples = 0;
 
   // DOM Elements
   const liveVoiceBtn = document.getElementById('live-voice-btn');
@@ -110,7 +109,7 @@
   }
 
   // ==========================================
-  // 🧮 Audio Data Conversion Utilities
+  // 🧮 Audio Data & WAV Conversion Utilities
   // ==========================================
   function floatTo16BitPCM(float32Array) {
     const buffer = new ArrayBuffer(float32Array.length * 2);
@@ -121,6 +120,55 @@
       view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
     }
     return buffer;
+  }
+
+  function writeString(view, offset, string) {
+    for (let i = 0; i < string.length; i++) {
+      view.setUint8(offset + i, string.charCodeAt(i));
+    }
+  }
+
+  function pcmFloat32ArrayToWavBase64(float32Chunks, sampleRate) {
+    let totalLength = 0;
+    for (const chunk of float32Chunks) totalLength += chunk.length;
+    if (totalLength === 0) return '';
+
+    const merged = new Float32Array(totalLength);
+    let offset = 0;
+    for (const chunk of float32Chunks) {
+      merged.set(chunk, offset);
+      offset += chunk.length;
+    }
+
+    const numChannels = 1;
+    const bitsPerSample = 16;
+    const byteRate = sampleRate * numChannels * (bitsPerSample / 8);
+    const blockAlign = numChannels * (bitsPerSample / 8);
+    const dataSize = totalLength * 2;
+    const buffer = new ArrayBuffer(44 + dataSize);
+    const view = new DataView(buffer);
+
+    writeString(view, 0, 'RIFF');
+    view.setUint32(4, 36 + dataSize, true);
+    writeString(view, 8, 'WAVE');
+    writeString(view, 12, 'fmt ');
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);
+    view.setUint16(22, numChannels, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, byteRate, true);
+    view.setUint16(32, blockAlign, true);
+    view.setUint16(34, bitsPerSample, true);
+    writeString(view, 36, 'data');
+    view.setUint32(40, dataSize, true);
+
+    let pcmOffset = 44;
+    for (let i = 0; i < totalLength; i++, pcmOffset += 2) {
+      let s = Math.max(-1, Math.min(1, merged[i]));
+      view.setInt16(pcmOffset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+    }
+
+    return arrayBufferToBase64(buffer);
   }
 
   function arrayBufferToBase64(buffer) {
@@ -270,12 +318,12 @@
   }
 
   function appendTranscript(role, text) {
-    if (!liveTranscriptText) return;
+    if (!liveTranscriptText || !text) return;
     const p = document.createElement('div');
-    p.className = `text-xs leading-relaxed py-1 px-2.5 rounded-xl my-1 ${
-      role === 'user' ? 'bg-indigo-950/70 border border-indigo-500/30 text-indigo-200 text-right ml-6' : 
+    p.className = `text-xs leading-relaxed py-1.5 px-3 rounded-xl my-1.5 transition-all ${
+      role === 'user' ? 'bg-indigo-950/80 border border-indigo-500/40 text-indigo-200 text-right ml-6 shadow-md shadow-indigo-950/30' : 
       role === 'system' ? 'bg-amber-950/70 border border-amber-500/40 text-amber-300 text-left font-mono text-[11px]' : 
-      'bg-slate-900/80 border border-slate-800 text-slate-200 text-left mr-6'
+      'bg-slate-900/90 border border-teal-500/30 text-slate-100 text-left mr-6 shadow-md shadow-slate-950/40'
     }`;
     p.innerHTML = (role === 'user' ? '🗣️ 我: ' : role === 'system' ? '⚠️ ' : '✨ Gemini: ') + escapeHtml(text);
     liveTranscriptText.appendChild(p);
@@ -288,77 +336,56 @@
     return div.innerHTML;
   }
 
-  // 🎙️ Real-time Speech-to-Text (STT) for Transcribing User Speech
-  function startSpeechRecognition() {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) return;
-    try {
-      speechRecognizer = new SpeechRecognition();
-      speechRecognizer.continuous = true;
-      speechRecognizer.interimResults = true;
-      speechRecognizer.lang = 'zh-TW';
+  // ⚡ Transcribe and Sync Full Dialogue into Active Session
+  async function processTurnAndSync() {
+    const userChunks = turnUserPcmChunks.slice();
+    const modelChunks = turnModelPcmChunks.slice();
+    
+    // Clear buffer for next turn
+    turnUserPcmChunks = [];
+    turnModelPcmChunks = [];
 
-      speechRecognizer.onresult = (event) => {
-        let resultText = '';
-        for (let i = event.resultIndex; i < event.results.length; ++i) {
-          resultText += event.results[i][0].transcript;
-        }
-        const spoken = resultText.trim();
-        if (spoken) {
-          currentTurnUserText = spoken;
-          appendTranscript('user', spoken);
-        }
-      };
+    const apiKey = getApiKey();
+    const userWav = pcmFloat32ArrayToWavBase64(userChunks, 16000);
+    const modelWav = pcmFloat32ArrayToWavBase64(modelChunks, 24000);
 
-      speechRecognizer.onerror = (e) => {
-        console.warn('[Live STT Warning]', e.error);
-      };
-
-      speechRecognizer.onend = () => {
-        if (isConnected && speechRecognizer) {
-          try { speechRecognizer.start(); } catch (e) {}
-        }
-      };
-
-      speechRecognizer.start();
-    } catch (e) {
-      console.warn('[SpeechRecognition start error]', e);
-    }
-  }
-
-  function stopSpeechRecognition() {
-    if (speechRecognizer) {
-      try { speechRecognizer.stop(); } catch (e) {}
-      speechRecognizer = null;
-    }
-  }
-
-  // 🔄 Sync Live Turn Dialogue into Current Active Session and Chat Timeline
-  async function syncTurnToActiveSession(userText, modelText) {
-    // Fill fallback text if voice audio occurred without pure text tokens
-    if (!userText && turnUserAudioSamples > 8000) {
-      userText = '🗣️ (即時語音對話)';
-    }
-    if (!modelText && turnModelAudioSamples > 12000) {
-      const seconds = Math.max(1, Math.round(turnModelAudioSamples / 24000));
-      modelText = `🎙️ (Gemini 2.0 Live 語音回覆 · ${seconds} 秒)`;
-    }
-
-    if (!userText && !modelText) return;
-
-    const finalUser = userText || '🗣️ (即時語音通話)';
-    const finalModel = modelText || '🎙️ (已完成語音回覆)';
-
-    // Reset turn metrics
-    currentTurnUserText = '';
-    currentTurnModelText = '';
-    turnModelAudioSamples = 0;
-    turnUserAudioSamples = 0;
+    if (!userWav && !modelWav && !currentTurnUserText && !currentTurnModelText) return;
 
     try {
+      let finalUser = currentTurnUserText;
+      let finalModel = currentTurnModelText;
+
+      // 1. If text is missing, transcribe audio clips via Gemini Flash
+      if ((!finalUser && userWav) || (!finalModel && modelWav)) {
+        const transRes = await fetch('/api/live-transcribe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            api_key: apiKey,
+            user_audio: (!finalUser && userWav) ? userWav : null,
+            model_audio: (!finalModel && modelWav) ? modelWav : null
+          })
+        });
+
+        const transData = await transRes.json();
+        if (transData.success) {
+          if (transData.user_text) finalUser = transData.user_text;
+          if (transData.model_text) finalModel = transData.model_text;
+        }
+      }
+
+      finalUser = finalUser || (userWav ? '🗣️ (即時語音對話)' : '');
+      finalModel = finalModel || (modelWav ? '🎙️ (即時語音回覆)' : '');
+
+      if (!finalUser && !finalModel) return;
+
+      // 2. Show in live modal transcript box
+      if (finalUser && finalUser !== '🗣️ (即時語音對話)') appendTranscript('user', finalUser);
+      if (finalModel && finalModel !== '🎙️ (即時語音回覆)') appendTranscript('model', finalModel);
+
+      // 3. Save to backend session logs
       const activeConvId = (typeof currentConversationId !== 'undefined' && currentConversationId) ? currentConversationId : null;
-      
-      const res = await fetch('/api/live-sync', {
+      const syncRes = await fetch('/api/live-sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -368,23 +395,23 @@
         })
       });
 
-      const data = await res.json();
-      if (data.success && data.conversation_id) {
+      const syncData = await syncRes.json();
+      if (syncData.success && syncData.conversation_id) {
         if (typeof currentConversationId !== 'undefined' && !currentConversationId) {
-          currentConversationId = data.conversation_id;
-          localStorage.setItem('agy_active_conv_id', data.conversation_id);
+          currentConversationId = syncData.conversation_id;
+          localStorage.setItem('agy_active_conv_id', syncData.conversation_id);
           if (typeof loadConversations === 'function') loadConversations();
         }
       }
 
-      // Render into background main chat timeline
+      // 4. Render into background chat timeline
       if (typeof appendMessage === 'function') {
         appendMessage('user', `🎙️ [Live 語音] ${finalUser}`);
         appendMessage('assistant', `🎙️ [Live 語音]\n${finalModel}`);
       }
 
     } catch (err) {
-      console.error('[Live Sync Error]', err);
+      console.error('[Process Turn Sync Error]', err);
     }
   }
 
@@ -399,10 +426,10 @@
     updateStatus('connecting', '⚡ 連線 Google Gemini Live...');
     if (liveTranscriptText) liveTranscriptText.innerHTML = '<div class="text-slate-400 text-center text-[11px] font-mono">⚡ 正在建立即時雙向語音通道...</div>';
     audioSendBuffer = [];
+    turnUserPcmChunks = [];
+    turnModelPcmChunks = [];
     currentTurnModelText = '';
     currentTurnUserText = '';
-    turnModelAudioSamples = 0;
-    turnUserAudioSamples = 0;
 
     try {
       // 1. Web Audio Context
@@ -485,7 +512,6 @@
         };
         ws.send(JSON.stringify(setupMessage));
         startVisualizer();
-        startSpeechRecognition();
       };
 
       ws.onmessage = async (event) => {
@@ -517,7 +543,7 @@
             console.log('[Gemini Live] Interrupted by user!');
             audioPlayer.stopAll();
             updateStatus('listening', '🎙️ 正在聆聽...');
-            syncTurnToActiveSession(currentTurnUserText, currentTurnModelText);
+            processTurnAndSync();
             return;
           }
 
@@ -528,7 +554,7 @@
               const inlineData = part.inlineData || part.inline_data;
               if (inlineData && inlineData.data) {
                 const float32 = base64ToFloat32PCM(inlineData.data);
-                turnModelAudioSamples += float32.length;
+                turnModelPcmChunks.push(float32);
                 audioPlayer.playChunk(float32, 24000);
               }
               if (part.text) {
@@ -540,7 +566,7 @@
 
           const isTurnDone = sc.turnComplete || sc.turn_complete;
           if (isTurnDone) {
-            syncTurnToActiveSession(currentTurnUserText, currentTurnModelText);
+            processTurnAndSync();
           }
         }
       };
@@ -553,7 +579,7 @@
       ws.onclose = (e) => {
         console.log('[Gemini Live] Closed code:', e.code, 'reason:', e.reason);
         isConnected = false;
-        syncTurnToActiveSession(currentTurnUserText, currentTurnModelText);
+        processTurnAndSync();
         if (e.code !== 1000) {
           updateStatus('error', `⚠️ 連線中斷 (${e.code})`);
           let helpText = `連線已中斷 (代碼: ${e.code})。`;
@@ -565,13 +591,13 @@
         }
       };
 
-      // 4. Mic PCM Stream (100ms buffering)
+      // 4. Mic PCM Stream (100ms buffering & turn audio accumulation)
       micProcessorNode.onaudioprocess = (e) => {
         if (!isConnected || isMuted || !ws || ws.readyState !== WebSocket.OPEN) return;
         const inputData = e.inputBuffer.getChannelData(0);
         const downsampled = downsampleBuffer(inputData, audioContext.sampleRate, 16000);
         
-        turnUserAudioSamples += downsampled.length;
+        turnUserPcmChunks.push(downsampled);
 
         for (let i = 0; i < downsampled.length; i++) {
           audioSendBuffer.push(downsampled[i]);
@@ -606,9 +632,8 @@
   function endLiveSession() {
     isConnected = false;
     stopVisualizer();
-    stopSpeechRecognition();
 
-    syncTurnToActiveSession(currentTurnUserText, currentTurnModelText);
+    processTurnAndSync();
 
     if (cameraInterval) {
       clearInterval(cameraInterval);
@@ -660,7 +685,7 @@
 
     // Refresh conversation list in sidebar
     if (typeof loadConversations === 'function') {
-      setTimeout(loadConversations, 300);
+      setTimeout(loadConversations, 500);
     }
   }
 
