@@ -369,18 +369,17 @@ function initAppAndListeners() {
   async function handleImageSelection(file) {
     if (!file) return;
     currentSelectedImageSource = file;
-    if (typeof openImageCropper === 'function') {
-      openImageCropper(file, (finalBase64, wasCropped) => {
-        processAndUploadImageBase64(finalBase64, file.name, wasCropped);
-      });
-    } else {
-      try {
-        const { base64 } = await compressImageFile(file, 1280, 0.82);
-        await processAndUploadImageBase64(base64, file.name, false);
-      } catch (err) {
-        console.error('[Image Selection Error]', err);
-        alert('圖片壓縮處理失敗：' + err.message);
-      }
+    try {
+      if (previewFilename) previewFilename.textContent = file.name || 'photo.jpg';
+      if (previewFilesize) previewFilesize.textContent = '最佳化壓縮中...';
+      if (imagePreviewContainer) imagePreviewContainer.classList.remove('hidden');
+
+      const { base64 } = await compressImageFile(file, 1280, 0.82);
+      await processAndUploadImageBase64(base64, file.name || 'photo.jpg', false);
+    } catch (err) {
+      console.error('[Image Selection Error]', err);
+      alert('圖片處理失敗：' + err.message);
+      if (imagePreviewContainer) imagePreviewContainer.classList.add('hidden');
     }
   }
 
