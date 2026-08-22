@@ -332,11 +332,8 @@ function initAppAndListeners() {
   if (headerRenameBtn) headerRenameBtn.addEventListener('click', triggerHeaderRename);
   if (headerTitle) headerTitle.addEventListener('click', triggerHeaderRename);
 
-  // Camera & Image Upload Handlers (with Interactive Cropping & HEIC support & AI-vision compression)
-  let currentSelectedImageSource = null;
-  const cropImageBtn = document.getElementById('crop-image-btn');
-
-  async function processAndUploadImageBase64(base64Data, filename, wasCropped) {
+  // Camera & Image Upload Handlers (with HEIC support & AI-vision compression)
+  async function processAndUploadImageBase64(base64Data, filename) {
     try {
       if (previewFilename) previewFilename.textContent = filename || 'photo.jpg';
       if (previewFilesize) previewFilesize.textContent = '處理上傳中...';
@@ -344,9 +341,7 @@ function initAppAndListeners() {
 
       const kb = Math.round((base64Data.length * 3 / 4) / 1024);
       if (previewThumb) previewThumb.src = base64Data;
-      if (previewFilesize) {
-        previewFilesize.textContent = wasCropped ? `已框選裁切 (${kb} KB)` : `已最佳化壓縮 (${kb} KB)`;
-      }
+      if (previewFilesize) previewFilesize.textContent = `已最佳化壓縮 (${kb} KB)`;
 
       console.log(`[Upload] Sending base64 (${kb} KB) to /api/upload...`);
       const res = await fetch('/api/upload', {
@@ -372,7 +367,6 @@ function initAppAndListeners() {
   async function handleImageSelection(file) {
     if (!file) return;
     console.log('[ImageSelection] File received:', file.name, file.size, file.type);
-    currentSelectedImageSource = file;
     try {
       if (previewFilename) previewFilename.textContent = file.name || 'photo.jpg';
       if (previewFilesize) previewFilesize.textContent = '最佳化壓縮中...';
@@ -380,7 +374,7 @@ function initAppAndListeners() {
 
       const { base64, kb } = await compressImageFile(file, 1280, 0.82);
       console.log('[ImageSelection] Compressed:', kb, 'KB');
-      await processAndUploadImageBase64(base64, file.name || 'photo.jpg', false);
+      await processAndUploadImageBase64(base64, file.name || 'photo.jpg');
     } catch (err) {
       console.error('[Image Selection Error]', err);
       alert('圖片處理失敗：' + err.message);
@@ -390,16 +384,6 @@ function initAppAndListeners() {
 
   window.processAndUploadImageBase64 = processAndUploadImageBase64;
   window.handleImageSelection = handleImageSelection;
-
-  if (cropImageBtn) {
-    cropImageBtn.addEventListener('click', () => {
-      if (currentSelectedImageSource && typeof openImageCropper === 'function') {
-        openImageCropper(currentSelectedImageSource, (finalBase64, wasCropped) => {
-          processAndUploadImageBase64(finalBase64, currentSelectedImageSource.name || 'photo.jpg', wasCropped);
-        });
-      }
-    });
-  }
 
   // 📋 Direct Image Paste Support (e.g. pasted screenshots or copied photos from gallery/web)
   window.addEventListener('paste', (e) => {
@@ -432,7 +416,6 @@ function initAppAndListeners() {
   if (removeImageBtn) {
     removeImageBtn.addEventListener('click', () => {
       uploadedImagePath = null;
-      currentSelectedImageSource = null;
       if (cameraInput) cameraInput.value = '';
       if (attachInput) attachInput.value = '';
       if (imagePreviewContainer) imagePreviewContainer.classList.add('hidden');

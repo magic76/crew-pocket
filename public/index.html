@@ -45,10 +45,6 @@
   <!-- HEIC/HEIF Converter for iPhone & Mobile Photo Library -->
   <script src="/heic2any.min.js"></script>
 
-  <!-- Cropper.js for Interactive Mobile Box Crop -->
-  <link rel="stylesheet" href="/cropper.min.css">
-  <script src="/cropper.min.js"></script>
-
   <!-- Modular Stylesheet (v4.1) -->
   <link rel="stylesheet" href="/css/style.css?v=4.1">
 </head>
@@ -304,20 +300,11 @@
           <span id="preview-filename" class="font-medium text-slate-200 truncate max-w-[130px]">photo.jpg</span>
           <span id="preview-filesize" class="text-[10px] text-emerald-400">已最佳化壓縮</span>
         </div>
-        <div class="flex items-center gap-0.5">
-          <!-- ✂️ Re-crop Button -->
-          <button id="crop-image-btn" type="button" class="p-1 px-1.5 rounded-lg text-indigo-300 hover:text-white bg-indigo-950/60 hover:bg-indigo-900 border border-indigo-500/40 transition active:scale-95 text-[11px] flex items-center gap-1 font-medium" title="手動框選裁切重點">
-            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.121 14.121L19 19m-7-7l7-7m-7 7l-2.879 2.879M12 12L9.121 9.121m0 5.758a3 3 0 10-4.243-4.243 3 3 0 004.243 4.243z" />
-            </svg>
-            <span>框選</span>
-          </button>
-          <button id="remove-image-btn" type="button" title="移除圖片" class="p-1 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-700 transition">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-            </svg>
-          </button>
-        </div>
+        <button id="remove-image-btn" type="button" title="移除圖片" class="p-1 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-700 transition">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+          </svg>
+        </button>
       </div>
 
       <!-- 📋 Clipboard Smart Sensing Capsule -->
@@ -635,43 +622,6 @@
     </div>
   </div>
 
-  <!-- ✂️ MOBILE IMAGE CROPPER MODAL -->
-  <div id="crop-modal" class="fixed inset-0 z-50 bg-[#030712] flex flex-col hidden select-none">
-    <!-- Top Bar -->
-    <div class="px-3.5 py-2.5 border-b border-slate-800 flex items-center justify-between bg-slate-900/90 shrink-0">
-      <div class="flex items-center gap-1.5 min-w-0">
-        <span class="text-indigo-400">✂️</span>
-        <span class="font-semibold text-xs text-white truncate">手勢框選重點區域</span>
-      </div>
-      <div class="flex items-center gap-1.5 shrink-0">
-        <button id="crop-rotate-btn" type="button" class="px-2 py-1 rounded-xl bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-slate-300 hover:text-white transition active:scale-95 text-[11px] flex items-center gap-1">
-          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-          <span>旋轉</span>
-        </button>
-        <button id="crop-cancel-btn" type="button" class="px-2.5 py-1 rounded-xl bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-slate-300 hover:text-white transition active:scale-95 text-[11px] font-medium">
-          取消
-        </button>
-      </div>
-    </div>
-
-    <!-- Image Workspace (Centered with Cropper) -->
-    <div class="flex-1 min-h-0 relative p-2 flex items-center justify-center overflow-hidden bg-slate-950">
-      <div class="w-full h-full max-w-full max-h-full flex items-center justify-center overflow-hidden">
-        <img id="cropper-image" class="max-w-full max-h-full block" alt="Crop Target">
-      </div>
-    </div>
-
-    <!-- Bottom Actions -->
-    <div class="p-3 border-t border-slate-800/80 bg-slate-900/95 flex items-center justify-between gap-2.5 shrink-0">
-      <button id="crop-full-btn" type="button" class="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-slate-200 text-xs font-medium transition active:scale-95">
-        📐 全圖發送 (不裁切)
-      </button>
-      <button id="crop-confirm-btn" type="button" class="flex-1 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white text-xs font-bold transition active:scale-95 shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-1">
-        <span>✔️ 完成框選</span>
-      </button>
-    </div>
-  </div>
-
   <!-- 🔑 GEMINI API KEY & LIVE VOICE SETTINGS MODAL -->
   <div id="live-key-modal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 select-none animate-fadeIn">
     <div class="bg-slate-900 border border-slate-800 rounded-3xl p-5 sm:p-6 w-full max-w-sm shadow-2xl flex flex-col space-y-4">
@@ -736,11 +686,11 @@
     <img id="lightbox-img" src="" class="max-w-full max-h-full object-contain rounded-lg" alt="Enlarged">
   </div>
 
-  <!-- Modular Scripts (Cache-busted v6.30) -->
-  <script src="/js/ui.js?v=6.30"></script>
-  <script src="/js/tools.js?v=6.30"></script>
-  <script src="/js/chat.js?v=6.30"></script>
+  <!-- Modular Scripts (Cache-busted v6.40) -->
+  <script src="/js/ui.js?v=6.40"></script>
+  <script src="/js/tools.js?v=6.40"></script>
+  <script src="/js/chat.js?v=6.40"></script>
   <script src="/js/live.js?v=4.0"></script>
-  <script src="/js/app.js?v=6.30"></script>
+  <script src="/js/app.js?v=6.40"></script>
 </body>
 </html>
