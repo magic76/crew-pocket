@@ -37,6 +37,7 @@
   let currentTurnModel = '';
   let lastUserSpokeTime = 0;
   let lastVideoFrameSentTime = 0;
+  let isCameraExpanded = false;
 
   // DOM References
   const liveVoiceBtn = document.getElementById('live-voice-btn');
@@ -237,7 +238,7 @@
 
         <!-- 📷 CAMERA EXPANSION VIEW (相機展開區) -->
         <div id="live-card-camera-box" class="hidden transition-all duration-300 overflow-hidden rounded-xl border border-indigo-500/40 bg-slate-950 relative">
-          <video id="live-card-video" autoplay playsinline muted class="w-full max-h-52 object-contain bg-black rounded-lg"></video>
+          <video id="live-card-video" autoplay playsinline muted class="w-full max-h-52 object-contain bg-black rounded-lg transition-all duration-300"></video>
           
           <!-- Top Badge (智慧節流指示燈) -->
           <div id="live-card-camera-badge" class="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-black/80 border border-slate-700 text-[10px] text-slate-300 font-mono flex items-center gap-1 shadow-md pointer-events-none">
@@ -245,10 +246,13 @@
             <span id="live-camera-badge-text">待命中 (說話時自動發送)</span>
           </div>
 
-          <!-- Bottom Camera Controls: 📸 截圖存檔 + 🔄 切換鏡頭 -->
-          <div class="absolute bottom-2 right-2 flex gap-1.5 z-10">
+          <!-- Bottom Camera Controls: 📸 截圖存檔 + ⛶ 放大 + 🔄 切換鏡頭 -->
+          <div class="absolute bottom-2 right-2 flex gap-1.5 z-10 flex-wrap justify-end">
             <button id="live-card-snap-btn" type="button" class="px-2.5 py-1 rounded-lg bg-teal-950/90 hover:bg-teal-900 text-[10px] text-teal-300 border border-teal-500/50 font-mono flex items-center gap-1 shadow-md active:scale-95 transition" title="截圖儲存並發送高畫質畫面給 AI">
               📸 截圖存檔
+            </button>
+            <button id="live-card-expand-btn" type="button" class="px-2.5 py-1 rounded-lg bg-indigo-950/90 hover:bg-indigo-900 text-[10px] text-indigo-300 border border-indigo-500/50 font-mono flex items-center gap-1 shadow-md active:scale-95 transition" title="放大 / 縮小鏡頭預覽">
+              ⛶ 放大
             </button>
             <button id="live-card-flip-btn" type="button" class="px-2.5 py-1 rounded-lg bg-black/80 hover:bg-black text-[10px] text-slate-200 border border-slate-700 font-mono flex items-center gap-1 shadow-md active:scale-95 transition">
               🔄 切換
@@ -296,6 +300,9 @@
 
     const snapBtn = card.querySelector('#live-card-snap-btn');
     if (snapBtn) snapBtn.addEventListener('click', snapPhoto);
+
+    const expandBtn = card.querySelector('#live-card-expand-btn');
+    if (expandBtn) expandBtn.addEventListener('click', toggleCameraExpand);
 
     const flipBtn = card.querySelector('#live-card-flip-btn');
     if (flipBtn) flipBtn.addEventListener('click', flipCamera);
@@ -495,6 +502,31 @@
     }
   }
 
+  function toggleCameraExpand() {
+    isCameraExpanded = !isCameraExpanded;
+    const video = document.getElementById('live-card-video');
+    const expandBtn = document.getElementById('live-card-expand-btn');
+
+    if (video) {
+      if (isCameraExpanded) {
+        video.classList.remove('max-h-52');
+        video.classList.add('max-h-[70vh]', 'h-[50vh]');
+        if (expandBtn) expandBtn.innerHTML = '🗗 縮小';
+      } else {
+        video.classList.remove('max-h-[70vh]', 'h-[50vh]');
+        video.classList.add('max-h-52');
+        if (expandBtn) expandBtn.innerHTML = '⛶ 放大';
+      }
+    }
+
+    setTimeout(() => {
+      const liveCard = document.getElementById('live-inline-card');
+      if (liveCard) {
+        liveCard.scrollIntoView({ behavior: 'smooth', block: 'end' });
+      }
+    }, 120);
+  }
+
   async function snapPhoto() {
     const video = document.getElementById('live-card-video');
     const snapBtn = document.getElementById('live-card-snap-btn');
@@ -502,12 +534,13 @@
 
     try {
       const snapCanvas = document.createElement('canvas');
+      // Full original sensor resolution (1080p / 720p)
       snapCanvas.width = video.videoWidth;
       snapCanvas.height = video.videoHeight;
       const snapCtx = snapCanvas.getContext('2d');
       snapCtx.drawImage(video, 0, 0);
 
-      const dataUrl = snapCanvas.toDataURL('image/jpeg', 0.85);
+      const dataUrl = snapCanvas.toDataURL('image/jpeg', 0.9);
       const cleanBase64 = dataUrl.replace(/^data:image\/\w+;base64,/, '');
 
       // 1. Send high-res snapshot to Gemini Live for immediate inspection
@@ -586,7 +619,7 @@
     if (isCameraOn) {
       try {
         cameraStream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: cameraFacingMode, width: { ideal: 640 }, height: { ideal: 480 } }
+          video: { facingMode: cameraFacingMode, width: { ideal: 1920 }, height: { ideal: 1080 } }
         });
         if (video) video.srcObject = cameraStream;
         if (box) box.classList.remove('hidden');
@@ -595,6 +628,16 @@
           btn.classList.replace('border-slate-700', 'border-indigo-400');
         }
         if (label) label.textContent = '關閉相機';
+
+        // Auto-scroll down smoothly so the user sees the camera view immediately
+        setTimeout(() => {
+          const liveCard = document.getElementById('live-inline-card');
+          if (liveCard) {
+            liveCard.scrollIntoView({ behavior: 'smooth', block: 'end' });
+          } else if (messagesContainer) {
+            messagesContainer.scrollTo({ top: messagesContainer.scrollHeight, behavior: 'smooth' });
+          }
+        }, 120);
 
         const tempCanvas = document.createElement('canvas');
         const tempCtx = tempCanvas.getContext('2d');
@@ -653,7 +696,15 @@
         cameraStream.getTracks().forEach(t => t.stop());
         cameraStream = null;
       }
-      if (video) video.srcObject = null;
+      if (video) {
+        video.srcObject = null;
+        video.classList.remove('max-h-[70vh]', 'h-[50vh]');
+        video.classList.add('max-h-52');
+      }
+      isCameraExpanded = false;
+      const expandBtn = document.getElementById('live-card-expand-btn');
+      if (expandBtn) expandBtn.innerHTML = '⛶ 放大';
+
       if (box) box.classList.add('hidden');
       if (btn) {
         btn.classList.replace('bg-indigo-600', 'bg-slate-800');
@@ -670,7 +721,7 @@
       const video = document.getElementById('live-card-video');
       try {
         cameraStream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: cameraFacingMode, width: { ideal: 640 }, height: { ideal: 480 } }
+          video: { facingMode: cameraFacingMode, width: { ideal: 1920 }, height: { ideal: 1080 } }
         });
         if (video) video.srcObject = cameraStream;
       } catch (e) {
