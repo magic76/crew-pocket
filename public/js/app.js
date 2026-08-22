@@ -81,7 +81,7 @@ setInterval(checkInternetConnection, 30000);
 checkInternetConnection();
 
 // 4. Bind Global UI Listeners
-document.addEventListener('DOMContentLoaded', () => {
+function initAppAndListeners() {
   // 🚀 Holographic Quantum Splash Screen Dismissal (Option 1)
   const splashScreen = document.getElementById('app-splash-screen');
   if (splashScreen) {
@@ -542,4 +542,10 @@ document.addEventListener('DOMContentLoaded', () => {
       console.error('Init load error:', e);
     }
   })();
-});
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initAppAndListeners);
+} else {
+  initAppAndListeners();
+}
