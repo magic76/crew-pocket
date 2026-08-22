@@ -226,6 +226,55 @@ function buildThinkingBlockHtml(thinking, isStreamingThinking = false) {
   `;
 }
 
+// Build Collapsible Memory Compact Checkpoint Divider
+function buildCheckpointDividerHtml(summaryText, timestamp) {
+  const container = document.createElement('div');
+  container.className = 'my-5 not-prose flex flex-col items-center gap-2 select-none w-full max-w-2xl mx-auto px-1';
+  
+  const timeStr = timestamp ? new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+  const cleanedSummary = (summaryText || '')
+    .replace(/^\{\{\s*CHECKPOINT\s*\d+\s*\}\}/i, '')
+    .replace(/\*\*The prior conversation has been compacted via \/compact\.\*\*/i, '')
+    .replace(/# Compacted Conversation Context/i, '')
+    .trim();
+
+  container.innerHTML = `
+    <!-- Glowing Divider Capsule -->
+    <div class="w-full flex items-center gap-3">
+      <div class="flex-1 h-[1px] bg-gradient-to-r from-transparent via-cyan-700/50 to-cyan-500/80"></div>
+      <div class="px-3.5 py-1.5 rounded-full bg-gradient-to-r from-slate-950 via-cyan-950/80 to-slate-950 border border-cyan-500/60 shadow-lg shadow-cyan-950/60 flex items-center gap-2 text-cyan-300 font-mono text-[11px] font-bold shrink-0">
+        <span class="w-2 h-2 rounded-full bg-cyan-400 animate-pulse shrink-0"></span>
+        <span>📦 記憶提煉分界線 (Memory Checkpoint)</span>
+      </div>
+      <div class="flex-1 h-[1px] bg-gradient-to-l from-transparent via-cyan-700/50 to-cyan-500/80"></div>
+    </div>
+
+    <!-- Collapsible Summary Card -->
+    <details class="w-full bg-slate-950/90 border border-cyan-800/50 rounded-2xl overflow-hidden text-xs shadow-xl transition-all duration-300 group">
+      <summary class="px-3.5 py-2.5 cursor-pointer flex items-center justify-between text-cyan-300 hover:text-cyan-200 font-mono select-none bg-gradient-to-r from-cyan-950/60 via-slate-900 to-slate-900">
+        <div class="flex items-center gap-2 min-w-0">
+          <span class="text-sm">📋</span>
+          <span class="font-semibold text-slate-200 truncate">查看本次提煉的核心記憶摘要</span>
+          <span class="text-[9px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-mono shrink-0">✓ 釋放 ~85% Tokens</span>
+        </div>
+        <div class="flex items-center gap-2 shrink-0">
+          <span class="text-[10px] text-slate-500 font-mono">${timeStr}</span>
+          <span class="text-[10px] text-slate-400 font-mono group-open:rotate-180 transition-transform">▼</span>
+        </div>
+      </summary>
+      <div class="p-4 border-t border-cyan-900/40 bg-slate-950 text-slate-200 leading-relaxed text-xs space-y-2 prose prose-invert max-w-none">
+        ${formatMessageContent(cleanedSummary)}
+      </div>
+    </details>
+
+    <div class="text-[10px] text-slate-500 font-mono text-center">
+      💡 以上歷史對話已封存，後續提問將基於此份核心記憶極速展開
+    </div>
+  `;
+
+  return container;
+}
+
 // Append Message to UI
 function appendMessage(role, content, timestamp, tools = [], thinking = '', isBtw = false) {
   const isUser = role === 'user';
@@ -509,8 +558,14 @@ async function loadConversationHistory(convId) {
     
     if (data.messages && data.messages.length > 0) {
       data.messages.forEach((msg, idx) => {
-        const isBtw = msg.role === 'assistant' && idx > 0 && /^\s*\/btw\b/i.test(data.messages[idx - 1].content || '');
-        appendMessage(msg.role, msg.content, msg.timestamp, msg.tools || [], msg.thinking || '', isBtw);
+        if (msg.role === 'checkpoint') {
+          const divider = buildCheckpointDividerHtml(msg.content, msg.timestamp);
+          messagesContainer.appendChild(divider);
+          if (typeof enhanceCodeBlocks === 'function') enhanceCodeBlocks(divider);
+        } else {
+          const isBtw = msg.role === 'assistant' && idx > 0 && /^\s*\/btw\b/i.test(data.messages[idx - 1].content || '');
+          appendMessage(msg.role, msg.content, msg.timestamp, msg.tools || [], msg.thinking || '', isBtw);
+        }
       });
       const firstUserMsg = data.messages.find(m => m.role === 'user');
       if (headerTitle) {
@@ -536,10 +591,9 @@ async function loadConversationHistory(convId) {
           if (!existingLive) {
             const liveCard = document.createElement('div');
             liveCard.id = 'resumed-live-card';
-            liveCard.className = 'flex gap-2.5 w-full max-w-2xl mx-auto justify-start min-w-0';
+            liveCard.className = 'w-full max-w-2xl mx-auto justify-start min-w-0';
             liveCard.innerHTML = `
-              <div class="w-7 h-7 rounded-full bg-indigo-600/30 border border-indigo-500/50 flex items-center justify-center text-indigo-400 shrink-0 text-xs font-bold mt-0.5">CP</div>
-              <div class="bg-slate-900 border border-indigo-500/50 text-slate-200 rounded-2xl rounded-tl-none p-3.5 text-xs sm:text-sm shadow-md flex-1 min-w-0 aurora-glow-box">
+              <div class="bg-slate-900 border border-indigo-500/50 text-slate-200 rounded-2xl p-3.5 text-xs sm:text-sm shadow-md w-full min-w-0 aurora-glow-box">
                 <div class="flex items-center gap-2 text-indigo-300 font-medium">
                   <span class="w-2 h-2 rounded-full bg-indigo-400 animate-ping"></span>
                   <span>⚡ AI 正在背景持續生成回覆中...</span>
@@ -862,31 +916,10 @@ async function sendMessage() {
       compactingMsgDiv.remove();
 
       if (data.success && data.summary) {
-        messagesContainer.innerHTML = '';
-        
-        const cardDiv = document.createElement('div');
-        cardDiv.className = 'flex gap-2.5 w-full max-w-2xl mx-auto justify-start min-w-0 my-2';
-        cardDiv.innerHTML = `
-          <div class="w-7 h-7 rounded-full bg-cyan-600/30 border border-cyan-500/50 flex items-center justify-center text-cyan-300 shrink-0 text-xs font-bold mt-0.5">📦</div>
-          <div class="bg-gradient-to-b from-slate-900 via-slate-900 to-cyan-950/30 border border-cyan-500/60 text-slate-200 rounded-2xl rounded-tl-none p-4 text-xs sm:text-sm shadow-2xl flex-1 min-w-0 prose">
-            <div class="flex items-center justify-between border-b border-cyan-800/60 pb-2 mb-3 select-none">
-              <span class="px-2.5 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 text-[11px] font-mono font-bold flex items-center gap-1.5">
-                <span>📦</span>
-                <span>對話記憶已精簡壓縮 (Compacted Memory)</span>
-              </span>
-              <span class="text-[10px] text-emerald-400 font-mono font-semibold">✓ 釋放 ~85% Tokens</span>
-            </div>
-            <div class="text-slate-300 leading-relaxed space-y-2">
-              ${formatMessageContent(data.summary)}
-            </div>
-            <div class="mt-3 pt-2 border-t border-slate-800 text-[11px] text-slate-400 flex items-center justify-between">
-              <span>💡 後續提問將自動繼承這份精華記憶繼續展開</span>
-              <span class="text-[10px] text-slate-500 font-mono">${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-            </div>
-          </div>
-        `;
-        messagesContainer.appendChild(cardDiv);
-        if (typeof enhanceCodeBlocks === 'function') enhanceCodeBlocks(cardDiv);
+        // 🌟 Visual Persistence: Do not wipe screen! Append glowing checkpoint divider
+        const divider = buildCheckpointDividerHtml(data.summary, new Date().toISOString());
+        messagesContainer.appendChild(divider);
+        if (typeof enhanceCodeBlocks === 'function') enhanceCodeBlocks(divider);
         if (navigator.vibrate) navigator.vibrate([30, 50, 30]);
         scrollToBottom(true);
       } else {
@@ -1057,6 +1090,7 @@ async function sendMessage() {
 
   let accumulatedText = '';
   let abortedHandled = false;
+  let renderPending = false;
 
   try {
     const response = await fetch('/api/chat', {
@@ -1148,14 +1182,21 @@ async function sendMessage() {
               statusTextElem.textContent = '✍️ 回覆組織撰寫中...';
               accumulatedText = data.accumulated;
               updateLiveTicker(accumulatedText, '✍️');
-              contentElem.innerHTML = formatMessageContent(accumulatedText);
+
+              if (!renderPending) {
+                renderPending = true;
+                requestAnimationFrame(() => {
+                  contentElem.innerHTML = formatMessageContent(accumulatedText);
+                  renderPending = false;
+                  if (userScrolledUp) {
+                    const scrollBadge = document.getElementById('scroll-bottom-badge');
+                    if (scrollBadge) scrollBadge.classList.remove('hidden');
+                  }
+                  scrollToBottom();
+                });
+              }
 
               if (liveThinking) thinkingContainerElem.innerHTML = buildThinkingBlockHtml(liveThinking, false);
-              if (userScrolledUp) {
-                const scrollBadge = document.getElementById('scroll-bottom-badge');
-                if (scrollBadge) scrollBadge.classList.remove('hidden');
-              }
-              scrollToBottom();
             } else if (currentEvent === 'done') {
               clearInterval(liveTimerInterval);
               liveStatusElem.style.display = 'none';
