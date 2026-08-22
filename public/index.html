@@ -103,12 +103,21 @@
           </button>
           <span id="network-offline-badge" class="hidden text-[9px] px-1.5 py-0.2 rounded bg-rose-500/20 text-rose-300 border border-rose-500/40 font-mono shrink-0">離線</span>
         </div>
-        <!-- Interactive Model Selector Trigger -->
-        <button id="model-selector-btn" class="flex items-center gap-1 text-[10px] text-slate-300 hover:text-white bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 px-1.5 py-0.5 rounded-md transition active:scale-95 text-left w-fit max-w-[130px] sm:max-w-[180px] mt-0.5" title="點擊切換 AI 模型與思考強度 (Gemini / Claude / GPT)">
-          <span id="model-badge-icon" class="shrink-0">✨</span>
-          <span id="model-display-name" class="font-semibold text-slate-200 truncate">Gemini 3.7 Flash</span>
-          <svg class="w-2.5 h-2.5 text-slate-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
-        </button>
+        <!-- Header Sub-row: Model Selector & Context Pill -->
+        <div class="flex items-center gap-1.5 mt-0.5 min-w-0">
+          <!-- Interactive Model Selector Trigger -->
+          <button id="model-selector-btn" class="flex items-center gap-1 text-[10px] text-slate-300 hover:text-white bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 px-1.5 py-0.5 rounded-md transition active:scale-95 text-left w-fit max-w-[120px] sm:max-w-[160px]" title="點擊切換 AI 模型與思考強度 (Gemini / Claude / GPT)">
+            <span id="model-badge-icon" class="shrink-0">✨</span>
+            <span id="model-display-name" class="font-semibold text-slate-200 truncate">Gemini 3.7 Flash</span>
+            <svg class="w-2.5 h-2.5 text-slate-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+          </button>
+
+          <!-- Interactive Context Usage Pill Trigger -->
+          <button id="context-pill" class="flex items-center gap-1 text-[10px] text-slate-300 hover:text-white bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 px-1.5 py-0.5 rounded-md transition active:scale-95 text-left shrink-0 cursor-pointer" title="點擊查看當前對話 Context 用量與記憶提煉">
+            <span id="context-indicator" class="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0"></span>
+            <span id="context-tokens-text" class="font-mono font-semibold text-slate-200">0 tok</span>
+          </button>
+        </div>
       </div>
     </div>
     
@@ -507,6 +516,67 @@
     </div>
   </div>
 
+  <!-- CONTEXT USAGE & COMPACT MODAL -->
+  <div id="context-modal" class="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-3 opacity-0 pointer-events-none transition-opacity duration-200">
+    <div class="bg-slate-900 border border-slate-700/80 rounded-2xl w-full max-w-sm flex flex-col shadow-2xl overflow-hidden max-h-[85dvh]">
+      <!-- Header -->
+      <div class="px-4 py-3 border-b border-slate-800 flex items-center justify-between bg-slate-950/60 shrink-0">
+        <div class="flex items-center gap-2">
+          <span class="text-lg">🧠</span>
+          <div>
+            <h2 class="text-xs font-bold text-white tracking-wide">當前對話 Context 用量監控</h2>
+            <div class="text-[10px] text-slate-400">即時計算活躍 Tokens 與記憶負載</div>
+          </div>
+        </div>
+        <button id="close-context-btn" class="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition text-xs font-mono">✕</button>
+      </div>
+
+      <!-- Body -->
+      <div class="p-4 space-y-3.5 overflow-y-auto">
+        <!-- Status Card -->
+        <div class="p-3 rounded-xl bg-slate-950/80 border border-slate-800 space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="text-[11px] text-slate-400 font-mono">活躍 Context 負載:</span>
+            <span id="modal-context-active-tokens" class="text-xs font-mono font-bold text-emerald-400">0 tok</span>
+          </div>
+          <!-- Progress Bar -->
+          <div class="w-full h-2 bg-slate-800 rounded-full overflow-hidden relative">
+            <div id="modal-context-bar" class="h-full bg-gradient-to-r from-emerald-500 to-teal-400 rounded-full transition-all duration-500" style="width: 2%"></div>
+          </div>
+          <div class="flex items-center justify-between text-[10px] font-mono text-slate-400">
+            <span id="modal-context-status-text">🟢 狀態：全新對話</span>
+            <span id="modal-context-turns">0 輪對話</span>
+          </div>
+        </div>
+
+        <!-- Metrics Grid -->
+        <div class="grid grid-cols-2 gap-2 text-xs">
+          <div class="p-2.5 rounded-xl bg-slate-950/60 border border-slate-800/80 space-y-1">
+            <div class="text-[10px] text-slate-400 font-mono">歷史累積總量</div>
+            <div id="modal-context-total-tokens" class="font-mono font-bold text-slate-200">0 tok</div>
+          </div>
+          <div class="p-2.5 rounded-xl bg-slate-950/60 border border-slate-800/80 space-y-1">
+            <div class="text-[10px] text-slate-400 font-mono">記憶提煉節省率</div>
+            <div id="modal-context-saved-percent" class="font-mono font-bold text-cyan-400">0%</div>
+          </div>
+        </div>
+
+        <!-- Tips & Quick Compact Action -->
+        <div class="p-3 rounded-xl bg-cyan-950/30 border border-cyan-900/40 text-[11px] text-slate-300 space-y-2">
+          <div class="flex items-center gap-1.5 text-cyan-300 font-semibold">
+            <span>💡</span><span>提煉記憶以保持秒級響應</span>
+          </div>
+          <p class="text-[10px] text-slate-400 leading-relaxed">
+            當對話輪次漸多、Tokens 累積較大時，執行 <code class="text-cyan-300">/compact</code> 可提煉核心脈絡並釋放 ~85% 負擔，所有歷史對話仍完好保留在畫面上！
+          </p>
+          <button id="modal-trigger-compact-btn" class="w-full py-2 bg-gradient-to-r from-cyan-600 to-teal-600 hover:from-cyan-500 hover:to-teal-500 active:scale-95 text-white rounded-xl text-xs font-bold font-mono transition shadow-lg shadow-cyan-950/50 flex items-center justify-center gap-1.5 cursor-pointer">
+            <span>📦 立即執行 /compact 提煉記憶</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- USAGE QUOTA MODAL -->
   <div id="usage-modal" class="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-3 opacity-0 pointer-events-none transition-opacity duration-200">
     <div class="bg-slate-900 border border-slate-700/80 rounded-2xl w-full max-w-sm flex flex-col shadow-2xl overflow-hidden max-h-[85dvh]">
@@ -696,11 +766,11 @@
     <img id="lightbox-img" src="" class="max-w-full max-h-full object-contain rounded-lg" alt="Enlarged">
   </div>
 
-  <!-- Modular Scripts (Cache-busted v6.47) -->
-  <script src="/js/ui.js?v=6.47"></script>
-  <script src="/js/tools.js?v=6.47"></script>
-  <script src="/js/chat.js?v=6.47"></script>
+  <!-- Modular Scripts (Cache-busted v6.48) -->
+  <script src="/js/ui.js?v=6.48"></script>
+  <script src="/js/tools.js?v=6.48"></script>
+  <script src="/js/chat.js?v=6.48"></script>
   <script src="/js/live.js?v=4.0"></script>
-  <script src="/js/app.js?v=6.47"></script>
+  <script src="/js/app.js?v=6.48"></script>
 </body>
 </html>

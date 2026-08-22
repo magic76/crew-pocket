@@ -136,6 +136,44 @@ function initAppAndListeners() {
   if (refreshUsageBtn) refreshUsageBtn.addEventListener('click', loadUsageData);
   if (usageModal) usageModal.addEventListener('click', (e) => { if (e.target === usageModal) toggleUsageModal(false); });
 
+  // Context Usage Modal listeners
+  const contextPill = document.getElementById('context-pill');
+  const contextModal = document.getElementById('context-modal');
+  const closeContextBtn = document.getElementById('close-context-btn');
+  const modalTriggerCompactBtn = document.getElementById('modal-trigger-compact-btn');
+
+  if (contextPill) {
+    contextPill.addEventListener('click', () => {
+      if (typeof window.showContextModal === 'function') window.showContextModal();
+    });
+  }
+  if (closeContextBtn) {
+    closeContextBtn.addEventListener('click', () => {
+      if (typeof window.hideContextModal === 'function') window.hideContextModal();
+    });
+  }
+  if (contextModal) {
+    contextModal.addEventListener('click', (e) => {
+      if (e.target === contextModal && typeof window.hideContextModal === 'function') {
+        window.hideContextModal();
+      }
+    });
+  }
+  if (modalTriggerCompactBtn) {
+    modalTriggerCompactBtn.addEventListener('click', () => {
+      if (typeof window.hideContextModal === 'function') window.hideContextModal();
+      if (promptInput) {
+        promptInput.value = '/compact';
+        promptInput.focus();
+        promptInput.style.height = 'auto';
+        promptInput.style.height = Math.min(promptInput.scrollHeight, 120) + 'px';
+      }
+      if (typeof handleSendClick === 'function') {
+        handleSendClick(new Event('click'));
+      }
+    });
+  }
+
   // Model & Effort Selector listeners
   if (modelSelectorBtn) modelSelectorBtn.addEventListener('click', () => toggleModelModal(true));
   if (effortSelectorBtn) effortSelectorBtn.addEventListener('click', () => toggleModelModal(true));

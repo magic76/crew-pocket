@@ -275,6 +275,94 @@ function buildCheckpointDividerHtml(summaryText, timestamp) {
   return container;
 }
 
+// 🧠 Context Usage Pill & Modal State Tracker
+let currentContextStats = null;
+
+function updateContextPill(stats) {
+  currentContextStats = stats || null;
+  const pill = document.getElementById('context-pill');
+  const indicator = document.getElementById('context-indicator');
+  const textEl = document.getElementById('context-tokens-text');
+  if (!pill || !textEl) return;
+
+  if (!stats || typeof stats.active_tokens !== 'number' || stats.active_tokens === 0) {
+    textEl.textContent = '0 tok';
+    if (indicator) indicator.className = 'w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0';
+    return;
+  }
+
+  textEl.textContent = stats.active_tokens_formatted || `${stats.active_tokens} tok`;
+
+  if (indicator) {
+    if (stats.status_level === 'red') {
+      indicator.className = 'w-1.5 h-1.5 rounded-full bg-rose-400 animate-ping shrink-0';
+      textEl.className = 'font-mono font-semibold text-rose-300';
+    } else if (stats.status_level === 'yellow') {
+      indicator.className = 'w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0';
+      textEl.className = 'font-mono font-semibold text-amber-300';
+    } else {
+      indicator.className = 'w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0';
+      textEl.className = 'font-mono font-semibold text-slate-200';
+    }
+  }
+}
+
+function showContextModal() {
+  const modal = document.getElementById('context-modal');
+  if (!modal) return;
+
+  const activeTokensEl = document.getElementById('modal-context-active-tokens');
+  const barEl = document.getElementById('modal-context-bar');
+  const statusTextEl = document.getElementById('modal-context-status-text');
+  const turnsEl = document.getElementById('modal-context-turns');
+  const totalTokensEl = document.getElementById('modal-context-total-tokens');
+  const savedPercentEl = document.getElementById('modal-context-saved-percent');
+
+  const stats = currentContextStats || {
+    active_tokens: 0,
+    active_tokens_formatted: '0 tok',
+    total_tokens: 0,
+    total_tokens_formatted: '0 tok',
+    saved_percent: 0,
+    status_level: 'green',
+    status_text: '全新對話',
+    user_turns: 0
+  };
+
+  if (activeTokensEl) activeTokensEl.textContent = stats.active_tokens_formatted;
+  if (totalTokensEl) totalTokensEl.textContent = stats.total_tokens_formatted;
+  if (savedPercentEl) savedPercentEl.textContent = `${stats.saved_percent || 0}%`;
+  if (turnsEl) turnsEl.textContent = `${stats.user_turns || 0} 輪對話`;
+
+  const pct = Math.min(100, Math.max(3, Math.round((stats.active_tokens / 80000) * 100)));
+  if (barEl) {
+    barEl.style.width = `${pct}%`;
+    if (stats.status_level === 'red') {
+      barEl.className = 'h-full bg-gradient-to-r from-rose-500 to-amber-500 rounded-full transition-all duration-500';
+    } else if (stats.status_level === 'yellow') {
+      barEl.className = 'h-full bg-gradient-to-r from-amber-500 to-teal-400 rounded-full transition-all duration-500';
+    } else {
+      barEl.className = 'h-full bg-gradient-to-r from-emerald-500 to-teal-400 rounded-full transition-all duration-500';
+    }
+  }
+
+  if (statusTextEl) {
+    const icon = stats.status_level === 'red' ? '🔴' : stats.status_level === 'yellow' ? '🟡' : '🟢';
+    statusTextEl.textContent = `${icon} 狀態：${stats.status_text}`;
+  }
+
+  modal.classList.remove('pointer-events-none');
+  modal.classList.add('opacity-100');
+}
+
+function hideContextModal() {
+  const modal = document.getElementById('context-modal');
+  if (modal) {
+    modal.classList.remove('opacity-100');
+    modal.classList.add('pointer-events-none');
+  }
+}
+
 // Append Message to UI
 function appendMessage(role, content, timestamp, tools = [], thinking = '', isBtw = false) {
   const isUser = role === 'user';
@@ -556,6 +644,13 @@ async function loadConversationHistory(convId) {
     const res = await fetch(`/api/history?id=${convId}`);
     const data = await res.json();
     
+    // 🧠 Update Top Context Usage Pill
+    if (data.context_stats) {
+      updateContextPill(data.context_stats);
+    } else {
+      updateContextPill(null);
+    }
+
     if (data.messages && data.messages.length > 0) {
       data.messages.forEach((msg, idx) => {
         if (msg.role === 'checkpoint') {
@@ -623,6 +718,7 @@ async function loadConversationHistory(convId) {
                     const freshRes = await fetch(`/api/history?id=${convId}`);
                     if (freshRes.ok) {
                       const freshData = await freshRes.json();
+                      if (freshData.context_stats) updateContextPill(freshData.context_stats);
                       if (freshData.messages && freshData.messages.length > 0) {
                         const lastMsg = freshData.messages[freshData.messages.length - 1];
                         if (lastMsg.role === 'assistant') {
@@ -647,7 +743,7 @@ async function loadConversationHistory(convId) {
   }
 }
 
-// Load Conversations List in Drawer (with Smooth Swipe-to-Delete)
+// Load Conversations List in Drawer (with Smooth Swipe-to-Delete & Context Stats)
 async function loadConversations() {
   if (!convList) return;
   try {
@@ -666,6 +762,8 @@ async function loadConversations() {
       wrapper.className = 'swipe-item-wrapper relative overflow-hidden rounded-xl mb-1.5 select-none transition-all duration-200';
       wrapper.style.maxHeight = '80px';
 
+      const tokenColorClass = conv.status_level === 'red' ? 'text-rose-400 font-semibold' : conv.status_level === 'yellow' ? 'text-amber-400' : 'text-emerald-400';
+
       wrapper.innerHTML = `
         <!-- Delete background revealed when swiping left -->
         <div class="swipe-delete-bg absolute inset-0 bg-rose-600 text-white flex items-center justify-end px-3.5 text-xs font-semibold rounded-xl select-none">
@@ -681,13 +779,22 @@ async function loadConversations() {
         <div class="swipe-item-content relative z-10 p-2.5 rounded-xl cursor-pointer flex items-center justify-between text-xs transition-transform duration-75 touch-pan-y ${
           isCurrent ? 'bg-indigo-950 text-indigo-200 border border-indigo-500/60 shadow-md' : 'bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800'
         }">
-          <div class="flex items-center gap-2 truncate min-w-0 flex-1 pointer-events-none">
-            <svg class="w-3.5 h-3.5 shrink-0 ${isCurrent ? 'text-indigo-400' : 'text-slate-400'}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/>
-            </svg>
-            <span class="truncate font-medium">${escapeHtml(conv.title)}</span>
+          <div class="flex flex-col truncate min-w-0 flex-1 pointer-events-none pr-1">
+            <div class="flex items-center gap-1.5 truncate">
+              <svg class="w-3.5 h-3.5 shrink-0 ${isCurrent ? 'text-indigo-400' : 'text-slate-400'}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/>
+              </svg>
+              <span class="truncate font-medium">${escapeHtml(conv.title)}</span>
+            </div>
+            <!-- Conversation Sub-meta: Turns & Context Tokens -->
+            <div class="flex items-center gap-1.5 text-[10px] text-slate-400 font-mono mt-0.5 pl-5">
+              <span>${conv.turns || 0} 輪</span>
+              <span>·</span>
+              <span class="${tokenColorClass}">${conv.context_tokens_formatted || '0 tok'}</span>
+              ${conv.is_compacted ? '<span class="text-[9px] px-1 py-0.2 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">📦已提煉</span>' : ''}
+            </div>
           </div>
-          <div class="flex items-center gap-1 shrink-0 ml-1.5">
+          <div class="flex items-center gap-1 shrink-0 ml-1">
             ${isCurrent ? '<span class="text-[9px] px-1.5 py-0.2 rounded-full bg-indigo-900 text-indigo-200 border border-indigo-500/60 font-mono shrink-0">目前</span>' : ''}
             <button type="button" class="rename-conv-btn p-1 rounded-lg hover:bg-slate-700/80 text-slate-400 hover:text-indigo-300 transition active:scale-95 shrink-0" title="修改對話標題">
               <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1213,6 +1320,13 @@ async function sendMessage() {
                 thinkingContainerElem.innerHTML = buildThinkingBlockHtml(liveThinking);
               }
 
+              // 🧠 Refresh Context Usage Stats
+              if (targetDoneConvId) {
+                fetch(`/api/history?id=${targetDoneConvId}`).then(r => r.json()).then(hData => {
+                  if (hData.context_stats) updateContextPill(hData.context_stats);
+                }).catch(() => {});
+              }
+
               const totalSec = ((performance.now() - startTs) / 1000).toFixed(1);
               const estTokens = Math.round(accumulatedText.length / 2);
               const avgSpeed = Math.round(estTokens / Math.max(0.5, totalSec));
@@ -1480,3 +1594,8 @@ document.addEventListener('click', (e) => {
     }
   }
 });
+
+// Window Exports for Context Usage & Modals
+window.showContextModal = showContextModal;
+window.hideContextModal = hideContextModal;
+window.updateContextPill = updateContextPill;
