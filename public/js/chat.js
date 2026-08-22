@@ -797,7 +797,9 @@ async function stopGeneration() {
 
 // Send Message with Live Streaming, Tools Logging, and Abort Support
 async function sendMessage() {
-  const text = promptInput.value.trim();
+  const text = promptInput.value
+    .replace(/\[Context:[\s\S]*?(?:\](?:\n\n|\n|$)|$)/gi, '')
+    .trim();
   const imgPath = uploadedImagePath;
 
   if (!text && !imgPath) return;

@@ -330,7 +330,6 @@ function enhanceCodeBlocks(container) {
           <div class="flex items-center gap-2 min-w-0">
             <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0"></span>
             <span class="text-[11px] font-mono font-semibold text-slate-300 truncate">🌐 ${typeLabel}</span>
-            <span class="text-[9px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-mono">即時內嵌</span>
           </div>
           <div class="flex items-center gap-1.5 shrink-0">
             <a href="${blobUrl}" target="_blank" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 active:bg-slate-900 text-slate-300 hover:text-white text-[11px] font-mono flex items-center gap-1 transition active:scale-95 no-underline" title="另開全螢幕分頁">
