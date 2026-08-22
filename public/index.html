@@ -586,7 +586,7 @@
           <span class="text-lg">📊</span>
           <div>
             <h2 class="text-xs font-bold text-white tracking-wide">AI 模型配額用量監控</h2>
-            <div class="text-[10px] text-slate-400">即時調用 agy /usage 獲取</div>
+            <div id="usage-modal-subtitle" class="text-[10px] text-slate-400">即時調用 agy /usage 獲取</div>
           </div>
         </div>
         <button id="close-usage-btn" class="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition text-xs font-mono">✕</button>
@@ -599,7 +599,7 @@
 
       <!-- Footer -->
       <div class="p-3 border-t border-slate-800 bg-slate-950/40 flex items-center justify-between">
-        <span class="text-[10px] text-slate-500 font-mono">配額以各模型重置時間為準</span>
+        <span id="usage-modal-footer-text" class="text-[10px] text-slate-500 font-mono">配額以各模型重置時間為準</span>
         <button id="refresh-usage-btn" class="px-2.5 py-1 rounded-lg bg-sky-950/80 border border-sky-700/60 hover:bg-sky-900 text-sky-300 text-xs font-medium flex items-center gap-1 transition active:scale-95">
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
           <span>重新整理</span>

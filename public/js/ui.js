@@ -73,6 +73,8 @@ const closeUsageBtn = document.getElementById('close-usage-btn');
 const openUsageChip = document.getElementById('open-usage-chip');
 const refreshUsageBtn = document.getElementById('refresh-usage-btn');
 const usageBarsContainer = document.getElementById('usage-bars-container');
+const usageModalSubtitle = document.getElementById('usage-modal-subtitle');
+const usageModalFooterText = document.getElementById('usage-modal-footer-text');
 const modelSelectorBtn = document.getElementById('model-selector-btn');
 const modelModal = document.getElementById('model-modal');
 const closeModelBtn = document.getElementById('close-model-btn');
@@ -169,9 +171,28 @@ function toggleUsageModal(open) {
 async function loadUsageData() {
   if (!usageBarsContainer) return;
   if (currentProvider === 'codex') {
-    usageBarsContainer.innerHTML = '<div class="p-3 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-300">Codex 用量請以 Codex CLI 帳戶資訊為準；此面板目前只支援 Antigravity。</div>';
+    if (usageModalSubtitle) usageModalSubtitle.textContent = 'Codex 配額由 OpenAI 帳戶頁面提供';
+    if (usageModalFooterText) usageModalFooterText.textContent = '將在瀏覽器新分頁開啟';
+    if (refreshUsageBtn) refreshUsageBtn.classList.add('hidden');
+    usageBarsContainer.innerHTML = `
+      <div class="p-4 rounded-xl bg-slate-950 border border-emerald-800/70 text-xs text-slate-300 space-y-3">
+        <div class="flex items-start gap-3">
+          <span class="text-2xl">🧩</span>
+          <div class="space-y-1">
+            <div class="font-bold text-white">OpenAI Codex 用量</div>
+            <p class="text-[11px] text-slate-400 leading-relaxed">查看目前方案的剩餘用量、重置時間與可購買的額外 credits。</p>
+          </div>
+        </div>
+        <a href="https://chatgpt.com/codex/settings/usage" target="_blank" rel="noopener noreferrer" class="w-full min-h-11 px-3 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold flex items-center justify-center gap-2 no-underline transition active:scale-[0.98] shadow-lg shadow-emerald-900/30">
+          <span>🌐 前往 Codex 官方用量頁</span>
+          <span aria-hidden="true">↗</span>
+        </a>
+      </div>`;
     return;
   }
+  if (usageModalSubtitle) usageModalSubtitle.textContent = '即時調用 agy /usage 獲取';
+  if (usageModalFooterText) usageModalFooterText.textContent = '配額以各模型重置時間為準';
+  if (refreshUsageBtn) refreshUsageBtn.classList.remove('hidden');
   usageBarsContainer.innerHTML = `
     <div class="text-center py-6 text-slate-400 text-xs flex flex-col items-center gap-2 font-sans">
       <span class="inline-block w-5 h-5 rounded-full border-2 border-indigo-400 border-t-transparent animate-spin"></span>
