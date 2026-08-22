@@ -272,16 +272,44 @@ function enhanceCodeBlocks(container) {
         processedCode = processedCode.slice(htmlStartMatch.index);
       }
 
-      // 1. Inject <base href="..."> so relative paths (e.g. icons/..., uploads/..., css/...) resolve directly to our server origin
+      // 1. Inject <base href="..."> & auto-resize script so relative paths work and iframe fits height automatically
       const baseOrigin = window.location.origin;
       const baseTag = `<base href="${baseOrigin}/">`;
+      const resizeScript = `
+<script>
+  (function() {
+    function notifyHeight() {
+      try {
+        var h = Math.max(
+          document.documentElement ? document.documentElement.scrollHeight : 0,
+          document.body ? document.body.scrollHeight : 0,
+          document.documentElement ? document.documentElement.offsetHeight : 0,
+          document.body ? document.body.offsetHeight : 0
+        );
+        if (h > 0 && window.parent && window.parent !== window) {
+          window.parent.postMessage({ type: 'agy-sandbox-resize', height: h }, '*');
+        }
+      } catch(e) {}
+    }
+    window.addEventListener('load', notifyHeight);
+    window.addEventListener('DOMContentLoaded', notifyHeight);
+    window.addEventListener('resize', notifyHeight);
+    if (window.ResizeObserver && document.body) {
+      new ResizeObserver(notifyHeight).observe(document.body);
+    }
+    setTimeout(notifyHeight, 50);
+    setTimeout(notifyHeight, 200);
+    setTimeout(notifyHeight, 600);
+  })();
+<\/script>
+`;
 
       if (/<head\b[^>]*>/i.test(processedCode)) {
-        processedCode = processedCode.replace(/(<head\b[^>]*>)/i, `$1\n  ${baseTag}`);
+        processedCode = processedCode.replace(/(<head\b[^>]*>)/i, `$1\n  ${baseTag}\n  ${resizeScript}`);
       } else if (/<html\b[^>]*>/i.test(processedCode)) {
-        processedCode = processedCode.replace(/(<html\b[^>]*>)/i, `$1\n<head>\n  ${baseTag}\n</head>`);
+        processedCode = processedCode.replace(/(<html\b[^>]*>)/i, `$1\n<head>\n  ${baseTag}\n  ${resizeScript}\n</head>`);
       } else {
-        processedCode = `${baseTag}\n${processedCode}`;
+        processedCode = `${baseTag}\n${resizeScript}\n${processedCode}`;
       }
 
       // 2. Smart Path Rewriter: Auto-convert local absolute paths (/data/data/..., /sdcard/..., /storage/...) to /api/image?path=...
@@ -292,71 +320,38 @@ function enhanceCodeBlocks(container) {
       const blob = new Blob([processedCode], { type: 'text/html;charset=utf-8' });
       const blobUrl = URL.createObjectURL(blob);
       activeBlobUrls.add(blobUrl);
-      const typeLabel = lang === 'SVG' ? 'SVG 視覺圖形' : 'HTML 網頁產物';
+      const typeLabel = lang === 'SVG' ? 'SVG 視覺圖形' : '互動網頁組件';
 
       const card = document.createElement('div');
-      card.className = 'my-2.5 not-prose';
+      card.className = 'inline-sandbox-card my-3 not-prose rounded-2xl bg-slate-950/90 border border-slate-700/80 shadow-xl overflow-hidden flex flex-col transition-all duration-300';
 
       card.innerHTML = `
-        <div class="p-3 rounded-2xl bg-gradient-to-r from-slate-900 to-slate-800/90 border border-slate-700/80 shadow-md flex flex-col gap-2.5">
-          <div class="flex items-center justify-between gap-2 flex-wrap">
-            <div class="flex items-center gap-2.5 min-w-0">
-              <div class="w-8 h-8 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
-                </svg>
-              </div>
-              <div class="min-w-0">
-                <div class="text-xs font-semibold text-white truncate">🌐 ${typeLabel}</div>
-                <div class="text-[10px] text-slate-400">點擊開啟全螢幕或展開預覽</div>
-              </div>
-            </div>
-            <div class="flex items-center gap-1.5 shrink-0 ml-auto">
-              <!-- Native unblockable anchor link -->
-              <a href="${blobUrl}" target="_blank" class="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white text-xs font-semibold flex items-center gap-1.5 shadow-md shadow-emerald-900/40 active:scale-95 transition no-underline">
-                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
-                </svg>
-                <span>開啟預覽</span>
-              </a>
-              <button type="button" class="card-copy-btn p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 transition border border-slate-700 active:scale-95" title="複製 HTML 原始碼">
-                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
-                </svg>
-              </button>
-            </div>
+        <div class="px-3 py-1.5 bg-gradient-to-r from-slate-900 via-slate-900 to-slate-800 border-b border-slate-800/90 flex items-center justify-between gap-2 select-none">
+          <div class="flex items-center gap-2 min-w-0">
+            <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0"></span>
+            <span class="text-[11px] font-mono font-semibold text-slate-300 truncate">🌐 ${typeLabel}</span>
+            <span class="text-[9px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-mono">即時內嵌</span>
           </div>
-          <!-- Optional on-demand inline sandbox expander -->
-          <details class="border-t border-slate-800/80 pt-2 text-xs">
-            <summary class="cursor-pointer text-indigo-400 hover:text-indigo-300 font-mono text-[11px] select-none flex items-center justify-between">
-              <span>📱 在對話框中直接展開小視窗</span>
-              <span class="text-[10px] text-slate-500">點擊展開 ▼</span>
-            </summary>
-            <div class="sandbox-container mt-2 h-72 rounded-xl overflow-hidden bg-slate-950 border border-slate-700 relative">
-              <!-- Lazy created iframe -->
-            </div>
-          </details>
+          <div class="flex items-center gap-1.5 shrink-0">
+            <a href="${blobUrl}" target="_blank" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 active:bg-slate-900 text-slate-300 hover:text-white text-[11px] font-mono flex items-center gap-1 transition active:scale-95 no-underline" title="另開全螢幕分頁">
+              <svg class="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+              <span>全螢幕</span>
+            </a>
+            <button type="button" class="card-copy-btn px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 active:bg-slate-900 text-slate-300 hover:text-white text-[11px] font-mono flex items-center gap-1 transition active:scale-95" title="複製 HTML 原始碼">
+              <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+              <span>代碼</span>
+            </button>
+          </div>
+        </div>
+        <div class="sandbox-frame-wrapper w-full bg-slate-950 relative overflow-hidden transition-all duration-300 min-h-[160px] max-h-[620px]">
+          <iframe class="inline-sandbox-frame w-full h-full border-0 block" sandbox="allow-scripts allow-forms allow-popups" src="${blobUrl}"></iframe>
         </div>
       `;
 
       const cardCopyBtn = card.querySelector('.card-copy-btn');
-      const detailsExpander = card.querySelector('details');
-      const sandboxContainer = card.querySelector('.sandbox-container');
-
       cardCopyBtn.onclick = (e) => {
         e.stopPropagation();
         copyToClipboard(rawCode, cardCopyBtn);
-      };
-
-      detailsExpander.ontoggle = () => {
-        if (detailsExpander.open && !sandboxContainer.querySelector('iframe')) {
-          const inlineFrame = document.createElement('iframe');
-          inlineFrame.className = 'w-full h-full border-0 absolute inset-0';
-          inlineFrame.sandbox = 'allow-scripts allow-forms allow-popups';
-          inlineFrame.src = blobUrl;
-          sandboxContainer.appendChild(inlineFrame);
-        }
       };
 
       if (pre.parentNode) {
@@ -939,3 +934,22 @@ function initClipboardSmartSensors() {
     });
   }
 }
+
+// ⚡ Auto-adjust inline sandbox iframe height based on rendered content
+window.addEventListener('message', (e) => {
+  if (e.data && e.data.type === 'agy-sandbox-resize' && typeof e.data.height === 'number') {
+    const iframes = document.querySelectorAll('.inline-sandbox-frame');
+    iframes.forEach(frame => {
+      if (frame.contentWindow === e.source) {
+        const rawH = e.data.height;
+        const clampedH = Math.min(Math.max(rawH + 12, 120), 650);
+        frame.style.height = `${clampedH}px`;
+        const wrapper = frame.closest('.sandbox-frame-wrapper');
+        if (wrapper) {
+          wrapper.style.height = `${clampedH}px`;
+          wrapper.style.minHeight = 'auto';
+        }
+      }
+    });
+  }
+});
