@@ -348,6 +348,7 @@ function initAppAndListeners() {
         previewFilesize.textContent = wasCropped ? `已框選裁切 (${kb} KB)` : `已最佳化壓縮 (${kb} KB)`;
       }
 
+      console.log(`[Upload] Sending base64 (${kb} KB) to /api/upload...`);
       const res = await fetch('/api/upload', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -356,11 +357,13 @@ function initAppAndListeners() {
       const data = await res.json();
       if (data.success) {
         uploadedImagePath = data.filePath;
+        console.log('[Upload] Success! Server file path:', uploadedImagePath);
         if (navigator.vibrate) navigator.vibrate(25);
       } else {
         alert('圖片上傳失敗：' + (data.error || '未知錯誤'));
       }
     } catch (err) {
+      console.error('[Upload Error]', err);
       alert('圖片處理失敗：' + err.message);
       if (imagePreviewContainer) imagePreviewContainer.classList.add('hidden');
     }
@@ -368,13 +371,15 @@ function initAppAndListeners() {
 
   async function handleImageSelection(file) {
     if (!file) return;
+    console.log('[ImageSelection] File received:', file.name, file.size, file.type);
     currentSelectedImageSource = file;
     try {
       if (previewFilename) previewFilename.textContent = file.name || 'photo.jpg';
       if (previewFilesize) previewFilesize.textContent = '最佳化壓縮中...';
       if (imagePreviewContainer) imagePreviewContainer.classList.remove('hidden');
 
-      const { base64 } = await compressImageFile(file, 1280, 0.82);
+      const { base64, kb } = await compressImageFile(file, 1280, 0.82);
+      console.log('[ImageSelection] Compressed:', kb, 'KB');
       await processAndUploadImageBase64(base64, file.name || 'photo.jpg', false);
     } catch (err) {
       console.error('[Image Selection Error]', err);

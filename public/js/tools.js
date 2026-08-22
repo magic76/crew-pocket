@@ -28,38 +28,45 @@ async function compressImageFile(file, maxWidth = 1280, quality = 0.8) {
 
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.readAsDataURL(sourceBlob);
     reader.onload = (event) => {
       const img = new Image();
-      img.src = event.target.result;
       img.onload = () => {
-        let width = img.width;
-        let height = img.height;
+        try {
+          let width = img.naturalWidth || img.width;
+          let height = img.naturalHeight || img.height;
 
-        // Scale down for AI vision analysis (lightweight, ~100-150KB)
-        if (width > maxWidth || height > maxWidth) {
-          if (width > height) {
-            height = Math.round((height * maxWidth) / width);
-            width = maxWidth;
-          } else {
-            width = Math.round((width * maxWidth) / height);
-            height = maxWidth;
+          // Scale down for AI vision analysis (lightweight, ~100-150KB)
+          if (width > maxWidth || height > maxWidth) {
+            if (width > height) {
+              height = Math.round((height * maxWidth) / width);
+              width = maxWidth;
+            } else {
+              width = Math.round((width * maxWidth) / height);
+              height = maxWidth;
+            }
           }
+
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+
+          const compressedBase64 = canvas.toDataURL('image/jpeg', quality);
+          const approxKb = Math.round((compressedBase64.length * 3) / 4 / 1024);
+          resolve({ base64: compressedBase64, kb: approxKb });
+        } catch (e) {
+          reject(e);
         }
-
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0, width, height);
-
-        const compressedBase64 = canvas.toDataURL('image/jpeg', quality);
-        const approxKb = Math.round((compressedBase64.length * 3) / 4 / 1024);
-        resolve({ base64: compressedBase64, kb: approxKb });
       };
       img.onerror = (err) => reject(new Error('圖片載入失敗，格式可能不受支援或檔案損毀'));
+      img.src = event.target.result;
+      if (img.complete && img.naturalWidth > 0) {
+        img.onload();
+      }
     };
     reader.onerror = (err) => reject(err);
+    reader.readAsDataURL(sourceBlob);
   });
 }
 
