@@ -369,20 +369,21 @@
         });
 
         const transData = await transRes.json();
+        console.log('[Live Transcribe API Result]', transData);
         if (transData.success) {
           if (transData.user_text) finalUser = transData.user_text;
           if (transData.model_text) finalModel = transData.model_text;
         }
       }
 
-      finalUser = finalUser || (userWav ? '🗣️ (即時語音對話)' : '');
-      finalModel = finalModel || (modelWav ? '🎙️ (即時語音回覆)' : '');
-
       if (!finalUser && !finalModel) return;
 
+      finalUser = finalUser || '(語音輸入)';
+      finalModel = finalModel || '(語音回覆)';
+
       // 2. Show in live modal transcript box
-      if (finalUser && finalUser !== '🗣️ (即時語音對話)') appendTranscript('user', finalUser);
-      if (finalModel && finalModel !== '🎙️ (即時語音回覆)') appendTranscript('model', finalModel);
+      if (finalUser && finalUser !== '(語音輸入)') appendTranscript('user', finalUser);
+      if (finalModel && finalModel !== '(語音回覆)') appendTranscript('model', finalModel);
 
       // 3. Save to backend session logs
       const activeConvId = (typeof currentConversationId !== 'undefined' && currentConversationId) ? currentConversationId : null;
