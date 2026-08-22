@@ -188,12 +188,14 @@
         <!-- CARD TOP TOOLBAR (兩排結構，掛斷放置於第二排尾端) -->
         <div class="border-b border-slate-800/80 pb-2.5 space-y-2">
           
-          <!-- Row 1: 狀態指示 + 音色選擇膠囊 -->
-          <div class="flex items-center gap-2 min-w-0">
-            <span id="live-card-status-dot" class="w-2 h-2 rounded-full bg-amber-400 animate-pulse shrink-0"></span>
-            <span id="live-card-status-text" class="text-amber-300 font-bold text-xs font-mono">⚡ 準備中...</span>
+          <!-- Row 1: 狀態指示 (靠左) + 音色選擇膠囊 (靠右) -->
+          <div class="flex items-center justify-between gap-2 min-w-0">
+            <div class="flex items-center gap-1.5 min-w-0">
+              <span id="live-card-status-dot" class="w-2 h-2 rounded-full bg-amber-400 animate-pulse shrink-0"></span>
+              <span id="live-card-status-text" class="text-amber-300 font-bold text-xs font-mono truncate">⚡ 準備中...</span>
+            </div>
             
-            <!-- 🗣️ Voice Selector Pill (音色切換膠囊 · 點擊直接開啟選項) -->
+            <!-- 🗣️ Voice Selector Pill (音色切換膠囊 · 靠右放置) -->
             <div class="relative inline-flex items-center shrink-0">
               <select id="live-card-voice-select" class="appearance-none bg-teal-950/80 hover:bg-teal-900 active:scale-95 border border-teal-500/50 text-teal-300 text-[11px] font-semibold rounded-full pl-2.5 pr-4.5 py-0.5 outline-none transition cursor-pointer shadow-sm" title="點擊切換音色">
                 <option value="Puck" ${selectedVoice === 'Puck' ? 'selected' : ''}>🗣️ Puck (活潑)</option>
