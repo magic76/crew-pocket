@@ -35,6 +35,8 @@
   let sessionDialogueTurns = [];
   let currentTurnUser = '';
   let currentTurnModel = '';
+  let lastUserSpokeTime = 0;
+  let lastVideoFrameSentTime = 0;
 
   // DOM References
   const liveVoiceBtn = document.getElementById('live-voice-btn');
@@ -236,9 +238,20 @@
         <!-- 📷 CAMERA EXPANSION VIEW (相機展開區) -->
         <div id="live-card-camera-box" class="hidden transition-all duration-300 overflow-hidden rounded-xl border border-indigo-500/40 bg-slate-950 relative">
           <video id="live-card-video" autoplay playsinline muted class="w-full max-h-52 object-contain bg-black rounded-lg"></video>
+          
+          <!-- Top Badge (智慧節流指示燈) -->
+          <div id="live-card-camera-badge" class="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-black/80 border border-slate-700 text-[10px] text-slate-300 font-mono flex items-center gap-1 shadow-md pointer-events-none">
+            <span id="live-camera-badge-dot" class="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
+            <span id="live-camera-badge-text">待命中 (說話時自動發送)</span>
+          </div>
+
+          <!-- Bottom Camera Controls: 📸 截圖存檔 + 🔄 切換鏡頭 -->
           <div class="absolute bottom-2 right-2 flex gap-1.5 z-10">
-            <button id="live-card-flip-btn" type="button" class="px-2.5 py-1 rounded-lg bg-black/80 hover:bg-black text-[10px] text-teal-300 border border-teal-500/40 font-mono flex items-center gap-1 shadow-md active:scale-95 transition">
-              🔄 前後切換
+            <button id="live-card-snap-btn" type="button" class="px-2.5 py-1 rounded-lg bg-teal-950/90 hover:bg-teal-900 text-[10px] text-teal-300 border border-teal-500/50 font-mono flex items-center gap-1 shadow-md active:scale-95 transition" title="截圖儲存並發送高畫質畫面給 AI">
+              📸 截圖存檔
+            </button>
+            <button id="live-card-flip-btn" type="button" class="px-2.5 py-1 rounded-lg bg-black/80 hover:bg-black text-[10px] text-slate-200 border border-slate-700 font-mono flex items-center gap-1 shadow-md active:scale-95 transition">
+              🔄 切換
             </button>
           </div>
         </div>
@@ -280,6 +293,9 @@
 
     const cameraBtn = card.querySelector('#live-card-camera-btn');
     if (cameraBtn) cameraBtn.addEventListener('click', toggleCamera);
+
+    const snapBtn = card.querySelector('#live-card-snap-btn');
+    if (snapBtn) snapBtn.addEventListener('click', snapPhoto);
 
     const flipBtn = card.querySelector('#live-card-flip-btn');
     if (flipBtn) flipBtn.addEventListener('click', flipCamera);
@@ -466,8 +482,69 @@
   }
 
   // ==========================================
-  // 🔇 Mute & 📷 Camera Vision Controls
+  // 🔇 Mute, 📷 Smart Camera & 📸 Snapshot Controls
   // ==========================================
+  function updateCameraBadge(isSending, text) {
+    const badgeDot = document.getElementById('live-camera-badge-dot');
+    const badgeText = document.getElementById('live-camera-badge-text');
+    if (badgeText) badgeText.textContent = text;
+    if (badgeDot) {
+      badgeDot.className = isSending 
+        ? 'w-1.5 h-1.5 rounded-full bg-teal-400 animate-ping' 
+        : 'w-1.5 h-1.5 rounded-full bg-slate-500';
+    }
+  }
+
+  async function snapPhoto() {
+    const video = document.getElementById('live-card-video');
+    const snapBtn = document.getElementById('live-card-snap-btn');
+    if (!video || video.videoWidth === 0) return;
+
+    try {
+      const snapCanvas = document.createElement('canvas');
+      snapCanvas.width = video.videoWidth;
+      snapCanvas.height = video.videoHeight;
+      const snapCtx = snapCanvas.getContext('2d');
+      snapCtx.drawImage(video, 0, 0);
+
+      const dataUrl = snapCanvas.toDataURL('image/jpeg', 0.85);
+      const cleanBase64 = dataUrl.replace(/^data:image\/\w+;base64,/, '');
+
+      // 1. Send high-res snapshot to Gemini Live for immediate inspection
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        const videoMsg = {
+          realtimeInput: {
+            video: {
+              mimeType: "image/jpeg",
+              data: cleanBase64
+            }
+          }
+        };
+        ws.send(JSON.stringify(videoMsg));
+        updateCameraBadge(true, '📸 已傳送高清截圖給 AI');
+      }
+
+      // 2. Save snapshot locally to uploads directory
+      fetch('/api/upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          filename: `snapshot_${Date.now()}.jpg`,
+          imageBase64: dataUrl
+        })
+      }).catch(e => console.warn('[Snapshot Upload Warn]', e));
+
+      if (snapBtn) {
+        snapBtn.innerHTML = '✅ 已存檔';
+        setTimeout(() => {
+          if (snapBtn) snapBtn.innerHTML = '📸 截圖存檔';
+        }, 1500);
+      }
+    } catch (err) {
+      console.warn('[Snapshot Error]', err);
+    }
+  }
+
   function toggleMute() {
     isMuted = !isMuted;
     if (micMediaStream) {
@@ -525,7 +602,25 @@
         if (cameraInterval) clearInterval(cameraInterval);
         cameraInterval = setInterval(() => {
           if (!isConnected || !ws || ws.readyState !== WebSocket.OPEN || !isCameraOn || !video) return;
+
+          // 1. If Gemini is speaking, pause camera transmission to prioritize audio stream & avoid echo
+          if (audioPlayer && audioPlayer.activeSources.length > 0) {
+            updateCameraBadge(false, 'AI 說話中 (暫停傳圖)');
+            return;
+          }
+
+          // 2. Smart VAD: only send when user is speaking or just spoke within 2.5s
+          const isUserSpeaking = (Date.now() - lastUserSpokeTime) <= 2500;
+          if (!isUserSpeaking) {
+            updateCameraBadge(false, '待命中 (說話時自動發送)');
+            return;
+          }
+
+          // 3. Smart Throttle: Send at most 1 frame every 2.0 seconds (2000ms)
+          if (Date.now() - lastVideoFrameSentTime < 2000) return;
+
           if (video.videoWidth > 0) {
+            lastVideoFrameSentTime = Date.now();
             tempCanvas.width = 480;
             tempCanvas.height = Math.round((video.videoHeight / video.videoWidth) * 480);
             tempCtx.drawImage(video, 0, 0, tempCanvas.width, tempCanvas.height);
@@ -541,8 +636,9 @@
               }
             };
             ws.send(JSON.stringify(videoMsg));
+            updateCameraBadge(true, '🟢 正在傳送畫面 (2s/幀)');
           }
-        }, 1000);
+        }, 500);
 
       } catch (err) {
         alert('無法開啟相機：' + err.message);
@@ -789,10 +885,21 @@
         }
       };
 
-      // 5. Mic PCM Stream (100ms buffering)
+      // 5. Mic PCM Stream (100ms buffering & RMS speech detection)
       micProcessorNode.onaudioprocess = (e) => {
         if (!isConnected || isMuted || !ws || ws.readyState !== WebSocket.OPEN) return;
         const inputData = e.inputBuffer.getChannelData(0);
+
+        // Audio energy calculation to track active user speech
+        let sumSquares = 0;
+        for (let i = 0; i < inputData.length; i++) {
+          sumSquares += inputData[i] * inputData[i];
+        }
+        const rms = Math.sqrt(sumSquares / inputData.length);
+        if (rms > 0.02) {
+          lastUserSpokeTime = Date.now();
+        }
+
         const downsampled = downsampleBuffer(inputData, audioContext.sampleRate, 16000);
 
         for (let i = 0; i < downsampled.length; i++) {
