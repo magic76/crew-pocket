@@ -743,15 +743,6 @@
       <div id="live-transcript-text" class="w-full max-w-md max-h-24 overflow-y-auto px-4 py-2 mt-2 bg-slate-950/70 border border-slate-800/80 rounded-2xl text-xs space-y-1 z-10 backdrop-blur-md">
         <div class="text-slate-400 text-center text-[11px] font-mono">💬 雙向語音已就緒，請隨時說話...</div>
       </div>
-
-      <!-- Diagnostic Quick Test Bar inside Live Modal -->
-      <div class="w-full max-w-md mx-auto px-1 mt-2 z-10">
-        <button id="live-direct-test-btn" type="button" class="w-full py-2 px-3 rounded-xl bg-teal-950/60 hover:bg-teal-900/80 active:scale-95 border border-teal-500/50 text-teal-300 text-xs font-semibold flex items-center justify-between transition shadow-lg shadow-teal-950/50">
-          <span class="flex items-center gap-1.5"><span>🧪</span> <span id="live-direct-test-label">點此測試 3 秒錄音與轉錄</span></span>
-          <span id="live-direct-test-tag" class="text-[10px] bg-teal-500/20 text-teal-200 px-2 py-0.5 rounded-full border border-teal-500/40 font-mono">單元測試</span>
-        </button>
-        <div id="live-direct-test-box" class="hidden mt-1.5 p-2.5 rounded-xl bg-slate-950/95 border border-teal-500/40 text-xs font-mono text-slate-200 text-left"></div>
-      </div>
     </div>
 
     <!-- Bottom Controls: Mute, Camera, End Call -->
@@ -809,15 +800,7 @@
         </div>
       </div>
 
-      <!-- Diagnostic Test Button -->
-      <div class="pt-2 border-t border-slate-800 space-y-2">
-        <button id="live-test-rec-btn" type="button" class="w-full py-2 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-95 border border-slate-700 text-slate-200 text-xs font-semibold flex items-center justify-center gap-1.5 transition">
-          <span>🎙️</span> <span id="live-test-rec-text">點擊錄音 3 秒測試轉錄 (單元測試)</span>
-        </button>
-        <div id="live-test-rec-result" class="hidden p-2.5 rounded-xl bg-slate-950 border border-slate-800 text-[11px] font-mono leading-relaxed text-slate-300"></div>
-      </div>
-
-      <div class="flex gap-2 pt-1">
+      <div class="flex gap-2 pt-2">
         <button id="live-save-key-btn" class="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-teal-500 to-indigo-600 hover:from-teal-400 hover:to-indigo-500 text-white font-bold text-xs shadow-lg shadow-teal-500/20 active:scale-95 transition">
           儲存並啟動通話
         </button>
@@ -835,11 +818,11 @@
     <img id="lightbox-img" src="" class="max-w-full max-h-full object-contain rounded-lg" alt="Enlarged">
   </div>
 
-  <!-- Modular Scripts (Cache-busted v5.03) -->
-  <script src="/js/ui.js?v=5.03"></script>
-  <script src="/js/tools.js?v=5.03"></script>
-  <script src="/js/chat.js?v=5.03"></script>
-  <script src="/js/live.js?v=2.7"></script>
-  <script src="/js/app.js?v=5.03"></script>
+  <!-- Modular Scripts (Cache-busted v5.04) -->
+  <script src="/js/ui.js?v=5.04"></script>
+  <script src="/js/tools.js?v=5.04"></script>
+  <script src="/js/chat.js?v=5.04"></script>
+  <script src="/js/live.js?v=2.8"></script>
+  <script src="/js/app.js?v=5.04"></script>
 </body>
 </html>
