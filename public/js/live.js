@@ -459,18 +459,21 @@
       });
 
       const syncData = await syncRes.json();
+      // 4. Render into background chat timeline & reload
       if (syncData.success && syncData.conversation_id) {
-        if (typeof currentConversationId !== 'undefined' && !currentConversationId) {
-          currentConversationId = syncData.conversation_id;
-          localStorage.setItem('agy_active_conv_id', syncData.conversation_id);
-          if (typeof loadConversations === 'function') loadConversations();
+        currentConversationId = syncData.conversation_id;
+        localStorage.setItem('agy_active_conv_id', syncData.conversation_id);
+        if (typeof loadConversations === 'function') loadConversations();
+        if (typeof loadConversationHistory === 'function') {
+          await loadConversationHistory(syncData.conversation_id);
         }
-      }
-
-      // 4. Render into background chat timeline
-      if (typeof appendMessage === 'function') {
+      } else if (typeof appendMessage === 'function') {
         appendMessage('user', `🎙️ [Live 語音] ${finalUser}`);
         appendMessage('assistant', `🎙️ [Live 語音]\n${finalModel}`);
+      }
+
+      if (typeof messagesContainer !== 'undefined' && messagesContainer) {
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
       }
 
       // 5. Reset turn texts
