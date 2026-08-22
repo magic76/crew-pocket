@@ -2,8 +2,9 @@
 node_modules/
 package-lock.json
 
-# Temporary Uploads
+# Temporary Uploads & Scratch
 uploads/
+scratch/
 
 # System & OS
 .DS_Store
