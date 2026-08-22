@@ -52,6 +52,7 @@ const drawer = document.getElementById('drawer');
 const drawerOverlay = document.getElementById('drawer-overlay');
 const closeDrawerBtn = document.getElementById('close-drawer-btn');
 const convList = document.getElementById('conv-list');
+const newChatBtn = document.getElementById('new-chat-btn');
 const notifyBtn = document.getElementById('notify-btn');
 const notifyStatusSubtext = document.getElementById('notify-status-subtext');
 const toolsMenuBtn = document.getElementById('tools-menu-btn');
