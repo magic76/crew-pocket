@@ -85,7 +85,7 @@
         const idx = this.activeSources.indexOf(source);
         if (idx > -1) this.activeSources.splice(idx, 1);
         if (this.activeSources.length === 0 && isConnected && !isMuted) {
-          updateCardStatus('listening', '🎙️ 聆聽中 (隨時說話)');
+          updateCardStatus('listening', '🎙️ 可以開始說話');
         }
       };
     }
@@ -226,6 +226,8 @@
   function createInlineCardElement() {
     removeInlineCard();
 
+    const selectedVoice = getSelectedVoice();
+
     const card = document.createElement('div');
     card.id = 'live-inline-card';
     card.className = 'flex gap-2.5 w-full max-w-2xl mx-auto justify-start transition-all duration-300 animate-fadeIn';
@@ -237,18 +239,27 @@
 
       <div class="bg-gradient-to-b from-slate-900 via-slate-900 to-slate-950 border border-teal-500/50 rounded-2xl rounded-tl-none p-3.5 text-xs sm:text-sm shadow-2xl shadow-teal-950/50 flex-1 max-w-[92%] space-y-3 relative overflow-hidden">
         
-        <!-- CARD TOP TOOLBAR: Status + Mute + Camera + Hangup -->
-        <div class="flex items-center justify-between border-b border-slate-800 pb-2.5 gap-2">
+        <!-- CARD TOP TOOLBAR: Status + Voice Select + Mute + Camera + Hangup -->
+        <div class="flex items-center justify-between border-b border-slate-800 pb-2.5 gap-2 flex-wrap">
           
-          <!-- Status Pill -->
+          <!-- Status Pill (簡約狀態提示) -->
           <div class="flex items-center gap-1.5 min-w-0">
-            <span id="live-card-status-dot" class="w-2 h-2 rounded-full bg-teal-400 animate-pulse shrink-0"></span>
-            <span id="live-card-status-text" class="text-teal-300 font-bold text-xs font-mono truncate">⚡ 連線中...</span>
+            <span id="live-card-status-dot" class="w-2 h-2 rounded-full bg-amber-400 animate-pulse shrink-0"></span>
+            <span id="live-card-status-text" class="text-amber-300 font-bold text-xs font-mono truncate">⚡ 準備中...</span>
           </div>
 
           <!-- Controls Group -->
           <div class="flex items-center gap-1.5 shrink-0">
             
+            <!-- 🗣️ Voice Selector Dropdown (音色切換) -->
+            <select id="live-card-voice-select" class="bg-slate-800 hover:bg-slate-700 active:scale-95 border border-slate-700 text-teal-300 text-[11px] font-semibold rounded-xl px-2 py-1 outline-none transition cursor-pointer shadow-sm" title="切換語音音色">
+              <option value="Puck" ${selectedVoice === 'Puck' ? 'selected' : ''}>🗣️ Puck (活潑)</option>
+              <option value="Charon" ${selectedVoice === 'Charon' ? 'selected' : ''}>🗣️ Charon (沉穩)</option>
+              <option value="Kore" ${selectedVoice === 'Kore' ? 'selected' : ''}>🗣️ Kore (溫柔)</option>
+              <option value="Fenrir" ${selectedVoice === 'Fenrir' ? 'selected' : ''}>🗣️ Fenrir (低沉)</option>
+              <option value="Aoede" ${selectedVoice === 'Aoede' ? 'selected' : ''}>🗣️ Aoede (明亮)</option>
+            </select>
+
             <!-- 🔇 Mute Button -->
             <button id="live-card-mute-btn" type="button" class="px-2.5 py-1 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-95 border border-slate-700 text-slate-200 text-[11px] font-semibold flex items-center gap-1 transition shadow-sm" title="靜音 / 開啟麥克風">
               <span id="live-card-mute-icon">🎙️</span>
@@ -284,9 +295,9 @@
           <canvas id="live-card-canvas" width="280" height="32" class="w-full h-full"></canvas>
         </div>
 
-        <!-- Real-time Dialogue Subtitles -->
+        <!-- Real-time Dialogue Subtitles (簡潔字幕區) -->
         <div id="live-card-transcript" class="space-y-1.5 text-xs max-h-36 overflow-y-auto pr-1">
-          <div class="text-slate-400 text-center text-[11px] font-mono py-1">💬 語音通道建立中...</div>
+          <div class="text-slate-500 text-center text-[11px] font-mono py-1">💬 請說話...</div>
         </div>
 
       </div>
@@ -298,6 +309,19 @@
     }
 
     // Attach Inline Controls
+    const voiceSelect = card.querySelector('#live-card-voice-select');
+    if (voiceSelect) {
+      voiceSelect.addEventListener('change', () => {
+        const newVoice = voiceSelect.value;
+        localStorage.setItem(VOICE_KEY, newVoice);
+        if (liveVoiceSelect) liveVoiceSelect.value = newVoice;
+        if (isConnected) {
+          endLiveSession();
+          setTimeout(startLiveSession, 300);
+        }
+      });
+    }
+
     const muteBtn = card.querySelector('#live-card-mute-btn');
     if (muteBtn) muteBtn.addEventListener('click', toggleMute);
 
@@ -509,7 +533,7 @@
       }
       if (icon) icon.textContent = '🔇';
       if (label) label.textContent = '已靜音';
-      updateCardStatus('muted', '🔇 麥克風已靜音');
+      updateCardStatus('muted', '🔇 已靜音');
     } else {
       if (btn) {
         btn.classList.replace('bg-rose-900/80', 'bg-slate-800');
@@ -517,7 +541,7 @@
       }
       if (icon) icon.textContent = '🎙️';
       if (label) label.textContent = '靜音';
-      updateCardStatus('listening', '🎙️ 聆聽中 (雙向)');
+      updateCardStatus('listening', '🎙️ 可以開始說話');
     }
   }
 
@@ -713,7 +737,7 @@
 
     // 1. Create Inline Live Card in Chat Timeline
     createInlineCardElement();
-    updateCardStatus('connecting', '⚡ 連線 Google Gemini Live...');
+    updateCardStatus('connecting', '⚡ 準備中...');
     
     audioSendBuffer = [];
     turnUserPcmChunks = [];
@@ -748,8 +772,8 @@
           }
         });
       } catch (micErr) {
-        updateCardStatus('error', '⚠️ 麥克風存取失敗');
-        appendCardTranscript('system', '請允許麥克風權限以進行通話：' + micErr.message);
+        updateCardStatus('error', '⚠️ 麥克風未開啟');
+        appendCardTranscript('system', '請允許麥克風權限：' + micErr.message);
         return;
       }
 
@@ -777,7 +801,7 @@
       ws.onopen = () => {
         console.log('[Gemini Live] WebSocket opened with model:', model);
         isConnected = true;
-        updateCardStatus('connected', '✨ 初始化語音通道...');
+        updateCardStatus('connecting', '⚡ 準備中...');
 
         const voiceName = getSelectedVoice();
         const setupMessage = {
@@ -824,8 +848,7 @@
         const isSetupDone = response.setupComplete || response.setup_complete;
         if (isSetupDone) {
           console.log('[Gemini Live] Setup complete, ready to talk!');
-          updateCardStatus('listening', '🎙️ 聆聽中 (雙向全雙工)');
-          appendCardTranscript('system', `✅ ${model.replace('models/', '')} 已就緒，請隨時說話...`);
+          updateCardStatus('listening', '🎙️ 可以開始說話');
           return;
         }
 
@@ -835,14 +858,14 @@
           if (sc.interrupted) {
             console.log('[Gemini Live] Interrupted by user!');
             audioPlayer.stopAll();
-            updateCardStatus('listening', '🎙️ 正在聆聽...');
+            updateCardStatus('listening', '🎙️ 聆聽中...');
             processTurnAndSync();
             return;
           }
 
           const modelTurn = sc.modelTurn || sc.model_turn;
           if (modelTurn && modelTurn.parts) {
-            updateCardStatus('speaking', '🔊 Gemini 正在說話...');
+            updateCardStatus('speaking', '🔊 Gemini 說話中...');
             for (const part of modelTurn.parts) {
               const inlineData = part.inlineData || part.inline_data;
               if (inlineData && inlineData.data) {
@@ -875,11 +898,10 @@
         stopSpeechRecognition();
         if (e.code !== 1000) {
           updateCardStatus('error', `⚠️ 連線中斷 (${e.code})`);
-          let helpText = `連線已中斷 (代碼: ${e.code})。`;
+          let helpText = `連線中斷 (${e.code})`;
           if (e.code === 1008) {
-            helpText += '\n• 原因 1008 通常是「API Key 設有限制」，請在 Google AI Studio 將 API Key 改為「無限制 (None)」。';
+            helpText += '：API Key 設有限制，請在 AI Studio 改為「無限制」';
           }
-          if (e.reason) helpText += `\n• Google 回傳訊息: ${e.reason}`;
           appendCardTranscript('system', helpText);
         }
       };
