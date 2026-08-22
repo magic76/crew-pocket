@@ -1,6 +1,6 @@
 /**
  * 🎙️ Crew Pocket - Gemini Live Multimodal Live API (Full-Duplex Audio & Vision)
- * Powered by Real-time Automatic Audio Transcription (Gemini Flash Speech-to-Text).
+ * Powered by Web STT + Gemini Flash Background Transcribe + Active Session History Sync.
  */
 
 (function() {
@@ -29,7 +29,8 @@
   let animFrameId = null;
   let audioSendBuffer = [];
   
-  // Turn Audio Recording for Background Transcription
+  // Real-time STT & Audio Accumulation
+  let speechRecognizer = null;
   let turnUserPcmChunks = [];
   let turnModelPcmChunks = [];
   let currentTurnModelText = '';
@@ -256,9 +257,9 @@
 
         const gradient = canvasCtx.createLinearGradient(0, y, 0, y + barHeight);
         if (isConnected) {
-          gradient.addColorStop(0, '#2dd4bf'); // teal
-          gradient.addColorStop(0.5, '#6366f1'); // indigo
-          gradient.addColorStop(1, '#ec4899'); // pink
+          gradient.addColorStop(0, '#2dd4bf');
+          gradient.addColorStop(0.5, '#6366f1');
+          gradient.addColorStop(1, '#ec4899');
         } else {
           gradient.addColorStop(0, '#64748b');
           gradient.addColorStop(1, '#334155');
@@ -286,6 +287,62 @@
     if (animFrameId) {
       cancelAnimationFrame(animFrameId);
       animFrameId = null;
+    }
+  }
+
+  // ==========================================
+  // 🎙️ Browser-Native Realtime STT (Web Speech API)
+  // ==========================================
+  function startSpeechRecognition() {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) return;
+    try {
+      if (speechRecognizer) {
+        try { speechRecognizer.stop(); } catch (e) {}
+      }
+      speechRecognizer = new SpeechRecognition();
+      speechRecognizer.continuous = true;
+      speechRecognizer.interimResults = true;
+      speechRecognizer.lang = 'zh-TW';
+
+      speechRecognizer.onresult = (event) => {
+        let interim = '';
+        let final = '';
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          if (event.results[i].isFinal) {
+            final += event.results[i][0].transcript;
+          } else {
+            interim += event.results[i][0].transcript;
+          }
+        }
+        const spoken = (final || interim).trim();
+        if (spoken) {
+          currentTurnUserText = spoken;
+          console.log('[Live STT Transcribed]', spoken);
+          appendTranscript('user', spoken);
+        }
+      };
+
+      speechRecognizer.onerror = (err) => {
+        console.warn('[Live STT Warning]', err.error);
+      };
+
+      speechRecognizer.onend = () => {
+        if (isConnected && speechRecognizer) {
+          try { speechRecognizer.start(); } catch (e) {}
+        }
+      };
+
+      speechRecognizer.start();
+    } catch (e) {
+      console.warn('[Live STT Init Error]', e);
+    }
+  }
+
+  function stopSpeechRecognition() {
+    if (speechRecognizer) {
+      try { speechRecognizer.stop(); } catch (e) {}
+      speechRecognizer = null;
     }
   }
 
@@ -371,13 +428,13 @@
         const transData = await transRes.json();
         console.log('[Live Transcribe API Result]', transData);
         if (transData.success) {
-          if (transData.user_text) finalUser = transData.user_text;
-          if (transData.model_text) finalModel = transData.model_text;
+          if (transData.user_text && !finalUser) finalUser = transData.user_text;
+          if (transData.model_text && !finalModel) finalModel = transData.model_text;
         }
       }
 
       finalUser = finalUser || (userWav ? '🗣️ (語音輸入)' : '');
-      finalModel = finalModel || (modelWav ? '🎙️ (語音回覆)' : '');
+      finalModel = finalModel || (modelWav ? '🎙️ (已完成語音回覆)' : '');
 
       if (!finalUser && !finalModel) return;
 
@@ -518,6 +575,7 @@
         };
         ws.send(JSON.stringify(setupMessage));
         startVisualizer();
+        startSpeechRecognition();
       };
 
       ws.onmessage = async (event) => {
@@ -585,6 +643,7 @@
       ws.onclose = (e) => {
         console.log('[Gemini Live] Closed code:', e.code, 'reason:', e.reason);
         isConnected = false;
+        stopSpeechRecognition();
         processTurnAndSync();
         if (e.code !== 1000) {
           updateStatus('error', `⚠️ 連線中斷 (${e.code})`);
@@ -638,6 +697,7 @@
   async function endLiveSession() {
     isConnected = false;
     stopVisualizer();
+    stopSpeechRecognition();
 
     await processTurnAndSync();
 
