@@ -118,7 +118,7 @@ function initAppAndListeners() {
       }
     });
 
-    [filesBtn, usageBtn, cheatSheetBtn, notifyBtn].forEach(btn => {
+    [newChatBtn, filesBtn, usageBtn, cheatSheetBtn, notifyBtn].forEach(btn => {
       if (btn) btn.addEventListener('click', () => toolsMenuDropdown.classList.add('hidden'));
     });
   }

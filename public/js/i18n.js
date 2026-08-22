@@ -27,6 +27,7 @@
     '系統推播通知': 'System notifications',
     '點擊開啟 / 關閉': 'Tap to enable / disable',
     '開啟新對話': 'Start a new conversation',
+    '開啟全新的對話': 'Open a fresh conversation',
     '新對話': 'New conversation',
     '你好！已為你開啟新對話。有什麼可以幫你的？': 'Hi! I’ve opened a new conversation. How can I help?',
     '你好！Codex provider 已就緒。有什麼開發任務？': 'Hi! The Codex provider is ready. What would you like to build?',
