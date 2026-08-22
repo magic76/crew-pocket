@@ -40,7 +40,6 @@ const sendIcon = document.getElementById('send-icon');
 const stopIcon = document.getElementById('stop-icon');
 const camBtn = document.getElementById('cam-btn');
 const attachBtn = document.getElementById('attach-btn');
-const micBtn = document.getElementById('mic-btn');
 const cameraInput = document.getElementById('camera-input');
 const attachInput = document.getElementById('attach-input');
 const imagePreviewContainer = document.getElementById('image-preview-container');
