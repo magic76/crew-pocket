@@ -72,7 +72,7 @@ agy --version
 # 3. 首次啟動並完成 Google 帳號授權登入
 agy
 ```
-> 💡 *在終端依提示於瀏覽器登入 Google 帳號授權後，即可按下 `Ctrl+C` 結束 TUI 介面。*
+> 💡 **Android 登入小提示**：首次啟動 `agy` 若 Termux 未自動喚醒瀏覽器，請長按複製終端中顯示的 OAuth 授權網址，貼到手機 Chrome/Edge 中完成登入，完成後回到終端按 `Ctrl+C` 結束 TUI 即可。
 
 #### 🔹 核心 B（可選擴充）：OpenAI Codex CLI (`codex`)
 若您希望在模型選單中無縫切換到 OpenAI Codex 系列模型（如 Sol、Terra、Luna 等），請安裝 Codex CLI：
@@ -87,7 +87,10 @@ codex --version
 # 3. 登入 OpenAI / ChatGPT 帳號
 codex login
 ```
-> 💡 *不安裝 Codex 也可以正常使用預設的 Antigravity / agy 引擎。*
+> 💡 **Codex 登入小提示**：Codex 採用 Device Code 模式，執行 `codex login` 後終端會顯示短網址與 8 位驗證碼，用手機瀏覽器打開輸入代碼即可秒速完成授權。
+
+> 🧠 **為什麼先裝 agy 再裝 codex 很順暢？**  
+> Android 系統採用特有的 Bionic Libc 架構。在完成步驟 2 的環境配置與 `agy` 初始化後，Termux 的底層開發工具鏈（Node.js、Python、儲存權限與全域路徑）已全部鋪平。加上 `@mmmbuto/codex-cli-termux` 是社群專門針對 Android arm64 修補過動態連結庫（LD_LIBRARY_PATH）的版本，因此後續安裝其他 CLI 引擎會非常順暢！
 
 ---
 
