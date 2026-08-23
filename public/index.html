@@ -452,21 +452,21 @@
       <!-- 🎙️ Live Voice Call Bottom Ergonomic Dock (Option A: Transforms bottom input into high-touch action bar) -->
       <div id="live-bottom-dock" class="hidden w-full items-center justify-between gap-2.5 py-1 select-none animate-fadeIn">
         <!-- 📷 Left: Camera Toggle -->
-        <button id="live-dock-camera-btn" type="button" class="flex-1 max-w-[84px] py-3 rounded-2xl bg-slate-800/90 hover:bg-slate-700 active:scale-95 border border-slate-700 text-slate-200 text-xs font-semibold flex flex-col items-center justify-center gap-1 transition shadow-lg shrink-0" title="開啟/關閉鏡頭">
-          <span class="text-base">📷</span>
-          <span id="live-dock-camera-label" class="text-[10px] font-mono">相機</span>
+        <button id="live-dock-camera-btn" type="button" class="flex-1 max-w-[80px] h-[52px] rounded-2xl bg-slate-800/90 hover:bg-slate-700 active:scale-95 border border-slate-700 text-slate-200 text-xs font-semibold flex flex-col items-center justify-center gap-0.5 transition shadow-lg shrink-0" title="開啟/關閉鏡頭">
+          <span class="text-base leading-none">📷</span>
+          <span id="live-dock-camera-label" class="text-[10px] font-mono leading-none">相機</span>
         </button>
 
         <!-- 🎙️ Center: Large Ergonomic Mic Mute/Unmute Action Button -->
-        <button id="live-dock-mute-btn" type="button" class="flex-1 py-3 px-3 rounded-2xl bg-gradient-to-r from-teal-500 to-indigo-600 hover:from-teal-400 hover:to-indigo-500 active:scale-95 text-white font-bold text-xs sm:text-sm shadow-xl shadow-teal-500/30 flex items-center justify-center gap-2 transition border border-teal-400/50 min-h-[52px]" title="點擊切換靜音">
+        <button id="live-dock-mute-btn" type="button" class="flex-1 h-[52px] px-3 rounded-2xl bg-gradient-to-r from-teal-500 to-indigo-600 hover:from-teal-400 hover:to-indigo-500 active:scale-95 text-white font-bold text-xs sm:text-sm shadow-xl shadow-teal-500/30 flex items-center justify-center gap-2 transition border border-teal-400/50" title="點擊切換靜音">
           <span id="live-dock-mute-icon" class="text-lg animate-pulse">🎙️</span>
           <span id="live-dock-mute-label" class="tracking-wide font-mono truncate">通話中 · 點擊靜音</span>
         </button>
 
         <!-- 🛑 Right: Hangup Button -->
-        <button id="live-dock-hangup-btn" type="button" class="flex-1 max-w-[84px] py-3 rounded-2xl bg-rose-600 hover:bg-rose-500 active:scale-95 text-white text-xs font-bold shadow-lg shadow-rose-600/30 flex flex-col items-center justify-center gap-1 transition shrink-0" title="結束通話">
-          <span class="text-base">🛑</span>
-          <span class="text-[10px] font-mono">掛斷</span>
+        <button id="live-dock-hangup-btn" type="button" class="flex-1 max-w-[80px] h-[52px] rounded-2xl bg-rose-600 hover:bg-rose-500 active:scale-95 text-white text-xs font-bold shadow-lg shadow-rose-600/30 flex flex-col items-center justify-center gap-0.5 transition shrink-0" title="結束通話">
+          <span class="text-base leading-none">🛑</span>
+          <span class="text-[10px] font-mono leading-none">掛斷</span>
         </button>
       </div>
     </div>
@@ -816,7 +816,7 @@
   <script src="/js/ui.js?v=6.50"></script>
   <script src="/js/tools.js?v=6.50"></script>
   <script src="/js/chat.js?v=6.55"></script>
-  <script src="/js/live.js?v=5.0"></script>
+  <script src="/js/live.js?v=5.1"></script>
   <script src="/js/app.js?v=6.49"></script>
 </body>
 </html>
