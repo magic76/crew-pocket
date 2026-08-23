@@ -307,33 +307,7 @@ function initAppAndListeners() {
     });
   });
 
-  // Quick Action Chips Fill & Action Handler
-  document.querySelectorAll('.quick-chip').forEach(chip => {
-    chip.addEventListener('click', () => {
-      const action = chip.getAttribute('data-action');
-      const fillText = chip.getAttribute('data-fill');
-      
-      if (typeof window.haptic === 'function') window.haptic('light');
 
-      if (action === 'compact') {
-        if (promptInput) {
-          promptInput.value = '/compact';
-          promptInput.focus();
-          promptInput.dispatchEvent(new Event('input'));
-        }
-        if (typeof handleSendClick === 'function') {
-          handleSendClick(new Event('click'));
-        }
-        return;
-      }
-
-      if (fillText && promptInput) {
-        promptInput.value = fillText;
-        promptInput.focus();
-        promptInput.dispatchEvent(new Event('input'));
-      }
-    });
-  });
 
   // Initialize GPS Chip
   if (typeof initGpsHandler === 'function') {
