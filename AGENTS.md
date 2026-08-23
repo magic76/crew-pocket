@@ -8,6 +8,13 @@
 - 大型且可獨立並行的研究、檔案探索或測試可交由子代理，回傳精簡證據、檔案位置與風險。
 - 小型、緊密耦合或順序工作不使用子代理；保留使用者既有檔案變更。
 
+## ⚡ 極速批次交付規範 (High-Velocity Batch Pipeline)
+
+- **批次代碼編輯**：多檔案變更與快取版本號必須一次性批次完成。
+- **單一複合終端指令**：語法檢查、服務重啟與 Git Commit/Push 必須串接為單一命令一次執行完畢。
+- **消除冗餘讀檔**：精準定位修改點，杜絕重複全檔檢索。
+- **精簡敏捷回報**：結果直接聚焦核心要點與測試方式。
+
 ## 功能與輸出
 
 - 支援 Mobile-first PWA、SSE 串流、雙工作階段 LRU、HTML/SVG 沙盒、本地檔案、Tailwind、Chart.js、GPS/Google Maps、相機、STT/TTS、震動、Termux 檔案管理，以及 `/compact`、`/btw`、`/clear`、`/plan`、`/goal`、`/schedule`。
