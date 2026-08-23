@@ -24,6 +24,17 @@ Each provider registered in `index.js` exports:
 
 Usage can use `{ mode: "endpoint", endpoint }`, `{ mode: "external-link", url }`, or an unsupported mode.
 
+### Deletion lifecycle
+
+Providers that declare `delete: true` must make `deleteConversation(conversationId)` a real deletion, not only hide a row from the UI:
+
+1. Reject deletion while that provider's conversation is actively generating, or stop it safely first.
+2. Delete the conversation through the underlying CLI/service.
+3. Remove only the provider-owned local persisted data for that conversation, including session/log files and in-memory caches.
+4. Never delete the user's project files or shared uploads as part of conversation deletion.
+
+The method returns `{ localDataDeleted, storageFreedBytes }`. `storageFreedBytes` is the byte count when the provider can determine it; otherwise it is `null`.
+
 ## Normalized turn events
 
 `startTurn()` reports provider-independent events through `onEvent`:

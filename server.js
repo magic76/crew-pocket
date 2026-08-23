@@ -120,11 +120,23 @@ async function handleProviderHistory(parsedUrl, res) {
 async function handleProviderDelete(parsedUrl, res) {
   const providerId = normalizeProviderId(parsedUrl.query.provider);
   try {
+    const conversationId = parsedUrl.query.id;
+    if (!conversationId || !/^[a-zA-Z0-9_-]+$/.test(conversationId)) {
+      const error = new Error('Invalid conversation id');
+      error.statusCode = 400;
+      throw error;
+    }
     const provider = getProvider(providerId);
     if (!provider.metadata.capabilities.delete || typeof provider.deleteConversation !== 'function') throw new Error('Provider does not support deleting conversations');
-    await provider.deleteConversation(parsedUrl.query.id);
+    const result = await provider.deleteConversation(conversationId);
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ success: true, id: parsedUrl.query.id, provider: providerId }));
+    res.end(JSON.stringify({
+      success: true,
+      id: conversationId,
+      provider: providerId,
+      localDataDeleted: result?.localDataDeleted !== false,
+      storageFreedBytes: Number.isFinite(result?.storageFreedBytes) ? result.storageFreedBytes : null
+    }));
   } catch (err) {
     res.writeHead(err.statusCode || 500, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: err.message }));
