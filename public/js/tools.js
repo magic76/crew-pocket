@@ -632,59 +632,67 @@ class StreamingTTSPlayer {
 const streamingTTS = new StreamingTTSPlayer();
 
 // 📍 Browser GPS Geolocation Initializer
-function initGpsHandler() {
-  if (!gpsChip) return;
-  gpsChip.addEventListener('click', () => {
-    if (!navigator.geolocation) {
-      alert('您的瀏覽器不支援 GPS 衛星定位功能');
-      return;
-    }
+function triggerGpsLocation(btnElement = null) {
+  if (!navigator.geolocation) {
+    alert('您的瀏覽器不支援 GPS 衛星定位功能');
+    return;
+  }
 
-    const originalHtml = gpsChip.innerHTML;
-    gpsChip.innerHTML = `<span class="inline-block w-2.5 h-2.5 rounded-full border-2 border-rose-400 border-t-transparent animate-spin"></span><span>定位中...</span>`;
-    if (navigator.vibrate) navigator.vibrate(20);
+  const originalHtml = btnElement ? btnElement.innerHTML : null;
+  if (btnElement) {
+    btnElement.innerHTML = `<span class="inline-block w-2.5 h-2.5 rounded-full border-2 border-rose-400 border-t-transparent animate-spin"></span><span>定位中...</span>`;
+  }
+  if (typeof window.haptic === 'function') window.haptic('medium');
 
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        const lat = position.coords.latitude.toFixed(6);
-        const lon = position.coords.longitude.toFixed(6);
-        const accuracy = Math.round(position.coords.accuracy);
+  navigator.geolocation.getCurrentPosition(
+    async (position) => {
+      const lat = position.coords.latitude.toFixed(6);
+      const lon = position.coords.longitude.toFixed(6);
+      const accuracy = Math.round(position.coords.accuracy);
 
-        let placeInfo = '';
-        try {
-          const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=18&addressdetails=1&accept-language=zh-TW`);
-          if (res.ok) {
-            const data = await res.json();
-            const addr = data.address || {};
-            const city = addr.city || addr.town || addr.county || '';
-            const suburb = addr.suburb || addr.district || '';
-            const road = addr.road || '';
-            placeInfo = [city, suburb, road].filter(Boolean).join('');
-          }
-        } catch (e) {}
-
-        const locationLabel = placeInfo ? `（約位於 ${placeInfo}，精確度約 ${accuracy} 公尺）` : `（精確度約 ${accuracy} 公尺）`;
-        const queryText = `📍 我目前的手機即時 GPS 座標為：緯度 ${lat}, 經度 ${lon}${locationLabel}。請根據我當前的位置，推薦我身邊 1 公里內的在地必吃美食或人氣景點，並為每個地點附上 Google 地圖一鍵導航卡片：`;
-
-        if (promptInput) {
-          promptInput.value = queryText;
-          promptInput.focus();
-          promptInput.dispatchEvent(new Event('input'));
+      let placeInfo = '';
+      try {
+        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=18&addressdetails=1&accept-language=zh-TW`);
+        if (res.ok) {
+          const data = await res.json();
+          const addr = data.address || {};
+          const city = addr.city || addr.town || addr.county || '';
+          const suburb = addr.suburb || addr.district || '';
+          const road = addr.road || '';
+          placeInfo = [city, suburb, road].filter(Boolean).join('');
         }
-        gpsChip.innerHTML = originalHtml;
-        if (navigator.vibrate) navigator.vibrate([30, 30]);
-      },
-      (err) => {
-        gpsChip.innerHTML = originalHtml;
-        let errMsg = '無法獲取位置資訊';
-        if (err.code === 1) errMsg = '請在手機瀏覽器權限中允許「位置資訊 (GPS)」';
-        else if (err.code === 2) errMsg = '定位訊號不良或 GPS 開關尚未開啟';
-        else if (err.code === 3) errMsg = '定位請求逾時';
-        alert(`定位失敗：${errMsg}`);
-      },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-    );
-  });
+      } catch (e) {}
+
+      const locationLabel = placeInfo ? `（約位於 ${placeInfo}，精確度約 ${accuracy} 公尺）` : `（精確度約 ${accuracy} 公尺）`;
+      const queryText = `📍 我目前的手機即時 GPS 座標為：緯度 ${lat}, 經度 ${lon}${locationLabel}。請根據我當前的位置，推薦我身邊 1 公里內的在地必吃美食或人氣景點，並為每個地點附上 Google 地圖一鍵導航卡片：`;
+
+      if (promptInput) {
+        promptInput.value = queryText;
+        promptInput.focus();
+        promptInput.style.height = 'auto';
+        promptInput.style.height = Math.min(promptInput.scrollHeight, 120) + 'px';
+        promptInput.dispatchEvent(new Event('input'));
+      }
+      if (btnElement && originalHtml) btnElement.innerHTML = originalHtml;
+      if (typeof window.haptic === 'function') window.haptic('success');
+    },
+    (err) => {
+      if (btnElement && originalHtml) btnElement.innerHTML = originalHtml;
+      let errMsg = '無法獲取位置資訊';
+      if (err.code === 1) errMsg = '請在手機瀏覽器權限中允許「位置資訊 (GPS)」';
+      else if (err.code === 2) errMsg = '定位訊號不良或 GPS 開關尚未開啟';
+      else if (err.code === 3) errMsg = '定位請求逾時';
+      alert(`定位失敗：${errMsg}`);
+    },
+    { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+  );
+}
+window.triggerGpsLocation = triggerGpsLocation;
+
+function initGpsHandler() {
+  const gpsChip = document.getElementById('gps-chip');
+  if (!gpsChip) return;
+  gpsChip.addEventListener('click', () => triggerGpsLocation(gpsChip));
 }
 
 // 📋 Clipboard Smart Sensing Engine (100% Local Instant Regex Intent Classifier)

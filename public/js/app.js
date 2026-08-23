@@ -309,6 +309,12 @@ function initAppAndListeners() {
 
 
 
+  // ➕ Initialize Unified Attachment Menu
+  initAttachMenu();
+
+  // 🎙️ Initialize Speech-to-Text (STT) Voice Input
+  initVoiceInput();
+
   // Initialize GPS Chip
   if (typeof initGpsHandler === 'function') {
     initGpsHandler();
@@ -450,6 +456,166 @@ function initAppAndListeners() {
       if (attachInput) attachInput.value = '';
       if (imagePreviewContainer) imagePreviewContainer.classList.add('hidden');
     });
+  }
+
+  // ➕ Unified Attachment Menu Controller
+  function initAttachMenu() {
+    const attachMenuBtn = document.getElementById('attach-menu-btn');
+    const attachMenuDropdown = document.getElementById('attach-menu-dropdown');
+    const attachInput = document.getElementById('attach-input');
+    const cameraInput = document.getElementById('camera-input');
+    const attachOptCamera = document.getElementById('attach-opt-camera');
+    const attachOptGallery = document.getElementById('attach-opt-gallery');
+    const attachOptFiles = document.getElementById('attach-opt-files');
+    const attachOptGps = document.getElementById('attach-opt-gps');
+
+    if (attachMenuBtn && attachMenuDropdown) {
+      attachMenuBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (typeof window.haptic === 'function') window.haptic('light');
+        attachMenuDropdown.classList.toggle('hidden');
+      });
+
+      document.addEventListener('click', (e) => {
+        if (!attachMenuDropdown.contains(e.target) && !attachMenuBtn.contains(e.target)) {
+          attachMenuDropdown.classList.add('hidden');
+        }
+      });
+
+      if (attachOptCamera && cameraInput) {
+        attachOptCamera.addEventListener('click', () => {
+          if (typeof window.haptic === 'function') window.haptic('light');
+          attachMenuDropdown.classList.add('hidden');
+          cameraInput.click();
+        });
+      }
+
+      if (attachOptGallery && attachInput) {
+        attachOptGallery.addEventListener('click', () => {
+          if (typeof window.haptic === 'function') window.haptic('light');
+          attachMenuDropdown.classList.add('hidden');
+          attachInput.click();
+        });
+      }
+
+      if (attachOptFiles) {
+        attachOptFiles.addEventListener('click', () => {
+          if (typeof window.haptic === 'function') window.haptic('light');
+          attachMenuDropdown.classList.add('hidden');
+          if (typeof toggleFilesModal === 'function') toggleFilesModal(true);
+        });
+      }
+
+      if (attachOptGps) {
+        attachOptGps.addEventListener('click', () => {
+          if (typeof window.haptic === 'function') window.haptic('light');
+          attachMenuDropdown.classList.add('hidden');
+          if (typeof triggerGpsLocation === 'function') {
+            triggerGpsLocation();
+          }
+        });
+      }
+    }
+  }
+
+  // 🎙️ Speech-to-Text (STT) Voice Dictation Controller
+  let sttRecognition = null;
+  let isSttListening = false;
+
+  function initVoiceInput() {
+    const voiceBtn = document.getElementById('voice-input-btn');
+    if (!voiceBtn) return;
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+    if (!SpeechRecognition) {
+      voiceBtn.title = '您的瀏覽器不支援 Web Speech 語音輸入';
+      voiceBtn.addEventListener('click', () => {
+        if (typeof window.haptic === 'function') window.haptic('warning');
+        alert('您的瀏覽器尚未支援 Web Speech 語音輸入 API，推薦使用 Chrome 瀏覽器或手機鍵盤內建語音輸入法。');
+      });
+      return;
+    }
+
+    try {
+      sttRecognition = new SpeechRecognition();
+      sttRecognition.lang = 'zh-TW';
+      sttRecognition.continuous = true;
+      sttRecognition.interimResults = true;
+
+      let basePromptText = '';
+
+      function setListeningState(listening) {
+        isSttListening = listening;
+        if (listening) {
+          if (typeof window.haptic === 'function') window.haptic('medium');
+          voiceBtn.classList.remove('bg-slate-800', 'text-slate-300', 'border-slate-700');
+          voiceBtn.classList.add('bg-rose-600', 'text-white', 'border-rose-400', 'animate-pulse', 'shadow-lg', 'shadow-rose-600/40');
+          if (promptInput) {
+            basePromptText = promptInput.value;
+            if (basePromptText && !basePromptText.endsWith(' ') && !basePromptText.endsWith('\n')) {
+              basePromptText += ' ';
+            }
+          }
+        } else {
+          if (typeof window.haptic === 'function') window.haptic('light');
+          voiceBtn.classList.remove('bg-rose-600', 'text-white', 'border-rose-400', 'animate-pulse', 'shadow-lg', 'shadow-rose-600/40');
+          voiceBtn.classList.add('bg-slate-800', 'text-slate-300', 'border-slate-700');
+        }
+      }
+
+      sttRecognition.onstart = () => {
+        setListeningState(true);
+      };
+
+      sttRecognition.onresult = (event) => {
+        let interimTranscript = '';
+        let finalTranscript = '';
+
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          if (event.results[i].isFinal) {
+            finalTranscript += event.results[i][0].transcript;
+          } else {
+            interimTranscript += event.results[i][0].transcript;
+          }
+        }
+
+        if (promptInput) {
+          promptInput.value = basePromptText + (finalTranscript || interimTranscript);
+          promptInput.style.height = 'auto';
+          promptInput.style.height = Math.min(promptInput.scrollHeight, 120) + 'px';
+          promptInput.dispatchEvent(new Event('input'));
+        }
+      };
+
+      sttRecognition.onerror = (event) => {
+        console.warn('[STT Error]', event.error);
+        setListeningState(false);
+      };
+
+      sttRecognition.onend = () => {
+        setListeningState(false);
+      };
+
+      voiceBtn.addEventListener('click', () => {
+        if (isSttListening) {
+          try { sttRecognition.stop(); } catch (e) {}
+          setListeningState(false);
+        } else {
+          try {
+            sttRecognition.start();
+          } catch (err) {
+            console.warn('[STT Start Error]', err);
+            try {
+              sttRecognition.stop();
+              setTimeout(() => sttRecognition.start(), 150);
+            } catch (e) {}
+          }
+        }
+      });
+    } catch (e) {
+      console.warn('[STT Init Error]', e);
+    }
   }
 
   // Send Button Listener
