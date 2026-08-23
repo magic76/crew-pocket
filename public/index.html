@@ -449,24 +449,29 @@
         </div>
       </div>
 
-      <!-- 🎙️ Live Voice Call Bottom Ergonomic Dock (Option A: Transforms bottom input into high-touch action bar) -->
-      <div id="live-bottom-dock" class="hidden w-full items-center justify-between gap-2.5 py-1 select-none animate-fadeIn">
+      <!-- 🎙️ Live Voice Call Bottom Ergonomic Dock (Option A: Pure Icon Action Dock) -->
+      <div id="live-bottom-dock" class="hidden w-full items-center justify-between gap-3 py-1 select-none animate-fadeIn">
         <!-- 📷 Left: Camera Toggle -->
-        <button id="live-dock-camera-btn" type="button" class="flex-1 max-w-[80px] h-[52px] rounded-2xl bg-slate-800/90 hover:bg-slate-700 active:scale-95 border border-slate-700 text-slate-200 text-xs font-semibold flex flex-col items-center justify-center gap-0.5 transition shadow-lg shrink-0" title="開啟/關閉鏡頭">
-          <span class="text-base leading-none">📷</span>
-          <span id="live-dock-camera-label" class="text-[10px] font-mono leading-none">相機</span>
+        <button id="live-dock-camera-btn" type="button" class="flex-1 max-w-[76px] h-[52px] rounded-2xl bg-slate-800/90 hover:bg-slate-700 active:scale-95 border border-slate-700 text-slate-200 flex items-center justify-center transition shadow-lg shrink-0" title="開啟/關閉相機">
+          <svg class="w-6 h-6 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+          </svg>
         </button>
 
-        <!-- 🎙️ Center: Large Ergonomic Mic Mute/Unmute Action Button -->
-        <button id="live-dock-mute-btn" type="button" class="flex-1 h-[52px] px-3 rounded-2xl bg-gradient-to-r from-teal-500 to-indigo-600 hover:from-teal-400 hover:to-indigo-500 active:scale-95 text-white font-bold text-xs sm:text-sm shadow-xl shadow-teal-500/30 flex items-center justify-center gap-2 transition border border-teal-400/50" title="點擊切換靜音">
-          <span id="live-dock-mute-icon" class="text-lg animate-pulse">🎙️</span>
-          <span id="live-dock-mute-label" class="tracking-wide font-mono truncate">通話中 · 點擊靜音</span>
+        <!-- 🎙️ Center: Large Ergonomic Mic Mute/Unmute Action Button (Pure Icon) -->
+        <button id="live-dock-mute-btn" type="button" class="flex-1 h-[52px] px-4 rounded-2xl bg-gradient-to-r from-teal-500 to-indigo-600 hover:from-teal-400 hover:to-indigo-500 active:scale-95 text-white shadow-xl shadow-teal-500/30 flex items-center justify-center transition border border-teal-400/50" title="點擊切換靜音">
+          <span id="live-dock-mute-icon-container" class="flex items-center justify-center">
+            <svg class="w-7 h-7 text-white animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/>
+            </svg>
+          </span>
         </button>
 
         <!-- 🛑 Right: Hangup Button -->
-        <button id="live-dock-hangup-btn" type="button" class="flex-1 max-w-[80px] h-[52px] rounded-2xl bg-rose-600 hover:bg-rose-500 active:scale-95 text-white text-xs font-bold shadow-lg shadow-rose-600/30 flex flex-col items-center justify-center gap-0.5 transition shrink-0" title="結束通話">
-          <span class="text-base leading-none">🛑</span>
-          <span class="text-[10px] font-mono leading-none">掛斷</span>
+        <button id="live-dock-hangup-btn" type="button" class="flex-1 max-w-[76px] h-[52px] rounded-2xl bg-rose-600 hover:bg-rose-500 active:scale-95 text-white shadow-lg shadow-rose-600/40 flex items-center justify-center transition shrink-0 border border-rose-500/50" title="結束通話">
+          <svg class="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M12 9c-1.6 0-3.15.25-4.6.72v3.1c0 .39-.23.74-.56.9-.98.49-1.87 1.12-2.66 1.85-.18.18-.43.28-.7.28-.28 0-.53-.11-.71-.29L.29 13.08a.996.996 0 010-1.41C3.12 8.91 7.33 7 12 7s8.88 1.91 11.71 4.67c.39.39.39 1.02 0 1.41l-2.48 2.48c-.18.18-.43.29-.71.29s-.52-.1-.7-.28c-.79-.74-1.69-1.36-2.67-1.85-.33-.16-.56-.5-.56-.9v-3.1C15.15 9.25 13.6 9 12 9z"/>
+          </svg>
         </button>
       </div>
     </div>
@@ -816,7 +821,7 @@
   <script src="/js/ui.js?v=6.50"></script>
   <script src="/js/tools.js?v=6.50"></script>
   <script src="/js/chat.js?v=6.55"></script>
-  <script src="/js/live.js?v=5.1"></script>
+  <script src="/js/live.js?v=5.2"></script>
   <script src="/js/app.js?v=6.49"></script>
 </body>
 </html>

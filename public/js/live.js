@@ -514,42 +514,55 @@
 
   function updateDockControls() {
     const dockMuteBtn = document.getElementById('live-dock-mute-btn');
-    const dockMuteIcon = document.getElementById('live-dock-mute-icon');
-    const dockMuteLabel = document.getElementById('live-dock-mute-label');
-
+    const dockMuteContainer = document.getElementById('live-dock-mute-icon-container');
     const dockCameraBtn = document.getElementById('live-dock-camera-btn');
-    const dockCameraLabel = document.getElementById('live-dock-camera-label');
 
     if (isMuted) {
       if (dockMuteBtn) {
-        dockMuteBtn.className = 'flex-1 h-[52px] px-3 rounded-2xl bg-rose-900/90 hover:bg-rose-800 active:scale-95 text-rose-200 font-bold text-xs sm:text-sm shadow-xl shadow-rose-950/50 flex items-center justify-center gap-2 transition border border-rose-500/60';
+        dockMuteBtn.className = 'flex-1 h-[52px] px-4 rounded-2xl bg-rose-900/90 hover:bg-rose-800 active:scale-95 text-rose-200 shadow-xl shadow-rose-950/60 flex items-center justify-center transition border border-rose-500/60';
+        dockMuteBtn.title = '麥克風已靜音 · 點擊開啟';
       }
-      if (dockMuteIcon) {
-        dockMuteIcon.textContent = '🔇';
-        dockMuteIcon.className = 'text-lg';
+      if (dockMuteContainer) {
+        dockMuteContainer.innerHTML = `
+          <svg class="w-7 h-7 text-rose-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-1.294 4.072M12 18a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4M9.88 9.88A3 3 0 0012 14a3 3 0 003-3V6a3 3 0 00-3-3 3 3 0 00-2.12.88M3 3l18 18"/>
+          </svg>
+        `;
       }
-      if (dockMuteLabel) dockMuteLabel.textContent = '已靜音 · 點擊發話';
     } else {
       if (dockMuteBtn) {
-        dockMuteBtn.className = 'flex-1 h-[52px] px-3 rounded-2xl bg-gradient-to-r from-teal-500 to-indigo-600 hover:from-teal-400 hover:to-indigo-500 active:scale-95 text-white font-bold text-xs sm:text-sm shadow-xl shadow-teal-500/30 flex items-center justify-center gap-2 transition border border-teal-400/50';
+        dockMuteBtn.className = 'flex-1 h-[52px] px-4 rounded-2xl bg-gradient-to-r from-teal-500 to-indigo-600 hover:from-teal-400 hover:to-indigo-500 active:scale-95 text-white shadow-xl shadow-teal-500/30 flex items-center justify-center transition border border-teal-400/50';
+        dockMuteBtn.title = '通話收音中 · 點擊靜音';
       }
-      if (dockMuteIcon) {
-        dockMuteIcon.textContent = '🎙️';
-        dockMuteIcon.className = 'text-lg animate-pulse';
+      if (dockMuteContainer) {
+        dockMuteContainer.innerHTML = `
+          <svg class="w-7 h-7 text-white animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/>
+          </svg>
+        `;
       }
-      if (dockMuteLabel) dockMuteLabel.textContent = '通話中 · 點擊靜音';
     }
 
     if (isCameraOn) {
       if (dockCameraBtn) {
-        dockCameraBtn.className = 'flex-1 max-w-[80px] h-[52px] rounded-2xl bg-indigo-600 hover:bg-indigo-500 active:scale-95 border border-indigo-400 text-white text-xs font-semibold flex flex-col items-center justify-center gap-0.5 transition shadow-lg shrink-0';
+        dockCameraBtn.className = 'flex-1 max-w-[76px] h-[52px] rounded-2xl bg-indigo-600 hover:bg-indigo-500 active:scale-95 border border-indigo-400 text-white flex items-center justify-center transition shadow-lg shrink-0';
+        dockCameraBtn.title = '關閉相機';
+        dockCameraBtn.innerHTML = `
+          <svg class="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M4 4h10a2 2 0 012 2v2.5l4.5-3a1 1 0 011.5.86v11.28a1 1 0 01-1.5.86L16 15.5V18a2 2 0 01-2 2H4a2 2 0 01-2-2V6a2 2 0 012-2z"/>
+          </svg>
+        `;
       }
-      if (dockCameraLabel) dockCameraLabel.textContent = '關閉相機';
     } else {
       if (dockCameraBtn) {
-        dockCameraBtn.className = 'flex-1 max-w-[80px] h-[52px] rounded-2xl bg-slate-800/90 hover:bg-slate-700 active:scale-95 border border-slate-700 text-slate-200 text-xs font-semibold flex flex-col items-center justify-center gap-0.5 transition shadow-lg shrink-0';
+        dockCameraBtn.className = 'flex-1 max-w-[76px] h-[52px] rounded-2xl bg-slate-800/90 hover:bg-slate-700 active:scale-95 border border-slate-700 text-slate-200 flex items-center justify-center transition shadow-lg shrink-0';
+        dockCameraBtn.title = '開啟相機';
+        dockCameraBtn.innerHTML = `
+          <svg class="w-6 h-6 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+          </svg>
+        `;
       }
-      if (dockCameraLabel) dockCameraLabel.textContent = '相機';
     }
   }
 
