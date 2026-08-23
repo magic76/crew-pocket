@@ -312,9 +312,6 @@ function initAppAndListeners() {
   // ➕ Initialize Unified Attachment Menu
   initAttachMenu();
 
-  // 🎙️ Initialize Speech-to-Text (STT) Voice Input
-  initVoiceInput();
-
   // Initialize GPS Chip
   if (typeof initGpsHandler === 'function') {
     initGpsHandler();
@@ -543,88 +540,7 @@ function initAppAndListeners() {
     }
   }
 
-  // 🎙️ Speech-to-Text (STT) Native Voice Dictation (100% Free & Zero Key Required)
-  let sttRecognition = null;
-  let isSttListening = false;
-  let sttBaseText = '';
 
-  function initVoiceInput() {
-    const voiceBtn = document.getElementById('voice-input-btn');
-    if (!voiceBtn) return;
-
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-
-    if (!SpeechRecognition) {
-      voiceBtn.title = '此瀏覽器不支援 Web Speech 語音辨識';
-      voiceBtn.addEventListener('click', () => {
-        if (typeof window.haptic === 'function') window.haptic('warning');
-        alert('您的瀏覽器未支援語音辨識，請使用手機鍵盤上的麥克風進行語音輸入！');
-      });
-      return;
-    }
-
-    try {
-      sttRecognition = new SpeechRecognition();
-      sttRecognition.lang = 'zh-TW';
-      sttRecognition.continuous = false;
-      sttRecognition.interimResults = true;
-
-      sttRecognition.onstart = () => {
-        isSttListening = true;
-        voiceBtn.classList.remove('bg-slate-800', 'text-slate-300', 'border-slate-700');
-        voiceBtn.classList.add('bg-rose-600', 'text-white', 'border-rose-400', 'animate-pulse', 'shadow-lg', 'shadow-rose-600/40');
-      };
-
-      sttRecognition.onresult = (event) => {
-        let transcript = '';
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          transcript += event.results[i][0].transcript;
-        }
-        if (promptInput) {
-          promptInput.value = (sttBaseText ? sttBaseText : '') + transcript;
-          promptInput.style.height = 'auto';
-          promptInput.style.height = Math.min(promptInput.scrollHeight, 120) + 'px';
-          promptInput.dispatchEvent(new Event('input'));
-        }
-      };
-
-      sttRecognition.onerror = (e) => {
-        console.warn('Speech recognition error:', e);
-        isSttListening = false;
-        voiceBtn.classList.remove('bg-rose-600', 'border-rose-400', 'animate-pulse', 'shadow-rose-600/40');
-        voiceBtn.classList.add('bg-slate-800', 'text-slate-300', 'border-slate-700');
-      };
-
-      sttRecognition.onend = () => {
-        isSttListening = false;
-        voiceBtn.classList.remove('bg-rose-600', 'border-rose-400', 'animate-pulse', 'shadow-rose-600/40');
-        voiceBtn.classList.add('bg-slate-800', 'text-slate-300', 'border-slate-700');
-      };
-
-      voiceBtn.addEventListener('click', () => {
-        if (typeof window.haptic === 'function') window.haptic('light');
-        if (isSttListening) {
-          try { sttRecognition.stop(); } catch(e) {}
-        } else {
-          sttBaseText = promptInput ? promptInput.value : '';
-          if (sttBaseText && !sttBaseText.endsWith(' ') && !sttBaseText.endsWith('\n')) {
-            sttBaseText += ' ';
-          }
-          try {
-            sttRecognition.start();
-          } catch(err) {
-            console.warn('[STT Start Error]', err);
-            try {
-              sttRecognition.stop();
-              setTimeout(() => sttRecognition.start(), 100);
-            } catch(e) {}
-          }
-        }
-      });
-    } catch (e) {
-      console.warn('[STT Init Error]', e);
-    }
-  }
 
   // Send Button Listener
   if (sendBtn) {
