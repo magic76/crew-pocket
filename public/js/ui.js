@@ -3,7 +3,7 @@
 // Global State
 const DEFAULT_PROVIDERS = [
   { id: 'antigravity', label: 'Antigravity', shortLabel: 'AGY', icon: '✨', storagePrefix: 'agy', badgeClass: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40', greeting: '你好！已為你開啟新對話。有什麼可以幫你的？', capabilities: { history: true, rewind: true, autoTitle: true, compact: 'checkpoint', usage: { mode: 'endpoint', endpoint: '/api/usage' } } },
-  { id: 'codex', label: 'OpenAI Codex', shortLabel: 'Codex', icon: '🧩', storagePrefix: 'codex', badgeClass: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40', greeting: '你好！Codex provider 已就緒。有什麼開發任務？', capabilities: { history: true, rewind: true, autoTitle: false, compact: 'native', usage: { mode: 'external-link', url: 'https://chatgpt.com/codex/settings/usage' } } }
+  { id: 'codex', label: 'OpenAI Codex', shortLabel: 'Codex', icon: '🧩', storagePrefix: 'codex', badgeClass: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40', greeting: '你好！Codex provider 已就緒。有什麼開發任務？', capabilities: { history: true, rewind: false, autoTitle: false, compact: 'native', usage: { mode: 'external-link', url: 'https://chatgpt.com/codex/settings/usage' } } }
 ];
 let availableProviders = DEFAULT_PROVIDERS;
 let currentConversationId = null;

@@ -433,54 +433,10 @@
   }
 
   // ==========================================
-  // 🎙️ Browser-Native Realtime STT (Web Speech API)
+  // 🎙️ Pure Native Audio Pipeline (No OS Chimes)
   // ==========================================
-  function startSpeechRecognition() {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) return;
-    try {
-      if (speechRecognizer) {
-        try { speechRecognizer.stop(); } catch (e) {}
-      }
-      speechRecognizer = new SpeechRecognition();
-      speechRecognizer.continuous = true;
-      speechRecognizer.interimResults = true;
-      speechRecognizer.lang = (typeof getCrewLocale === 'function' && getCrewLocale() === 'en') ? 'en-US' : 'zh-TW';
-
-      speechRecognizer.onresult = (event) => {
-        let interim = '';
-        let final = '';
-        for (let i = event.resultIndex; i < event.results.length; ++i) {
-          if (event.results[i].isFinal) {
-            final += event.results[i][0].transcript;
-          } else {
-            interim += event.results[i][0].transcript;
-          }
-        }
-        const spoken = (final || interim).trim();
-        if (spoken) {
-          currentTurnUser = spoken;
-          console.log('[Live STT Transcribed]', spoken);
-          appendCardTranscript('user', spoken);
-        }
-      };
-
-      speechRecognizer.onerror = (err) => {
-        console.warn('[Live STT Warning]', err.error);
-      };
-
-      speechRecognizer.onend = () => {
-        if (isConnected && speechRecognizer) {
-          try { speechRecognizer.start(); } catch (e) {}
-        }
-      };
-
-      speechRecognizer.start();
-    } catch (e) {
-      console.warn('[Live STT Init Error]', e);
-    }
-  }
-
+  // Gemini 2.0 Live directly understands 16kHz raw PCM audio.
+  // SpeechRecognition is removed to eliminate repetitive Android OS mic activation chimes ("噔噔噔").
   function stopSpeechRecognition() {
     if (speechRecognizer) {
       try { speechRecognizer.stop(); } catch (e) {}
@@ -855,7 +811,6 @@
         };
         ws.send(JSON.stringify(setupMessage));
         startVisualizer();
-        startSpeechRecognition();
       };
 
       ws.onmessage = async (event) => {
@@ -938,7 +893,7 @@
         }
       };
 
-      // 5. Mic PCM Stream (100ms buffering & RMS speech detection)
+      // 5. Mic PCM Stream (100ms buffering & Adaptive RMS Voice Activity Detection)
       micProcessorNode.onaudioprocess = (e) => {
         if (!isConnected || isMuted || !ws || ws.readyState !== WebSocket.OPEN) return;
         const inputData = e.inputBuffer.getChannelData(0);
@@ -949,7 +904,10 @@
           sumSquares += inputData[i] * inputData[i];
         }
         const rms = Math.sqrt(sumSquares / inputData.length);
-        if (rms > 0.02) {
+        const isAiSpeaking = audioPlayer && audioPlayer.activeSources.length > 0;
+        const vadThreshold = isAiSpeaking ? 0.045 : 0.015;
+
+        if (rms > vadThreshold) {
           lastUserSpokeTime = Date.now();
         }
 
@@ -959,7 +917,7 @@
           audioSendBuffer.push(downsampled[i]);
         }
 
-        // Send every ~100ms
+        // Send every ~100ms (1600 samples at 16kHz)
         if (audioSendBuffer.length >= 1600) {
           const chunkToSend = new Float32Array(audioSendBuffer);
           audioSendBuffer = [];
