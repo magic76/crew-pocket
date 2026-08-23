@@ -63,6 +63,17 @@ pkg install -y git nodejs python curl gh
 git clone https://github.com/magic76/crew-pocket.git ~/agy-web
 ```
 
+### 步驟 3.1：AI 助理專案規範
+
+本 repo 已包含 [`GEMINI.md`](GEMINI.md) 與 [`AGENTS.md`](AGENTS.md)。使用 Gemini CLI 或其他支援專案指令檔的 AI coding agent 時，請從專案根目錄啟動，讓它讀取這些規範後再修改程式：
+
+```bash
+cd ~/agy-web
+gemini
+```
+
+規範包含 Termux 執行安全、Mobile-first UI、HTML 沙盒、Chart.js 與手機裝置能力等專案慣例；請保留在 fork 或部署副本中，避免 AI 修改時忽略 Crew Pocket 的既有行為。
+
 ### 步驟 4（可選）：啟用 OpenAI Codex Provider
 
 Antigravity / agy 仍是預設 Provider，不安裝 Codex 也可以照常使用。若要在模型選單中切換到 Codex，請先在 Termux 完成 Codex CLI 登入，並確認它可執行：
