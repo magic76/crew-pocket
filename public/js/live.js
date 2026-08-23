@@ -881,14 +881,14 @@
 
       audioPlayer = new LiveAudioPlayer(audioContext);
 
-      // 3. Microphone Capture
+      // 3. Microphone Capture (Media Recording Mode - keeps Android OS in standard Media Mode instead of In-Call Phone Mode)
       try {
         micMediaStream = await navigator.mediaDevices.getUserMedia({
           audio: {
             channelCount: 1,
-            echoCancellation: true,
-            noiseSuppression: true,
-            autoGainControl: true
+            echoCancellation: false,
+            noiseSuppression: false,
+            autoGainControl: false
           }
         });
       } catch (micErr) {
