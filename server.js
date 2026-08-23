@@ -171,20 +171,28 @@ async function handleImageProxy(parsedUrl, res) {
       return res.end('Image not found');
     }
 
-    const resolvedPath = path.resolve(imgPath);
     const HOME_DIR = '/data/data/com.termux/files/home';
-    const isAllowed = resolvedPath.startsWith(UPLOADS_DIR) ||
-                      resolvedPath.startsWith(BRAIN_DIR) ||
-                      resolvedPath.startsWith(HOME_DIR) ||
-                      resolvedPath.startsWith('/sdcard') ||
-                      resolvedPath.startsWith('/storage');
+    const allowedRoots = [UPLOADS_DIR, BRAIN_DIR, HOME_DIR, '/sdcard', '/storage'];
+    let resolvedPath;
+    try {
+      // realpath resolves symlinks first, so a permitted-looking path cannot escape via one.
+      resolvedPath = await fsPromises.realpath(imgPath);
+    } catch (err) {
+      res.writeHead(404, { 'Content-Type': 'text/plain' });
+      return res.end('Image not found');
+    }
+    const isAllowed = allowedRoots.some(root => {
+      const normalizedRoot = path.resolve(root);
+      return resolvedPath === normalizedRoot || resolvedPath.startsWith(`${normalizedRoot}${path.sep}`);
+    });
 
     if (!isAllowed) {
       res.writeHead(403, { 'Content-Type': 'text/plain' });
       return res.end('Forbidden');
     }
 
-    if (!fs.existsSync(resolvedPath)) {
+    const stat = await fsPromises.stat(resolvedPath);
+    if (!stat.isFile()) {
       res.writeHead(404, { 'Content-Type': 'text/plain' });
       return res.end('Image not found');
     }
@@ -247,6 +255,7 @@ const CREW_POCKET_SYSTEM_GUIDE = `[Context: You are the core intelligence of "Cr
      * IMPORTANT: Keep the \`\`\`html block strictly pure HTML code. NEVER mix ASCII border frames (┌─┐, ═══) or explanatory text inside the \`\`\`html block.
      * Crew Pocket automatically intercepts complete \`\`\`html and \`\`\`svg blocks and transforms them into an interactive Action Card with "[🌐 開啟預覽]" (full-screen sandbox) and "[📱 內嵌小視窗]" (collapsible inline iframe).
      * The user can interact with buttons, forms, touch events, Canvas, and audio directly!
+     * To load an existing Termux asset without embedding it, use its absolute local path directly in src, href, poster, srcset, or CSS url(), e.g. /data/data/com.termux/files/home/pocket-game/public/assets/tile.webp. Crew Pocket safely proxies approved local assets into the Action Card; do not use file:// URLs or assume relative paths point at another project.
    - 🔄 When modifying or iterating on an interactive tool (e.g. "change color", "add button", "fix bug"):
      * Output the UPDATED COMPLETE \`\`\`html code block so the user can immediately click the new preview card to test the updated version with 0 manual copying.
      * Accompany the code with 1-2 concise bullet points highlighting the specific changes made.

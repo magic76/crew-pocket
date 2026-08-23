@@ -272,7 +272,25 @@ function enhanceCodeBlocks(container) {
         processedCode = processedCode.slice(htmlStartMatch.index);
       }
 
-      // 1. Inject <base href="..."> & auto-resize script so relative paths work and iframe fits height automatically
+      // 1. Rewrite permitted Termux paths through the same-origin asset proxy. Blob iframes
+      // cannot read file:// URLs, while the proxy keeps the sandbox isolated from the host.
+      const localPathPattern = '(?:file:\\/\\/)?(?:\\/data\\/data\\/|\\/storage\\/|\\/sdcard\\/)[^\\s"\'>)]+?\\.(?:png|jpe?g|webp|svg|gif|ico|avif|bmp|mp3|wav|ogg|m4a|woff2?|ttf|otf)';
+      const toLocalAssetUrl = (localPath) => {
+        const normalizedPath = localPath.replace(/^file:\/\//i, '');
+        return `/api/image?path=${encodeURIComponent(normalizedPath)}`;
+      };
+      const rewriteLocalAssetUrls = (html) => html
+        .replace(new RegExp(`((?:src|href|poster|data-src|xlink:href)\\s*=\\s*["'])(${localPathPattern})(["'])`, 'gi'),
+          (match, prefix, localPath, suffix) => `${prefix}${toLocalAssetUrl(localPath)}${suffix}`)
+        .replace(new RegExp(`(url\\(\\s*["']?)(${localPathPattern})(["']?\\s*\\))`, 'gi'),
+          (match, prefix, localPath, suffix) => `${prefix}${toLocalAssetUrl(localPath)}${suffix}`)
+        .replace(new RegExp(`(\\bsrcset\\s*=\\s*["'][^"']*?)(${localPathPattern})`, 'gi'),
+          (match, prefix, localPath) => `${prefix}${toLocalAssetUrl(localPath)}`);
+
+      processedCode = rewriteLocalAssetUrls(processedCode);
+
+      // 2. Inject a default base and auto-resize script. An author supplied <base> is
+      // intentional (for example a local game server) and must remain the first base tag.
       const baseOrigin = window.location.origin;
       const baseTag = `<base href="${baseOrigin}/">`;
       const resizeScript = `
@@ -304,18 +322,14 @@ function enhanceCodeBlocks(container) {
 <\/script>
 `;
 
+      const defaultBase = /<base\b[^>]*>/i.test(processedCode) ? '' : `${baseTag}\n  `;
       if (/<head\b[^>]*>/i.test(processedCode)) {
-        processedCode = processedCode.replace(/(<head\b[^>]*>)/i, `$1\n  ${baseTag}\n  ${resizeScript}`);
+        processedCode = processedCode.replace(/(<head\b[^>]*>)/i, `$1\n  ${defaultBase}${resizeScript}`);
       } else if (/<html\b[^>]*>/i.test(processedCode)) {
-        processedCode = processedCode.replace(/(<html\b[^>]*>)/i, `$1\n<head>\n  ${baseTag}\n  ${resizeScript}\n</head>`);
+        processedCode = processedCode.replace(/(<html\b[^>]*>)/i, `$1\n<head>\n  ${defaultBase}${resizeScript}\n</head>`);
       } else {
-        processedCode = `${baseTag}\n${resizeScript}\n${processedCode}`;
+        processedCode = `${defaultBase}${resizeScript}\n${processedCode}`;
       }
-
-      // 2. Smart Path Rewriter: Auto-convert local absolute paths (/data/data/..., /sdcard/..., /storage/...) to /api/image?path=...
-      processedCode = processedCode.replace(/(src|href|url)\s*=\s*(["'])((\/data\/data\/|\/storage\/|\/sdcard\/)[^\s"'>]+\.(png|jpg|jpeg|webp|svg|gif|ico))\2/gi, (match, attr, quote, localPath) => {
-        return `${attr}=${quote}/api/image?path=${encodeURIComponent(localPath)}${quote}`;
-      });
 
       const blob = new Blob([processedCode], { type: 'text/html;charset=utf-8' });
       const blobUrl = URL.createObjectURL(blob);
