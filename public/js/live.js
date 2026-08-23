@@ -546,6 +546,47 @@
     }
   }
 
+  function updateDockControls() {
+    const dockMuteBtn = document.getElementById('live-dock-mute-btn');
+    const dockMuteIcon = document.getElementById('live-dock-mute-icon');
+    const dockMuteLabel = document.getElementById('live-dock-mute-label');
+
+    const dockCameraBtn = document.getElementById('live-dock-camera-btn');
+    const dockCameraLabel = document.getElementById('live-dock-camera-label');
+
+    if (isMuted) {
+      if (dockMuteBtn) {
+        dockMuteBtn.className = 'flex-1 py-3 px-3 rounded-2xl bg-rose-900/90 hover:bg-rose-800 active:scale-95 text-rose-200 font-bold text-xs sm:text-sm shadow-xl shadow-rose-950/50 flex items-center justify-center gap-2 transition border border-rose-500/60 min-h-[52px]';
+      }
+      if (dockMuteIcon) {
+        dockMuteIcon.textContent = '🔇';
+        dockMuteIcon.className = 'text-lg';
+      }
+      if (dockMuteLabel) dockMuteLabel.textContent = '已靜音 · 點擊發話';
+    } else {
+      if (dockMuteBtn) {
+        dockMuteBtn.className = 'flex-1 py-3 px-3 rounded-2xl bg-gradient-to-r from-teal-500 to-indigo-600 hover:from-teal-400 hover:to-indigo-500 active:scale-95 text-white font-bold text-xs sm:text-sm shadow-xl shadow-teal-500/30 flex items-center justify-center gap-2 transition border border-teal-400/50 min-h-[52px]';
+      }
+      if (dockMuteIcon) {
+        dockMuteIcon.textContent = '🎙️';
+        dockMuteIcon.className = 'text-lg animate-pulse';
+      }
+      if (dockMuteLabel) dockMuteLabel.textContent = '通話中 · 點擊靜音';
+    }
+
+    if (isCameraOn) {
+      if (dockCameraBtn) {
+        dockCameraBtn.className = 'flex-1 max-w-[84px] py-3 rounded-2xl bg-indigo-600 hover:bg-indigo-500 active:scale-95 border border-indigo-400 text-white text-xs font-semibold flex flex-col items-center justify-center gap-1 transition shadow-lg shrink-0';
+      }
+      if (dockCameraLabel) dockCameraLabel.textContent = '關閉相機';
+    } else {
+      if (dockCameraBtn) {
+        dockCameraBtn.className = 'flex-1 max-w-[84px] py-3 rounded-2xl bg-slate-800/90 hover:bg-slate-700 active:scale-95 border border-slate-700 text-slate-200 text-xs font-semibold flex flex-col items-center justify-center gap-1 transition shadow-lg shrink-0';
+      }
+      if (dockCameraLabel) dockCameraLabel.textContent = '相機';
+    }
+  }
+
   function toggleMute() {
     isMuted = !isMuted;
 
@@ -599,6 +640,9 @@
         updateCardStatus('listening', '🎙️ 可以開始說話');
       }
     }
+
+    updateDockControls();
+    if (navigator.vibrate) navigator.vibrate(20);
   }
 
   async function toggleCamera() {
@@ -620,6 +664,8 @@
           btn.classList.replace('border-slate-700', 'border-indigo-400');
         }
         if (label) label.textContent = '關閉相機';
+
+        updateDockControls();
 
         // Auto-scroll down smoothly so the user sees the camera view immediately
         setTimeout(() => {
@@ -703,6 +749,7 @@
         btn.classList.replace('border-indigo-400', 'border-slate-700');
       }
       if (label) label.textContent = '相機';
+      updateDockControls();
     }
   }
 
@@ -767,6 +814,16 @@
       const span = liveVoiceBtn.querySelector('span:last-child');
       if (span) span.textContent = '通話中';
     }
+
+    // 📱 Option A: Switch bottom bar to Live Voice Dock (Bottom Ergonomic Action Dock)
+    const standardInputBar = document.getElementById('standard-input-bar');
+    const liveBottomDock = document.getElementById('live-bottom-dock');
+    if (standardInputBar) standardInputBar.classList.add('hidden');
+    if (liveBottomDock) {
+      liveBottomDock.classList.remove('hidden');
+      liveBottomDock.classList.add('flex');
+    }
+    updateDockControls();
     
     audioSendBuffer = [];
     isMuted = false;
@@ -1090,6 +1147,15 @@
       if (span) span.textContent = 'Live 通話';
     }
 
+    // 📱 Option A: Restore bottom standard chat input bar
+    const standardInputBar = document.getElementById('standard-input-bar');
+    const liveBottomDock = document.getElementById('live-bottom-dock');
+    if (liveBottomDock) {
+      liveBottomDock.classList.add('hidden');
+      liveBottomDock.classList.remove('flex');
+    }
+    if (standardInputBar) standardInputBar.classList.remove('hidden');
+
     // Remove active inline card cleanly
     removeInlineCard();
 
@@ -1206,6 +1272,22 @@
     liveModelSelect.addEventListener('change', () => {
       localStorage.setItem(MODEL_KEY, liveModelSelect.value);
     });
+  }
+
+  // 📱 Option A: Bottom Voice Dock Event Listeners
+  const dockMuteBtn = document.getElementById('live-dock-mute-btn');
+  if (dockMuteBtn) {
+    dockMuteBtn.addEventListener('click', toggleMute);
+  }
+
+  const dockCameraBtn = document.getElementById('live-dock-camera-btn');
+  if (dockCameraBtn) {
+    dockCameraBtn.addEventListener('click', toggleCamera);
+  }
+
+  const dockHangupBtn = document.getElementById('live-dock-hangup-btn');
+  if (dockHangupBtn) {
+    dockHangupBtn.addEventListener('click', endLiveSession);
   }
 
 })();

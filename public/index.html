@@ -391,60 +391,83 @@
         </button>
       </div>
 
-      <!-- Input Row -->
-      <div class="flex items-center gap-1.5 w-full min-w-0">
-        
-        <!-- Attach Image (Gallery / HEIC) Button with wrapped native input -->
-        <label id="attach-btn" title="附加相簿圖片 (支援 HEIC/JPG/PNG 自動壓縮)" class="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-slate-300 hover:text-indigo-400 transition active:scale-95 shrink-0 border border-slate-700 flex items-center justify-center cursor-pointer select-none relative overflow-hidden">
-          <input type="file" id="attach-input" accept="image/*, .heic, .heif" class="absolute inset-0 opacity-0 cursor-pointer w-full h-full" onchange="if(this.files&&this.files[0])window.handleImageSelection(this.files[0]);">
-          <svg class="w-5 h-5 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/>
-          </svg>
-        </label>
+      <!-- Standard Chat Input Controls -->
+      <div id="standard-input-bar" class="w-full space-y-2">
+        <!-- Input Row -->
+        <div class="flex items-center gap-1.5 w-full min-w-0">
+          
+          <!-- Attach Image (Gallery / HEIC) Button with wrapped native input -->
+          <label id="attach-btn" title="附加相簿圖片 (支援 HEIC/JPG/PNG 自動壓縮)" class="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-slate-300 hover:text-indigo-400 transition active:scale-95 shrink-0 border border-slate-700 flex items-center justify-center cursor-pointer select-none relative overflow-hidden">
+            <input type="file" id="attach-input" accept="image/*, .heic, .heif" class="absolute inset-0 opacity-0 cursor-pointer w-full h-full" onchange="if(this.files&&this.files[0])window.handleImageSelection(this.files[0]);">
+            <svg class="w-5 h-5 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/>
+            </svg>
+          </label>
 
-        <!-- Camera Button with wrapped native input -->
-        <label id="cam-btn" title="相機即時拍照" class="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-slate-300 hover:text-indigo-400 transition active:scale-95 shrink-0 border border-slate-700 flex items-center justify-center cursor-pointer select-none relative overflow-hidden">
-          <input type="file" id="camera-input" accept="image/*" capture="environment" class="absolute inset-0 opacity-0 cursor-pointer w-full h-full" onchange="if(this.files&&this.files[0])window.handleImageSelection(this.files[0]);">
-          <svg class="w-5 h-5 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/>
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/>
-          </svg>
-        </label>
+          <!-- Camera Button with wrapped native input -->
+          <label id="cam-btn" title="相機即時拍照" class="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-slate-300 hover:text-indigo-400 transition active:scale-95 shrink-0 border border-slate-700 flex items-center justify-center cursor-pointer select-none relative overflow-hidden">
+            <input type="file" id="camera-input" accept="image/*" capture="environment" class="absolute inset-0 opacity-0 cursor-pointer w-full h-full" onchange="if(this.files&&this.files[0])window.handleImageSelection(this.files[0]);">
+            <svg class="w-5 h-5 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/>
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/>
+            </svg>
+          </label>
 
+          <!-- Textarea (Auto-expand, Ctrl+Enter to send) -->
+          <div class="relative flex-1 min-w-0">
+            <textarea
+              id="prompt-input"
+              rows="1"
+              placeholder="問任何問題... (Ctrl+Enter 發送)"
+              class="w-full bg-slate-800 text-slate-100 placeholder-slate-400 text-xs sm:text-sm rounded-xl px-3.5 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 border border-slate-700 resize-none max-h-32 transition leading-relaxed block overflow-y-auto"
+            ></textarea>
+          </div>
 
-        <!-- Textarea (Auto-expand, Ctrl+Enter to send) -->
-        <div class="relative flex-1 min-w-0">
-          <textarea
-            id="prompt-input"
-            rows="1"
-            placeholder="問任何問題... (Ctrl+Enter 發送)"
-            class="w-full bg-slate-800 text-slate-100 placeholder-slate-400 text-xs sm:text-sm rounded-xl px-3.5 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 border border-slate-700 resize-none max-h-32 transition leading-relaxed block overflow-y-auto"
-          ></textarea>
+          <!-- Send / Stop Button -->
+          <button
+            id="send-btn"
+            type="button"
+            title="送出"
+            onclick="handleSendClick(event)"
+            class="p-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white shadow-md shadow-indigo-600/30 transition active:scale-95 shrink-0 flex items-center justify-center min-w-[42px] min-h-[42px] cursor-pointer"
+          >
+            <!-- Send Icon -->
+            <svg id="send-icon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
+            </svg>
+            <!-- Stop Icon -->
+            <svg id="stop-icon" class="w-5 h-5 hidden text-white animate-pulse" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M6 6h12v12H6z"/>
+            </svg>
+          </button>
         </div>
 
-        <!-- Send / Stop Button -->
-        <button
-          id="send-btn"
-          type="button"
-          title="送出"
-          onclick="handleSendClick(event)"
-          class="p-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white shadow-md shadow-indigo-600/30 transition active:scale-95 shrink-0 flex items-center justify-center min-w-[42px] min-h-[42px] cursor-pointer"
-        >
-          <!-- Send Icon -->
-          <svg id="send-icon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
-          </svg>
-          <!-- Stop Icon -->
-          <svg id="stop-icon" class="w-5 h-5 hidden text-white animate-pulse" fill="currentColor" viewBox="0 0 24 24">
-            <path d="M6 6h12v12H6z"/>
-          </svg>
-        </button>
+        <!-- Compact Footer Info -->
+        <div class="flex items-center justify-between text-[10px] text-slate-400 px-1 select-none">
+          <span>Enter 換行 · Ctrl+Enter 發送 · <code class="text-indigo-300">/</code> 快捷指令</span>
+          <span class="text-indigo-400 font-mono">Crew Pocket 2.0</span>
+        </div>
       </div>
 
-      <!-- Compact Footer Info -->
-      <div class="flex items-center justify-between text-[10px] text-slate-400 px-1 select-none">
-        <span>Enter 換行 · Ctrl+Enter 發送 · <code class="text-indigo-300">/</code> 快捷指令</span>
-        <span class="text-indigo-400 font-mono">Crew Pocket 2.0</span>
+      <!-- 🎙️ Live Voice Call Bottom Ergonomic Dock (Option A: Transforms bottom input into high-touch action bar) -->
+      <div id="live-bottom-dock" class="hidden w-full items-center justify-between gap-2.5 py-1 select-none animate-fadeIn">
+        <!-- 📷 Left: Camera Toggle -->
+        <button id="live-dock-camera-btn" type="button" class="flex-1 max-w-[84px] py-3 rounded-2xl bg-slate-800/90 hover:bg-slate-700 active:scale-95 border border-slate-700 text-slate-200 text-xs font-semibold flex flex-col items-center justify-center gap-1 transition shadow-lg shrink-0" title="開啟/關閉鏡頭">
+          <span class="text-base">📷</span>
+          <span id="live-dock-camera-label" class="text-[10px] font-mono">相機</span>
+        </button>
+
+        <!-- 🎙️ Center: Large Ergonomic Mic Mute/Unmute Action Button -->
+        <button id="live-dock-mute-btn" type="button" class="flex-1 py-3 px-3 rounded-2xl bg-gradient-to-r from-teal-500 to-indigo-600 hover:from-teal-400 hover:to-indigo-500 active:scale-95 text-white font-bold text-xs sm:text-sm shadow-xl shadow-teal-500/30 flex items-center justify-center gap-2 transition border border-teal-400/50 min-h-[52px]" title="點擊切換靜音">
+          <span id="live-dock-mute-icon" class="text-lg animate-pulse">🎙️</span>
+          <span id="live-dock-mute-label" class="tracking-wide font-mono truncate">通話中 · 點擊靜音</span>
+        </button>
+
+        <!-- 🛑 Right: Hangup Button -->
+        <button id="live-dock-hangup-btn" type="button" class="flex-1 max-w-[84px] py-3 rounded-2xl bg-rose-600 hover:bg-rose-500 active:scale-95 text-white text-xs font-bold shadow-lg shadow-rose-600/30 flex flex-col items-center justify-center gap-1 transition shrink-0" title="結束通話">
+          <span class="text-base">🛑</span>
+          <span class="text-[10px] font-mono">掛斷</span>
+        </button>
       </div>
     </div>
   </footer>
@@ -793,7 +816,7 @@
   <script src="/js/ui.js?v=6.50"></script>
   <script src="/js/tools.js?v=6.50"></script>
   <script src="/js/chat.js?v=6.55"></script>
-  <script src="/js/live.js?v=4.9"></script>
+  <script src="/js/live.js?v=5.0"></script>
   <script src="/js/app.js?v=6.49"></script>
 </body>
 </html>
