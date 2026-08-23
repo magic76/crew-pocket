@@ -97,11 +97,10 @@
       const source = this.ctx.createBufferSource();
       source.buffer = audioBuffer;
 
-      // Connect to output (MediaStream bridge takes priority so Android hardware volume keys bind to Media)
+      // 🔊 Always connect to hardware destination directly so camera activation never mutes WebAudio!
+      source.connect(this.ctx.destination);
       if (this.mediaStreamDest) {
-        try { source.connect(this.mediaStreamDest); } catch (e) { source.connect(this.ctx.destination); }
-      } else {
-        source.connect(this.ctx.destination);
+        try { source.connect(this.mediaStreamDest); } catch (e) {}
       }
 
       if (analyser) {
@@ -693,7 +692,16 @@
         cameraStream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: cameraFacingMode, width: { ideal: 1920 }, height: { ideal: 1080 } }
         });
-        if (video) video.srcObject = cameraStream;
+        if (video) {
+          video.muted = true;
+          video.defaultMuted = true;
+          video.playsInline = true;
+          video.srcObject = cameraStream;
+          video.play().catch(() => {});
+        }
+        if (audioContext && audioContext.state === 'suspended') {
+          audioContext.resume().catch(() => {});
+        }
         if (box) box.classList.remove('hidden');
         if (btn) {
           btn.classList.replace('bg-slate-800', 'bg-indigo-600');
