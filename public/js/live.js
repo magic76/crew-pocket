@@ -55,7 +55,7 @@
   const messagesContainer = document.getElementById('messages-container');
 
   // ==========================================
-  // 🔊 Gapless 24kHz PCM Audio Stream Player (with 35ms Jitter Buffer & MediaStream Bridge)
+  // 🔊 Gapless 24kHz PCM Audio Stream Player (Single Pristine Audio Track)
   // ==========================================
   class LiveAudioPlayer {
     constructor(ctx) {
@@ -63,30 +63,6 @@
       this.nextStartTime = 0;
       this.activeSources = [];
       this.jitterBufferSec = 0.035; // 35ms smooth jitter buffer to eliminate pops/stutters
-
-      // 🔊 HTML5 Media Output Bridge: Routes audio through standard HTML5 audio tag to lock Android hardware volume keys to Media Volume (STREAM_MUSIC)
-      try {
-        this.mediaStreamDest = this.ctx.createMediaStreamDestination();
-        this.audioEl = document.createElement('audio');
-        this.audioEl.autoplay = true;
-        this.audioEl.playsInline = true;
-        this.audioEl.srcObject = this.mediaStreamDest.stream;
-        this.audioEl.play().catch(() => {});
-
-        // Keep a tiny continuous micro-signal on mediaStreamDest to lock Android volume keys onto Media channel
-        if (typeof this.ctx.createConstantSource === 'function') {
-          const silentOsc = this.ctx.createConstantSource();
-          const silentGain = this.ctx.createGain();
-          silentGain.gain.value = 0.00001;
-          silentOsc.connect(silentGain);
-          silentGain.connect(this.mediaStreamDest);
-          silentOsc.start();
-          this.silentOsc = silentOsc;
-        }
-      } catch (e) {
-        this.mediaStreamDest = null;
-        this.audioEl = null;
-      }
     }
 
     playChunk(float32Array, sampleRate = 24000) {
@@ -101,11 +77,8 @@
       const source = this.ctx.createBufferSource();
       source.buffer = audioBuffer;
 
-      // 🔊 Always connect to hardware destination directly so camera activation never mutes WebAudio!
+      // 🔊 Single pristine direct hardware connection (no duplicate media bridge)
       source.connect(this.ctx.destination);
-      if (this.mediaStreamDest) {
-        try { source.connect(this.mediaStreamDest); } catch (e) {}
-      }
 
       if (analyser) {
         source.connect(analyser);
@@ -126,14 +99,20 @@
         if (idx > -1) this.activeSources.splice(idx, 1);
         lastAiSpokeTime = Date.now();
         if (this.activeSources.length === 0 && isConnected) {
-          isAiResponding = false;
-          hasSentFrameForCurrentTurn = false;
-          updateCameraBadge(false, '待命中 (說話時自動發送)');
-          if (isMuted) {
-            updateCardStatus('muted', '🔇 麥克風已靜音');
-          } else {
-            updateCardStatus('listening', '🎙️ 可以開始說話');
-          }
+          // 350ms room echo clearance buffer before re-opening mic
+          setTimeout(() => {
+            if (this.activeSources.length === 0 && isConnected) {
+              isAiResponding = false;
+              hasSentFrameForCurrentTurn = false;
+              updateDockControls();
+              updateCameraBadge(false, '待命中 (說話時自動發送)');
+              if (isMuted) {
+                updateCardStatus('muted', '🔇 麥克風已靜音');
+              } else {
+                updateCardStatus('listening', '🎙️ 可以開始說話');
+              }
+            }
+          }, 350);
         }
       };
     }
@@ -145,16 +124,6 @@
       this.activeSources = [];
       if (this.ctx) {
         this.nextStartTime = this.ctx.currentTime;
-      }
-      if (this.silentOsc) {
-        try { this.silentOsc.stop(); } catch (e) {}
-        this.silentOsc = null;
-      }
-      if (this.audioEl) {
-        try {
-          this.audioEl.srcObject = null;
-          this.audioEl.pause();
-        } catch (e) {}
       }
     }
   }
