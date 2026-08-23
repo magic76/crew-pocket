@@ -8,6 +8,8 @@ const {
   PORT,
   HOST,
   PUBLIC_DIR,
+  LEGACY_UPLOADS_DIR,
+  PREVIOUS_UPLOADS_DIR,
   UPLOADS_DIR,
   BRAIN_DIR,
   MIME_TYPES,
@@ -185,10 +187,15 @@ async function handleImageProxy(parsedUrl, res) {
 
     const HOME_DIR = '/data/data/com.termux/files/home';
     const allowedRoots = [UPLOADS_DIR, BRAIN_DIR, HOME_DIR, '/sdcard', '/storage'];
+    const isLegacyUploadPath = [LEGACY_UPLOADS_DIR, PREVIOUS_UPLOADS_DIR]
+      .some(root => imgPath.startsWith(`${root}${path.sep}`));
+    const requestedPath = isLegacyUploadPath
+      ? path.join(UPLOADS_DIR, path.basename(imgPath))
+      : imgPath;
     let resolvedPath;
     try {
       // realpath resolves symlinks first, so a permitted-looking path cannot escape via one.
-      resolvedPath = await fsPromises.realpath(imgPath);
+      resolvedPath = await fsPromises.realpath(requestedPath);
     } catch (err) {
       res.writeHead(404, { 'Content-Type': 'text/plain' });
       return res.end('Image not found');

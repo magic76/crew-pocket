@@ -643,7 +643,7 @@
         sessionSnapshots.push(dataUrl);
       }
 
-      // 2. Save snapshot locally to uploads directory
+      // 2. Save the manual snapshot locally to Pictures/crew-pocket
       fetch('/api/upload', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1531,8 +1531,9 @@
     const secs = durationSec % 60;
     const durationText = mins > 0 ? `${mins} 分 ${secs} 秒` : `${secs} 秒`;
 
-    // 🌟 ALWAYS Render Memo Card if call lasted at least 2 seconds, or had turns/snapshots/audio!
-    if (durationSec >= 2 || turnsToSync.length > 0 || snapshotsToSync.length > 0 || audioToTranscribe.length > 8000) {
+    // 🚫 Ignore accidental taps: a call must last at least five seconds before
+    // we create a memo, transcribe audio, or sync anything into conversation history.
+    if (durationSec >= 5) {
       const memoCard = buildCallSummaryCardHtml(turnsToSync, durationSec, voiceName, snapshotsToSync, memoId);
       if (messagesContainer) {
         messagesContainer.appendChild(memoCard);
