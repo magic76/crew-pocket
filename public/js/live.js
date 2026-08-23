@@ -509,12 +509,10 @@
       if (ws && ws.readyState === WebSocket.OPEN) {
         const videoMsg = {
           realtimeInput: {
-            mediaChunks: [
-              {
-                mimeType: "image/jpeg",
-                data: cleanBase64
-              }
-            ]
+            video: {
+              mimeType: "image/jpeg",
+              data: cleanBase64
+            }
           }
         };
         ws.send(JSON.stringify(videoMsg));
@@ -636,12 +634,10 @@
 
             const videoMsg = {
               realtimeInput: {
-                mediaChunks: [
-                  {
-                    mimeType: "image/jpeg",
-                    data: cleanBase64
-                  }
-                ]
+                video: {
+                  mimeType: "image/jpeg",
+                  data: cleanBase64
+                }
               }
             };
             ws.send(JSON.stringify(videoMsg));
@@ -945,12 +941,10 @@
 
           const realTimeMessage = {
             realtimeInput: {
-              mediaChunks: [
-                {
-                  mimeType: "audio/pcm;rate=16000",
-                  data: base64Audio
-                }
-              ]
+              audio: {
+                mimeType: "audio/pcm;rate=16000",
+                data: base64Audio
+              }
             }
           };
           ws.send(JSON.stringify(realTimeMessage));
