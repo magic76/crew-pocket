@@ -581,7 +581,21 @@
     const dockMuteContainer = document.getElementById('live-dock-mute-icon-container');
     const dockCameraBtn = document.getElementById('live-dock-camera-btn');
 
-    if (isMuted) {
+    const isAiSpeaking = isAiResponding || (audioPlayer && audioPlayer.activeSources.length > 0);
+
+    if (isAiSpeaking) {
+      if (dockMuteBtn) {
+        dockMuteBtn.className = 'flex-1 h-[52px] px-4 rounded-2xl bg-gradient-to-r from-amber-500 to-rose-600 hover:from-amber-400 hover:to-rose-500 active:scale-95 text-white shadow-xl shadow-amber-500/40 flex items-center justify-center transition border border-amber-300/50';
+        dockMuteBtn.title = 'AI 說話中 · 點擊打斷';
+      }
+      if (dockMuteContainer) {
+        dockMuteContainer.innerHTML = `
+          <svg class="w-7 h-7 text-white animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"/>
+          </svg>
+        `;
+      }
+    } else if (isMuted) {
       if (dockMuteBtn) {
         dockMuteBtn.className = 'flex-1 h-[52px] px-4 rounded-2xl bg-rose-900/90 hover:bg-rose-800 active:scale-95 text-rose-200 shadow-xl shadow-rose-950/60 flex items-center justify-center transition border border-rose-500/60';
         dockMuteBtn.title = '麥克風已靜音 · 點擊開啟';
@@ -631,6 +645,18 @@
   }
 
   function toggleMute() {
+    // 🛑 Tap-to-Interrupt: If AI is speaking, clicking center button instantly interrupts the AI
+    if (isAiResponding || (audioPlayer && audioPlayer.activeSources.length > 0)) {
+      if (audioPlayer) audioPlayer.stopAll();
+      isAiResponding = false;
+      hasSentFrameForCurrentTurn = false;
+      lastAiSpokeTime = 0;
+      updateCardStatus('listening', '🎙️ 可以開始說話');
+      updateDockControls();
+      if (navigator.vibrate) navigator.vibrate(30);
+      return;
+    }
+
     isMuted = !isMuted;
 
     // 🛡️ Smooth Silence Flush: send 100ms zeroed audio frame so Gemini server VAD cleanly detects turn completion
@@ -989,16 +1015,18 @@
             audioPlayer.stopAll();
             isAiResponding = false;
             hasSentFrameForCurrentTurn = false;
+            updateDockControls();
             updateCameraBadge(false, '待命中 (說話時自動發送)');
-            updateCardStatus('listening', '🎙️ 聆聽中...');
+            updateCardStatus('listening', '🎙️ 可以開始說話');
             return;
           }
 
           const modelTurn = sc.modelTurn || sc.model_turn;
           if (modelTurn && modelTurn.parts) {
             isAiResponding = true;
+            updateDockControls();
             updateCameraBadge(false, 'AI 說話中 (暫停傳圖)');
-            updateCardStatus('speaking', '🔊 Gemini 說話中...');
+            updateCardStatus('speaking', '🔊 Gemini 說話中 · 點擊按鈕可打斷');
             for (const part of modelTurn.parts) {
               const inlineData = part.inlineData || part.inline_data;
               if (inlineData && inlineData.data) {
@@ -1051,9 +1079,20 @@
         }
       };
 
-      // 5. Mic PCM Stream (100ms buffering & Adaptive RMS Voice Activity Detection with Echo-Gate)
+      // 5. Mic PCM Stream (Option A: 100% Pure Turn Lock & Half-Duplex Cutoff)
       micProcessorNode.onaudioprocess = (e) => {
         if (!isConnected || isMuted || !ws || ws.readyState !== WebSocket.OPEN) return;
+
+        const isAiSpeaking = isAiResponding || (audioPlayer && audioPlayer.activeSources.length > 0);
+        const inAiCooldown = (Date.now() - lastAiSpokeTime) < 500;
+
+        // 🛡️ Option A Turn-Lock: While AI is speaking or in 500ms room echo cooldown, ZERO mic data is sent to Google
+        if (isAiSpeaking || inAiCooldown) {
+          audioSendBuffer = [];
+          sustainedSpeechCount = 0;
+          return;
+        }
+
         const inputData = e.inputBuffer.getChannelData(0);
 
         // Audio energy calculation
@@ -1063,27 +1102,8 @@
         }
         const rms = Math.sqrt(sumSquares / inputData.length);
 
-        const isAiSpeaking = (audioPlayer && audioPlayer.activeSources.length > 0) || isAiResponding;
-        const inAiCooldown = (Date.now() - lastAiSpokeTime) < 1200;
-
-        // 🛡️ Echo-Gate: If AI is actively speaking or just finished (<1.2s cooldown), mute mic input to prevent speaker acoustic feedback loop
-        if (isAiSpeaking || inAiCooldown) {
-          // If user shouts (loud intentional barge-in), allow interrupt
-          if (rms > 0.15) {
-            audioPlayer.stopAll();
-            isAiResponding = false;
-            hasSentFrameForCurrentTurn = false;
-            lastAiSpokeTime = 0;
-          } else {
-            // Suppress microphone input so Gemini never hears its own speaker output!
-            audioSendBuffer = [];
-            sustainedSpeechCount = 0;
-            return;
-          }
-        }
-
         // Active user speech tracking
-        if (rms > 0.018) {
+        if (rms > 0.015) {
           sustainedSpeechCount++;
           lastUserSpokeTime = Date.now();
 
