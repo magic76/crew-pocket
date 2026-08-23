@@ -38,6 +38,7 @@
   let lastUserSpokeTime = 0;
   let lastVideoFrameSentTime = 0;
   let isCameraExpanded = false;
+  let liveCallStartTs = 0;
 
   // DOM References
   const liveVoiceBtn = document.getElementById('live-voice-btn');
@@ -50,13 +51,14 @@
   const messagesContainer = document.getElementById('messages-container');
 
   // ==========================================
-  // 🔊 Gapless 24kHz PCM Audio Stream Player
+  // 🔊 Gapless 24kHz PCM Audio Stream Player (with 35ms Jitter Buffer)
   // ==========================================
   class LiveAudioPlayer {
     constructor(ctx) {
       this.ctx = ctx;
       this.nextStartTime = 0;
       this.activeSources = [];
+      this.jitterBufferSec = 0.035; // 35ms smooth jitter buffer to eliminate pops/stutters
     }
 
     playChunk(float32Array, sampleRate = 24000) {
@@ -77,7 +79,11 @@
       }
 
       const currentTime = this.ctx.currentTime;
-      const startTime = Math.max(currentTime, this.nextStartTime);
+      let startTime = this.nextStartTime;
+      if (startTime < currentTime) {
+        startTime = currentTime + this.jitterBufferSec;
+      }
+
       source.start(startTime);
       this.nextStartTime = startTime + audioBuffer.duration;
 
@@ -731,6 +737,7 @@
     audioSendBuffer = [];
     isMuted = false;
     isCameraOn = false;
+    liveCallStartTs = Date.now();
 
     try {
       // 2. Web Audio Context
@@ -943,6 +950,56 @@
     }
   }
 
+  // ==========================================
+  // 📝 Post-Call Markdown Summary Memo Card
+  // ==========================================
+  function buildCallSummaryCardHtml(turns, durationSec, voiceName) {
+    const mins = Math.floor(durationSec / 60);
+    const secs = durationSec % 60;
+    const durationText = mins > 0 ? `${mins} 分 ${secs} 秒` : `${secs} 秒`;
+    const timeStr = new Date().toLocaleTimeString('zh-TW', { hour12: false, hour: '2-digit', minute: '2-digit' });
+
+    const card = document.createElement('div');
+    card.className = 'flex w-full max-w-2xl mx-auto min-w-0 justify-start my-3 animate-fadeIn select-text';
+
+    let dialogHtml = '';
+    turns.forEach(t => {
+      if (t.user) {
+        dialogHtml += `<div class="p-2.5 rounded-xl bg-indigo-950/40 border border-indigo-500/20 text-indigo-200 text-xs mb-1.5"><span class="font-bold text-indigo-300">🗣️ 您：</span>${escapeHtml(t.user)}</div>`;
+      }
+      if (t.model) {
+        const formattedModel = typeof formatMessageContent === 'function' ? formatMessageContent(t.model) : escapeHtml(t.model);
+        dialogHtml += `<div class="p-2.5 rounded-xl bg-slate-900/90 border border-teal-500/30 text-slate-200 text-xs mb-1.5"><span class="font-bold text-teal-300">✨ Gemini：</span><div class="mt-0.5">${formattedModel}</div></div>`;
+      }
+    });
+
+    card.innerHTML = `
+      <div class="bg-gradient-to-b from-slate-900 via-slate-900 to-teal-950/30 border border-teal-500/50 text-slate-200 rounded-2xl p-3.5 sm:p-4 text-xs sm:text-sm shadow-xl w-full">
+        <div class="flex items-center justify-between border-b border-teal-800/60 pb-2 mb-2.5">
+          <div class="flex items-center gap-1.5">
+            <span class="px-2.5 py-0.5 rounded-full bg-teal-500/20 text-teal-300 border border-teal-500/40 text-[10px] font-mono font-bold flex items-center gap-1">
+              <span>🎙️</span>
+              <span>語音通話備忘卡</span>
+            </span>
+            <span class="text-[10px] text-teal-400 font-mono">⏱️ ${durationText}</span>
+          </div>
+          <span class="text-[10px] text-slate-400 font-mono">${timeStr}</span>
+        </div>
+
+        <div class="space-y-1 max-h-72 overflow-y-auto pr-1">
+          ${dialogHtml || '<div class="text-slate-400 text-xs italic">通話結束（未記錄到發言）</div>'}
+        </div>
+
+        <div class="mt-2.5 pt-2 border-t border-slate-800/80 text-[10px] text-slate-400 font-mono flex items-center justify-between">
+          <span>💡 內容已自動記錄至歷史對話</span>
+          <span class="text-teal-400">✨ Gemini 2.0 Live (${escapeHtml(voiceName)})</span>
+        </div>
+      </div>
+    `;
+
+    return card;
+  }
+
   async function endLiveSession() {
     isConnected = false;
     stopVisualizer();
@@ -1008,7 +1065,7 @@
       currentTurnModel = '';
     }
 
-    // 🔒 Silent Background Sync to Brain Logs (Zero DOM reload / Zero visual interruption)
+    // 🔒 Silent Background Sync & Visual Summary Memo Card
     const turnsToSync = sessionDialogueTurns.slice();
     sessionDialogueTurns = [];
 
@@ -1018,6 +1075,16 @@
       const combinedModel = turnsToSync.map(t => t.model).filter(Boolean).join('\n\n');
 
       if (combinedUser || combinedModel) {
+        // Render beautiful Summary Memo Card to chat timeline
+        const durationSec = liveCallStartTs > 0 ? Math.max(1, Math.round((Date.now() - liveCallStartTs) / 1000)) : 0;
+        const voiceName = getSelectedVoice();
+        const memoCard = buildCallSummaryCardHtml(turnsToSync, durationSec, voiceName);
+        if (messagesContainer) {
+          messagesContainer.appendChild(memoCard);
+          if (typeof enhanceCodeBlocks === 'function') enhanceCodeBlocks(memoCard);
+          if (typeof scrollToBottom === 'function') scrollToBottom(true);
+        }
+
         console.log('[Live Silent Sync] Writing turns to brain log in background...', { user: combinedUser, model: combinedModel });
         fetch('/api/live-sync', {
           method: 'POST',
