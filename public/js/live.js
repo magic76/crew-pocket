@@ -39,6 +39,8 @@
   let lastVideoFrameSentTime = 0;
   let isCameraExpanded = false;
   let liveCallStartTs = 0;
+  let isAiResponding = false;
+  let hasSentFrameForCurrentTurn = false;
 
   // DOM References
   const liveVoiceBtn = document.getElementById('live-voice-btn');
@@ -121,6 +123,9 @@
         const idx = this.activeSources.indexOf(source);
         if (idx > -1) this.activeSources.splice(idx, 1);
         if (this.activeSources.length === 0 && isConnected) {
+          isAiResponding = false;
+          hasSentFrameForCurrentTurn = false;
+          updateCameraBadge(false, '待命中 (說話時自動發送)');
           if (isMuted) {
             updateCardStatus('muted', '🔇 麥克風已靜音');
           } else {
@@ -721,59 +726,13 @@
           }
         }, 120);
 
-        const tempCanvas = document.createElement('canvas');
-        const tempCtx = tempCanvas.getContext('2d');
-
-        if (cameraInterval) clearInterval(cameraInterval);
-        cameraInterval = setInterval(() => {
-          if (!isConnected || !ws || ws.readyState !== WebSocket.OPEN || !isCameraOn || !video) return;
-
-          // 1. If Gemini is speaking, pause camera transmission to prioritize audio stream & avoid echo
-          if (audioPlayer && audioPlayer.activeSources.length > 0) {
-            updateCameraBadge(false, 'AI 說話中 (暫停傳圖)');
-            return;
-          }
-
-          // 2. Smart VAD: only send when user is speaking or just spoke within 2.5s
-          const isUserSpeaking = (Date.now() - lastUserSpokeTime) <= 2500;
-          if (!isUserSpeaking) {
-            updateCameraBadge(false, '待命中 (說話時自動發送)');
-            return;
-          }
-
-          // 3. Smart Throttle: Send at most 1 frame every 2.0 seconds (2000ms)
-          if (Date.now() - lastVideoFrameSentTime < 2000) return;
-
-          if (video.videoWidth > 0) {
-            lastVideoFrameSentTime = Date.now();
-            tempCanvas.width = 480;
-            tempCanvas.height = Math.round((video.videoHeight / video.videoWidth) * 480);
-            tempCtx.drawImage(video, 0, 0, tempCanvas.width, tempCanvas.height);
-            const jpegDataUrl = tempCanvas.toDataURL('image/jpeg', 0.6);
-            const cleanBase64 = jpegDataUrl.replace(/^data:image\/\w+;base64,/, '');
-
-            const videoMsg = {
-              realtimeInput: {
-                video: {
-                  mimeType: "image/jpeg",
-                  data: cleanBase64
-                }
-              }
-            };
-            ws.send(JSON.stringify(videoMsg));
-            updateCameraBadge(true, '🟢 正在傳送畫面 (2s/幀)');
-          }
-        }, 500);
+        updateCameraBadge(false, '待命中 (說話時自動發送)');
 
       } catch (err) {
         alert('無法開啟相機：' + err.message);
         isCameraOn = false;
       }
     } else {
-      if (cameraInterval) {
-        clearInterval(cameraInterval);
-        cameraInterval = null;
-      }
       if (cameraStream) {
         cameraStream.getTracks().forEach(t => t.stop());
         cameraStream = null;
@@ -810,6 +769,45 @@
       } catch (e) {
         console.warn('Flip Camera Failed', e);
       }
+    }
+  }
+
+  function trySendVideoFrame() {
+    if (!isConnected || !ws || ws.readyState !== WebSocket.OPEN || !isCameraOn) return;
+    if (isAiResponding || (audioPlayer && audioPlayer.activeSources.length > 0)) {
+      updateCameraBadge(false, 'AI 說話中 (暫停傳圖)');
+      return;
+    }
+    if (hasSentFrameForCurrentTurn) {
+      return;
+    }
+
+    const video = document.getElementById('live-card-video');
+    if (!video || video.videoWidth === 0) return;
+
+    try {
+      const tempCanvas = document.createElement('canvas');
+      const tempCtx = tempCanvas.getContext('2d');
+      tempCanvas.width = 480;
+      tempCanvas.height = Math.round((video.videoHeight / video.videoWidth) * 480);
+      tempCtx.drawImage(video, 0, 0, tempCanvas.width, tempCanvas.height);
+      const jpegDataUrl = tempCanvas.toDataURL('image/jpeg', 0.6);
+      const cleanBase64 = jpegDataUrl.replace(/^data:image\/\w+;base64,/, '');
+
+      const videoMsg = {
+        realtimeInput: {
+          video: {
+            mimeType: "image/jpeg",
+            data: cleanBase64
+          }
+        }
+      };
+      ws.send(JSON.stringify(videoMsg));
+      hasSentFrameForCurrentTurn = true;
+      lastVideoFrameSentTime = Date.now();
+      updateCameraBadge(true, '📸 已捕捉畫面送出給 AI');
+    } catch (e) {
+      console.warn('[Video Frame Send Error]', e);
     }
   }
 
@@ -983,12 +981,17 @@
           if (sc.interrupted) {
             console.log('[Gemini Live] Interrupted by user!');
             audioPlayer.stopAll();
+            isAiResponding = false;
+            hasSentFrameForCurrentTurn = false;
+            updateCameraBadge(false, '待命中 (說話時自動發送)');
             updateCardStatus('listening', '🎙️ 聆聽中...');
             return;
           }
 
           const modelTurn = sc.modelTurn || sc.model_turn;
           if (modelTurn && modelTurn.parts) {
+            isAiResponding = true;
+            updateCameraBadge(false, 'AI 說話中 (暫停傳圖)');
             updateCardStatus('speaking', '🔊 Gemini 說話中...');
             for (const part of modelTurn.parts) {
               const inlineData = part.inlineData || part.inline_data;
@@ -1025,6 +1028,8 @@
       ws.onclose = (e) => {
         console.log('[Gemini Live] Closed code:', e.code, 'reason:', e.reason);
         isConnected = false;
+        isAiResponding = false;
+        hasSentFrameForCurrentTurn = false;
         stopSpeechRecognition();
         if (e.code !== 1000) {
           updateCardStatus('error', `⚠️ 連線中斷 (${e.code})`);
@@ -1056,6 +1061,10 @@
 
         if (rms > vadThreshold) {
           lastUserSpokeTime = Date.now();
+          // Trigger single synchronized camera snapshot upon speaking
+          if (isCameraOn && !isAiResponding && !hasSentFrameForCurrentTurn) {
+            trySendVideoFrame();
+          }
         }
 
         const downsampled = downsampleBuffer(inputData, audioContext.sampleRate, 16000);
