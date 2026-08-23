@@ -92,65 +92,34 @@
     return new Blob([buffer], { type: 'audio/wav' });
   }
 
-  async function generatePostCallSmartTranscript(audioBlob, apiKey) {
-    if (!audioBlob || audioBlob.size < 1000 || !apiKey) return null;
+  async function generatePostCallSmartTranscript(audioBlob, apiKey, sampleCount = 0, durationSec = 0) {
+    if (!audioBlob || audioBlob.size < 1000 || !apiKey) {
+      return { success: false, error: '音訊過短 (錄音長度不足) 或未設定 API Key' };
+    }
+
     const base64Audio = await new Promise((resolve) => {
       const reader = new FileReader();
       reader.onloadend = () => resolve(reader.result.split(',')[1]);
       reader.readAsDataURL(audioBlob);
     });
 
-    const modelsToTry = ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'];
-    for (const m of modelsToTry) {
-      try {
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${encodeURIComponent(apiKey)}`;
-        const payload = {
-          contents: [
-            {
-              parts: [
-                {
-                  text: "這是一段即時雙向語音通話的錄音檔（包含用戶提問與 AI 助理的回應）。請仔細聆聽音訊，並生成繁體中文（台灣）的通話備忘錄。請嚴格輸出純 JSON 物件（不要 markdown 程式碼區塊標記、不要額外文字）：\n{\n  \"summary\": [\"重點結論 1\", \"重點結論 2\"],\n  \"transcript\": [\n    {\"speaker\": \"user\", \"text\": \"用戶說的話\"},\n    {\"speaker\": \"model\", \"text\": \"AI 回應的話\"}\n  ]\n}"
-                },
-                {
-                  inlineData: {
-                    mimeType: "audio/wav",
-                    data: base64Audio
-                  }
-                }
-              ]
-            }
-          ],
-          generationConfig: {
-            responseMimeType: "application/json"
-          }
-        };
-
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 12000);
-
-        const res = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-          signal: controller.signal
-        });
-        clearTimeout(timeoutId);
-
-        const data = await res.json();
-        if (data.error) {
-          console.warn(`[Transcription ${m} API Error]`, data.error);
-          continue;
-        }
-        let rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (rawText) {
-          rawText = rawText.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/i, '').trim();
-          return JSON.parse(rawText);
-        }
-      } catch (err) {
-        console.warn(`[Transcription ${m} Failed]`, err);
-      }
+    try {
+      const res = await fetch('/api/live-transcribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          api_key: apiKey,
+          audio_base64: base64Audio,
+          mime_type: 'audio/wav',
+          sample_count: sampleCount,
+          duration_sec: durationSec
+        })
+      });
+      const data = await res.json();
+      return data;
+    } catch (err) {
+      return { success: false, error: '連線伺服器異常：' + err.message };
     }
-    return null;
   }
 
   // DOM References
@@ -1548,24 +1517,31 @@
       // Trigger AI Audio Transcription & Summarization in background using Flash
       if (audioToTranscribe.length > 8000 && apiKey) {
         const wavBlob = encodeWAV(audioToTranscribe, 16000);
-        generatePostCallSmartTranscript(wavBlob, apiKey).then(result => {
+        generatePostCallSmartTranscript(wavBlob, apiKey, audioToTranscribe.length, durationSec).then(result => {
           const highlightsEl = document.getElementById(`highlights-container-${memoId}`);
           const transcriptEl = document.getElementById(`transcript-container-${memoId}`);
 
-          if (!result) {
+          if (!result || !result.success) {
+            const errorMsg = result ? result.error : '未知伺服器異常';
             if (highlightsEl) {
               highlightsEl.innerHTML = `
-                <div class="p-3 rounded-xl bg-slate-900/60 border border-slate-700/60 mb-2.5">
-                  <div class="flex items-center gap-1.5 text-xs font-bold text-slate-300 mb-1">
-                    <span>📌</span>
-                    <span>通話已完成</span>
+                <div class="p-3 rounded-xl bg-rose-950/40 border border-rose-500/50 text-rose-200 text-xs mb-2.5">
+                  <div class="font-bold text-rose-300 mb-1 flex items-center gap-1.5">
+                    <span>⚠️</span>
+                    <span>語音轉錄診斷報告 (步驟 3 異常)</span>
                   </div>
-                  <p class="text-xs text-slate-400 font-mono">⏱️ 時長：${durationText} · 音色：${voiceName}</p>
+                  <div class="text-[11px] font-mono text-rose-200 bg-rose-950/80 p-2 rounded border border-rose-500/30 overflow-x-auto leading-relaxed mb-2">
+                    ${escapeHtml(errorMsg)}
+                  </div>
+                  <div class="text-[10px] text-slate-400 font-mono flex items-center justify-between">
+                    <span>📊 錄音樣本：${audioToTranscribe.length.toLocaleString()} 點 (${durationSec}秒)</span>
+                    <span>📦 WAV：${Math.round(wavBlob.size / 1024)} KB</span>
+                  </div>
                 </div>
               `;
             }
             if (transcriptEl) {
-              transcriptEl.innerHTML = `<div class="text-slate-400 text-xs italic">通話音訊已記錄 (${durationText})</div>`;
+              transcriptEl.innerHTML = `<div class="text-slate-400 text-xs italic">通話音訊已暫存 (${durationText})，可檢視上方診斷報告</div>`;
             }
             return;
           }
@@ -1643,12 +1619,14 @@
           const transcriptEl = document.getElementById(`transcript-container-${memoId}`);
           if (highlightsEl) {
             highlightsEl.innerHTML = `
-              <div class="p-3 rounded-xl bg-slate-900/60 border border-slate-700/60 mb-2.5">
-                <div class="flex items-center gap-1.5 text-xs font-bold text-slate-300 mb-1">
-                  <span>📌</span>
-                  <span>通話已完成</span>
+              <div class="p-3 rounded-xl bg-rose-950/40 border border-rose-500/50 text-rose-200 text-xs mb-2.5">
+                <div class="font-bold text-rose-300 mb-1 flex items-center gap-1.5">
+                  <span>⚠️</span>
+                  <span>語音轉錄診斷報告 (網路或連線失敗)</span>
                 </div>
-                <p class="text-xs text-slate-400 font-mono">⏱️ 時長：${durationText} · 音色：${voiceName}</p>
+                <div class="text-[11px] font-mono text-rose-200 bg-rose-950/80 p-2 rounded border border-rose-500/30 overflow-x-auto leading-relaxed mb-2">
+                  ${escapeHtml(err.message || '請求異常')}
+                </div>
               </div>
             `;
           }
