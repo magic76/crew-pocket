@@ -10,7 +10,7 @@
   const VOICE_KEY = 'crew_pocket_live_voice';
   const MODEL_KEY = 'crew_pocket_live_model';
   const DEFAULT_VOICE = 'Puck';
-  const DEFAULT_MODEL = 'models/gemini-3.1-flash-live-preview';
+  const DEFAULT_MODEL = 'models/gemini-2.0-flash-exp';
 
   // State
   let ws = null;
@@ -709,6 +709,10 @@
 
   function getSelectedModel() {
     let m = localStorage.getItem(MODEL_KEY) || DEFAULT_MODEL;
+    if (m.includes('3.1') || (!m.includes('gemini-2.0') && !m.includes('gemini-2.5'))) {
+      m = 'models/gemini-2.0-flash-exp';
+      localStorage.setItem(MODEL_KEY, m);
+    }
     if (!m.startsWith('models/')) m = 'models/' + m;
     return m;
   }
