@@ -41,6 +41,8 @@
   let liveCallStartTs = 0;
   let isAiResponding = false;
   let hasSentFrameForCurrentTurn = false;
+  let lastAiSpokeTime = 0;
+  let sustainedSpeechCount = 0;
 
   // DOM References
   const liveVoiceBtn = document.getElementById('live-voice-btn');
@@ -122,6 +124,7 @@
       source.onended = () => {
         const idx = this.activeSources.indexOf(source);
         if (idx > -1) this.activeSources.splice(idx, 1);
+        lastAiSpokeTime = Date.now();
         if (this.activeSources.length === 0 && isConnected) {
           isAiResponding = false;
           hasSentFrameForCurrentTurn = false;
@@ -774,11 +777,14 @@
 
   function trySendVideoFrame() {
     if (!isConnected || !ws || ws.readyState !== WebSocket.OPEN || !isCameraOn) return;
-    if (isAiResponding || (audioPlayer && audioPlayer.activeSources.length > 0)) {
+    if (isAiResponding || (audioPlayer && audioPlayer.activeSources.length > 0) || (Date.now() - lastAiSpokeTime < 1200)) {
       updateCameraBadge(false, 'AI 說話中 (暫停傳圖)');
       return;
     }
     if (hasSentFrameForCurrentTurn) {
+      return;
+    }
+    if (Date.now() - lastVideoFrameSentTime < 3000) {
       return;
     }
 
@@ -1045,26 +1051,50 @@
         }
       };
 
-      // 5. Mic PCM Stream (100ms buffering & Adaptive RMS Voice Activity Detection)
+      // 5. Mic PCM Stream (100ms buffering & Adaptive RMS Voice Activity Detection with Echo-Gate)
       micProcessorNode.onaudioprocess = (e) => {
         if (!isConnected || isMuted || !ws || ws.readyState !== WebSocket.OPEN) return;
         const inputData = e.inputBuffer.getChannelData(0);
 
-        // Audio energy calculation to track active user speech
+        // Audio energy calculation
         let sumSquares = 0;
         for (let i = 0; i < inputData.length; i++) {
           sumSquares += inputData[i] * inputData[i];
         }
         const rms = Math.sqrt(sumSquares / inputData.length);
-        const isAiSpeaking = audioPlayer && audioPlayer.activeSources.length > 0;
-        const vadThreshold = isAiSpeaking ? 0.045 : 0.015;
 
-        if (rms > vadThreshold) {
-          lastUserSpokeTime = Date.now();
-          // Trigger single synchronized camera snapshot upon speaking
-          if (isCameraOn && !isAiResponding && !hasSentFrameForCurrentTurn) {
-            trySendVideoFrame();
+        const isAiSpeaking = (audioPlayer && audioPlayer.activeSources.length > 0) || isAiResponding;
+        const inAiCooldown = (Date.now() - lastAiSpokeTime) < 1200;
+
+        // 🛡️ Echo-Gate: If AI is actively speaking or just finished (<1.2s cooldown), mute mic input to prevent speaker acoustic feedback loop
+        if (isAiSpeaking || inAiCooldown) {
+          // If user shouts (loud intentional barge-in), allow interrupt
+          if (rms > 0.15) {
+            audioPlayer.stopAll();
+            isAiResponding = false;
+            hasSentFrameForCurrentTurn = false;
+            lastAiSpokeTime = 0;
+          } else {
+            // Suppress microphone input so Gemini never hears its own speaker output!
+            audioSendBuffer = [];
+            sustainedSpeechCount = 0;
+            return;
           }
+        }
+
+        // Active user speech tracking
+        if (rms > 0.018) {
+          sustainedSpeechCount++;
+          lastUserSpokeTime = Date.now();
+
+          // Require at least 2 consecutive speech frames (~120ms) before triggering camera snapshot
+          if (isCameraOn && !isAiResponding && !hasSentFrameForCurrentTurn && sustainedSpeechCount >= 2) {
+            if (Date.now() - lastVideoFrameSentTime > 3000) {
+              trySendVideoFrame();
+            }
+          }
+        } else {
+          sustainedSpeechCount = Math.max(0, sustainedSpeechCount - 1);
         }
 
         const downsampled = downsampleBuffer(inputData, audioContext.sampleRate, 16000);
