@@ -44,6 +44,100 @@
   let lastAiSpokeTime = 0;
   let sustainedSpeechCount = 0;
   let sessionSnapshots = [];
+  let fullSessionAudioChunks = [];
+
+  function recordAudioSegment(role, float32Data, inputSampleRate = 16000) {
+    if (!float32Data || float32Data.length === 0) return;
+    let resampled16k = float32Data;
+    if (inputSampleRate !== 16000) {
+      resampled16k = downsampleBuffer(float32Data, inputSampleRate, 16000);
+    }
+    if (fullSessionAudioChunks.length < 1800000) {
+      for (let i = 0; i < resampled16k.length; i++) {
+        fullSessionAudioChunks.push(resampled16k[i]);
+      }
+    }
+  }
+
+  function encodeWAV(samples, sampleRate = 16000) {
+    const buffer = new ArrayBuffer(44 + samples.length * 2);
+    const view = new DataView(buffer);
+
+    function writeString(offset, string) {
+      for (let i = 0; i < string.length; i++) {
+        view.setUint8(offset + i, string.charCodeAt(i));
+      }
+    }
+
+    writeString(0, 'RIFF');
+    view.setUint32(4, 36 + samples.length * 2, true);
+    writeString(8, 'WAVE');
+    writeString(12, 'fmt ');
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);
+    view.setUint16(22, 1, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * 2, true);
+    view.setUint16(32, 2, true);
+    view.setUint16(34, 16, true);
+    writeString(36, 'data');
+    view.setUint32(40, samples.length * 2, true);
+
+    let offset = 44;
+    for (let i = 0; i < samples.length; i++, offset += 2) {
+      const s = Math.max(-1, Math.min(1, samples[i]));
+      view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+    }
+
+    return new Blob([buffer], { type: 'audio/wav' });
+  }
+
+  async function generatePostCallSmartTranscript(audioBlob, apiKey) {
+    if (!audioBlob || audioBlob.size < 1000 || !apiKey) return null;
+    const base64Audio = await new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result.split(',')[1]);
+      reader.readAsDataURL(audioBlob);
+    });
+
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`;
+    const payload = {
+      contents: [
+        {
+          parts: [
+            {
+              text: "這是一段即時雙向語音通話的錄音檔（包含用戶提問與 AI 助理的回應）。請仔細聆聽並生成繁體中文（台灣）的通話備忘錄。請嚴格輸出 JSON 格式（不要 markdown 標記、不要任何外層包裹）：\n{\n  \"summary\": [\"重點結論 1\", \"重點結論 2\"],\n  \"transcript\": [\n    {\"speaker\": \"user\", \"text\": \"用戶說的話\"},\n    {\"speaker\": \"model\", \"text\": \"AI 回應的話\"}\n  ]\n}"
+            },
+            {
+              inlineData: {
+                mimeType: "audio/wav",
+                data: base64Audio
+              }
+            }
+          ]
+        }
+      ],
+      generationConfig: {
+        responseMimeType: "application/json"
+      }
+    };
+
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (rawText) {
+        return JSON.parse(rawText);
+      }
+    } catch (err) {
+      console.warn('[Post-Call Transcription Error]', err);
+    }
+    return null;
+  }
 
   // DOM References
   const liveVoiceBtn = document.getElementById('live-voice-btn');
@@ -68,6 +162,7 @@
 
     playChunk(float32Array, sampleRate = 24000) {
       if (!float32Array || float32Array.length === 0) return;
+      recordAudioSegment('model', float32Array, sampleRate);
       if (this.ctx.state === 'suspended') {
         this.ctx.resume();
       }
@@ -915,6 +1010,7 @@
     
     audioSendBuffer = [];
     sessionSnapshots = [];
+    fullSessionAudioChunks = [];
     isMuted = false;
     isCameraOn = false;
     liveCallStartTs = Date.now();
@@ -1138,6 +1234,7 @@
         }
 
         const downsampled = downsampleBuffer(inputData, audioContext.sampleRate, 16000);
+        recordAudioSegment('user', downsampled, 16000);
 
         for (let i = 0; i < downsampled.length; i++) {
           audioSendBuffer.push(downsampled[i]);
@@ -1170,50 +1267,56 @@
   }
 
   // ==========================================
-  // 📝 Post-Call Option 1: Smart Call Summary Memo Card
+  // 📝 Post-Call Option 1: Smart Call Summary Memo Card (with Multimodal AI Transcription)
   // ==========================================
-  function buildCallSummaryCardHtml(turns, durationSec, voiceName, snapshots = []) {
+  function buildCallSummaryCardHtml(turns, durationSec, voiceName, snapshots = [], cardId = null) {
     const mins = Math.floor(durationSec / 60);
     const secs = durationSec % 60;
     const durationText = mins > 0 ? `${mins} 分 ${secs} 秒` : `${secs} 秒`;
     const timeStr = new Date().toLocaleTimeString('zh-TW', { hour12: false, hour: '2-digit', minute: '2-digit' });
+    const memoId = cardId || `call-memo-${Date.now()}`;
 
     const card = document.createElement('div');
+    card.id = `card-wrapper-${memoId}`;
     card.className = 'flex w-full max-w-2xl mx-auto min-w-0 justify-start my-3 animate-fadeIn select-text';
 
     // 1. Build dialog turns for collapsible transcript
     let dialogHtml = '';
     let plainTextSummary = `【Crew Pocket 語音通話備忘錄】\n時間：${timeStr} (時長：${durationText})\n音色：${voiceName}\n\n`;
 
-    turns.forEach((t, i) => {
-      if (t.user) {
-        dialogHtml += `
-          <div class="p-2.5 rounded-xl bg-indigo-950/40 border border-indigo-500/30 text-indigo-100 text-xs mb-2">
-            <div class="flex items-center gap-1.5 font-bold text-indigo-300 mb-1">
-              <span>🗣️ 您 (第 ${i + 1} 輪)：</span>
-            </div>
-            <div class="leading-relaxed pl-1">${escapeHtml(t.user)}</div>
-          </div>
-        `;
-        plainTextSummary += `[您]: ${t.user}\n`;
-      }
-      if (t.model) {
-        const formattedModel = typeof formatMessageContent === 'function' ? formatMessageContent(t.model) : escapeHtml(t.model);
-        dialogHtml += `
-          <div class="p-2.5 rounded-xl bg-slate-900/90 border border-teal-500/30 text-slate-100 text-xs mb-2">
-            <div class="flex items-center gap-1.5 font-bold text-teal-300 mb-1">
-              <span>✨ Gemini：</span>
-            </div>
-            <div class="prose prose-invert max-w-none text-xs leading-relaxed pl-1">${formattedModel}</div>
-          </div>
-        `;
-        plainTextSummary += `[Gemini]: ${t.model}\n\n`;
-      }
-    });
+    const hasRealText = turns && turns.some(t => t.user && !t.user.startsWith('🗣️ ('));
 
-    // 2. Build Smart Key Takeaways (Highlights from dialogue)
+    if (hasRealText) {
+      turns.forEach((t, i) => {
+        if (t.user) {
+          dialogHtml += `
+            <div class="p-2.5 rounded-xl bg-indigo-950/40 border border-indigo-500/30 text-indigo-100 text-xs mb-2">
+              <div class="flex items-center gap-1.5 font-bold text-indigo-300 mb-1">
+                <span>🗣️ 您 (第 ${i + 1} 輪)：</span>
+              </div>
+              <div class="leading-relaxed pl-1">${escapeHtml(t.user)}</div>
+            </div>
+          `;
+          plainTextSummary += `[您]: ${t.user}\n`;
+        }
+        if (t.model) {
+          const formattedModel = typeof formatMessageContent === 'function' ? formatMessageContent(t.model) : escapeHtml(t.model);
+          dialogHtml += `
+            <div class="p-2.5 rounded-xl bg-slate-900/90 border border-teal-500/30 text-slate-100 text-xs mb-2">
+              <div class="flex items-center gap-1.5 font-bold text-teal-300 mb-1">
+                <span>✨ Gemini：</span>
+              </div>
+              <div class="prose prose-invert max-w-none text-xs leading-relaxed pl-1">${formattedModel}</div>
+            </div>
+          `;
+          plainTextSummary += `[Gemini]: ${t.model}\n\n`;
+        }
+      });
+    }
+
+    // 2. Build Smart Key Takeaways
     let keyHighlightsHtml = '';
-    if (turns.length > 0) {
+    if (hasRealText) {
       keyHighlightsHtml = `
         <div class="p-3 rounded-xl bg-teal-950/40 border border-teal-500/40 mb-2.5">
           <div class="flex items-center gap-1.5 text-xs font-bold text-teal-300 mb-1.5">
@@ -1226,6 +1329,13 @@
               return preview ? `<li>${escapeHtml(preview)}</li>` : '';
             }).filter(Boolean).join('')}
           </ul>
+        </div>
+      `;
+    } else {
+      keyHighlightsHtml = `
+        <div class="p-3 rounded-xl bg-teal-950/30 border border-teal-500/30 mb-2.5 flex items-center gap-2">
+          <span class="w-3 h-3 rounded-full border-2 border-teal-400 border-t-transparent animate-spin shrink-0"></span>
+          <span class="text-xs text-teal-300 animate-pulse font-mono">正在透過語音 AI 自動提煉對話逐字稿與重點...</span>
         </div>
       `;
     }
@@ -1251,10 +1361,8 @@
       `;
     }
 
-    const cardId = `call-memo-${Date.now()}`;
-
     card.innerHTML = `
-      <div id="${cardId}" class="bg-gradient-to-b from-slate-900 via-slate-900 to-teal-950/40 border border-teal-500/50 text-slate-200 rounded-2xl p-3.5 sm:p-4 text-xs sm:text-sm shadow-2xl w-full">
+      <div id="${memoId}" class="bg-gradient-to-b from-slate-900 via-slate-900 to-teal-950/40 border border-teal-500/50 text-slate-200 rounded-2xl p-3.5 sm:p-4 text-xs sm:text-sm shadow-2xl w-full">
         <!-- Top Header Badge -->
         <div class="flex items-center justify-between border-b border-teal-800/60 pb-2.5 mb-3">
           <div class="flex items-center gap-2">
@@ -1273,22 +1381,24 @@
         </div>
 
         <!-- 📌 Smart Key Highlights -->
-        ${keyHighlightsHtml}
+        <div id="highlights-container-${memoId}">
+          ${keyHighlightsHtml}
+        </div>
 
         <!-- 📷 Visual Snapshots Gallery (if any) -->
         ${snapshotsHtml}
 
         <!-- 💬 Collapsible Full Transcript Accordion -->
-        <details class="group mt-2 border border-slate-800/80 rounded-xl bg-slate-950/40 overflow-hidden">
+        <details class="group mt-2 border border-slate-800/80 rounded-xl bg-slate-950/40 overflow-hidden" open>
           <summary class="flex items-center justify-between px-3 py-2 cursor-pointer select-none text-xs font-semibold text-teal-300 hover:bg-slate-900/60 transition">
             <span class="flex items-center gap-1.5">
               <span>💬</span>
-              <span>展開完整逐字稿 (${turns.length} 輪問答)</span>
+              <span>完整逐字對話記錄</span>
             </span>
             <span class="text-slate-400 group-open:rotate-180 transition-transform duration-200">▼</span>
           </summary>
-          <div class="p-3 border-t border-slate-800/80 max-h-80 overflow-y-auto space-y-2 bg-slate-950/20">
-            ${dialogHtml || '<div class="text-slate-400 text-xs italic">通話結束（未記錄到發言）</div>'}
+          <div id="transcript-container-${memoId}" class="p-3 border-t border-slate-800/80 max-h-80 overflow-y-auto space-y-2 bg-slate-950/20">
+            ${dialogHtml || '<div class="text-slate-400 text-xs italic">正在辨識通話音訊內容...</div>'}
           </div>
         </details>
 
@@ -1396,15 +1506,22 @@
     // 🔒 Silent Background Sync & Visual Summary Memo Card
     const turnsToSync = sessionDialogueTurns.slice();
     const snapshotsToSync = sessionSnapshots.slice();
+    const audioToTranscribe = fullSessionAudioChunks.slice();
     sessionDialogueTurns = [];
     sessionSnapshots = [];
+    fullSessionAudioChunks = [];
 
     const durationSec = liveCallStartTs > 0 ? Math.max(1, Math.round((Date.now() - liveCallStartTs) / 1000)) : 0;
     const voiceName = getSelectedVoice();
+    const memoId = `call-memo-${Date.now()}`;
+    const timeStr = new Date().toLocaleTimeString('zh-TW', { hour12: false, hour: '2-digit', minute: '2-digit' });
+    const mins = Math.floor(durationSec / 60);
+    const secs = durationSec % 60;
+    const durationText = mins > 0 ? `${mins} 分 ${secs} 秒` : `${secs} 秒`;
 
-    // 🌟 ALWAYS Render Memo Card if call lasted at least 2 seconds, or had turns/snapshots!
-    if (durationSec >= 2 || turnsToSync.length > 0 || snapshotsToSync.length > 0) {
-      const memoCard = buildCallSummaryCardHtml(turnsToSync, durationSec, voiceName, snapshotsToSync);
+    // 🌟 ALWAYS Render Memo Card if call lasted at least 2 seconds, or had turns/snapshots/audio!
+    if (durationSec >= 2 || turnsToSync.length > 0 || snapshotsToSync.length > 0 || audioToTranscribe.length > 8000) {
+      const memoCard = buildCallSummaryCardHtml(turnsToSync, durationSec, voiceName, snapshotsToSync, memoId);
       if (messagesContainer) {
         messagesContainer.appendChild(memoCard);
         if (typeof enhanceCodeBlocks === 'function') enhanceCodeBlocks(memoCard);
@@ -1412,26 +1529,102 @@
       }
 
       const activeConvId = (typeof currentConversationId !== 'undefined' && currentConversationId) ? currentConversationId : null;
-      const combinedUser = turnsToSync.map(t => t.user).filter(Boolean).join('\n') || `🗣️ 語音通話 (時長：${durationSec}秒)`;
-      const combinedModel = turnsToSync.map(t => t.model).filter(Boolean).join('\n\n') || `✨ Gemini Live 語音通話完畢 (${voiceName})`;
+      const apiKey = getApiKey();
 
-      console.log('[Live Silent Sync] Writing turns to brain log in background...', { user: combinedUser, model: combinedModel });
-      fetch('/api/live-sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          conversation_id: activeConvId,
-          user_message: combinedUser,
-          assistant_message: combinedModel
-        })
-      }).then(res => res.json()).then(data => {
-        if (data.success && data.conversation_id && (typeof currentConversationId !== 'undefined' && !currentConversationId)) {
-          currentConversationId = data.conversation_id;
-          localStorage.setItem('agy_active_conv_id', data.conversation_id);
-        }
-      }).catch(err => {
-        console.warn('[Live Silent Sync Warning]', err);
-      });
+      // Trigger AI Audio Transcription & Summarization in background using Flash
+      if (audioToTranscribe.length > 8000 && apiKey) {
+        const wavBlob = encodeWAV(audioToTranscribe, 16000);
+        generatePostCallSmartTranscript(wavBlob, apiKey).then(result => {
+          if (!result) return;
+          const highlightsEl = document.getElementById(`highlights-container-${memoId}`);
+          const transcriptEl = document.getElementById(`transcript-container-${memoId}`);
+
+          let newPlainText = `【Crew Pocket 語音通話備忘錄】\n時間：${timeStr} (時長：${durationText})\n音色：${voiceName}\n\n`;
+
+          if (result.summary && result.summary.length > 0 && highlightsEl) {
+            highlightsEl.innerHTML = `
+              <div class="p-3 rounded-xl bg-teal-950/40 border border-teal-500/40 mb-2.5">
+                <div class="flex items-center gap-1.5 text-xs font-bold text-teal-300 mb-1.5">
+                  <span>📌</span>
+                  <span>本次對話重點整理</span>
+                </div>
+                <ul class="space-y-1 text-xs text-slate-200 list-disc list-inside">
+                  ${result.summary.map(s => `<li>${escapeHtml(s)}</li>`).join('')}
+                </ul>
+              </div>
+            `;
+            newPlainText += `【重點摘要】\n` + result.summary.map(s => `• ${s}`).join('\n') + '\n\n';
+          }
+
+          if (result.transcript && result.transcript.length > 0 && transcriptEl) {
+            let newDialogHtml = '';
+            result.transcript.forEach((t, idx) => {
+              const isUser = t.speaker === 'user' || t.role === 'user';
+              const speakerName = isUser ? `🗣️ 您 (第 ${idx + 1} 輪)：` : '✨ Gemini：';
+              const bubbleClass = isUser 
+                ? 'bg-indigo-950/40 border-indigo-500/30 text-indigo-100' 
+                : 'bg-slate-900/90 border-teal-500/30 text-slate-100';
+              const titleColor = isUser ? 'text-indigo-300' : 'text-teal-300';
+              const formattedContent = (!isUser && typeof formatMessageContent === 'function') ? formatMessageContent(t.text) : escapeHtml(t.text);
+
+              newDialogHtml += `
+                <div class="p-2.5 rounded-xl border ${bubbleClass} text-xs mb-2">
+                  <div class="flex items-center gap-1.5 font-bold ${titleColor} mb-1">
+                    <span>${speakerName}</span>
+                  </div>
+                  <div class="leading-relaxed pl-1">${formattedContent}</div>
+                </div>
+              `;
+              newPlainText += `[${isUser ? '您' : 'Gemini'}]: ${t.text}\n`;
+            });
+            transcriptEl.innerHTML = newDialogHtml;
+
+            // Update copy button with enriched text
+            const cardElem = document.getElementById(memoId);
+            if (cardElem) {
+              const copyBtn = cardElem.querySelector('.copy-memo-btn');
+              if (copyBtn) {
+                copyBtn.onclick = () => {
+                  navigator.clipboard.writeText(newPlainText).then(() => {
+                    copyBtn.textContent = '✅ 已複製';
+                    setTimeout(() => { copyBtn.textContent = '📋 複製'; }, 1500);
+                  });
+                };
+              }
+            }
+
+            // Also update server Brain sync with the pristine transcript!
+            const userDialogue = result.transcript.filter(t => t.speaker === 'user' || t.role === 'user').map(t => t.text).join('\n');
+            const modelDialogue = result.transcript.filter(t => t.speaker !== 'user' && t.role !== 'user').map(t => t.text).join('\n\n');
+            fetch('/api/live-sync', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                conversation_id: activeConvId,
+                user_message: userDialogue || `🗣️ 語音通話 (時長：${durationSec}秒)`,
+                assistant_message: modelDialogue || `✨ Gemini Live 語音通話完畢`
+              })
+            }).catch(() => {});
+          }
+        }).catch(err => {
+          console.warn('[Post-Call AI Memo Generation Failed]', err);
+        });
+      } else {
+        const combinedUser = turnsToSync.map(t => t.user).filter(Boolean).join('\n') || `🗣️ 語音通話 (時長：${durationSec}秒)`;
+        const combinedModel = turnsToSync.map(t => t.model).filter(Boolean).join('\n\n') || `✨ Gemini Live 語音通話完畢 (${voiceName})`;
+
+        fetch('/api/live-sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            conversation_id: activeConvId,
+            user_message: combinedUser,
+            assistant_message: combinedModel
+          })
+        }).catch(err => {
+          console.warn('[Live Silent Sync Warning]', err);
+        });
+      }
     }
   }
 
