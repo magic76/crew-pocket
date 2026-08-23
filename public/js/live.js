@@ -51,7 +51,7 @@
   const messagesContainer = document.getElementById('messages-container');
 
   // ==========================================
-  // 🔊 Gapless 24kHz PCM Audio Stream Player (with 35ms Jitter Buffer)
+  // 🔊 Gapless 24kHz PCM Audio Stream Player (with 35ms Jitter Buffer & MediaStream Bridge)
   // ==========================================
   class LiveAudioPlayer {
     constructor(ctx) {
@@ -59,6 +59,30 @@
       this.nextStartTime = 0;
       this.activeSources = [];
       this.jitterBufferSec = 0.035; // 35ms smooth jitter buffer to eliminate pops/stutters
+
+      // 🔊 HTML5 Media Output Bridge: Routes audio through standard HTML5 audio tag to lock Android hardware volume keys to Media Volume (STREAM_MUSIC)
+      try {
+        this.mediaStreamDest = this.ctx.createMediaStreamDestination();
+        this.audioEl = document.createElement('audio');
+        this.audioEl.autoplay = true;
+        this.audioEl.playsInline = true;
+        this.audioEl.srcObject = this.mediaStreamDest.stream;
+        this.audioEl.play().catch(() => {});
+
+        // Keep a tiny continuous micro-signal on mediaStreamDest to lock Android volume keys onto Media channel
+        if (typeof this.ctx.createConstantSource === 'function') {
+          const silentOsc = this.ctx.createConstantSource();
+          const silentGain = this.ctx.createGain();
+          silentGain.gain.value = 0.00001;
+          silentOsc.connect(silentGain);
+          silentGain.connect(this.mediaStreamDest);
+          silentOsc.start();
+          this.silentOsc = silentOsc;
+        }
+      } catch (e) {
+        this.mediaStreamDest = null;
+        this.audioEl = null;
+      }
     }
 
     playChunk(float32Array, sampleRate = 24000) {
@@ -72,7 +96,13 @@
 
       const source = this.ctx.createBufferSource();
       source.buffer = audioBuffer;
-      source.connect(this.ctx.destination);
+
+      // Connect to output (MediaStream bridge takes priority so Android hardware volume keys bind to Media)
+      if (this.mediaStreamDest) {
+        try { source.connect(this.mediaStreamDest); } catch (e) { source.connect(this.ctx.destination); }
+      } else {
+        source.connect(this.ctx.destination);
+      }
 
       if (analyser) {
         source.connect(analyser);
@@ -109,6 +139,33 @@
       if (this.ctx) {
         this.nextStartTime = this.ctx.currentTime;
       }
+      if (this.silentOsc) {
+        try { this.silentOsc.stop(); } catch (e) {}
+        this.silentOsc = null;
+      }
+      if (this.audioEl) {
+        try {
+          this.audioEl.srcObject = null;
+          this.audioEl.pause();
+        } catch (e) {}
+      }
+    }
+  }
+
+  function setMediaSessionActive(active) {
+    if ('mediaSession' in navigator) {
+      try {
+        if (active) {
+          navigator.mediaSession.metadata = new MediaMetadata({
+            title: 'Gemini Live 雙向即時通話',
+            artist: 'Crew Pocket 口袋特勤隊',
+            album: '即時雙向語音'
+          });
+          navigator.mediaSession.playbackState = 'playing';
+        } else {
+          navigator.mediaSession.playbackState = 'none';
+        }
+      } catch (e) {}
     }
   }
 
@@ -803,6 +860,7 @@
       liveBottomDock.classList.add('flex');
     }
     updateDockControls();
+    setMediaSessionActive(true);
     
     audioSendBuffer = [];
     isMuted = false;
@@ -1134,6 +1192,8 @@
       liveBottomDock.classList.remove('flex');
     }
     if (standardInputBar) standardInputBar.classList.remove('hidden');
+
+    setMediaSessionActive(false);
 
     // Remove active inline card cleanly
     removeInlineCard();
