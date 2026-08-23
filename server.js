@@ -17,7 +17,7 @@ const {
 
 const { sessionManager } = require('./lib/session');
 const { getProvider, normalizeProviderId, listProviders, listProviderMetadata } = require('./lib/providers');
-const { handleLiveSync, handleLiveTranscribe } = require('./lib/history');
+const { handleLiveSync, handleLiveTranscribe, handleQuickTranscribe } = require('./lib/history');
 const { handleRunCode } = require('./lib/sandbox');
 const { handleUsage } = require('./lib/usage');
 const { handleListFiles, handleReadFile } = require('./lib/files');
@@ -495,6 +495,8 @@ const server = http.createServer(async (req, res) => {
     return handleLiveSync(req, res);
   } else if (pathname === '/api/live-transcribe' && req.method === 'POST') {
     return handleLiveTranscribe(req, res);
+  } else if (pathname === '/api/quick-transcribe' && req.method === 'POST') {
+    return handleQuickTranscribe(req, res);
   } else if (pathname === '/api/rewind' && req.method === 'POST') {
     return handleProviderRewind(req, res);
   } else if (pathname === '/api/prewarm' && req.method === 'POST') {
