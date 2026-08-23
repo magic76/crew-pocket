@@ -901,7 +901,11 @@
         if (e.code !== 1000) {
           updateCardStatus('error', `⚠️ 連線中斷 (${e.code})`);
           let helpText = `連線中斷 (${e.code})`;
-          if (e.code === 1008) {
+          if (e.reason) {
+            helpText += `：${e.reason}`;
+          } else if (e.code === 1006) {
+            helpText += '：網路連線中斷或 Google API 連線受阻，請檢查網路或 API Key';
+          } else if (e.code === 1008) {
             helpText += '：API Key 設有限制，請在 AI Studio 改為「無限制」';
           }
           appendCardTranscript('system', helpText);
