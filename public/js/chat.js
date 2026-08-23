@@ -171,11 +171,8 @@ function formatToolSummary(tool) {
   return `${d.icon} ${d.label}: ${d.desc}`;
 }
 
-// Render tools accordion HTML with rich cards
-function buildToolsAccordionHtml(tools) {
-  if (!tools || tools.length === 0) return '';
-  
-  const itemsHtml = tools.map((t, idx) => {
+function buildToolItemsHtml(tools) {
+  return tools.map((t) => {
     const d = getToolDetails(t);
     return `
       <div class="py-1.5 border-b border-slate-800/60 last:border-b-0 flex items-center justify-between gap-2 text-xs">
@@ -189,6 +186,12 @@ function buildToolsAccordionHtml(tools) {
       </div>
     `;
   }).join('');
+}
+
+// Render tools accordion HTML with rich cards
+function buildToolsAccordionHtml(tools) {
+  if (!tools || tools.length === 0) return '';
+  const itemsHtml = buildToolItemsHtml(tools);
 
   return `
     <details class="my-2 bg-slate-950/70 border border-slate-800/90 rounded-xl overflow-hidden text-xs">
@@ -201,6 +204,21 @@ function buildToolsAccordionHtml(tools) {
       <div class="px-3 py-2 border-t border-slate-800/60 bg-slate-950/90 space-y-1">
         ${itemsHtml}
       </div>
+    </details>
+  `;
+}
+
+// Historical tool output can be enormous. Keep the collapsed summary instant and
+// only construct individual cards when the user explicitly opens it.
+function buildLazyToolsAccordionHtml(tools) {
+  if (!tools || tools.length === 0) return '';
+  return `
+    <details class="lazy-tools my-2 bg-slate-950/70 border border-slate-800/90 rounded-xl overflow-hidden text-xs">
+      <summary class="px-3 py-1.5 cursor-pointer flex items-center justify-between text-slate-400 hover:text-slate-200 font-mono select-none bg-slate-900/60">
+        <div class="flex items-center gap-1.5"><span>⚙️ 執行了 ${tools.length} 個操作動作</span></div>
+        <span class="text-[10px] text-slate-500">展開 ▼</span>
+      </summary>
+      <div class="lazy-tools-body px-3 py-2 border-t border-slate-800/60 bg-slate-950/90 space-y-1"></div>
     </details>
   `;
 }
@@ -367,15 +385,18 @@ function hideContextModal() {
 }
 
 // Append Message to UI
-function appendMessage(role, content, timestamp, tools = [], thinking = '', isBtw = false) {
+function appendMessage(role, content, timestamp, tools = [], thinking = '', isBtw = false, renderOptions = {}) {
   const isUser = role === 'user';
+  const targetContainer = renderOptions.container || messagesContainer;
   const msgDiv = document.createElement('div');
   msgDiv.className = `flex w-full max-w-2xl mx-auto min-w-0 ${isUser ? 'justify-end' : 'justify-start'}`;
 
   const isUserBtw = isUser && (isBtw || /^\s*\/btw\b/i.test(content || ''));
 
   const thinkingHtml = (!isUser && thinking) ? buildThinkingBlockHtml(thinking) : '';
-  const toolsHtml = (!isUser && tools && tools.length > 0) ? buildToolsAccordionHtml(tools) : '';
+  const toolsHtml = (!isUser && tools && tools.length > 0)
+    ? (renderOptions.lazyTools ? buildLazyToolsAccordionHtml(tools) : buildToolsAccordionHtml(tools))
+    : '';
 
   let bubbleClass = '';
   if (isUser) {
@@ -390,7 +411,9 @@ function appendMessage(role, content, timestamp, tools = [], thinking = '', isBt
 
   let bodyHtml = '';
   if (isUser) {
-    const userTurnIndex = document.querySelectorAll('#messages-container > div[data-role="user"]').length;
+    const userTurnIndex = Number.isInteger(renderOptions.userTurnIndex)
+      ? renderOptions.userTurnIndex
+      : document.querySelectorAll('#messages-container > div[data-role="user"]').length;
     msgDiv.setAttribute('data-role', 'user');
     msgDiv.setAttribute('data-turn-index', userTurnIndex);
 
@@ -460,7 +483,19 @@ function appendMessage(role, content, timestamp, tools = [], thinking = '', isBt
   }
 
   msgDiv.innerHTML = `<div class="${bubbleClass}">${bodyHtml}</div>`;
-  messagesContainer.appendChild(msgDiv);
+  targetContainer.appendChild(msgDiv);
+
+  if (renderOptions.lazyTools && tools && tools.length > 0) {
+    const lazyTools = msgDiv.querySelector('.lazy-tools');
+    if (lazyTools) {
+      lazyTools.addEventListener('toggle', () => {
+        if (!lazyTools.open || lazyTools.dataset.rendered) return;
+        const body = lazyTools.querySelector('.lazy-tools-body');
+        if (body) body.innerHTML = buildToolItemsHtml(tools);
+        lazyTools.dataset.rendered = 'true';
+      });
+    }
+  }
 
   if (isBtw && !isUser) {
     const toggleBtn = msgDiv.querySelector('.btw-toggle-btn');
@@ -537,8 +572,8 @@ function appendMessage(role, content, timestamp, tools = [], thinking = '', isBt
     ttsBtn.addEventListener('click', () => toggleSpeech(content, ttsBtn));
   }
 
-  if (typeof enhanceCodeBlocks === 'function') enhanceCodeBlocks(msgDiv);
-  scrollToBottom();
+  if (!renderOptions.deferEnhancement && typeof enhanceCodeBlocks === 'function') enhanceCodeBlocks(msgDiv);
+  if (!renderOptions.deferScroll) scrollToBottom();
   return msgDiv;
 }
 
@@ -619,8 +654,153 @@ async function renameConversationDirect(convId, currentTitle, conversationProvid
   }
 }
 
+let historyRenderVersion = 0;
+let historyLoadOverlay = null;
+let historyPageState = null;
+let historyLoadEarlierObserver = null;
+
+function showHistoryLoadOverlay() {
+  if (historyLoadOverlay) historyLoadOverlay.remove();
+  const overlay = document.createElement('div');
+  overlay.className = 'fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/98 backdrop-blur-md opacity-0 transition-opacity duration-150';
+  overlay.setAttribute('role', 'status');
+  overlay.setAttribute('aria-live', 'polite');
+  overlay.innerHTML = `
+    <div class="flex flex-col items-center gap-3 text-slate-200">
+      <div class="w-9 h-9 rounded-full border-2 border-indigo-400/30 border-t-indigo-300 animate-spin"></div>
+      <span class="text-sm font-medium">正在切換對話…</span>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  requestAnimationFrame(() => overlay.classList.remove('opacity-0'));
+  historyLoadOverlay = overlay;
+  return overlay;
+}
+
+function hideHistoryLoadOverlay(overlay) {
+  if (!overlay || overlay !== historyLoadOverlay) return;
+  // Keep the cover in place through the scroll and one rendered frame so the
+  // user never sees the transcript jump from its first message to the bottom.
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    if (overlay !== historyLoadOverlay) return;
+    overlay.classList.add('opacity-0');
+    setTimeout(() => {
+      if (overlay === historyLoadOverlay) historyLoadOverlay = null;
+      overlay.remove();
+    }, 160);
+  }));
+}
+
+const HISTORY_INITIAL_MESSAGES = 16;
+
+function findHistoryPageStart(messages, endIndex, count = HISTORY_INITIAL_MESSAGES) {
+  let startIndex = Math.max(0, endIndex - count);
+  // Prefer starting on a user turn so a reply is never shown without its question.
+  while (startIndex > 0 && messages[startIndex].role !== 'user') startIndex -= 1;
+  return startIndex;
+}
+
+function addLoadEarlierSentinel(state) {
+  if (!state || state.startIndex <= 0 || state.renderVersion !== historyRenderVersion) return;
+  if (historyLoadEarlierObserver) historyLoadEarlierObserver.disconnect();
+  const sentinel = document.createElement('div');
+  sentinel.className = 'history-load-earlier-sentinel w-full max-w-2xl mx-auto h-8 flex items-center justify-center text-[10px] text-slate-500';
+  sentinel.textContent = '向上滑動以載入更早訊息';
+  messagesContainer.prepend(sentinel);
+
+  let loading = false;
+  const loadEarlier = async () => {
+    if (loading || state.renderVersion !== historyRenderVersion || currentConversationId !== state.convId) return;
+    loading = true;
+    sentinel.textContent = '正在載入更早訊息…';
+    if (historyLoadEarlierObserver) historyLoadEarlierObserver.disconnect();
+
+    const previousStart = state.startIndex;
+    const nextStart = findHistoryPageStart(state.messages, previousStart);
+    const fragment = document.createDocumentFragment();
+    const rendered = await renderHistoryMessages(state.messages, state.convId, state.renderVersion, {
+      startIndex: nextStart,
+      endIndex: previousStart,
+      container: fragment,
+      scrollOnComplete: false
+    });
+    if (!rendered || state.renderVersion !== historyRenderVersion || currentConversationId !== state.convId) return;
+
+    const previousHeight = messagesContainer.scrollHeight;
+    const previousTop = messagesContainer.scrollTop;
+    sentinel.remove();
+    messagesContainer.prepend(fragment);
+    messagesContainer.scrollTop = previousTop + (messagesContainer.scrollHeight - previousHeight);
+    state.startIndex = nextStart;
+    const heightBeforeSentinel = messagesContainer.scrollHeight;
+    const topBeforeSentinel = messagesContainer.scrollTop;
+    addLoadEarlierSentinel(state);
+    messagesContainer.scrollTop = topBeforeSentinel + (messagesContainer.scrollHeight - heightBeforeSentinel);
+  };
+
+  if (typeof IntersectionObserver === 'undefined') return;
+  historyLoadEarlierObserver = new IntersectionObserver(entries => {
+    if (entries.some(entry => entry.isIntersecting)) loadEarlier();
+  }, { root: messagesContainer, rootMargin: '160px 0px 0px 0px', threshold: 0 });
+  historyLoadEarlierObserver.observe(sentinel);
+}
+
+function renderHistoryMessages(messages, convId, renderVersion, options = {}) {
+  const startIndex = options.startIndex || 0;
+  const endIndex = options.endIndex ?? messages.length;
+  const targetContainer = options.container || messagesContainer;
+  const scrollOnComplete = options.scrollOnComplete !== false;
+  const batchSize = 4;
+  let nextUserTurn = messages.slice(0, startIndex).filter(message => message.role === 'user').length;
+  const entries = messages.slice(startIndex, endIndex).map((message, index) => ({
+    message,
+    userTurnIndex: message.role === 'user' ? nextUserTurn++ : null,
+    absoluteIndex: startIndex + index
+  }));
+  let index = 0;
+
+  return new Promise(resolve => {
+    const schedule = window.requestAnimationFrame || (callback => setTimeout(callback, 0));
+    const renderBatch = () => {
+      if (renderVersion !== historyRenderVersion || currentConversationId !== convId) {
+        resolve(false);
+        return;
+      }
+
+      const end = Math.min(index + batchSize, entries.length);
+      for (; index < end; index += 1) {
+        const { message, userTurnIndex, absoluteIndex } = entries[index];
+        if (message.role === 'checkpoint') {
+          const divider = buildCheckpointDividerHtml(message.content, message.timestamp);
+          targetContainer.appendChild(divider);
+          if (typeof enhanceCodeBlocks === 'function') enhanceCodeBlocks(divider);
+          continue;
+        }
+        const isBtw = message.role === 'assistant' && absoluteIndex > 0 && /^\s*\/btw\b/i.test(messages[absoluteIndex - 1].content || '');
+        appendMessage(message.role, message.content, message.timestamp, message.tools || [], message.thinking || '', isBtw, {
+          lazyTools: message.role === 'assistant',
+          deferScroll: true,
+          userTurnIndex,
+          container: targetContainer
+        });
+      }
+
+      if (index < entries.length) {
+        schedule(renderBatch);
+      } else {
+        if (scrollOnComplete) scrollToBottom(true);
+        resolve(true);
+      }
+    };
+    schedule(renderBatch);
+  });
+}
+
 // Load History for a Conversation
 async function loadConversationHistory(convId) {
+  const renderVersion = ++historyRenderVersion;
+  const loadOverlay = showHistoryLoadOverlay();
+  historyPageState = null;
   // 🛡️ Abort any ongoing stream from previous session to prevent cross-session state pollution
   if (currentAbortController) {
     try { currentAbortController.abort(); } catch(e) {}
@@ -630,7 +810,7 @@ async function loadConversationHistory(convId) {
   currentConversationId = convId;
   localStorage.setItem(activeConversationStorageKey(), convId);
   revokeAllBlobUrls();
-  messagesContainer.innerHTML = '';
+  messagesContainer.innerHTML = '<div class="p-5 text-center text-xs text-slate-400 animate-pulse">正在載入對話紀錄…</div>';
   toggleDrawer(false);
 
   // 🔄 Reset input box and Send/Stop button to initial idle state
@@ -647,6 +827,7 @@ async function loadConversationHistory(convId) {
   try {
     const res = await fetch(`/api/history?id=${convId}&${providerQuery()}`);
     const data = await res.json();
+    if (renderVersion !== historyRenderVersion || currentConversationId !== convId) return;
     
     // 🧠 Update Top Context Usage Pill
     if (data.context_stats) {
@@ -656,16 +837,6 @@ async function loadConversationHistory(convId) {
     }
 
     if (data.messages && data.messages.length > 0) {
-      data.messages.forEach((msg, idx) => {
-        if (msg.role === 'checkpoint') {
-          const divider = buildCheckpointDividerHtml(msg.content, msg.timestamp);
-          messagesContainer.appendChild(divider);
-          if (typeof enhanceCodeBlocks === 'function') enhanceCodeBlocks(divider);
-        } else {
-          const isBtw = msg.role === 'assistant' && idx > 0 && /^\s*\/btw\b/i.test(data.messages[idx - 1].content || '');
-          appendMessage(msg.role, msg.content, msg.timestamp, msg.tools || [], msg.thinking || '', isBtw);
-        }
-      });
       const firstUserMsg = data.messages.find(m => m.role === 'user');
       if (headerTitle) {
         if (data.title) {
@@ -674,10 +845,26 @@ async function loadConversationHistory(convId) {
           headerTitle.textContent = (firstUserMsg && firstUserMsg.content) ? firstUserMsg.content.slice(0, 18) : '對話紀錄';
         }
       }
+      messagesContainer.innerHTML = '';
+      const pageState = {
+        messages: data.messages,
+        convId,
+        renderVersion,
+        startIndex: findHistoryPageStart(data.messages, data.messages.length)
+      };
+      historyPageState = pageState;
+      const rendered = await renderHistoryMessages(data.messages, convId, renderVersion, {
+        startIndex: pageState.startIndex
+      });
+      if (!rendered) return;
+      addLoadEarlierSentinel(pageState);
+      scrollToBottom(true);
     } else {
       if (headerTitle) headerTitle.textContent = data.title || '新對話';
       appendMessage('assistant', '你好！已為你開啟此對話。有什麼可以幫你的？');
     }
+
+    hideHistoryLoadOverlay(loadOverlay);
 
     // ⚡ Check if this conversation is actively generating in background and auto-resume loading UI
     try {
@@ -742,6 +929,7 @@ async function loadConversationHistory(convId) {
     } catch (e) {}
 
   } catch (err) {
+    hideHistoryLoadOverlay(loadOverlay);
     console.error(err);
     messagesContainer.innerHTML = `<div class="p-4 text-center text-xs text-rose-400">載入歷史對話失敗：${err.message}</div>`;
   }
@@ -779,8 +967,6 @@ async function loadConversations() {
       wrapper.className = 'swipe-item-wrapper relative overflow-hidden rounded-xl mb-1.5 select-none transition-all duration-200';
       wrapper.style.maxHeight = '80px';
 
-      const tokenColorClass = conv.status_level === 'red' ? 'text-rose-400 font-semibold' : conv.status_level === 'yellow' ? 'text-amber-400' : 'text-emerald-400';
-
       wrapper.innerHTML = `
         <!-- Delete background revealed when swiping left -->
         <div class="swipe-delete-bg absolute inset-0 bg-rose-600 text-white flex items-center justify-end px-3.5 text-xs font-semibold rounded-xl select-none">
@@ -803,12 +989,6 @@ async function loadConversations() {
               </svg>
               <span class="text-[9px] px-1 py-0.2 rounded border font-mono shrink-0 ${providerBadgeClass}">${providerLabel}</span>
               <span class="truncate font-medium">${escapeHtml(conv.title)}</span>
-            </div>
-            <!-- Conversation Sub-meta: Turns & Context Tokens -->
-            <div class="flex items-center gap-1.5 text-[10px] text-slate-400 font-mono mt-0.5 pl-5">
-              <span>${conv.turns || 0} 輪</span>
-              <span>·</span>
-              <span class="${tokenColorClass}">${conv.context_tokens_formatted || '0 tok'}</span>
             </div>
           </div>
           <div class="flex items-center gap-1 shrink-0 ml-1">
