@@ -1005,16 +1005,21 @@
             updateDockControls();
             updateCameraBadge(false, 'AI 說話中 (暫停傳圖)');
             updateCardStatus('speaking', '🔊 Gemini 說話中 · 點擊按鈕可打斷');
+            let hasAudioChunk = false;
             for (const part of modelTurn.parts) {
               const inlineData = part.inlineData || part.inline_data;
               if (inlineData && inlineData.data) {
                 const float32 = base64ToFloat32PCM(inlineData.data);
                 audioPlayer.playChunk(float32, 24000);
+                hasAudioChunk = true;
               }
               if (part.text) {
-                currentTurnModel += part.text;
+                currentTurnModel = (currentTurnModel && currentTurnModel !== '🎙️ (AI 即時語音回覆)') ? (currentTurnModel + part.text) : part.text;
                 appendCardTranscript('model', part.text);
               }
+            }
+            if (hasAudioChunk && !currentTurnModel) {
+              currentTurnModel = '🎙️ (AI 即時語音回覆)';
             }
           }
 
@@ -1022,8 +1027,8 @@
           if (isTurnDone) {
             if (currentTurnUser || currentTurnModel) {
               sessionDialogueTurns.push({
-                user: currentTurnUser,
-                model: currentTurnModel
+                user: currentTurnUser || '🗣️ (您的語音提問)',
+                model: currentTurnModel || '🎙️ (AI 語音回覆)'
               });
               currentTurnUser = '';
               currentTurnModel = '';
@@ -1344,8 +1349,8 @@
     // Collect any remaining turn
     if (currentTurnUser || currentTurnModel) {
       sessionDialogueTurns.push({
-        user: currentTurnUser,
-        model: currentTurnModel
+        user: currentTurnUser || '🗣️ (您的語音提問)',
+        model: currentTurnModel || '🎙️ (AI 語音回覆)'
       });
       currentTurnUser = '';
       currentTurnModel = '';
@@ -1357,40 +1362,39 @@
     sessionDialogueTurns = [];
     sessionSnapshots = [];
 
-    if (turnsToSync.length > 0) {
-      const activeConvId = (typeof currentConversationId !== 'undefined' && currentConversationId) ? currentConversationId : null;
-      const combinedUser = turnsToSync.map(t => t.user).filter(Boolean).join('\n');
-      const combinedModel = turnsToSync.map(t => t.model).filter(Boolean).join('\n\n');
+    const durationSec = liveCallStartTs > 0 ? Math.max(1, Math.round((Date.now() - liveCallStartTs) / 1000)) : 0;
+    const voiceName = getSelectedVoice();
 
-      if (combinedUser || combinedModel) {
-        // Render beautiful Summary Memo Card to chat timeline
-        const durationSec = liveCallStartTs > 0 ? Math.max(1, Math.round((Date.now() - liveCallStartTs) / 1000)) : 0;
-        const voiceName = getSelectedVoice();
-        const memoCard = buildCallSummaryCardHtml(turnsToSync, durationSec, voiceName, snapshotsToSync);
-        if (messagesContainer) {
-          messagesContainer.appendChild(memoCard);
-          if (typeof enhanceCodeBlocks === 'function') enhanceCodeBlocks(memoCard);
-          if (typeof scrollToBottom === 'function') scrollToBottom(true);
-        }
-
-        console.log('[Live Silent Sync] Writing turns to brain log in background...', { user: combinedUser, model: combinedModel });
-        fetch('/api/live-sync', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            conversation_id: activeConvId,
-            user_message: combinedUser,
-            assistant_message: combinedModel
-          })
-        }).then(res => res.json()).then(data => {
-          if (data.success && data.conversation_id && (typeof currentConversationId !== 'undefined' && !currentConversationId)) {
-            currentConversationId = data.conversation_id;
-            localStorage.setItem('agy_active_conv_id', data.conversation_id);
-          }
-        }).catch(err => {
-          console.warn('[Live Silent Sync Warning]', err);
-        });
+    // 🌟 ALWAYS Render Memo Card if call lasted at least 2 seconds, or had turns/snapshots!
+    if (durationSec >= 2 || turnsToSync.length > 0 || snapshotsToSync.length > 0) {
+      const memoCard = buildCallSummaryCardHtml(turnsToSync, durationSec, voiceName, snapshotsToSync);
+      if (messagesContainer) {
+        messagesContainer.appendChild(memoCard);
+        if (typeof enhanceCodeBlocks === 'function') enhanceCodeBlocks(memoCard);
+        if (typeof scrollToBottom === 'function') scrollToBottom(true);
       }
+
+      const activeConvId = (typeof currentConversationId !== 'undefined' && currentConversationId) ? currentConversationId : null;
+      const combinedUser = turnsToSync.map(t => t.user).filter(Boolean).join('\n') || `🗣️ 語音通話 (時長：${durationSec}秒)`;
+      const combinedModel = turnsToSync.map(t => t.model).filter(Boolean).join('\n\n') || `✨ Gemini Live 語音通話完畢 (${voiceName})`;
+
+      console.log('[Live Silent Sync] Writing turns to brain log in background...', { user: combinedUser, model: combinedModel });
+      fetch('/api/live-sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          conversation_id: activeConvId,
+          user_message: combinedUser,
+          assistant_message: combinedModel
+        })
+      }).then(res => res.json()).then(data => {
+        if (data.success && data.conversation_id && (typeof currentConversationId !== 'undefined' && !currentConversationId)) {
+          currentConversationId = data.conversation_id;
+          localStorage.setItem('agy_active_conv_id', data.conversation_id);
+        }
+      }).catch(err => {
+        console.warn('[Live Silent Sync Warning]', err);
+      });
     }
   }
 
