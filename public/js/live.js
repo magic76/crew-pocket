@@ -43,6 +43,7 @@
   let hasSentFrameForCurrentTurn = false;
   let lastAiSpokeTime = 0;
   let sustainedSpeechCount = 0;
+  let sessionSnapshots = [];
 
   // DOM References
   const liveVoiceBtn = document.getElementById('live-voice-btn');
@@ -524,6 +525,10 @@
         updateCameraBadge(true, '📸 已傳送高清截圖給 AI');
       }
 
+      if (sessionSnapshots.length < 6) {
+        sessionSnapshots.push(dataUrl);
+      }
+
       // 2. Save snapshot locally to uploads directory
       fetch('/api/upload', {
         method: 'POST',
@@ -806,6 +811,9 @@
       ws.send(JSON.stringify(videoMsg));
       hasSentFrameForCurrentTurn = true;
       lastVideoFrameSentTime = Date.now();
+      if (sessionSnapshots.length < 6) {
+        sessionSnapshots.push(jpegDataUrl);
+      }
       updateCameraBadge(true, '📸 已捕捉畫面送出給 AI');
     } catch (e) {
       console.warn('[Video Frame Send Error]', e);
@@ -870,6 +878,7 @@
     setMediaSessionActive(true);
     
     audioSendBuffer = [];
+    sessionSnapshots = [];
     isMuted = false;
     isCameraOn = false;
     liveCallStartTs = Date.now();
@@ -1119,9 +1128,9 @@
   }
 
   // ==========================================
-  // 📝 Post-Call Markdown Summary Memo Card
+  // 📝 Post-Call Option 1: Smart Call Summary Memo Card
   // ==========================================
-  function buildCallSummaryCardHtml(turns, durationSec, voiceName) {
+  function buildCallSummaryCardHtml(turns, durationSec, voiceName, snapshots = []) {
     const mins = Math.floor(durationSec / 60);
     const secs = durationSec % 60;
     const durationText = mins > 0 ? `${mins} 分 ${secs} 秒` : `${secs} 秒`;
@@ -1130,40 +1139,138 @@
     const card = document.createElement('div');
     card.className = 'flex w-full max-w-2xl mx-auto min-w-0 justify-start my-3 animate-fadeIn select-text';
 
+    // 1. Build dialog turns for collapsible transcript
     let dialogHtml = '';
-    turns.forEach(t => {
+    let plainTextSummary = `【Crew Pocket 語音通話備忘錄】\n時間：${timeStr} (時長：${durationText})\n音色：${voiceName}\n\n`;
+
+    turns.forEach((t, i) => {
       if (t.user) {
-        dialogHtml += `<div class="p-2.5 rounded-xl bg-indigo-950/40 border border-indigo-500/20 text-indigo-200 text-xs mb-1.5"><span class="font-bold text-indigo-300">🗣️ 您：</span>${escapeHtml(t.user)}</div>`;
+        dialogHtml += `
+          <div class="p-2.5 rounded-xl bg-indigo-950/40 border border-indigo-500/30 text-indigo-100 text-xs mb-2">
+            <div class="flex items-center gap-1.5 font-bold text-indigo-300 mb-1">
+              <span>🗣️ 您 (第 ${i + 1} 輪)：</span>
+            </div>
+            <div class="leading-relaxed pl-1">${escapeHtml(t.user)}</div>
+          </div>
+        `;
+        plainTextSummary += `[您]: ${t.user}\n`;
       }
       if (t.model) {
         const formattedModel = typeof formatMessageContent === 'function' ? formatMessageContent(t.model) : escapeHtml(t.model);
-        dialogHtml += `<div class="p-2.5 rounded-xl bg-slate-900/90 border border-teal-500/30 text-slate-200 text-xs mb-1.5"><span class="font-bold text-teal-300">✨ Gemini：</span><div class="mt-0.5">${formattedModel}</div></div>`;
+        dialogHtml += `
+          <div class="p-2.5 rounded-xl bg-slate-900/90 border border-teal-500/30 text-slate-100 text-xs mb-2">
+            <div class="flex items-center gap-1.5 font-bold text-teal-300 mb-1">
+              <span>✨ Gemini：</span>
+            </div>
+            <div class="prose prose-invert max-w-none text-xs leading-relaxed pl-1">${formattedModel}</div>
+          </div>
+        `;
+        plainTextSummary += `[Gemini]: ${t.model}\n\n`;
       }
     });
 
-    card.innerHTML = `
-      <div class="bg-gradient-to-b from-slate-900 via-slate-900 to-teal-950/30 border border-teal-500/50 text-slate-200 rounded-2xl p-3.5 sm:p-4 text-xs sm:text-sm shadow-xl w-full">
-        <div class="flex items-center justify-between border-b border-teal-800/60 pb-2 mb-2.5">
-          <div class="flex items-center gap-1.5">
-            <span class="px-2.5 py-0.5 rounded-full bg-teal-500/20 text-teal-300 border border-teal-500/40 text-[10px] font-mono font-bold flex items-center gap-1">
-              <span>🎙️</span>
-              <span>語音通話備忘卡</span>
-            </span>
-            <span class="text-[10px] text-teal-400 font-mono">⏱️ ${durationText}</span>
+    // 2. Build Smart Key Takeaways (Highlights from dialogue)
+    let keyHighlightsHtml = '';
+    if (turns.length > 0) {
+      keyHighlightsHtml = `
+        <div class="p-3 rounded-xl bg-teal-950/40 border border-teal-500/40 mb-2.5">
+          <div class="flex items-center gap-1.5 text-xs font-bold text-teal-300 mb-1.5">
+            <span>📌</span>
+            <span>本次對話重點整理</span>
           </div>
-          <span class="text-[10px] text-slate-400 font-mono">${timeStr}</span>
+          <ul class="space-y-1 text-xs text-slate-200 list-disc list-inside">
+            ${turns.slice(0, 3).map(t => {
+              const preview = t.user ? `討論：「${t.user.slice(0, 40)}${t.user.length > 40 ? '...' : ''}」` : (t.model ? `回覆摘要：${t.model.slice(0, 50)}...` : '');
+              return preview ? `<li>${escapeHtml(preview)}</li>` : '';
+            }).filter(Boolean).join('')}
+          </ul>
+        </div>
+      `;
+    }
+
+    // 3. Build Visual Snapshots Gallery (if camera was used)
+    let snapshotsHtml = '';
+    if (snapshots && snapshots.length > 0) {
+      snapshotsHtml = `
+        <div class="p-2.5 rounded-xl bg-slate-950/60 border border-slate-800 mb-2.5">
+          <div class="flex items-center justify-between text-[11px] font-bold text-slate-300 mb-1.5">
+            <span class="flex items-center gap-1">
+              <span>📷</span>
+              <span>通話中視覺捕捉 (${snapshots.length} 張)</span>
+            </span>
+            <span class="text-[10px] text-slate-400 font-normal">點擊放大</span>
+          </div>
+          <div class="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+            ${snapshots.map((imgSrc, idx) => `
+              <img src="${imgSrc}" class="w-16 h-16 object-cover rounded-lg border border-slate-700 hover:border-teal-400 cursor-pointer transition active:scale-95 shrink-0" alt="Snapshot ${idx + 1}" onclick="if (window.openLightbox) window.openLightbox('${imgSrc}');">
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    const cardId = `call-memo-${Date.now()}`;
+
+    card.innerHTML = `
+      <div id="${cardId}" class="bg-gradient-to-b from-slate-900 via-slate-900 to-teal-950/40 border border-teal-500/50 text-slate-200 rounded-2xl p-3.5 sm:p-4 text-xs sm:text-sm shadow-2xl w-full">
+        <!-- Top Header Badge -->
+        <div class="flex items-center justify-between border-b border-teal-800/60 pb-2.5 mb-3">
+          <div class="flex items-center gap-2">
+            <span class="px-2.5 py-1 rounded-full bg-teal-500/20 text-teal-300 border border-teal-500/40 text-[11px] font-mono font-bold flex items-center gap-1.5 shadow-sm">
+              <span class="animate-pulse">🎙️</span>
+              <span>語音通話備忘錄</span>
+            </span>
+            <span class="text-[10px] text-teal-400 font-mono bg-slate-800/80 px-2 py-0.5 rounded-md border border-slate-700">⏱️ ${durationText}</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="text-[10px] text-slate-400 font-mono">${timeStr}</span>
+            <button type="button" class="copy-memo-btn px-2 py-0.5 text-[10px] font-mono bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-300 hover:text-white rounded-md border border-slate-700 transition" title="複製備忘錄文字">
+              📋 複製
+            </button>
+          </div>
         </div>
 
-        <div class="space-y-1 max-h-72 overflow-y-auto pr-1">
-          ${dialogHtml || '<div class="text-slate-400 text-xs italic">通話結束（未記錄到發言）</div>'}
-        </div>
+        <!-- 📌 Smart Key Highlights -->
+        ${keyHighlightsHtml}
 
-        <div class="mt-2.5 pt-2 border-t border-slate-800/80 text-[10px] text-slate-400 font-mono flex items-center justify-between">
-          <span>💡 內容已自動記錄至歷史對話</span>
-          <span class="text-teal-400">✨ Gemini 2.0 Live (${escapeHtml(voiceName)})</span>
+        <!-- 📷 Visual Snapshots Gallery (if any) -->
+        ${snapshotsHtml}
+
+        <!-- 💬 Collapsible Full Transcript Accordion -->
+        <details class="group mt-2 border border-slate-800/80 rounded-xl bg-slate-950/40 overflow-hidden">
+          <summary class="flex items-center justify-between px-3 py-2 cursor-pointer select-none text-xs font-semibold text-teal-300 hover:bg-slate-900/60 transition">
+            <span class="flex items-center gap-1.5">
+              <span>💬</span>
+              <span>展開完整逐字稿 (${turns.length} 輪問答)</span>
+            </span>
+            <span class="text-slate-400 group-open:rotate-180 transition-transform duration-200">▼</span>
+          </summary>
+          <div class="p-3 border-t border-slate-800/80 max-h-80 overflow-y-auto space-y-2 bg-slate-950/20">
+            ${dialogHtml || '<div class="text-slate-400 text-xs italic">通話結束（未記錄到發言）</div>'}
+          </div>
+        </details>
+
+        <!-- Footer Note -->
+        <div class="mt-3 pt-2 border-t border-slate-800/80 text-[10px] text-slate-400 font-mono flex items-center justify-between">
+          <span class="flex items-center gap-1">
+            <span>🧠</span>
+            <span class="text-slate-400">已同步至上下文記憶 · 可打字接續討論</span>
+          </span>
+          <span class="text-teal-400 font-bold">✨ Gemini Live (${escapeHtml(voiceName)})</span>
         </div>
       </div>
     `;
+
+    // Bind copy button
+    const copyBtn = card.querySelector('.copy-memo-btn');
+    if (copyBtn) {
+      copyBtn.addEventListener('click', () => {
+        navigator.clipboard.writeText(plainTextSummary).then(() => {
+          copyBtn.textContent = '✅ 已複製';
+          setTimeout(() => { copyBtn.textContent = '📋 複製'; }, 1500);
+        }).catch(() => {});
+      });
+    }
 
     return card;
   }
@@ -1246,7 +1353,9 @@
 
     // 🔒 Silent Background Sync & Visual Summary Memo Card
     const turnsToSync = sessionDialogueTurns.slice();
+    const snapshotsToSync = sessionSnapshots.slice();
     sessionDialogueTurns = [];
+    sessionSnapshots = [];
 
     if (turnsToSync.length > 0) {
       const activeConvId = (typeof currentConversationId !== 'undefined' && currentConversationId) ? currentConversationId : null;
@@ -1257,7 +1366,7 @@
         // Render beautiful Summary Memo Card to chat timeline
         const durationSec = liveCallStartTs > 0 ? Math.max(1, Math.round((Date.now() - liveCallStartTs) / 1000)) : 0;
         const voiceName = getSelectedVoice();
-        const memoCard = buildCallSummaryCardHtml(turnsToSync, durationSec, voiceName);
+        const memoCard = buildCallSummaryCardHtml(turnsToSync, durationSec, voiceName, snapshotsToSync);
         if (messagesContainer) {
           messagesContainer.appendChild(memoCard);
           if (typeof enhanceCodeBlocks === 'function') enhanceCodeBlocks(memoCard);
