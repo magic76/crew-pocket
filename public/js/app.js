@@ -522,7 +522,6 @@ function initAppAndListeners() {
   let sttRecognition = null;
   let isSttListening = false;
   let sttBaseText = '';
-  let sttAccumulatedText = '';
 
   function initVoiceInput() {
     const voiceBtn = document.getElementById('voice-input-btn');
@@ -531,10 +530,10 @@ function initAppAndListeners() {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
     if (!SpeechRecognition) {
-      voiceBtn.title = '點擊使用語音輸入';
+      voiceBtn.title = '此瀏覽器不支援 Web Speech 語音辨識';
       voiceBtn.addEventListener('click', () => {
         if (typeof window.haptic === 'function') window.haptic('warning');
-        alert('您的瀏覽器未啟用 Web Speech API，您可以直接點擊手機鍵盤上的「🎤 麥克風」按鈕進行語音輸入！');
+        alert('您的瀏覽器未支援語音辨識，請使用手機鍵盤上的麥克風進行語音輸入！');
       });
       return;
     }
@@ -542,114 +541,63 @@ function initAppAndListeners() {
     try {
       sttRecognition = new SpeechRecognition();
       sttRecognition.lang = 'zh-TW';
-      sttRecognition.continuous = false; // Mobile Android Chrome standard
+      sttRecognition.continuous = false;
       sttRecognition.interimResults = true;
-      sttRecognition.maxAlternatives = 1;
-
-      let origPlaceholder = promptInput ? promptInput.placeholder : '問任何問題...';
 
       sttRecognition.onstart = () => {
+        isSttListening = true;
         voiceBtn.classList.remove('bg-slate-800', 'text-slate-300', 'border-slate-700');
         voiceBtn.classList.add('bg-rose-600', 'text-white', 'border-rose-400', 'animate-pulse', 'shadow-lg', 'shadow-rose-600/40');
-        if (promptInput) {
-          promptInput.placeholder = '🎙️ 正在聆聽語音... (請說話，說完再點一下)';
-        }
       };
 
       sttRecognition.onresult = (event) => {
-        let interim = '';
-        let finalChunk = '';
-
-        for (let i = event.resultIndex; i < event.results.length; ++i) {
-          if (event.results[i].isFinal) {
-            finalChunk += event.results[i][0].transcript;
-          } else {
-            interim += event.results[i][0].transcript;
-          }
+        let transcript = '';
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          transcript += event.results[i][0].transcript;
         }
-
-        if (finalChunk) {
-          sttAccumulatedText += finalChunk;
-          if (promptInput) {
-            promptInput.value = sttBaseText + sttAccumulatedText;
-          }
-        } else if (interim && promptInput) {
-          promptInput.value = sttBaseText + sttAccumulatedText + interim;
-        }
-
         if (promptInput) {
+          promptInput.value = (sttBaseText ? sttBaseText : '') + transcript;
           promptInput.style.height = 'auto';
           promptInput.style.height = Math.min(promptInput.scrollHeight, 120) + 'px';
           promptInput.dispatchEvent(new Event('input'));
         }
       };
 
-      sttRecognition.onerror = (event) => {
-        console.warn('[STT Error]', event.error);
-        if (event.error === 'not-allowed') {
-          alert('請在手機瀏覽器設定中允許「麥克風」權限以進行語音輸入！');
-          stopListening();
-        }
+      sttRecognition.onerror = (e) => {
+        console.warn('Speech recognition error:', e);
+        isSttListening = false;
+        voiceBtn.classList.remove('bg-rose-600', 'border-rose-400', 'animate-pulse', 'shadow-rose-600/40');
+        voiceBtn.classList.add('bg-slate-800', 'text-slate-300', 'border-slate-700');
       };
 
       sttRecognition.onend = () => {
-        if (isSttListening) {
-          // Auto-resume for continuous dictation across pauses
-          try {
-            sttRecognition.start();
-          } catch (e) {
-            stopListening();
-          }
-        } else {
-          stopListening();
-        }
+        isSttListening = false;
+        voiceBtn.classList.remove('bg-rose-600', 'border-rose-400', 'animate-pulse', 'shadow-rose-600/40');
+        voiceBtn.classList.add('bg-slate-800', 'text-slate-300', 'border-slate-700');
       };
 
-      function startListening() {
-        isSttListening = true;
-        sttAccumulatedText = '';
-        if (promptInput) {
-          sttBaseText = promptInput.value;
+      voiceBtn.addEventListener('click', () => {
+        if (typeof window.haptic === 'function') window.haptic('light');
+        if (isSttListening) {
+          try { sttRecognition.stop(); } catch(e) {}
+        } else {
+          sttBaseText = promptInput ? promptInput.value : '';
           if (sttBaseText && !sttBaseText.endsWith(' ') && !sttBaseText.endsWith('\n')) {
             sttBaseText += ' ';
           }
-        }
-        if (typeof window.haptic === 'function') window.haptic('medium');
-        try {
-          sttRecognition.start();
-        } catch (err) {
-          console.warn('[STT Start Catch]', err);
           try {
-            sttRecognition.stop();
-            setTimeout(() => sttRecognition.start(), 100);
-          } catch (e) {}
-        }
-      }
-
-      function stopListening() {
-        isSttListening = false;
-        try {
-          sttRecognition.stop();
-        } catch (e) {}
-        if (typeof window.haptic === 'function') window.haptic('light');
-        voiceBtn.classList.remove('bg-rose-600', 'border-rose-400', 'animate-pulse', 'shadow-rose-600/40');
-        voiceBtn.classList.add('bg-slate-800', 'text-slate-300', 'border-slate-700');
-        if (promptInput) {
-          promptInput.placeholder = origPlaceholder;
-          promptInput.focus();
-        }
-      }
-
-      voiceBtn.addEventListener('click', () => {
-        if (isSttListening) {
-          stopListening();
-        } else {
-          startListening();
+            sttRecognition.start();
+          } catch(err) {
+            console.warn('[STT Start Error]', err);
+            try {
+              sttRecognition.stop();
+              setTimeout(() => sttRecognition.start(), 100);
+            } catch(e) {}
+          }
         }
       });
-
     } catch (e) {
-      console.warn('[STT Setup Error]', e);
+      console.warn('[STT Init Error]', e);
     }
   }
 
