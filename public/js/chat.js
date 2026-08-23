@@ -1187,8 +1187,8 @@ async function stopGeneration() {
   try {
     await fetch('/api/stop', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ provider: currentProvider }) });
   } catch (e) {}
-  if (navigator.vibrate) {
-    navigator.vibrate([40, 40, 40]);
+  if (typeof window.haptic === 'function') {
+    window.haptic('heavy');
   }
   setStreamingState(false);
 }
@@ -1203,6 +1203,10 @@ async function sendMessage() {
   if (!text && !imgPath) return;
   if (isStreaming) return;
 
+  if (typeof window.haptic === 'function') {
+    window.haptic('medium');
+  }
+
   if (text.toLowerCase() === '/clear') {
     promptInput.value = '';
     promptInput.style.height = 'auto';
@@ -1210,7 +1214,7 @@ async function sendMessage() {
     if (cameraInput) cameraInput.value = '';
     if (imagePreviewContainer) imagePreviewContainer.classList.add('hidden');
     if (newChatBtn) newChatBtn.click();
-    if (navigator.vibrate) navigator.vibrate([20, 20]);
+    if (typeof window.haptic === 'function') window.haptic('medium');
     return;
   }
 

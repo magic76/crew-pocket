@@ -113,6 +113,19 @@ const closePreviewPaneBtn = document.getElementById('close-preview-pane-btn');
 const filesBasePath = document.getElementById('files-base-path');
 const filesCountBadge = document.getElementById('files-count-badge');
 
+// 📳 Tactical Mobile Haptic Feedback (Web Vibration API)
+function haptic(type = 'light') {
+  if (typeof navigator !== 'undefined' && navigator.vibrate) {
+    try {
+      if (type === 'light') navigator.vibrate(12);
+      else if (type === 'medium') navigator.vibrate(25);
+      else if (type === 'success') navigator.vibrate([15, 30, 20]);
+      else if (type === 'warning' || type === 'heavy') navigator.vibrate([30, 40, 30]);
+    } catch (e) {}
+  }
+}
+window.haptic = haptic;
+
 // Smart Scroll
 function scrollToBottom(force = false) {
   if (force || !userScrolledUp) {
@@ -120,13 +133,15 @@ function scrollToBottom(force = false) {
   }
 }
 
-// Copy to Clipboard
+// Copy to Clipboard (with Haptic Feedback)
 function copyToClipboard(text, btn) {
   navigator.clipboard.writeText(text).then(() => {
+    haptic('success');
     const original = btn.innerHTML;
     btn.innerHTML = `<span class="text-emerald-400 font-medium">✓ 已複製</span>`;
     setTimeout(() => { btn.innerHTML = original; }, 1800);
   }).catch(() => {
+    haptic('warning');
     alert('複製失敗');
   });
 }
@@ -134,14 +149,16 @@ function copyToClipboard(text, btn) {
 // Lightbox
 function showLightbox(src) {
   if (lightboxImg && lightbox) {
+    haptic('light');
     lightboxImg.src = src;
     lightbox.classList.remove('opacity-0', 'pointer-events-none');
   }
 }
 
-// Drawer Toggle
+// Drawer Toggle (with Haptic Feedback)
 function toggleDrawer(open) {
   if (!drawer || !drawerOverlay) return;
+  haptic('light');
   if (open) {
     drawer.classList.remove('-translate-x-full');
     drawerOverlay.classList.remove('opacity-0', 'pointer-events-none');
@@ -151,6 +168,44 @@ function toggleDrawer(open) {
     drawerOverlay.classList.add('opacity-0', 'pointer-events-none');
   }
 }
+
+// 👉 Edge Swipe Gestures (Swipe Right from Left Edge to Open, Swipe Left to Close)
+function initSwipeGestures() {
+  let touchStartX = 0;
+  let touchStartY = 0;
+  let touchStartTime = 0;
+
+  window.addEventListener('touchstart', (e) => {
+    if (e.touches.length !== 1) return;
+    const touch = e.touches[0];
+    touchStartX = touch.clientX;
+    touchStartY = touch.clientY;
+    touchStartTime = Date.now();
+  }, { passive: true });
+
+  window.addEventListener('touchend', (e) => {
+    if (e.changedTouches.length !== 1 || !drawer) return;
+    const touch = e.changedTouches[0];
+    const deltaX = touch.clientX - touchStartX;
+    const deltaY = touch.clientY - touchStartY;
+    const elapsedTime = Date.now() - touchStartTime;
+
+    // Check if horizontal swipe is dominant and fast
+    if (Math.abs(deltaX) > Math.abs(deltaY) * 1.3 && elapsedTime < 450) {
+      const isDrawerOpen = !drawer.classList.contains('-translate-x-full');
+
+      // 1. Swipe Right from Left Edge (startX < 45px) -> Open Drawer
+      if (!isDrawerOpen && touchStartX < 45 && deltaX > 45) {
+        toggleDrawer(true);
+      }
+      // 2. Swipe Left when Drawer is Open -> Close Drawer
+      else if (isDrawerOpen && deltaX < -45) {
+        toggleDrawer(false);
+      }
+    }
+  }, { passive: true });
+}
+window.initSwipeGestures = initSwipeGestures;
 
 // Capabilities Cheat Sheet Modal Handlers
 function toggleCheatSheet(open) {

@@ -85,15 +85,18 @@ function initAppAndListeners() {
   // 🚀 Holographic Quantum Splash Screen Dismissal (Option 1)
   const splashScreen = document.getElementById('app-splash-screen');
   if (splashScreen) {
-    if (navigator.vibrate) {
-      try { navigator.vibrate([20, 30]); } catch (e) {}
-    }
+    if (typeof window.haptic === 'function') window.haptic('medium');
     setTimeout(() => {
       splashScreen.classList.add('splash-dismissed');
       setTimeout(() => {
         if (splashScreen && splashScreen.parentNode) splashScreen.remove();
       }, 500);
     }, 950);
+  }
+
+  // 👉 Initialize Edge Swipe Gestures
+  if (typeof window.initSwipeGestures === 'function') {
+    window.initSwipeGestures();
   }
 
   // Drawer listeners
@@ -109,6 +112,7 @@ function initAppAndListeners() {
   if (toolsMenuBtn && toolsMenuDropdown) {
     toolsMenuBtn.addEventListener('click', (e) => {
       e.stopPropagation();
+      if (typeof window.haptic === 'function') window.haptic('light');
       toolsMenuDropdown.classList.toggle('hidden');
     });
 
@@ -119,7 +123,10 @@ function initAppAndListeners() {
     });
 
     [newChatBtn, filesBtn, usageBtn, cheatSheetBtn, notifyBtn].forEach(btn => {
-      if (btn) btn.addEventListener('click', () => toolsMenuDropdown.classList.add('hidden'));
+      if (btn) btn.addEventListener('click', () => {
+        if (typeof window.haptic === 'function') window.haptic('light');
+        toolsMenuDropdown.classList.add('hidden');
+      });
     });
   }
 
@@ -305,15 +312,31 @@ function initAppAndListeners() {
     });
   });
 
-  // Quick Action Chips Fill Handler
+  // Quick Action Chips Fill & Action Handler
   document.querySelectorAll('.quick-chip').forEach(chip => {
     chip.addEventListener('click', () => {
+      const action = chip.getAttribute('data-action');
       const fillText = chip.getAttribute('data-fill');
-      if (!fillText || !promptInput) return;
-      promptInput.value = fillText;
-      promptInput.focus();
-      promptInput.dispatchEvent(new Event('input'));
-      if (navigator.vibrate) navigator.vibrate(20);
+      
+      if (typeof window.haptic === 'function') window.haptic('light');
+
+      if (action === 'compact') {
+        if (promptInput) {
+          promptInput.value = '/compact';
+          promptInput.focus();
+          promptInput.dispatchEvent(new Event('input'));
+        }
+        if (typeof handleSendClick === 'function') {
+          handleSendClick(new Event('click'));
+        }
+        return;
+      }
+
+      if (fillText && promptInput) {
+        promptInput.value = fillText;
+        promptInput.focus();
+        promptInput.dispatchEvent(new Event('input'));
+      }
     });
   });
 

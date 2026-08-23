@@ -799,11 +799,12 @@
     }
 
     updateDockControls();
-    if (navigator.vibrate) navigator.vibrate(20);
+    if (typeof window.haptic === 'function') window.haptic('medium');
   }
 
   async function toggleCamera() {
     isCameraOn = !isCameraOn;
+    if (typeof window.haptic === 'function') window.haptic('medium');
     const box = document.getElementById('live-card-camera-box');
     const video = document.getElementById('live-card-video');
     const btn = document.getElementById('live-card-camera-btn');
@@ -972,6 +973,7 @@
     // 1. Create Inline Live Card in Chat Timeline
     createInlineCardElement();
     updateCardStatus('connecting', '⚡ 準備中...');
+    if (typeof window.haptic === 'function') window.haptic('success');
 
     // Update Header Live Button
     if (liveVoiceBtn) {
@@ -1479,6 +1481,8 @@
       try { ws.close(); } catch (e) {}
       ws = null;
     }
+
+    if (typeof window.haptic === 'function') window.haptic('heavy');
 
     // Reset Header Live Button
     if (liveVoiceBtn) {
