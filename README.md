@@ -49,13 +49,49 @@ termux-setup-storage
 # 2. 更新套件庫索引與系統套件
 pkg update && pkg upgrade -y
 
-# 3. 安裝 Node.js、Git、Python 與網路工具
+# 3. 安裝 Node.js、Git、Python 與基礎工具
 pkg install -y git nodejs python curl gh
 ```
 
 ---
 
-### 步驟 3：下載 Crew Pocket 專案
+### 步驟 3：安裝 AI 核心引擎 (agy / codex)
+
+Crew Pocket 支援雙核心 AI 引擎，請依需求安裝：
+
+#### 🔹 核心 A（預設必裝）：Google Antigravity CLI (`agy`)
+Antigravity (`agy`) 是 Crew Pocket 的預設核心，具備高效率代碼編輯、多模態視覺與上下文記憶管理能力。
+
+```bash
+# 1. 全域安裝 Antigravity CLI
+npm install -g agy
+
+# 2. 驗證安裝
+agy --version
+
+# 3. 首次啟動並完成 Google 帳號授權登入
+agy
+```
+> 💡 *在終端依提示於瀏覽器登入 Google 帳號授權後，即可按下 `Ctrl+C` 結束 TUI 介面。*
+
+#### 🔹 核心 B（可選擴充）：OpenAI Codex CLI (`codex`)
+若您希望在模型選單中無縫切換到 OpenAI Codex 系列模型（如 Sol、Terra、Luna 等），請安裝 Codex CLI：
+
+```bash
+# 1. 安裝 Termux 專用優化版 Codex CLI（Android arm64 環境推薦）
+npm install -g @mmmbuto/codex-cli-termux
+
+# 2. 驗證安裝
+codex --version
+
+# 3. 登入 OpenAI / ChatGPT 帳號
+codex login
+```
+> 💡 *不安裝 Codex 也可以正常使用預設的 Antigravity / agy 引擎。*
+
+---
+
+### 步驟 4：下載 Crew Pocket 專案
 
 在 Termux 終端中複製本專案：
 
@@ -63,27 +99,16 @@ pkg install -y git nodejs python curl gh
 git clone https://github.com/magic76/crew-pocket.git ~/agy-web
 ```
 
-### 步驟 3.1：AI 助理專案規範
+### 步驟 4.1：AI 助理專案規範
 
-本 repo 已包含 [`GEMINI.md`](GEMINI.md) 與 [`AGENTS.md`](AGENTS.md)。使用 Gemini CLI 或其他支援專案指令檔的 AI coding agent 時，請從專案根目錄啟動，讓它讀取這些規範後再修改程式：
+本 repo 已包含 [`GEMINI.md`](GEMINI.md) 與 [`AGENTS.md`](AGENTS.md)。使用 Antigravity CLI (`agy`) 或其他支援專案指令檔的 AI agent 時，請從專案根目錄啟動，讓它讀取這些規範後再修改程式：
 
 ```bash
 cd ~/agy-web
-gemini
+agy
 ```
 
 規範包含 Termux 執行安全、Mobile-first UI、HTML 沙盒、Chart.js 與手機裝置能力等專案慣例；請保留在 fork 或部署副本中，避免 AI 修改時忽略 Crew Pocket 的既有行為。
-
-### 步驟 4（可選）：啟用 OpenAI Codex Provider
-
-Antigravity / agy 仍是預設 Provider，不安裝 Codex 也可以照常使用。若要在模型選單中切換到 Codex，請先在 Termux 完成 Codex CLI 登入，並確認它可執行：
-
-```bash
-codex --version
-codex login
-```
-
-Crew Pocket 會在第一次選用 Codex 時啟動 `codex app-server`。Codex 模型選單由該 CLI 動態取得，因此實際可用模型取決於你的 Codex 帳號與安裝版本。
 
 ---
 
