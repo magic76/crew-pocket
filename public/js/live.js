@@ -100,41 +100,55 @@
       reader.readAsDataURL(audioBlob);
     });
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`;
-    const payload = {
-      contents: [
-        {
-          parts: [
+    const modelsToTry = ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'];
+    for (const m of modelsToTry) {
+      try {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${encodeURIComponent(apiKey)}`;
+        const payload = {
+          contents: [
             {
-              text: "這是一段即時雙向語音通話的錄音檔（包含用戶提問與 AI 助理的回應）。請仔細聆聽並生成繁體中文（台灣）的通話備忘錄。請嚴格輸出 JSON 格式（不要 markdown 標記、不要任何外層包裹）：\n{\n  \"summary\": [\"重點結論 1\", \"重點結論 2\"],\n  \"transcript\": [\n    {\"speaker\": \"user\", \"text\": \"用戶說的話\"},\n    {\"speaker\": \"model\", \"text\": \"AI 回應的話\"}\n  ]\n}"
-            },
-            {
-              inlineData: {
-                mimeType: "audio/wav",
-                data: base64Audio
-              }
+              parts: [
+                {
+                  text: "這是一段即時雙向語音通話的錄音檔（包含用戶提問與 AI 助理的回應）。請仔細聆聽音訊，並生成繁體中文（台灣）的通話備忘錄。請嚴格輸出純 JSON 物件（不要 markdown 程式碼區塊標記、不要額外文字）：\n{\n  \"summary\": [\"重點結論 1\", \"重點結論 2\"],\n  \"transcript\": [\n    {\"speaker\": \"user\", \"text\": \"用戶說的話\"},\n    {\"speaker\": \"model\", \"text\": \"AI 回應的話\"}\n  ]\n}"
+                },
+                {
+                  inlineData: {
+                    mimeType: "audio/wav",
+                    data: base64Audio
+                  }
+                }
+              ]
             }
-          ]
-        }
-      ],
-      generationConfig: {
-        responseMimeType: "application/json"
-      }
-    };
+          ],
+          generationConfig: {
+            responseMimeType: "application/json"
+          }
+        };
 
-    try {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      const data = await res.json();
-      const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (rawText) {
-        return JSON.parse(rawText);
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 12000);
+
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+
+        const data = await res.json();
+        if (data.error) {
+          console.warn(`[Transcription ${m} API Error]`, data.error);
+          continue;
+        }
+        let rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (rawText) {
+          rawText = rawText.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/i, '').trim();
+          return JSON.parse(rawText);
+        }
+      } catch (err) {
+        console.warn(`[Transcription ${m} Failed]`, err);
       }
-    } catch (err) {
-      console.warn('[Post-Call Transcription Error]', err);
     }
     return null;
   }
@@ -1535,9 +1549,26 @@
       if (audioToTranscribe.length > 8000 && apiKey) {
         const wavBlob = encodeWAV(audioToTranscribe, 16000);
         generatePostCallSmartTranscript(wavBlob, apiKey).then(result => {
-          if (!result) return;
           const highlightsEl = document.getElementById(`highlights-container-${memoId}`);
           const transcriptEl = document.getElementById(`transcript-container-${memoId}`);
+
+          if (!result) {
+            if (highlightsEl) {
+              highlightsEl.innerHTML = `
+                <div class="p-3 rounded-xl bg-slate-900/60 border border-slate-700/60 mb-2.5">
+                  <div class="flex items-center gap-1.5 text-xs font-bold text-slate-300 mb-1">
+                    <span>📌</span>
+                    <span>通話已完成</span>
+                  </div>
+                  <p class="text-xs text-slate-400 font-mono">⏱️ 時長：${durationText} · 音色：${voiceName}</p>
+                </div>
+              `;
+            }
+            if (transcriptEl) {
+              transcriptEl.innerHTML = `<div class="text-slate-400 text-xs italic">通話音訊已記錄 (${durationText})</div>`;
+            }
+            return;
+          }
 
           let newPlainText = `【Crew Pocket 語音通話備忘錄】\n時間：${timeStr} (時長：${durationText})\n音色：${voiceName}\n\n`;
 
@@ -1608,6 +1639,22 @@
           }
         }).catch(err => {
           console.warn('[Post-Call AI Memo Generation Failed]', err);
+          const highlightsEl = document.getElementById(`highlights-container-${memoId}`);
+          const transcriptEl = document.getElementById(`transcript-container-${memoId}`);
+          if (highlightsEl) {
+            highlightsEl.innerHTML = `
+              <div class="p-3 rounded-xl bg-slate-900/60 border border-slate-700/60 mb-2.5">
+                <div class="flex items-center gap-1.5 text-xs font-bold text-slate-300 mb-1">
+                  <span>📌</span>
+                  <span>通話已完成</span>
+                </div>
+                <p class="text-xs text-slate-400 font-mono">⏱️ 時長：${durationText} · 音色：${voiceName}</p>
+              </div>
+            `;
+          }
+          if (transcriptEl) {
+            transcriptEl.innerHTML = `<div class="text-slate-400 text-xs italic">通話音訊已記錄 (${durationText})</div>`;
+          }
         });
       } else {
         const combinedUser = turnsToSync.map(t => t.user).filter(Boolean).join('\n') || `🗣️ 語音通話 (時長：${durationSec}秒)`;
