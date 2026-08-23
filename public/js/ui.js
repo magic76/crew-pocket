@@ -169,44 +169,6 @@ function toggleDrawer(open) {
   }
 }
 
-// 👉 Edge Swipe Gestures (Swipe Right from Left Edge to Open, Swipe Left to Close)
-function initSwipeGestures() {
-  let touchStartX = 0;
-  let touchStartY = 0;
-  let touchStartTime = 0;
-
-  window.addEventListener('touchstart', (e) => {
-    if (e.touches.length !== 1) return;
-    const touch = e.touches[0];
-    touchStartX = touch.clientX;
-    touchStartY = touch.clientY;
-    touchStartTime = Date.now();
-  }, { passive: true });
-
-  window.addEventListener('touchend', (e) => {
-    if (e.changedTouches.length !== 1 || !drawer) return;
-    const touch = e.changedTouches[0];
-    const deltaX = touch.clientX - touchStartX;
-    const deltaY = touch.clientY - touchStartY;
-    const elapsedTime = Date.now() - touchStartTime;
-
-    // Check if horizontal swipe is dominant and fast
-    if (Math.abs(deltaX) > Math.abs(deltaY) * 1.3 && elapsedTime < 450) {
-      const isDrawerOpen = !drawer.classList.contains('-translate-x-full');
-
-      // 1. Swipe Right from Left Edge (startX < 45px) -> Open Drawer
-      if (!isDrawerOpen && touchStartX < 45 && deltaX > 45) {
-        toggleDrawer(true);
-      }
-      // 2. Swipe Left when Drawer is Open -> Close Drawer
-      else if (isDrawerOpen && deltaX < -45) {
-        toggleDrawer(false);
-      }
-    }
-  }, { passive: true });
-}
-window.initSwipeGestures = initSwipeGestures;
-
 // Capabilities Cheat Sheet Modal Handlers
 function toggleCheatSheet(open) {
   if (!cheatSheetModal) return;

@@ -94,11 +94,6 @@ function initAppAndListeners() {
     }, 950);
   }
 
-  // 👉 Initialize Edge Swipe Gestures
-  if (typeof window.initSwipeGestures === 'function') {
-    window.initSwipeGestures();
-  }
-
   // Drawer listeners
   if (menuBtn) menuBtn.addEventListener('click', () => toggleDrawer(true));
   if (closeDrawerBtn) closeDrawerBtn.addEventListener('click', () => toggleDrawer(false));
