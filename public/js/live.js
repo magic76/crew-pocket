@@ -91,8 +91,12 @@
       source.onended = () => {
         const idx = this.activeSources.indexOf(source);
         if (idx > -1) this.activeSources.splice(idx, 1);
-        if (this.activeSources.length === 0 && isConnected && !isMuted) {
-          updateCardStatus('listening', '🎙️ 可以開始說話');
+        if (this.activeSources.length === 0 && isConnected) {
+          if (isMuted) {
+            updateCardStatus('muted', '🔇 麥克風已靜音');
+          } else {
+            updateCardStatus('listening', '🎙️ 可以開始說話');
+          }
         }
       };
     }
@@ -391,7 +395,9 @@
 
       canvasCtx.clearRect(0, 0, width, height);
 
-      if (isMuted) {
+      const isAiSpeaking = audioPlayer && audioPlayer.activeSources.length > 0;
+
+      if (isMuted && !isAiSpeaking) {
         canvasCtx.strokeStyle = '#475569';
         canvasCtx.lineWidth = 2;
         canvasCtx.beginPath();
@@ -542,6 +548,24 @@
 
   function toggleMute() {
     isMuted = !isMuted;
+
+    // 🛡️ Smooth Silence Flush: send 100ms zeroed audio frame so Gemini server VAD cleanly detects turn completion
+    if (isMuted && ws && ws.readyState === WebSocket.OPEN) {
+      try {
+        const silentPcm = new Float32Array(1600);
+        const silentBuf = floatTo16BitPCM(silentPcm);
+        const silentBase64 = arrayBufferToBase64(silentBuf);
+        ws.send(JSON.stringify({
+          realtimeInput: {
+            audio: {
+              mimeType: "audio/pcm;rate=16000",
+              data: silentBase64
+            }
+          }
+        }));
+      } catch (e) {}
+    }
+
     if (micMediaStream) {
       micMediaStream.getAudioTracks().forEach(t => {
         t.enabled = !isMuted;
@@ -552,6 +576,8 @@
     const icon = document.getElementById('live-card-mute-icon');
     const label = document.getElementById('live-card-mute-label');
 
+    const isAiSpeaking = audioPlayer && audioPlayer.activeSources.length > 0;
+
     if (isMuted) {
       if (btn) {
         btn.classList.replace('bg-slate-800', 'bg-rose-900/80');
@@ -559,7 +585,9 @@
       }
       if (icon) icon.textContent = '🔇';
       if (label) label.textContent = '已靜音';
-      updateCardStatus('muted', '🔇 已靜音');
+      if (!isAiSpeaking) {
+        updateCardStatus('muted', '🔇 麥克風已靜音');
+      }
     } else {
       if (btn) {
         btn.classList.replace('bg-rose-900/80', 'bg-slate-800');
@@ -567,7 +595,9 @@
       }
       if (icon) icon.textContent = '🎙️';
       if (label) label.textContent = '靜音';
-      updateCardStatus('listening', '🎙️ 可以開始說話');
+      if (!isAiSpeaking) {
+        updateCardStatus('listening', '🎙️ 可以開始說話');
+      }
     }
   }
 
