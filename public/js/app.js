@@ -518,196 +518,139 @@ function initAppAndListeners() {
     }
   }
 
-  // 🎙️ Speech-to-Text (STT) Voice Dictation Controller (Universal Gemini Flash Engine)
-  let sttAudioStream = null;
-  let sttAudioContext = null;
-  let sttScriptProcessor = null;
-  let sttAudioChunks = [];
-  let isSttRecording = false;
-
-  function encodeWavForSTT(samples, sampleRate = 16000) {
-    const buffer = new ArrayBuffer(44 + samples.length * 2);
-    const view = new DataView(buffer);
-
-    function writeStr(offset, str) {
-      for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
-    }
-
-    writeStr(0, 'RIFF');
-    view.setUint32(4, 36 + samples.length * 2, true);
-    writeStr(8, 'WAVE');
-    writeStr(12, 'fmt ');
-    view.setUint32(16, 16, true);
-    view.setUint16(20, 1, true); // PCM
-    view.setUint16(22, 1, true); // Mono
-    view.setUint32(24, sampleRate, true);
-    view.setUint32(28, sampleRate * 2, true);
-    view.setUint16(32, 2, true);
-    view.setUint16(34, 16, true);
-    writeStr(36, 'data');
-    view.setUint32(40, samples.length * 2, true);
-
-    const pcm = new Int16Array(buffer, 44);
-    for (let i = 0; i < samples.length; i++) {
-      const s = Math.max(-1, Math.min(1, samples[i]));
-      pcm[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
-    }
-    return buffer;
-  }
-
-  function arrayBufferToBase64ForSTT(buffer) {
-    let binary = '';
-    const bytes = new Uint8Array(buffer);
-    for (let i = 0; i < bytes.byteLength; i++) {
-      binary += String.fromCharCode(bytes[i]);
-    }
-    return window.btoa(binary);
-  }
+  // 🎙️ Speech-to-Text (STT) Native Voice Dictation (100% Free & Zero Key Required)
+  let sttRecognition = null;
+  let isSttListening = false;
+  let sttBaseText = '';
+  let sttAccumulatedText = '';
 
   function initVoiceInput() {
     const voiceBtn = document.getElementById('voice-input-btn');
     if (!voiceBtn) return;
 
-    let basePromptText = '';
-    let origPlaceholder = promptInput ? promptInput.placeholder : '問任何問題...';
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
-    async function startRecording() {
-      try {
-        if (typeof window.haptic === 'function') window.haptic('medium');
-        sttAudioChunks = [];
-        
-        sttAudioStream = await navigator.mediaDevices.getUserMedia({
-          audio: {
-            echoCancellation: true,
-            noiseSuppression: true,
-            autoGainControl: true
-          }
-        });
+    if (!SpeechRecognition) {
+      voiceBtn.title = '點擊使用語音輸入';
+      voiceBtn.addEventListener('click', () => {
+        if (typeof window.haptic === 'function') window.haptic('warning');
+        alert('您的瀏覽器未啟用 Web Speech API，您可以直接點擊手機鍵盤上的「🎤 麥克風」按鈕進行語音輸入！');
+      });
+      return;
+    }
 
-        const AudioCtx = window.AudioContext || window.webkitAudioContext;
-        sttAudioContext = new AudioCtx();
-        if (sttAudioContext.state === 'suspended') {
-          await sttAudioContext.resume();
-        }
+    try {
+      sttRecognition = new SpeechRecognition();
+      sttRecognition.lang = 'zh-TW';
+      sttRecognition.continuous = false; // Mobile Android Chrome standard
+      sttRecognition.interimResults = true;
+      sttRecognition.maxAlternatives = 1;
 
-        const source = sttAudioContext.createMediaStreamSource(sttAudioStream);
-        sttScriptProcessor = sttAudioContext.createScriptProcessor(2048, 1, 1);
+      let origPlaceholder = promptInput ? promptInput.placeholder : '問任何問題...';
 
-        sttScriptProcessor.onaudioprocess = (e) => {
-          if (!isSttRecording) return;
-          const inputData = e.inputBuffer.getChannelData(0);
-          
-          const sampleRate = sttAudioContext.sampleRate;
-          const targetRate = 16000;
-          const ratio = sampleRate / targetRate;
-          const newLength = Math.round(inputData.length / ratio);
-          for (let i = 0; i < newLength; i++) {
-            const index = Math.min(Math.round(i * ratio), inputData.length - 1);
-            sttAudioChunks.push(inputData[index]);
-          }
-        };
-
-        source.connect(sttScriptProcessor);
-        sttScriptProcessor.connect(sttAudioContext.destination);
-
-        isSttRecording = true;
+      sttRecognition.onstart = () => {
         voiceBtn.classList.remove('bg-slate-800', 'text-slate-300', 'border-slate-700');
         voiceBtn.classList.add('bg-rose-600', 'text-white', 'border-rose-400', 'animate-pulse', 'shadow-lg', 'shadow-rose-600/40');
-        
         if (promptInput) {
-          basePromptText = promptInput.value;
-          if (basePromptText && !basePromptText.endsWith(' ') && !basePromptText.endsWith('\n')) {
-            basePromptText += ' ';
-          }
-          promptInput.placeholder = '🎙️ 正在聆聽語音... (說完再點一下結束)';
+          promptInput.placeholder = '🎙️ 正在聆聽語音... (請說話，說完再點一下)';
         }
+      };
 
-      } catch (err) {
-        console.error('[STT Mic Error]', err);
-        if (typeof window.haptic === 'function') window.haptic('warning');
-        alert('無法取得麥克風權限：' + err.message);
-        stopRecording(false);
-      }
-    }
+      sttRecognition.onresult = (event) => {
+        let interim = '';
+        let finalChunk = '';
 
-    async function stopRecording(shouldTranscribe = true) {
-      isSttRecording = false;
-      
-      if (sttScriptProcessor) {
-        try { sttScriptProcessor.disconnect(); } catch (e) {}
-        sttScriptProcessor = null;
-      }
-      if (sttAudioContext) {
-        try { sttAudioContext.close(); } catch (e) {}
-        sttAudioContext = null;
-      }
-      if (sttAudioStream) {
-        sttAudioStream.getTracks().forEach(t => t.stop());
-        sttAudioStream = null;
-      }
-
-      if (typeof window.haptic === 'function') window.haptic('light');
-      voiceBtn.classList.remove('bg-rose-600', 'border-rose-400', 'animate-pulse', 'shadow-rose-600/40');
-      voiceBtn.classList.add('bg-slate-800', 'text-slate-300', 'border-slate-700');
-      if (promptInput) promptInput.placeholder = origPlaceholder;
-
-      if (!shouldTranscribe || sttAudioChunks.length < 3000) {
-        return;
-      }
-
-      voiceBtn.classList.add('bg-amber-600/90', 'text-white', 'animate-pulse');
-      if (promptInput) promptInput.placeholder = '⚡ 正在透過 AI 轉錄為文字...';
-
-      try {
-        const wavBuffer = encodeWavForSTT(sttAudioChunks, 16000);
-        const base64Audio = arrayBufferToBase64ForSTT(wavBuffer);
-        const apiKey = (localStorage.getItem('gemini_live_api_key') || '').trim();
-
-        const res = await fetch('/api/quick-transcribe', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            api_key: apiKey,
-            audio_base64: base64Audio,
-            mime_type: 'audio/wav'
-          })
-        });
-
-        const data = await res.json();
-        if (data.success && data.text) {
-          if (promptInput) {
-            promptInput.value = basePromptText + data.text;
-            promptInput.focus();
-            promptInput.style.height = 'auto';
-            promptInput.style.height = Math.min(promptInput.scrollHeight, 120) + 'px';
-            promptInput.dispatchEvent(new Event('input'));
-          }
-          if (typeof window.haptic === 'function') window.haptic('success');
-        } else {
-          console.warn('[STT Transcribe Failed]', data.error);
-          if (data.error && data.error.includes('API Key')) {
-            alert('請先在右上角 🎙️ Live 語音設定中填入您的 Gemini API Key！');
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          if (event.results[i].isFinal) {
+            finalChunk += event.results[i][0].transcript;
           } else {
-            alert('語音辨識未完成：' + (data.error || '未偵測到清晰人聲'));
+            interim += event.results[i][0].transcript;
           }
         }
-      } catch (err) {
-        console.error('[STT Fetch Error]', err);
-        alert('語音辨識請求失敗：' + err.message);
-      } finally {
-        voiceBtn.classList.remove('bg-amber-600/90', 'text-white', 'animate-pulse');
-        voiceBtn.classList.add('bg-slate-800', 'text-slate-300', 'border-slate-700');
-        if (promptInput) promptInput.placeholder = origPlaceholder;
-      }
-    }
 
-    voiceBtn.addEventListener('click', () => {
-      if (isSttRecording) {
-        stopRecording(true);
-      } else {
-        startRecording();
+        if (finalChunk) {
+          sttAccumulatedText += finalChunk;
+          if (promptInput) {
+            promptInput.value = sttBaseText + sttAccumulatedText;
+          }
+        } else if (interim && promptInput) {
+          promptInput.value = sttBaseText + sttAccumulatedText + interim;
+        }
+
+        if (promptInput) {
+          promptInput.style.height = 'auto';
+          promptInput.style.height = Math.min(promptInput.scrollHeight, 120) + 'px';
+          promptInput.dispatchEvent(new Event('input'));
+        }
+      };
+
+      sttRecognition.onerror = (event) => {
+        console.warn('[STT Error]', event.error);
+        if (event.error === 'not-allowed') {
+          alert('請在手機瀏覽器設定中允許「麥克風」權限以進行語音輸入！');
+          stopListening();
+        }
+      };
+
+      sttRecognition.onend = () => {
+        if (isSttListening) {
+          // Auto-resume for continuous dictation across pauses
+          try {
+            sttRecognition.start();
+          } catch (e) {
+            stopListening();
+          }
+        } else {
+          stopListening();
+        }
+      };
+
+      function startListening() {
+        isSttListening = true;
+        sttAccumulatedText = '';
+        if (promptInput) {
+          sttBaseText = promptInput.value;
+          if (sttBaseText && !sttBaseText.endsWith(' ') && !sttBaseText.endsWith('\n')) {
+            sttBaseText += ' ';
+          }
+        }
+        if (typeof window.haptic === 'function') window.haptic('medium');
+        try {
+          sttRecognition.start();
+        } catch (err) {
+          console.warn('[STT Start Catch]', err);
+          try {
+            sttRecognition.stop();
+            setTimeout(() => sttRecognition.start(), 100);
+          } catch (e) {}
+        }
       }
-    });
+
+      function stopListening() {
+        isSttListening = false;
+        try {
+          sttRecognition.stop();
+        } catch (e) {}
+        if (typeof window.haptic === 'function') window.haptic('light');
+        voiceBtn.classList.remove('bg-rose-600', 'border-rose-400', 'animate-pulse', 'shadow-rose-600/40');
+        voiceBtn.classList.add('bg-slate-800', 'text-slate-300', 'border-slate-700');
+        if (promptInput) {
+          promptInput.placeholder = origPlaceholder;
+          promptInput.focus();
+        }
+      }
+
+      voiceBtn.addEventListener('click', () => {
+        if (isSttListening) {
+          stopListening();
+        } else {
+          startListening();
+        }
+      });
+
+    } catch (e) {
+      console.warn('[STT Setup Error]', e);
+    }
   }
 
   // Send Button Listener
