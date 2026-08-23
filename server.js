@@ -20,7 +20,7 @@ const { getProvider, normalizeProviderId, listProviders, listProviderMetadata } 
 const { handleLiveSync, handleLiveTranscribe, handleQuickTranscribe } = require('./lib/history');
 const { handleRunCode } = require('./lib/sandbox');
 const { handleUsage } = require('./lib/usage');
-const { handleListFiles, handleReadFile } = require('./lib/files');
+const { handleListFiles, handleReadFile, handleSaveFile } = require('./lib/files');
 const { handleGenerateTitle, getCachedTitle } = require('./lib/title');
 
 // 🤖 List Available Models & Thinking Efforts
@@ -519,6 +519,8 @@ const server = http.createServer(async (req, res) => {
     return handleListFiles(parsedUrl, res);
   } else if (pathname === '/api/file/read' && req.method === 'GET') {
     return handleReadFile(parsedUrl, res);
+  } else if (pathname === '/api/file/save' && req.method === 'POST') {
+    return handleSaveFile(req, res);
   } else if (pathname === '/api/image' && req.method === 'GET') {
     return handleImageProxy(parsedUrl, res);
   } else {

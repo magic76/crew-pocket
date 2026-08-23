@@ -350,7 +350,11 @@ function enhanceCodeBlocks(container) {
               <svg class="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
               <span>全螢幕</span>
             </a>
-            <button type="button" class="card-copy-btn px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 active:bg-slate-900 text-slate-300 hover:text-white text-[11px] font-mono flex items-center gap-1 transition active:scale-95" title="複製 HTML 原始碼">
+            <button type="button" class="card-save-btn px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 active:bg-slate-900 text-slate-300 hover:text-cyan-300 text-[11px] font-mono flex items-center gap-1 transition active:scale-95 cursor-pointer" title="存為本地 Termux 檔案">
+              <svg class="w-3.5 h-3.5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/></svg>
+              <span>存檔</span>
+            </button>
+            <button type="button" class="card-copy-btn px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 active:bg-slate-900 text-slate-300 hover:text-white text-[11px] font-mono flex items-center gap-1 transition active:scale-95 cursor-pointer" title="複製 HTML 原始碼">
               <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
               <span>代碼</span>
             </button>
@@ -362,10 +366,20 @@ function enhanceCodeBlocks(container) {
       `;
 
       const cardCopyBtn = card.querySelector('.card-copy-btn');
-      cardCopyBtn.onclick = (e) => {
-        e.stopPropagation();
-        copyToClipboard(rawCode, cardCopyBtn);
-      };
+      if (cardCopyBtn) {
+        cardCopyBtn.onclick = (e) => {
+          e.stopPropagation();
+          copyToClipboard(rawCode, cardCopyBtn);
+        };
+      }
+
+      const cardSaveBtn = card.querySelector('.card-save-btn');
+      if (cardSaveBtn) {
+        cardSaveBtn.onclick = (e) => {
+          e.stopPropagation();
+          saveCodeToFile(rawCode, lang === 'SVG' ? 'svg' : 'html');
+        };
+      }
 
       if (pre.parentNode) {
         if (asciiPrefix) {
@@ -399,7 +413,7 @@ function enhanceCodeBlocks(container) {
         // 🌐 Browser Sandbox Runner
         const browserRunBtn = document.createElement('button');
         browserRunBtn.type = 'button';
-        browserRunBtn.className = 'px-2 py-0.5 rounded bg-indigo-950/80 border border-indigo-700/60 hover:bg-indigo-900 text-indigo-300 text-[10px] font-mono flex items-center gap-1 transition active:scale-95';
+        browserRunBtn.className = 'px-2 py-0.5 rounded bg-indigo-950/80 border border-indigo-700/60 hover:bg-indigo-900 text-indigo-300 text-[10px] font-mono flex items-center gap-1 transition active:scale-95 cursor-pointer';
         browserRunBtn.innerHTML = `<svg class="w-3 h-3 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg><span>瀏覽器渲染</span>`;
         browserRunBtn.onclick = (e) => {
           e.stopPropagation();
@@ -410,7 +424,7 @@ function enhanceCodeBlocks(container) {
         // 💻 Backend Node.js Runner
         const nodeRunBtn = document.createElement('button');
         nodeRunBtn.type = 'button';
-        nodeRunBtn.className = 'px-2 py-0.5 rounded bg-emerald-950/80 border border-emerald-700/60 hover:bg-emerald-900 text-emerald-300 text-[10px] font-mono flex items-center gap-1 transition active:scale-95';
+        nodeRunBtn.className = 'px-2 py-0.5 rounded bg-emerald-950/80 border border-emerald-700/60 hover:bg-emerald-900 text-emerald-300 text-[10px] font-mono flex items-center gap-1 transition active:scale-95 cursor-pointer';
         nodeRunBtn.innerHTML = `<svg class="w-3 h-3 text-emerald-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd"/></svg><span>Node.js</span>`;
         nodeRunBtn.onclick = (e) => {
           e.stopPropagation();
@@ -421,7 +435,7 @@ function enhanceCodeBlocks(container) {
         // Python / Bash Backend Runner
         const runBtn = document.createElement('button');
         runBtn.type = 'button';
-        runBtn.className = 'px-2 py-0.5 rounded bg-emerald-950/80 border border-emerald-700/60 hover:bg-emerald-900 text-emerald-300 text-[10px] font-mono flex items-center gap-1 transition active:scale-95';
+        runBtn.className = 'px-2 py-0.5 rounded bg-emerald-950/80 border border-emerald-700/60 hover:bg-emerald-900 text-emerald-300 text-[10px] font-mono flex items-center gap-1 transition active:scale-95 cursor-pointer';
         runBtn.innerHTML = `<svg class="w-3 h-3 text-emerald-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd"/></svg><span>執行</span>`;
         runBtn.onclick = (e) => {
           e.stopPropagation();
@@ -430,9 +444,20 @@ function enhanceCodeBlocks(container) {
         actionsContainer.appendChild(runBtn);
       }
 
+      // 💾 Save to File Button
+      const saveBtn = document.createElement('button');
+      saveBtn.type = 'button';
+      saveBtn.className = 'px-2 py-0.5 rounded bg-slate-700/80 hover:bg-slate-600 text-slate-300 hover:text-cyan-300 text-[10px] font-sans flex items-center gap-1 transition active:scale-95 cursor-pointer';
+      saveBtn.innerHTML = `<svg class="w-3 h-3 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/></svg>存檔`;
+      saveBtn.onclick = (e) => {
+        e.stopPropagation();
+        saveCodeToFile(rawCode, lowerLang);
+      };
+      actionsContainer.appendChild(saveBtn);
+
       const copyBtn = document.createElement('button');
       copyBtn.type = 'button';
-      copyBtn.className = 'px-2 py-0.5 rounded bg-slate-700/80 hover:bg-slate-600 text-slate-300 text-[10px] font-sans flex items-center gap-1 transition active:scale-95';
+      copyBtn.className = 'px-2 py-0.5 rounded bg-slate-700/80 hover:bg-slate-600 text-slate-300 text-[10px] font-sans flex items-center gap-1 transition active:scale-95 cursor-pointer';
       copyBtn.innerHTML = `<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>複製`;
       copyBtn.onclick = (e) => {
         e.stopPropagation();
@@ -445,6 +470,52 @@ function enhanceCodeBlocks(container) {
     }
   });
 }
+
+// 💾 Save Code directly to Termux filesystem modal / prompt
+async function saveCodeToFile(rawCode, lang) {
+  if (!rawCode) return;
+  if (typeof window.haptic === 'function') window.haptic('light');
+
+  const extMap = {
+    python: 'py', py: 'py',
+    javascript: 'js', js: 'js', node: 'js',
+    typescript: 'ts', ts: 'ts',
+    html: 'html', htm: 'html', svg: 'svg',
+    css: 'css',
+    json: 'json',
+    yaml: 'yaml', yml: 'yaml',
+    bash: 'sh', sh: 'sh', shell: 'sh', zsh: 'sh',
+    markdown: 'md', md: 'md',
+    sql: 'sql'
+  };
+  const ext = extMap[(lang || '').toLowerCase()] || 'txt';
+  const defaultPath = `~/script_${Date.now().toString().slice(-4)}.${ext}`;
+
+  const userPath = prompt(`💾 請輸入要儲存到 Termux 的檔案路徑：\n（支援 ~ 代表 Termux Home 目錄）`, defaultPath);
+  if (!userPath || !userPath.trim()) return;
+
+  try {
+    const res = await fetch('/api/file/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        targetPath: userPath.trim(),
+        content: rawCode
+      })
+    });
+    const data = await res.json();
+    if (data.success) {
+      if (typeof window.haptic === 'function') window.haptic('success');
+      alert(`✅ 檔案已成功寫入！\n📁 路徑: ${data.displayPath || data.fullPath}`);
+    } else {
+      if (typeof window.haptic === 'function') window.haptic('warning');
+      alert(`❌ 存檔失敗: ${data.error || '未知錯誤'}`);
+    }
+  } catch (err) {
+    alert(`❌ 存檔請求失敗: ${err.message}`);
+  }
+}
+window.saveCodeToFile = saveCodeToFile;
 
 // 🎤 TTS Web Speech Synthesis
 let currentSpeakingBtn = null;

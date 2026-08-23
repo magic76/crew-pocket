@@ -980,178 +980,214 @@ async function loadConversations() {
         return [];
       }
     }));
-    const data = { conversations: results.flat().sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)) };
-    convList.innerHTML = '';
+    cachedConversations = results.flat().sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+    
+    const searchInput = document.getElementById('conv-search-input');
+    const query = searchInput ? searchInput.value : '';
+    renderConversationItems(cachedConversations, query);
+  } catch (err) {
+    console.error('Failed to load conversations:', err);
+    if (convList) convList.innerHTML = '<div class="p-4 text-center text-xs text-rose-400">無法載入歷史紀錄</div>';
+  }
+}
 
-    if (!data.conversations || data.conversations.length === 0) {
-      convList.innerHTML = '<div class="p-4 text-center text-xs text-slate-500">尚無歷史對話</div>';
-      return;
+let cachedConversations = [];
+
+function renderConversationItems(conversations, filterQuery = '') {
+  if (!convList) return;
+  convList.innerHTML = '';
+
+  const cleanQuery = (filterQuery || '').trim().toLowerCase();
+  const searchCountEl = document.getElementById('conv-search-count');
+  const searchClearBtn = document.getElementById('conv-search-clear');
+
+  if (searchClearBtn) {
+    searchClearBtn.classList.toggle('hidden', !cleanQuery);
+  }
+
+  let filtered = conversations || [];
+  if (cleanQuery) {
+    filtered = filtered.filter(c => (c.title || '').toLowerCase().includes(cleanQuery));
+    if (searchCountEl) {
+      searchCountEl.classList.remove('hidden');
+      searchCountEl.textContent = `找到 ${filtered.length} 個符合對話`;
+    }
+  } else {
+    if (searchCountEl) {
+      searchCountEl.classList.add('hidden');
+      searchCountEl.textContent = '';
+    }
+  }
+
+  if (!filtered || filtered.length === 0) {
+    convList.innerHTML = cleanQuery
+      ? `<div class="p-6 text-center text-xs text-slate-400 space-y-1"><div>🔍 無符合「${escapeHtml(cleanQuery)}」的對話</div><div class="text-[10px] text-slate-500">嘗試搜尋其他關鍵字</div></div>`
+      : '<div class="p-4 text-center text-xs text-slate-500">尚無歷史對話</div>';
+    return;
+  }
+
+  filtered.forEach(conv => {
+    const conversationProvider = conv.provider || 'antigravity';
+    const isCurrent = conv.id === currentConversationId && conversationProvider === currentProvider;
+    const conversationProviderConfig = providerConfig(conversationProvider);
+    const providerLabel = conversationProviderConfig.shortLabel || conversationProviderConfig.label;
+    const providerBadgeClass = conversationProviderConfig.badgeClass || 'bg-slate-500/20 text-slate-300 border-slate-500/40';
+    const wrapper = document.createElement('div');
+    wrapper.className = 'swipe-item-wrapper relative overflow-hidden rounded-xl mb-1.5 select-none transition-all duration-200';
+    wrapper.style.maxHeight = '80px';
+
+    // Highlight search match in title
+    let displayTitle = escapeHtml(conv.title);
+    if (cleanQuery) {
+      const regex = new RegExp(`(${cleanQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+      displayTitle = displayTitle.replace(regex, '<mark class="bg-indigo-500/40 text-white rounded px-0.5 font-bold">$1</mark>');
     }
 
-    data.conversations.forEach(conv => {
-      const conversationProvider = conv.provider || 'antigravity';
-      const isCurrent = conv.id === currentConversationId && conversationProvider === currentProvider;
-      const conversationProviderConfig = providerConfig(conversationProvider);
-      const providerLabel = conversationProviderConfig.shortLabel || conversationProviderConfig.label;
-      const providerBadgeClass = conversationProviderConfig.badgeClass || 'bg-slate-500/20 text-slate-300 border-slate-500/40';
-      const wrapper = document.createElement('div');
-      wrapper.className = 'swipe-item-wrapper relative overflow-hidden rounded-xl mb-1.5 select-none transition-all duration-200';
-      wrapper.style.maxHeight = '80px';
+    wrapper.innerHTML = `
+      <!-- Delete background revealed when swiping left -->
+      <div class="swipe-delete-bg absolute inset-0 bg-rose-600 text-white flex items-center justify-end px-3.5 text-xs font-semibold rounded-xl select-none">
+        <div class="flex items-center gap-1 text-white font-mono">
+          <svg class="w-4 h-4 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+          </svg>
+          <span class="text-[11px]">刪除中...</span>
+        </div>
+      </div>
 
-      wrapper.innerHTML = `
-        <!-- Delete background revealed when swiping left -->
-        <div class="swipe-delete-bg absolute inset-0 bg-rose-600 text-white flex items-center justify-end px-3.5 text-xs font-semibold rounded-xl select-none">
-          <div class="flex items-center gap-1 text-white font-mono">
-            <svg class="w-4 h-4 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+      <!-- Foreground content card (slides horizontally) -->
+      <div class="swipe-item-content relative z-10 p-2.5 rounded-xl cursor-pointer flex items-center justify-between text-xs transition-transform duration-75 touch-pan-y ${
+        isCurrent ? 'bg-indigo-950 text-indigo-200 border border-indigo-500/60 shadow-md' : 'bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800'
+      }">
+        <div class="flex flex-col truncate min-w-0 flex-1 pointer-events-none pr-1">
+          <div class="flex items-center gap-1.5 truncate">
+            <svg class="w-3.5 h-3.5 shrink-0 ${isCurrent ? 'text-indigo-400' : 'text-slate-400'}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/>
             </svg>
-            <span class="text-[11px]">刪除中...</span>
+            <span class="text-[9px] px-1 py-0.2 rounded border font-mono shrink-0 ${providerBadgeClass}">${providerLabel}</span>
+            <span class="truncate font-medium">${displayTitle}</span>
           </div>
         </div>
-
-        <!-- Foreground content card (slides horizontally) -->
-        <div class="swipe-item-content relative z-10 p-2.5 rounded-xl cursor-pointer flex items-center justify-between text-xs transition-transform duration-75 touch-pan-y ${
-          isCurrent ? 'bg-indigo-950 text-indigo-200 border border-indigo-500/60 shadow-md' : 'bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800'
-        }">
-          <div class="flex flex-col truncate min-w-0 flex-1 pointer-events-none pr-1">
-            <div class="flex items-center gap-1.5 truncate">
-              <svg class="w-3.5 h-3.5 shrink-0 ${isCurrent ? 'text-indigo-400' : 'text-slate-400'}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/>
-              </svg>
-              <span class="text-[9px] px-1 py-0.2 rounded border font-mono shrink-0 ${providerBadgeClass}">${providerLabel}</span>
-              <span class="truncate font-medium">${escapeHtml(conv.title)}</span>
-            </div>
-          </div>
-          <div class="flex items-center gap-1 shrink-0 ml-1">
-            ${isCurrent ? '<span class="text-[9px] px-1.5 py-0.2 rounded-full bg-indigo-900 text-indigo-200 border border-indigo-500/60 font-mono shrink-0">目前</span>' : ''}
-            <button type="button" class="rename-conv-btn p-1 rounded-lg hover:bg-slate-700/80 text-slate-400 hover:text-indigo-300 transition active:scale-95 shrink-0" title="修改對話標題">
-              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-              </svg>
-            </button>
-          </div>
+        <div class="flex items-center gap-1 shrink-0 ml-1">
+          ${isCurrent ? '<span class="text-[9px] px-1.5 py-0.2 rounded-full bg-indigo-900 text-indigo-200 border border-indigo-500/60 font-mono shrink-0">目前</span>' : ''}
+          <button type="button" class="rename-conv-btn p-1 rounded-lg hover:bg-slate-700/80 text-slate-400 hover:text-indigo-300 transition active:scale-95 shrink-0" title="修改對話標題">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+            </svg>
+          </button>
         </div>
-      `;
+      </div>
+    `;
 
-      const contentEl = wrapper.querySelector('.swipe-item-content');
-      const renameBtn = wrapper.querySelector('.rename-conv-btn');
+    const contentEl = wrapper.querySelector('.swipe-item-content');
+    const renameBtn = wrapper.querySelector('.rename-conv-btn');
 
-      if (renameBtn) {
-        renameBtn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          renameConversationDirect(conv.id, conv.title, conversationProvider);
-        });
-        renameBtn.addEventListener('pointerdown', (e) => e.stopPropagation());
-        renameBtn.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });
+    if (renameBtn) {
+      renameBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        renameConversationDirect(conv.id, conv.title, conversationProvider);
+      });
+      renameBtn.addEventListener('pointerdown', (e) => e.stopPropagation());
+      renameBtn.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });
+    }
+
+    // Swipe Gesture Handling
+    let startX = 0;
+    let startY = 0;
+    let currentDiffX = 0;
+    let isSwiping = false;
+    let isVerticalScroll = false;
+    let isDeleted = false;
+
+    const onTouchStart = (clientX, clientY) => {
+      if (isDeleted) return;
+      startX = clientX;
+      startY = clientY;
+      currentDiffX = 0;
+      isSwiping = false;
+      isVerticalScroll = false;
+      contentEl.style.transition = 'none';
+    };
+
+    const onTouchMove = (clientX, clientY) => {
+      if (isDeleted) return;
+      const diffX = clientX - startX;
+      const diffY = clientY - startY;
+
+      if (!isSwiping && !isVerticalScroll) {
+        if (Math.abs(diffY) > Math.abs(diffX) + 4) {
+          isVerticalScroll = true;
+          return;
+        } else if (Math.abs(diffX) > 8) {
+          isSwiping = true;
+        }
       }
 
-      // Swipe Gesture Handling
-      let startX = 0;
-      let startY = 0;
-      let currentDiffX = 0;
-      let isSwiping = false;
-      let isVerticalScroll = false;
-      let isDeleted = false;
+      if (isVerticalScroll) return;
 
-      const onTouchStart = (clientX, clientY) => {
-        if (isDeleted) return;
-        startX = clientX;
-        startY = clientY;
+      if (diffX < 0) {
+        currentDiffX = diffX;
+        const visualX = diffX < -120 ? -120 + (diffX + 120) * 0.35 : diffX;
+        contentEl.style.transform = `translateX(${visualX}px)`;
+      } else {
         currentDiffX = 0;
-        isSwiping = false;
-        isVerticalScroll = false;
-        contentEl.style.transition = 'none';
+        contentEl.style.transform = 'translateX(0px)';
+      }
+    };
+
+    const onTouchEnd = () => {
+      if (isDeleted || isVerticalScroll) return;
+
+      if (currentDiffX < -75) {
+        isDeleted = true;
+        deleteConversationDirect(conv.id, wrapper, conversationProvider);
+      } else {
+        contentEl.style.transition = 'transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1)';
+        contentEl.style.transform = 'translateX(0px)';
+      }
+    };
+
+    contentEl.addEventListener('touchstart', (e) => {
+      onTouchStart(e.touches[0].clientX, e.touches[0].clientY);
+    }, { passive: true });
+
+    contentEl.addEventListener('touchmove', (e) => {
+      onTouchMove(e.touches[0].clientX, e.touches[0].clientY);
+    }, { passive: true });
+
+    contentEl.addEventListener('touchend', onTouchEnd, { passive: true });
+    contentEl.addEventListener('touchcancel', onTouchEnd, { passive: true });
+
+    contentEl.addEventListener('pointerdown', (e) => {
+      if (e.pointerType === 'touch') return;
+      onTouchStart(e.clientX, e.clientY);
+      const onPointerMove = (moveEvent) => onTouchMove(moveEvent.clientX, moveEvent.clientY);
+      const onPointerUp = () => {
+        window.removeEventListener('pointermove', onPointerMove);
+        window.removeEventListener('pointerup', onPointerUp);
+        onTouchEnd();
       };
-
-      const onTouchMove = (clientX, clientY) => {
-        if (isDeleted) return;
-        const diffX = clientX - startX;
-        const diffY = clientY - startY;
-
-        if (!isSwiping && !isVerticalScroll) {
-          if (Math.abs(diffY) > Math.abs(diffX) + 4) {
-            isVerticalScroll = true;
-            return;
-          } else if (Math.abs(diffX) > 8) {
-            isSwiping = true;
-          }
-        }
-
-        if (isVerticalScroll) return;
-
-        // Only allow swiping left
-        if (diffX < 0) {
-          currentDiffX = diffX;
-          const visualX = diffX < -120 ? -120 + (diffX + 120) * 0.35 : diffX;
-          contentEl.style.transform = `translateX(${visualX}px)`;
-        } else {
-          currentDiffX = 0;
-          contentEl.style.transform = 'translateX(0px)';
-        }
-      };
-
-      const onTouchEnd = () => {
-        if (isDeleted || isVerticalScroll) return;
-
-        // Threshold for triggering direct delete: swiped left more than 75px
-        if (currentDiffX < -75) {
-          isDeleted = true;
-          deleteConversationDirect(conv.id, wrapper, conversationProvider);
-        } else {
-          // Snap back smoothly
-          contentEl.style.transition = 'transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1)';
-          contentEl.style.transform = 'translateX(0px)';
-        }
-      };
-
-      // Touch Events (Mobile)
-      contentEl.addEventListener('touchstart', (e) => {
-        onTouchStart(e.touches[0].clientX, e.touches[0].clientY);
-      }, { passive: true });
-
-      contentEl.addEventListener('touchmove', (e) => {
-        onTouchMove(e.touches[0].clientX, e.touches[0].clientY);
-      }, { passive: true });
-
-      contentEl.addEventListener('touchend', onTouchEnd, { passive: true });
-      contentEl.addEventListener('touchcancel', onTouchEnd, { passive: true });
-
-      // Pointer / Mouse Events (Desktop testing or mouse users)
-      contentEl.addEventListener('pointerdown', (e) => {
-        if (e.pointerType === 'touch') return;
-        onTouchStart(e.clientX, e.clientY);
-        const onPointerMove = (moveEvent) => onTouchMove(moveEvent.clientX, moveEvent.clientY);
-        const onPointerUp = () => {
-          window.removeEventListener('pointermove', onPointerMove);
-          window.removeEventListener('pointerup', onPointerUp);
-          onTouchEnd();
-        };
-        window.addEventListener('pointermove', onPointerMove);
-        window.addEventListener('pointerup', onPointerUp);
-      });
-
-      // Click to open conversation history (only when not swiping)
-      contentEl.addEventListener('click', (e) => {
-        if (e.target.closest('.rename-conv-btn')) return;
-        if (!isDeleted && Math.abs(currentDiffX) < 10) {
-          if (conversationProvider !== currentProvider) {
-            currentProvider = conversationProvider;
-            localStorage.setItem('crew_current_provider', currentProvider);
-            const providerModels = availableModels.filter(model => (model.provider || 'antigravity') === currentProvider);
-            const modelKey = providerStorageKey('current_model');
-            currentModel = localStorage.getItem(modelKey) || (providerModels[0] && providerModels[0].id) || 'gemini-3.7-flash';
-            renderProviderOptions();
-            updateModelUI();
-          }
-          loadConversationHistory(conv.id);
-        }
-      });
-
-      convList.appendChild(wrapper);
+      window.addEventListener('pointermove', onPointerMove);
+      window.addEventListener('pointerup', onPointerUp);
     });
-  } catch (err) {
-    convList.innerHTML = '<div class="p-4 text-center text-xs text-red-400">載入失敗</div>';
-  }
+
+    contentEl.addEventListener('click', (e) => {
+      if (e.target.closest('.rename-conv-btn')) return;
+      if (!isDeleted && Math.abs(currentDiffX) < 10) {
+        if (conversationProvider !== currentProvider) {
+          currentProvider = conversationProvider;
+          localStorage.setItem('crew_current_provider', currentProvider);
+          const providerModels = availableModels.filter(model => (model.provider || 'antigravity') === currentProvider);
+          const modelKey = providerStorageKey('current_model');
+          currentModel = localStorage.getItem(modelKey) || (providerModels[0] && providerModels[0].id) || 'gemini-3.7-flash';
+          renderProviderOptions();
+          updateModelUI();
+        }
+        loadConversationHistory(conv.id);
+      }
+    });
+
+    convList.appendChild(wrapper);
+  });
 }
 
 // Toggle Send / Stop button appearance & state

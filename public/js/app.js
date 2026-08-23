@@ -325,6 +325,31 @@ function initAppAndListeners() {
     initClipboardSmartSensors();
   }
 
+  // 🔍 History Conversation Search Listeners
+  const convSearchInput = document.getElementById('conv-search-input');
+  const convSearchClear = document.getElementById('conv-search-clear');
+
+  if (convSearchInput) {
+    convSearchInput.addEventListener('input', (e) => {
+      if (typeof renderConversationItems === 'function' && typeof cachedConversations !== 'undefined') {
+        renderConversationItems(cachedConversations, e.target.value);
+      }
+    });
+  }
+
+  if (convSearchClear) {
+    convSearchClear.addEventListener('click', () => {
+      if (typeof window.haptic === 'function') window.haptic('light');
+      if (convSearchInput) {
+        convSearchInput.value = '';
+        convSearchInput.focus();
+      }
+      if (typeof renderConversationItems === 'function' && typeof cachedConversations !== 'undefined') {
+        renderConversationItems(cachedConversations, '');
+      }
+    });
+  }
+
   // New Chat Action
   if (newChatBtn) {
     newChatBtn.addEventListener('click', () => {
