@@ -1252,7 +1252,10 @@
   // ==========================================
   // 📝 Post-Call Option 1: Smart Call Summary Memo Card (with Multimodal AI Transcription)
   // ==========================================
-  function buildCallSummaryCardHtml(turns, durationSec, voiceName, snapshots = [], cardId = null) {
+  // ==========================================
+  // 📝 Post-Call Option 1: Smart Call Summary Memo Card (with Multimodal AI Transcription)
+  // ==========================================
+  function buildCallSummaryCardHtml(turns, durationSec, voiceName, snapshots = [], cardId = null, precomputedSummary = null) {
     const mins = Math.floor(durationSec / 60);
     const secs = durationSec % 60;
     const durationText = mins > 0 ? `${mins} 分 ${secs} 秒` : `${secs} 秒`;
@@ -1263,27 +1266,32 @@
     card.id = `card-wrapper-${memoId}`;
     card.className = 'flex w-full max-w-2xl mx-auto min-w-0 justify-start my-3 animate-fadeIn select-text';
 
-    // 1. Build dialog turns for collapsible transcript
+    // Normalize turns into { user, model } or { speaker, text }
     let dialogHtml = '';
     let plainTextSummary = `【Crew Pocket 語音通話備忘錄】\n時間：${timeStr} (時長：${durationText})\n音色：${voiceName}\n\n`;
 
-    const hasRealText = turns && turns.some(t => t.user && !t.user.startsWith('🗣️ ('));
+    const rawTurns = Array.isArray(turns) ? turns : [];
+    const hasRealContent = rawTurns.length > 0;
 
-    if (hasRealText) {
-      turns.forEach((t, i) => {
-        if (t.user) {
+    if (hasRealContent) {
+      rawTurns.forEach((t, i) => {
+        const isUserSpeaker = t.speaker === 'user' || t.role === 'user' || Boolean(t.user);
+        const userText = t.user || (isUserSpeaker ? t.text : '');
+        const modelText = t.model || (!isUserSpeaker ? t.text : '');
+
+        if (userText) {
           dialogHtml += `
             <div class="p-2.5 rounded-xl bg-indigo-950/40 border border-indigo-500/30 text-indigo-100 text-xs mb-2">
               <div class="flex items-center gap-1.5 font-bold text-indigo-300 mb-1">
                 <span>🗣️ 您 (第 ${i + 1} 輪)：</span>
               </div>
-              <div class="leading-relaxed pl-1">${escapeHtml(t.user)}</div>
+              <div class="leading-relaxed pl-1">${escapeHtml(userText)}</div>
             </div>
           `;
-          plainTextSummary += `[您]: ${t.user}\n`;
+          plainTextSummary += `[您]: ${userText}\n`;
         }
-        if (t.model) {
-          const formattedModel = typeof formatMessageContent === 'function' ? formatMessageContent(t.model) : escapeHtml(t.model);
+        if (modelText) {
+          const formattedModel = typeof formatMessageContent === 'function' ? formatMessageContent(modelText) : escapeHtml(modelText);
           dialogHtml += `
             <div class="p-2.5 rounded-xl bg-slate-900/90 border border-teal-500/30 text-slate-100 text-xs mb-2">
               <div class="flex items-center gap-1.5 font-bold text-teal-300 mb-1">
@@ -1292,14 +1300,14 @@
               <div class="prose prose-invert max-w-none text-xs leading-relaxed pl-1">${formattedModel}</div>
             </div>
           `;
-          plainTextSummary += `[Gemini]: ${t.model}\n\n`;
+          plainTextSummary += `[Gemini]: ${modelText}\n\n`;
         }
       });
     }
 
     // 2. Build Smart Key Takeaways
     let keyHighlightsHtml = '';
-    if (hasRealText) {
+    if (precomputedSummary && Array.isArray(precomputedSummary) && precomputedSummary.length > 0) {
       keyHighlightsHtml = `
         <div class="p-3 rounded-xl bg-teal-950/40 border border-teal-500/40 mb-2.5">
           <div class="flex items-center gap-1.5 text-xs font-bold text-teal-300 mb-1.5">
@@ -1307,8 +1315,22 @@
             <span>本次對話重點整理</span>
           </div>
           <ul class="space-y-1 text-xs text-slate-200 list-disc list-inside">
-            ${turns.slice(0, 3).map(t => {
-              const preview = t.user ? `討論：「${t.user.slice(0, 40)}${t.user.length > 40 ? '...' : ''}」` : (t.model ? `回覆摘要：${t.model.slice(0, 50)}...` : '');
+            ${precomputedSummary.map(s => `<li>${escapeHtml(s)}</li>`).join('')}
+          </ul>
+        </div>
+      `;
+    } else if (hasRealContent) {
+      keyHighlightsHtml = `
+        <div class="p-3 rounded-xl bg-teal-950/40 border border-teal-500/40 mb-2.5">
+          <div class="flex items-center gap-1.5 text-xs font-bold text-teal-300 mb-1.5">
+            <span>📌</span>
+            <span>本次對話重點整理</span>
+          </div>
+          <ul class="space-y-1 text-xs text-slate-200 list-disc list-inside">
+            ${rawTurns.slice(0, 3).map(t => {
+              const u = t.user || (t.speaker === 'user' ? t.text : '');
+              const m = t.model || (t.speaker !== 'user' ? t.text : '');
+              const preview = u ? `討論：「${u.slice(0, 40)}${u.length > 40 ? '...' : ''}」` : (m ? `回覆摘要：${m.slice(0, 50)}...` : '');
               return preview ? `<li>${escapeHtml(preview)}</li>` : '';
             }).filter(Boolean).join('')}
           </ul>
@@ -1381,7 +1403,7 @@
             <span class="text-slate-400 group-open:rotate-180 transition-transform duration-200">▼</span>
           </summary>
           <div id="transcript-container-${memoId}" class="p-3 border-t border-slate-800/80 max-h-80 overflow-y-auto space-y-2 bg-slate-950/20">
-            ${dialogHtml || '<div class="text-slate-400 text-xs italic">正在辨識通話音訊內容...</div>'}
+            ${dialogHtml || '<div class="text-slate-400 text-xs italic">通話已記錄</div>'}
           </div>
         </details>
 
@@ -1409,6 +1431,9 @@
 
     return card;
   }
+
+  // Expose globally for history rendering across sessions
+  window.buildCallSummaryCardHtml = buildCallSummaryCardHtml;
 
   async function endLiveSession() {
     isConnected = false;
@@ -1600,7 +1625,7 @@
               }
             }
 
-            // Also update server Brain sync with the pristine transcript!
+            // Also update server Brain sync with the pristine transcript and rich Call Memo payload!
             const userDialogue = result.transcript.filter(t => t.speaker === 'user' || t.role === 'user').map(t => t.text).join('\n');
             const modelDialogue = result.transcript.filter(t => t.speaker !== 'user' && t.role !== 'user').map(t => t.text).join('\n\n');
             fetch('/api/live-sync', {
@@ -1609,8 +1634,20 @@
               body: JSON.stringify({
                 conversation_id: activeConvId,
                 user_message: userDialogue || `🗣️ 語音通話 (時長：${durationSec}秒)`,
-                assistant_message: modelDialogue || `✨ Gemini Live 語音通話完畢`
+                assistant_message: modelDialogue || `✨ Gemini Live 語音通話完畢`,
+                call_memo: {
+                  duration_sec: durationSec,
+                  voice_name: voiceName,
+                  summary: result.summary || [],
+                  transcript: result.transcript || [],
+                  snapshots: snapshotsToSync || []
+                }
               })
+            }).then(res => res.json()).then(data => {
+              if (data.success && data.conversation_id && (typeof currentConversationId !== 'undefined' && !currentConversationId)) {
+                currentConversationId = data.conversation_id;
+                localStorage.setItem('agy_active_conv_id', data.conversation_id);
+              }
             }).catch(() => {});
           }
         }).catch(err => {
@@ -1644,8 +1681,20 @@
           body: JSON.stringify({
             conversation_id: activeConvId,
             user_message: combinedUser,
-            assistant_message: combinedModel
+            assistant_message: combinedModel,
+            call_memo: {
+              duration_sec: durationSec,
+              voice_name: voiceName,
+              summary: [],
+              transcript: turnsToSync,
+              snapshots: snapshotsToSync || []
+            }
           })
+        }).then(res => res.json()).then(data => {
+          if (data.success && data.conversation_id && (typeof currentConversationId !== 'undefined' && !currentConversationId)) {
+            currentConversationId = data.conversation_id;
+            localStorage.setItem('agy_active_conv_id', data.conversation_id);
+          }
         }).catch(err => {
           console.warn('[Live Silent Sync Warning]', err);
         });

@@ -388,6 +388,37 @@ function hideContextModal() {
 function appendMessage(role, content, timestamp, tools = [], thinking = '', isBtw = false, renderOptions = {}) {
   const isUser = role === 'user';
   const targetContainer = renderOptions.container || messagesContainer;
+
+  // 🌟 1. If this is a persisted Call Memo from Live Voice Session, render the full interactive Memo Card!
+  if (!isUser && content && typeof content === 'string' && content.includes('<!-- CALL_MEMO_DATA:')) {
+    const match = content.match(/<!-- CALL_MEMO_DATA:([\s\S]*?) -->/);
+    if (match) {
+      try {
+        const memoData = JSON.parse(match[1]);
+        if (typeof window.buildCallSummaryCardHtml === 'function') {
+          const card = window.buildCallSummaryCardHtml(
+            memoData.transcript || [],
+            memoData.duration_sec || memoData.durationSec || 0,
+            memoData.voice_name || memoData.voiceName || 'Gemini',
+            memoData.snapshots || [],
+            `history-memo-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            memoData.summary || []
+          );
+          targetContainer.appendChild(card);
+          if (typeof enhanceCodeBlocks === 'function') enhanceCodeBlocks(card);
+          return;
+        }
+      } catch (e) {
+        console.warn('[Call Memo Parse Failed]', e);
+      }
+    }
+  }
+
+  // 🌟 2. Suppress duplicate raw prompt user bubble for Live Voice in history reload (already embedded in Memo Card)
+  if (isUser && content && typeof content === 'string' && (content.includes('[🎙️ Live 語音]') || content.includes('<USER_REQUEST>\n[🎙️ Live 語音]'))) {
+    return;
+  }
+
   const msgDiv = document.createElement('div');
   msgDiv.className = `flex w-full max-w-2xl mx-auto min-w-0 ${isUser ? 'justify-end' : 'justify-start'}`;
 
