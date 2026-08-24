@@ -2041,7 +2041,9 @@
         if (isSetupDone) {
           console.log('[Gemini Live] Setup complete, ready to talk!');
           updateCardStatus('listening', '🎙️ 可以開始說話');
-          startSpeechRecognition();
+      // Browser SpeechRecognition may emit periodic start/stop beeps on
+      // mobile. Gemini Live audio remains fully functional without it.
+      // Transcript capture is handled by the Live audio/session turns.
           return;
         }
 
@@ -2736,8 +2738,7 @@
     }
   }
 
-  // Expose the same close path used by the red hangup control. Event
-  // delegation keeps it working if the dock is re-rendered after startup.
+  // Expose the close path for the red hangup control and any re-rendered dock.
   window.endLiveSession = endLiveSession;
 
   // Key Modal Handlers
@@ -2814,13 +2815,5 @@
   if (dockCameraBtn) {
     dockCameraBtn.addEventListener('click', toggleCamera);
   }
-
-  document.addEventListener('click', (event) => {
-    const hangupBtn = event.target.closest && event.target.closest('#live-dock-hangup-btn');
-    if (!hangupBtn) return;
-    event.preventDefault();
-    console.log('[Live] Red hangup clicked');
-    window.endLiveSession();
-  });
 
 })();
