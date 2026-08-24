@@ -327,6 +327,27 @@
     return dot;
   }
 
+  // 🎛️ Voice & Voiceprint Real-time Tuning Configuration
+  const TUNING_CONFIG = {
+    SIMILARITY_THRESHOLD: parseFloat(localStorage.getItem('crew_live_similarity_threshold')) || 0.72,
+    RMS_THRESHOLD: parseFloat(localStorage.getItem('crew_live_rms_threshold')) || 0.028,
+    BARGEIN_FRAMES: parseInt(localStorage.getItem('crew_live_bargein_frames'), 10) || 3,
+    GAIN_BOOST: parseFloat(localStorage.getItem('crew_live_gain_boost')) || 1.4,
+    save() {
+      localStorage.setItem('crew_live_similarity_threshold', this.SIMILARITY_THRESHOLD);
+      localStorage.setItem('crew_live_rms_threshold', this.RMS_THRESHOLD);
+      localStorage.setItem('crew_live_bargein_frames', this.BARGEIN_FRAMES);
+      localStorage.setItem('crew_live_gain_boost', this.GAIN_BOOST);
+    },
+    reset() {
+      this.SIMILARITY_THRESHOLD = 0.72;
+      this.RMS_THRESHOLD = 0.028;
+      this.BARGEIN_FRAMES = 3;
+      this.GAIN_BOOST = 1.4;
+      this.save();
+    }
+  };
+
   // ==========================================
   // 🧮 Audio Data Conversion Utilities
   // ==========================================
@@ -417,7 +438,7 @@
 
       <div class="bg-gradient-to-b from-slate-900 via-slate-900 to-slate-950 border border-teal-500/50 rounded-2xl rounded-tl-none p-3.5 text-xs sm:text-sm shadow-2xl shadow-teal-950/50 flex-1 max-w-[92%] space-y-3 relative overflow-hidden">
         
-        <!-- CARD TOP TOOLBAR: 狀態指示 (靠左) + 聲紋/音色膠囊 (靠右) -->
+        <!-- CARD TOP TOOLBAR: 狀態指示 (靠左) + 聲紋/調音/音色膠囊 (靠右) -->
         <div class="border-b border-slate-800/80 pb-2 flex items-center justify-between gap-1.5 min-w-0">
           <div class="flex items-center gap-1.5 min-w-0">
             <span id="live-card-status-dot" class="w-2 h-2 rounded-full bg-amber-400 animate-pulse shrink-0"></span>
@@ -425,6 +446,9 @@
           </div>
           
           <div class="flex items-center gap-1.5 shrink-0">
+            <!-- 🎛️ Live Tuning Panel Toggle Button -->
+            <button id="live-card-tuning-toggle-btn" type="button" class="w-6 h-6 rounded-full bg-slate-800/90 hover:bg-slate-700 active:scale-95 border border-slate-700 text-[11px] text-slate-300 flex items-center justify-center transition shadow-sm" title="開啟/收合即時調音台">🎛️</button>
+
             <!-- 🧬 Voiceprint Status & Calibration Button -->
             <button id="live-card-voiceprint-btn" type="button" class="px-2 py-0.5 rounded-full bg-slate-800/90 hover:bg-slate-700 active:scale-95 border ${userVoiceprintProfile ? 'border-teal-500/50 text-teal-300' : 'border-slate-700 text-slate-400'} text-[10px] font-medium flex items-center gap-1 transition shadow-sm" title="點擊校準個人聲紋 (AI 專屬認你的聲音插話打斷，免疫旁人干擾)">
               <span id="live-voiceprint-dot" class="w-1.5 h-1.5 rounded-full ${userVoiceprintProfile ? 'bg-teal-400' : 'bg-slate-500'}"></span>
@@ -474,6 +498,93 @@
           <canvas id="live-card-canvas" width="280" height="32" class="w-full h-full"></canvas>
         </div>
 
+        <!-- 🎛️ REAL-TIME VOICE TUNING CONSOLE (調音台抽屜) -->
+        <div id="live-card-tuning-drawer" class="hidden p-3 rounded-xl bg-slate-950/90 border border-teal-500/40 space-y-2.5 transition-all text-xs select-none">
+          <div class="flex items-center justify-between border-b border-slate-800 pb-1.5">
+            <div class="flex items-center gap-1.5 font-bold text-teal-300 text-[11px]">
+              <span>🎛️</span>
+              <span>隨身特勤調音台 (即時可視化反饋)</span>
+            </div>
+            <button id="live-tuning-reset-btn" type="button" class="text-[10px] text-slate-400 hover:text-rose-300 px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 transition">重設預設</button>
+          </div>
+
+          <!-- Real-time Live Meters -->
+          <div class="grid grid-cols-2 gap-2 bg-slate-900/80 p-2 rounded-lg border border-slate-800 font-mono text-[10px]">
+            <div>
+              <div class="flex justify-between text-slate-400 mb-0.5">
+                <span>即時音量 (RMS)</span>
+                <span id="live-meter-rms-val" class="text-teal-300">0.000</span>
+              </div>
+              <div class="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                <div id="live-meter-rms-bar" class="bg-teal-400 h-full w-0 transition-all duration-75"></div>
+              </div>
+            </div>
+            <div>
+              <div class="flex justify-between text-slate-400 mb-0.5">
+                <span>聲紋吻合度</span>
+                <span id="live-meter-sim-val" class="text-indigo-300">--</span>
+              </div>
+              <div class="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                <div id="live-meter-sim-bar" class="bg-indigo-400 h-full w-0 transition-all duration-75"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Sliders -->
+          <div class="space-y-2 text-[11px]">
+            <!-- Slider 1: Similarity Threshold -->
+            <div>
+              <div class="flex justify-between items-center mb-1">
+                <span class="text-slate-300 flex items-center gap-1">
+                  <span>🧬</span>
+                  <span>聲紋匹配門檻 (防旁人插嘴)</span>
+                </span>
+                <span id="live-tuning-sim-label" class="font-mono text-teal-300 text-[10px] bg-slate-900 px-1.5 py-0.5 rounded border border-slate-800">${TUNING_CONFIG.SIMILARITY_THRESHOLD.toFixed(2)}</span>
+              </div>
+              <input id="live-tuning-sim-slider" type="range" min="0.60" max="0.88" step="0.01" value="${TUNING_CONFIG.SIMILARITY_THRESHOLD}" class="w-full h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-teal-400">
+              <div class="flex justify-between text-[9px] text-slate-500 font-mono mt-0.5">
+                <span>0.60 (易插話)</span>
+                <span>0.72 (建議)</span>
+                <span>0.88 (極嚴格)</span>
+              </div>
+            </div>
+
+            <!-- Slider 2: RMS Energy Threshold -->
+            <div>
+              <div class="flex justify-between items-center mb-1">
+                <span class="text-slate-300 flex items-center gap-1">
+                  <span>🔊</span>
+                  <span>插話音量門檻 (防環境噪音)</span>
+                </span>
+                <span id="live-tuning-rms-label" class="font-mono text-teal-300 text-[10px] bg-slate-900 px-1.5 py-0.5 rounded border border-slate-800">${TUNING_CONFIG.RMS_THRESHOLD.toFixed(3)}</span>
+              </div>
+              <input id="live-tuning-rms-slider" type="range" min="0.015" max="0.060" step="0.002" value="${TUNING_CONFIG.RMS_THRESHOLD}" class="w-full h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-teal-400">
+              <div class="flex justify-between text-[9px] text-slate-500 font-mono mt-0.5">
+                <span>0.015 (輕聲)</span>
+                <span>0.028 (建議)</span>
+                <span>0.060 (大聲)</span>
+              </div>
+            </div>
+
+            <!-- Slider 3: Barge-in Reaction Speed (Frames) -->
+            <div>
+              <div class="flex justify-between items-center mb-1">
+                <span class="text-slate-300 flex items-center gap-1">
+                  <span>⚡</span>
+                  <span>打斷反應時間 (防短暫咳嗽)</span>
+                </span>
+                <span id="live-tuning-frames-label" class="font-mono text-teal-300 text-[10px] bg-slate-900 px-1.5 py-0.5 rounded border border-slate-800">${TUNING_CONFIG.BARGEIN_FRAMES} 幀 (${TUNING_CONFIG.BARGEIN_FRAMES * 60}ms)</span>
+              </div>
+              <input id="live-tuning-frames-slider" type="range" min="2" max="6" step="1" value="${TUNING_CONFIG.BARGEIN_FRAMES}" class="w-full h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-teal-400">
+              <div class="flex justify-between text-[9px] text-slate-500 font-mono mt-0.5">
+                <span>2幀 (120ms 極速)</span>
+                <span>3幀 (180ms 穩定)</span>
+                <span>6幀 (360ms 穩健)</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- Real-time Dialogue Subtitles (純 Live 對話區) -->
         <div id="live-card-transcript" class="space-y-1.5 text-xs max-h-48 overflow-y-auto pr-1">
           <div id="live-card-placeholder" class="text-slate-500 text-center text-[11px] font-mono py-1">💬 請說話...</div>
@@ -488,6 +599,66 @@
     }
 
     // Attach Inline Controls
+    const tuningToggleBtn = card.querySelector('#live-card-tuning-toggle-btn');
+    const tuningDrawer = card.querySelector('#live-card-tuning-drawer');
+    if (tuningToggleBtn && tuningDrawer) {
+      tuningToggleBtn.addEventListener('click', () => {
+        tuningDrawer.classList.toggle('hidden');
+        if (navigator.vibrate) navigator.vibrate(15);
+      });
+    }
+
+    // Slider 1: Sim Slider
+    const simSlider = card.querySelector('#live-tuning-sim-slider');
+    const simLabel = card.querySelector('#live-tuning-sim-label');
+    if (simSlider && simLabel) {
+      simSlider.addEventListener('input', (e) => {
+        const val = parseFloat(e.target.value);
+        TUNING_CONFIG.SIMILARITY_THRESHOLD = val;
+        simLabel.textContent = val.toFixed(2);
+        TUNING_CONFIG.save();
+      });
+    }
+
+    // Slider 2: RMS Slider
+    const rmsSlider = card.querySelector('#live-tuning-rms-slider');
+    const rmsLabel = card.querySelector('#live-tuning-rms-label');
+    if (rmsSlider && rmsLabel) {
+      rmsSlider.addEventListener('input', (e) => {
+        const val = parseFloat(e.target.value);
+        TUNING_CONFIG.RMS_THRESHOLD = val;
+        rmsLabel.textContent = val.toFixed(3);
+        TUNING_CONFIG.save();
+      });
+    }
+
+    // Slider 3: Frames Slider
+    const framesSlider = card.querySelector('#live-tuning-frames-slider');
+    const framesLabel = card.querySelector('#live-tuning-frames-label');
+    if (framesSlider && framesLabel) {
+      framesSlider.addEventListener('input', (e) => {
+        const val = parseInt(e.target.value, 10);
+        TUNING_CONFIG.BARGEIN_FRAMES = val;
+        framesLabel.textContent = `${val} 幀 (${val * 60}ms)`;
+        TUNING_CONFIG.save();
+      });
+    }
+
+    // Reset Button
+    const resetBtn = card.querySelector('#live-tuning-reset-btn');
+    if (resetBtn) {
+      resetBtn.addEventListener('click', () => {
+        TUNING_CONFIG.reset();
+        if (simSlider) simSlider.value = TUNING_CONFIG.SIMILARITY_THRESHOLD;
+        if (simLabel) simLabel.textContent = TUNING_CONFIG.SIMILARITY_THRESHOLD.toFixed(2);
+        if (rmsSlider) rmsSlider.value = TUNING_CONFIG.RMS_THRESHOLD;
+        if (rmsLabel) rmsLabel.textContent = TUNING_CONFIG.RMS_THRESHOLD.toFixed(3);
+        if (framesSlider) framesSlider.value = TUNING_CONFIG.BARGEIN_FRAMES;
+        if (framesLabel) framesLabel.textContent = `${TUNING_CONFIG.BARGEIN_FRAMES} 幀 (${TUNING_CONFIG.BARGEIN_FRAMES * 60}ms)`;
+        if (navigator.vibrate) navigator.vibrate(20);
+      });
+    }
+
     const voiceprintBtn = card.querySelector('#live-card-voiceprint-btn');
     if (voiceprintBtn) {
       voiceprintBtn.addEventListener('click', () => {
@@ -1578,20 +1749,46 @@
           }
         }
 
+        // 🎛️ Update Live Visual Tuning Meters
+        const tuningDrawer = document.getElementById('live-card-tuning-drawer');
+        if (tuningDrawer && !tuningDrawer.classList.contains('hidden')) {
+          const rmsVal = document.getElementById('live-meter-rms-val');
+          const rmsBar = document.getElementById('live-meter-rms-bar');
+          if (rmsVal) rmsVal.textContent = rms.toFixed(3);
+          if (rmsBar) rmsBar.style.width = `${Math.min(100, Math.round((rms / 0.08) * 100))}%`;
+
+          const simVal = document.getElementById('live-meter-sim-val');
+          const simBar = document.getElementById('live-meter-sim-bar');
+          if (userVoiceprintProfile && rms > 0.012) {
+            const currentProfile = extractSpectralProfile(downsampled, 16000);
+            const curSim = computeVoiceprintSimilarity(currentProfile, userVoiceprintProfile);
+            if (simVal) {
+              const isMatch = curSim >= TUNING_CONFIG.SIMILARITY_THRESHOLD;
+              simVal.textContent = `${curSim.toFixed(2)} ${isMatch ? '✅' : '❌'}`;
+              simVal.className = isMatch ? 'text-teal-300 font-bold' : 'text-rose-300';
+            }
+            if (simBar) {
+              const pct = Math.min(100, Math.max(0, Math.round(((curSim - 0.5) / 0.5) * 100)));
+              simBar.style.width = `${pct}%`;
+              simBar.className = curSim >= TUNING_CONFIG.SIMILARITY_THRESHOLD ? 'bg-teal-400 h-full transition-all duration-75' : 'bg-rose-500 h-full transition-all duration-75';
+            }
+          }
+        }
+
         const isAiSpeaking = isAiResponding || (audioPlayer && audioPlayer.activeSources.length > 0);
         const inAiCooldown = (Date.now() - lastAiSpokeTime) < 350;
 
-        // 🎙️ Smart Barge-In Interruption Detection (Option B: Voiceprint Speaker Verification)
+        // 🎙️ Smart Barge-In Interruption Detection (Voiceprint + Real-time Config)
         if (isAiSpeaking || inAiCooldown) {
           if (userVoiceprintProfile) {
             // 🧬 Voiceprint Matching Mode
             const profile = extractSpectralProfile(downsampled, 16000);
             const similarity = computeVoiceprintSimilarity(profile, userVoiceprintProfile);
 
-            // Primary speaker voice matched (> 0.72) and has moderate vocal energy (> 0.028)
-            if (similarity >= 0.72 && rms > 0.028) {
+            // Primary speaker voice matched threshold and has sufficient vocal energy
+            if (similarity >= TUNING_CONFIG.SIMILARITY_THRESHOLD && rms > TUNING_CONFIG.RMS_THRESHOLD) {
               bargeInSpeechCount++;
-              if (bargeInSpeechCount >= 3) {
+              if (bargeInSpeechCount >= TUNING_CONFIG.BARGEIN_FRAMES) {
                 // ⚡ Instant Verified Speaker Barge-In!
                 if (audioPlayer) audioPlayer.stopAll();
                 isAiResponding = false;
@@ -1614,10 +1811,10 @@
               return;
             }
           } else {
-            // Fallback to high energy near-field gate if not calibrated yet
-            if (rms > 0.065) {
+            // Fallback to near-field gate if not calibrated yet
+            if (rms > (TUNING_CONFIG.RMS_THRESHOLD * 2.2)) {
               bargeInSpeechCount++;
-              if (bargeInSpeechCount >= 5) {
+              if (bargeInSpeechCount >= (TUNING_CONFIG.BARGEIN_FRAMES + 2)) {
                 if (audioPlayer) audioPlayer.stopAll();
                 isAiResponding = false;
                 lastAiSpokeTime = 0;
