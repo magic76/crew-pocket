@@ -340,9 +340,20 @@
     }
 
     extractFbank(audioSamples) {
-      if (audioSamples.length < this.frameLength) return null;
+      if (!audioSamples || audioSamples.length < this.frameLength) return null;
       const numFrames = Math.floor((audioSamples.length - this.frameLength) / this.frameShift) + 1;
       if (numFrames <= 0) return null;
+
+      // Kaldi standard: Scale PCM to [-32768, 32767] if audio is in [-1.0, 1.0]
+      let scale = 1.0;
+      let maxAbs = 0;
+      for (let i = 0; i < Math.min(1000, audioSamples.length); i++) {
+        const a = Math.abs(audioSamples[i]);
+        if (a > maxAbs) maxAbs = a;
+      }
+      if (maxAbs <= 1.5) {
+        scale = 32768.0;
+      }
 
       const fbank = new Float32Array(numFrames * this.numMelBins);
 
@@ -350,9 +361,9 @@
         const start = f * this.frameShift;
         const re = new Float32Array(this.nFft);
         const im = new Float32Array(this.nFft);
-        let prev = start > 0 ? audioSamples[start - 1] : audioSamples[start];
+        let prev = (start > 0 ? audioSamples[start - 1] : audioSamples[start]) * scale;
         for (let n = 0; n < this.frameLength; n++) {
-          const curr = audioSamples[start + n];
+          const curr = audioSamples[start + n] * scale;
           re[n] = (curr - 0.97 * prev) * this.window[n];
           prev = curr;
         }
@@ -482,10 +493,14 @@
       const embedding = new Float32Array(outputTensor.data);
 
       let norm = 0;
-      for (let i = 0; i < embedding.length; i++) norm += embedding[i] * embedding[i];
+      for (let i = 0; i < embedding.length; i++) {
+        if (!isNaN(embedding[i])) norm += embedding[i] * embedding[i];
+      }
       norm = Math.sqrt(norm);
-      if (norm > 0) {
+      if (norm > 1e-6 && !isNaN(norm)) {
         for (let i = 0; i < embedding.length; i++) embedding[i] /= norm;
+      } else {
+        throw new Error('神經網路特徵計算結果異常 (norm is zero or NaN)');
       }
       return embedding;
     } catch (e) {
@@ -498,9 +513,12 @@
     if (!v1 || !v2 || v1.length !== v2.length) return 0;
     let dot = 0;
     for (let i = 0; i < v1.length; i++) {
-      dot += v1[i] * v2[i];
+      if (!isNaN(v1[i]) && !isNaN(v2[i])) {
+        dot += v1[i] * v2[i];
+      }
     }
-    return dot;
+    if (isNaN(dot)) return 0;
+    return Math.max(-1.0, Math.min(1.0, dot));
   }
 
   // 🎛️ Voice & Voiceprint Real-time Tuning Configuration
