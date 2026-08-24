@@ -139,26 +139,42 @@ const closeGuidelinesBtn = document.getElementById('close-guidelines-btn');
 const copyGuidelinesBtn = document.getElementById('copy-guidelines-btn');
 const insertGuidelinesBtn = document.getElementById('insert-guidelines-btn');
 const refreshGuidelinesBtn = document.getElementById('refresh-guidelines-btn');
-const guidelinesContentPre = document.getElementById('guidelines-content-pre');
+const guidelinesContentTextarea = document.getElementById('guidelines-content-textarea');
 const guidelinesFilePath = document.getElementById('guidelines-file-path');
+const guidelinesCharCount = document.getElementById('guidelines-char-count');
 
-let cachedGuidelinesContent = '';
+function updateGuidelinesCharCount() {
+  if (guidelinesContentTextarea && guidelinesCharCount) {
+    const len = guidelinesContentTextarea.value.length;
+    guidelinesCharCount.textContent = `${len.toLocaleString()} 字元`;
+  }
+}
 
 async function loadGuidelines() {
-  if (guidelinesContentPre) guidelinesContentPre.textContent = '載入中...';
+  if (guidelinesContentTextarea) {
+    guidelinesContentTextarea.value = '載入中...';
+    guidelinesContentTextarea.disabled = true;
+  }
   try {
     const res = await fetch('/api/guidelines');
     const data = await res.json();
     if (data.success && data.content) {
-      cachedGuidelinesContent = data.content;
-      if (guidelinesContentPre) guidelinesContentPre.textContent = data.content;
+      if (guidelinesContentTextarea) {
+        guidelinesContentTextarea.value = data.content;
+        guidelinesContentTextarea.disabled = false;
+      }
       if (guidelinesFilePath) guidelinesFilePath.textContent = data.path || 'GEMINI.md';
+      updateGuidelinesCharCount();
     } else {
-      if (guidelinesContentPre) guidelinesContentPre.textContent = '⚠️ 無法載入指引內容: ' + (data.error || '未知錯誤');
+      if (guidelinesContentTextarea) guidelinesContentTextarea.value = '⚠️ 無法載入指引內容: ' + (data.error || '未知錯誤');
     }
   } catch (err) {
-    if (guidelinesContentPre) guidelinesContentPre.textContent = '⚠️ 網路連線錯誤: ' + err.message;
+    if (guidelinesContentTextarea) guidelinesContentTextarea.value = '⚠️ 網路連線錯誤: ' + err.message;
   }
+}
+
+if (guidelinesContentTextarea) {
+  guidelinesContentTextarea.addEventListener('input', updateGuidelinesCharCount);
 }
 
 function toggleGuidelinesModal(open) {
@@ -194,9 +210,10 @@ if (refreshGuidelinesBtn) {
 }
 if (copyGuidelinesBtn) {
   copyGuidelinesBtn.addEventListener('click', async () => {
-    if (!cachedGuidelinesContent) return;
+    const textToCopy = guidelinesContentTextarea ? guidelinesContentTextarea.value : '';
+    if (!textToCopy) return;
     try {
-      await navigator.clipboard.writeText(cachedGuidelinesContent);
+      await navigator.clipboard.writeText(textToCopy);
       if (typeof window.haptic === 'function') window.haptic([30, 50]);
       const origHtml = copyGuidelinesBtn.innerHTML;
       copyGuidelinesBtn.innerHTML = '<span>✅ 已複製全文！</span>';
@@ -214,9 +231,10 @@ if (copyGuidelinesBtn) {
 }
 if (insertGuidelinesBtn) {
   insertGuidelinesBtn.addEventListener('click', () => {
-    if (!cachedGuidelinesContent) return;
+    const textToInsert = guidelinesContentTextarea ? guidelinesContentTextarea.value : '';
+    if (!textToInsert) return;
     if (promptInput) {
-      promptInput.value = cachedGuidelinesContent;
+      promptInput.value = textToInsert;
       promptInput.style.height = 'auto';
       promptInput.style.height = Math.min(promptInput.scrollHeight, 180) + 'px';
       promptInput.focus();
@@ -231,13 +249,18 @@ const syncGuidelinesBtn = document.getElementById('sync-guidelines-btn');
 if (syncGuidelinesBtn) {
   syncGuidelinesBtn.addEventListener('click', async () => {
     const origHtml = syncGuidelinesBtn.innerHTML;
+    const contentToSave = guidelinesContentTextarea ? guidelinesContentTextarea.value : '';
     try {
-      syncGuidelinesBtn.innerHTML = '<span>⏳ 正在同步寫入...</span>';
-      const res = await fetch('/api/guidelines/sync', { method: 'POST' });
+      syncGuidelinesBtn.innerHTML = '<span>⏳ 正在儲存並同步...</span>';
+      const res = await fetch('/api/guidelines/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: contentToSave })
+      });
       const data = await res.json();
       if (data.success) {
         if (typeof window.haptic === 'function') window.haptic([30, 40, 50]);
-        syncGuidelinesBtn.innerHTML = '<span>✅ 已成功寫入預設路徑！</span>';
+        syncGuidelinesBtn.innerHTML = '<span>✅ 已儲存並同步至預設路徑！</span>';
         syncGuidelinesBtn.classList.remove('from-emerald-600', 'to-teal-600');
         syncGuidelinesBtn.classList.add('from-indigo-600', 'to-emerald-600');
         setTimeout(() => {

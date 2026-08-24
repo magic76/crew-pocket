@@ -660,20 +660,26 @@ async function handleGetGuidelines(res) {
   }
 }
 
-// 🚀 Sync Guidelines to all default locations (~/ and ~/agy-web/)
+// 🚀 Sync & Save Guidelines to all default locations (~/ and ~/agy-web/)
 async function handleSyncGuidelines(req, res) {
   try {
     const homeDir = process.env.HOME || '/data/data/com.termux/files/home';
     const agyWebDir = __dirname;
-
-    // 1. Read base content
-    let content = '';
+    let body = {};
     try {
-      content = await fsPromises.readFile(path.join(agyWebDir, 'GEMINI.md'), 'utf8');
-    } catch (e) {
+      body = await parseJsonBody(req);
+    } catch (e) {}
+
+    // 1. Read base content or use posted custom content
+    let content = (body && typeof body.content === 'string' && body.content.trim()) ? body.content : '';
+    if (!content) {
       try {
-        content = await fsPromises.readFile(path.join(homeDir, 'GEMINI.md'), 'utf8');
-      } catch (e2) {}
+        content = await fsPromises.readFile(path.join(agyWebDir, 'GEMINI.md'), 'utf8');
+      } catch (e) {
+        try {
+          content = await fsPromises.readFile(path.join(homeDir, 'GEMINI.md'), 'utf8');
+        } catch (e2) {}
+      }
     }
 
     if (!content) {
