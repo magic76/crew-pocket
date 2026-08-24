@@ -2108,6 +2108,9 @@
       let bargeInSpeechCount = 0;
       let recentSpeechRollingBuffer = [];
       let lastEmbeddingCheckTime = 0;
+      let isUtteranceVerified = false;
+      let preSendSpeechBuffer = [];
+      let lastSpeechActiveTime = 0;
 
       // 5. Mic PCM Stream with 3D-Speaker Neural Voiceprint & Barge-In Interruption Detector
       micProcessorNode.onaudioprocess = (e) => {
@@ -2280,8 +2283,62 @@
 
         recordAudioSegment('user', downsampled, 16000);
 
-        for (let i = 0; i < downsampled.length; i++) {
-          audioSendBuffer.push(downsampled[i]);
+        // 🎙️ 3D-Speaker Neural Voiceprint Upstream Gate (Immunize AI from Hearing Bystanders)
+        if (userVoiceprintProfile) {
+          if (rms > TUNING_CONFIG.RMS_THRESHOLD) {
+            lastSpeechActiveTime = Date.now();
+            if (!isUtteranceVerified) {
+              // Accumulate in pre-send buffer until neural voiceprint is verified
+              for (let i = 0; i < downsampled.length; i++) {
+                preSendSpeechBuffer.push(downsampled[i]);
+              }
+              if (preSendSpeechBuffer.length > 9600) {
+                preSendSpeechBuffer = preSendSpeechBuffer.slice(preSendSpeechBuffer.length - 9600);
+              }
+
+              // Run embedding check on latest audio burst
+              if (recentSpeechRollingBuffer.length >= 2400 && (Date.now() - lastEmbeddingCheckTime > 120)) {
+                lastEmbeddingCheckTime = Date.now();
+                computeSpeakerEmbedding(new Float32Array(recentSpeechRollingBuffer)).then(emb => {
+                  if (emb) {
+                    const similarity = computeVoiceprintSimilarity(emb, userVoiceprintProfile);
+                    if (similarity >= TUNING_CONFIG.SIMILARITY_THRESHOLD) {
+                      isUtteranceVerified = true;
+                      // Verified! Flush preSendSpeechBuffer to audioSendBuffer so no syllable is lost
+                      for (let i = 0; i < preSendSpeechBuffer.length; i++) {
+                        audioSendBuffer.push(preSendSpeechBuffer[i]);
+                      }
+                      preSendSpeechBuffer = [];
+                    }
+                  }
+                }).catch(() => {});
+              }
+              // Not verified yet (e.g. bystander / ambient noise) -> DO NOT SEND TO GEMINI!
+              return;
+            } else {
+              // Already verified in this sentence burst -> stream directly!
+              for (let i = 0; i < downsampled.length; i++) {
+                audioSendBuffer.push(downsampled[i]);
+              }
+            }
+          } else {
+            // Silence / gap between sentences
+            if (Date.now() - lastSpeechActiveTime > 500) {
+              isUtteranceVerified = false;
+              preSendSpeechBuffer = [];
+            }
+            if (!isUtteranceVerified) {
+              return; // Discard background silence
+            }
+            for (let i = 0; i < downsampled.length; i++) {
+              audioSendBuffer.push(downsampled[i]);
+            }
+          }
+        } else {
+          // No voiceprint profile registered -> send all audio
+          for (let i = 0; i < downsampled.length; i++) {
+            audioSendBuffer.push(downsampled[i]);
+          }
         }
 
         // Send every ~100ms (1600 samples at 16kHz)
