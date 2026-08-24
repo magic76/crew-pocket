@@ -315,24 +315,22 @@
       for (let i = 0; i < numBins + 2; i++) {
         melPoints[i] = lowMel + i * (highMel - lowMel) / (numBins + 1);
       }
-      const binPoints = new Int32Array(numBins + 2);
-      for (let i = 0; i < numBins + 2; i++) {
-        const hz = this.melToHz(melPoints[i]);
-        binPoints[i] = Math.floor((this.nFft + 1) * hz / sampleRate);
-      }
 
       const filters = [];
       for (let m = 1; m <= numBins; m++) {
         const filter = new Float32Array(numFftBins);
-        const left = binPoints[m - 1];
-        const center = binPoints[m];
-        const right = binPoints[m + 1];
+        const leftMel = melPoints[m - 1];
+        const centerMel = melPoints[m];
+        const rightMel = melPoints[m + 1];
 
-        for (let k = left; k < center && k < numFftBins; k++) {
-          filter[k] = (k - left) / (center - left);
-        }
-        for (let k = center; k <= right && k < numFftBins; k++) {
-          filter[k] = (right - k) / (right - center);
+        for (let k = 0; k < numFftBins; k++) {
+          const hz = k * sampleRate / this.nFft;
+          const mel = this.hzToMel(hz);
+          if (mel >= leftMel && mel <= centerMel) {
+            filter[k] = (mel - leftMel) / (centerMel - leftMel);
+          } else if (mel > centerMel && mel <= rightMel) {
+            filter[k] = (rightMel - mel) / (rightMel - centerMel);
+          }
         }
         filters.push(filter);
       }
