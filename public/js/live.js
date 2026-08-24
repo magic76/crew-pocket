@@ -523,51 +523,17 @@
   }
 
   // ==========================================
-  // ==========================================
-  // 🎙️ Real-time Speech-to-Text (STT) Engine
+  // 🎙️ Real-time Speech Tracker (Native Gemini Audio - No System Chimes)
   // ==========================================
   function startSpeechRecognition() {
-    if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) return;
-    try {
-      const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
-      speechRecognizer = new SpeechRec();
-      speechRecognizer.continuous = true;
-      speechRecognizer.interimResults = true;
-      speechRecognizer.lang = (typeof getCrewLocale === 'function' && getCrewLocale() === 'en') ? 'en-US' : 'zh-TW';
-
-      speechRecognizer.onresult = (event) => {
-        for (let i = event.resultIndex; i < event.results.length; ++i) {
-          const transcript = event.results[i][0].transcript.trim();
-          if (event.results[i].isFinal) {
-            if (transcript) {
-              currentTurnUser = currentTurnUser ? (currentTurnUser + ' ' + transcript) : transcript;
-              appendCardTranscript('user', transcript);
-            }
-          }
-        }
-      };
-
-      speechRecognizer.onerror = (e) => {
-        console.warn('[STT Error]', e);
-      };
-
-      speechRecognizer.onend = () => {
-        if (isConnected && speechRecognizer) {
-          try { speechRecognizer.start(); } catch (e) {}
-        }
-      };
-
-      speechRecognizer.start();
-    } catch (err) {
-      console.warn('[Speech Recognition Init Warn]', err);
-    }
+    // 🛡️ Disabled webkitSpeechRecognition to prevent Android OS audio focus conflicts,
+    // double-recording status bar icons, and annoying system "ding ding ding" prompt sounds.
+    // Gemini Live natively understands speech from the 16kHz PCM stream!
+    speechRecognizer = null;
   }
 
   function stopSpeechRecognition() {
-    if (speechRecognizer) {
-      try { speechRecognizer.stop(); } catch (e) {}
-      speechRecognizer = null;
-    }
+    speechRecognizer = null;
   }
 
   // ==========================================
