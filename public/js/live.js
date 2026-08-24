@@ -521,7 +521,7 @@
 
   // 🎛️ Voice & Voiceprint Real-time Tuning Configuration
   const TUNING_CONFIG = {
-    SIMILARITY_THRESHOLD: parseFloat(localStorage.getItem('crew_live_similarity_threshold')) || 0.70,
+    SIMILARITY_THRESHOLD: parseFloat(localStorage.getItem('crew_live_similarity_threshold')) || 0.45,
     RMS_THRESHOLD: parseFloat(localStorage.getItem('crew_live_rms_threshold')) || 0.028,
     BARGEIN_FRAMES: parseInt(localStorage.getItem('crew_live_bargein_frames'), 10) || 3,
     GAIN_BOOST: parseFloat(localStorage.getItem('crew_live_gain_boost')) || 1.4,
@@ -532,7 +532,7 @@
       localStorage.setItem('crew_live_gain_boost', this.GAIN_BOOST);
     },
     reset() {
-      this.SIMILARITY_THRESHOLD = 0.70;
+      this.SIMILARITY_THRESHOLD = 0.45;
       this.RMS_THRESHOLD = 0.028;
       this.BARGEIN_FRAMES = 3;
       this.GAIN_BOOST = 1.4;
@@ -965,10 +965,10 @@
                 </span>
                 <span id="live-tuning-sim-label" class="font-mono text-teal-300 text-[10px] bg-slate-900 px-1.5 py-0.5 rounded border border-slate-800">${TUNING_CONFIG.SIMILARITY_THRESHOLD.toFixed(2)}</span>
               </div>
-              <input id="live-tuning-sim-slider" type="range" min="0.60" max="0.88" step="0.01" value="${TUNING_CONFIG.SIMILARITY_THRESHOLD}" class="w-full h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-teal-400">
+              <input id="live-tuning-sim-slider" type="range" min="0.20" max="0.88" step="0.01" value="${TUNING_CONFIG.SIMILARITY_THRESHOLD}" class="w-full h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-teal-400">
               <div class="flex justify-between text-[9px] text-slate-500 font-mono mt-0.5">
-                <span>0.60 (易插話)</span>
-                <span>0.72 (建議)</span>
+                <span>0.20 (超靈敏)</span>
+                <span>0.45 (建議)</span>
                 <span>0.88 (極嚴格)</span>
               </div>
             </div>
