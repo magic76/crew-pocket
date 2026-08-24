@@ -2552,13 +2552,18 @@
       durationText = earlyMins > 0 ? `${earlyMins} 分 ${earlySecs} 秒` : `${earlySecs} 秒`;
       memoId = `call-memo-${Date.now()}`;
       initialSummary = [`已完成 ${durationText} 語音通話 (音色：${voiceName})`];
-      const earlyCard = buildCallSummaryCardHtml(turnsToSave, durationSec, voiceName, snapshotsToSave, memoId, initialSummary);
-      const earlyContainer = document.getElementById('messages-container');
-      if (earlyContainer && earlyCard) {
-        earlyContainer.appendChild(earlyCard);
-        earlyContainer.scrollTop = earlyContainer.scrollHeight;
+      // Card rendering must never block teardown.
+      try {
+        const earlyCard = buildCallSummaryCardHtml(turnsToSave, durationSec, voiceName, snapshotsToSave, memoId, initialSummary);
+        const earlyContainer = document.getElementById('messages-container');
+        if (earlyContainer && earlyCard) {
+          earlyContainer.appendChild(earlyCard);
+          earlyContainer.scrollTop = earlyContainer.scrollHeight;
+        }
+        if (typeof scrollToBottom === 'function') scrollToBottom(true);
+      } catch (cardErr) {
+        console.error('[Live Memo Render Error]', cardErr);
       }
-      if (typeof scrollToBottom === 'function') scrollToBottom(true);
 
       isConnected = false;
       stopVisualizer();
@@ -2664,7 +2669,17 @@
       }).catch(e => console.warn('[Live Sync Fetch Failed]', e));
     } catch (fatalErr) {
       console.error('[Live endLiveSession Fatal Error]', fatalErr);
-      return;
+      // Teardown fallback: even if one cleanup operation fails, restore the
+      // normal input UI and release the connection state.
+      isConnected = false;
+      const fallbackDock = document.getElementById('live-bottom-dock');
+      const fallbackInput = document.getElementById('standard-input-bar');
+      if (fallbackDock) {
+        fallbackDock.classList.add('hidden');
+        fallbackDock.classList.remove('flex');
+      }
+      if (fallbackInput) fallbackInput.classList.remove('hidden');
+      try { removeInlineCard(); } catch (_) {}
     }
 
     // 2. Background AI Audio Multimodal Transcription & Highlights Enrichment
