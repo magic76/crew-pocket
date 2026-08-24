@@ -30,7 +30,7 @@ Crew Pocket 是運行於 Android Termux 的行動 AI 助理與開發工作台，
    ```
 2. **多模態檢視**：截圖檔案將存放於：
    `/data/data/com.termux/files/home/agy-web/public/uploads/phone_screen_opt.webp`
-   **立即使用 `view_file` 工具開啟該路徑**，向使用者進行精確的螢幕文字與畫面解析！
+   **只有在回傳 `success:true` 且檔案時間已更新時，才使用 `view_image` 開啟該路徑**；失敗時禁止讀取舊快取。
 
 #### 📸 B. 分析「真實物理環境」（例如使用者說「拍張照片」、「看我眼前」、「拍一下」）：
 1. **呼叫後台相機端點**（背景靜默拍攝，相簿保留高畫質原圖 + 自動產出 AI 壓縮圖）：
@@ -40,10 +40,11 @@ Crew Pocket 是運行於 Android Termux 的行動 AI 助理與開發工作台，
 2. **多模態檢視**：分析圖片存放於：
    `/data/data/com.termux/files/home/agy-web/public/uploads/camera_photo_opt.webp`
    （原圖存放於 `/sdcard/Pictures/CrewPocket/IMG_YYYYMMDD_HHMMSS.jpg`）
-   **立即使用 `view_file` 工具開啟該路徑**，向使用者進行多模態景物/文字/環境分析！
+   **只有在回傳 `success:true` 且檔案時間已更新時，才使用 `view_image` 開啟該路徑**；失敗時禁止讀取舊快取。
 
 ### 2. 底層原生小幫手服務 (`CrewHelper.apk` / `127.0.0.1:8766`)
-- `POST http://127.0.0.1:8766/key`：系統實體鍵（`{"key":"HOME"}`、`{"key":"BACK"}`、`{"key":"RECENTS"}`、`{"key":"SCREENSHOT"}`）。
+- `POST http://127.0.0.1:8766/screenshot`：產生並保存原尺寸 PNG，成功時回傳 `{"success":true,"path":"...","latestPath":"..."}`。
+- `POST http://127.0.0.1:8766/key`：系統實體鍵（`{"key":"HOME"}`、`{"key":"BACK"}`、`{"key":"RECENTS"}`）。
 - `POST http://127.0.0.1:8766/tap`：座標點擊 `{"x": 500, "y": 1000}`。
 - `POST http://127.0.0.1:8766/swipe`：滑動手勢 `{"x1": 500, "y1": 1500, "x2": 500, "y2": 500, "duration": 300}`。
 - `POST http://127.0.0.1:8766/notify`：狀態通知（`{"state":"THINKING"}` 啟動 360° 流水旋轉光環；`{"state":"DONE","text":"結論"}` 翡翠定格與震動小膠囊）。
