@@ -2486,142 +2486,149 @@
   window.buildCallSummaryCardHtml = buildCallSummaryCardHtml;
 
   async function endLiveSession() {
-    isConnected = false;
-    stopVisualizer();
-    stopSpeechRecognition();
+    try {
+      console.log('[Live] endLiveSession initiated...');
+      isConnected = false;
+      stopVisualizer();
+      stopSpeechRecognition();
 
-    if (cameraInterval) {
-      clearInterval(cameraInterval);
-      cameraInterval = null;
-    }
-    if (cameraStream) {
-      cameraStream.getTracks().forEach(t => t.stop());
-      cameraStream = null;
-    }
-    isCameraOn = false;
-
-    if (audioPlayer) {
-      audioPlayer.stopAll();
-      audioPlayer = null;
-    }
-
-    if (micProcessorNode) {
-      try { micProcessorNode.disconnect(); } catch (e) {}
-      micProcessorNode = null;
-    }
-    if (silentGainNode) {
-      try { silentGainNode.disconnect(); } catch (e) {}
-      silentGainNode = null;
-    }
-    if (micAudioSource) {
-      try { micAudioSource.disconnect(); } catch (e) {}
-      micAudioSource = null;
-    }
-    if (micMediaStream) {
-      micMediaStream.getTracks().forEach(t => t.stop());
-      micMediaStream = null;
-    }
-    if (audioContext) {
-      try { audioContext.close(); } catch (e) {}
-      audioContext = null;
-    }
-    if (ws) {
-      try { ws.close(); } catch (e) {}
-      ws = null;
-    }
-
-    if (typeof window.haptic === 'function') window.haptic('heavy');
-
-    // Reset Header Live Button
-    if (liveVoiceBtn) {
-      liveVoiceBtn.classList.remove('bg-rose-950/80', 'text-rose-300', 'border-rose-500/50');
-      const span = liveVoiceBtn.querySelector('span:last-child');
-      if (span) span.textContent = 'Live 通話';
-    }
-
-    // 📱 Option A: Restore bottom standard chat input bar
-    const standardInputBar = document.getElementById('standard-input-bar');
-    const liveBottomDock = document.getElementById('live-bottom-dock');
-    if (liveBottomDock) {
-      liveBottomDock.classList.add('hidden');
-      liveBottomDock.classList.remove('flex');
-    }
-    if (standardInputBar) standardInputBar.classList.remove('hidden');
-
-    setMediaSessionActive(false);
-
-    // Collect any remaining turn
-    if (currentTurnUser || currentTurnModel) {
-      sessionDialogueTurns.push({
-        user: currentTurnUser || '🗣️ (您的語音提問)',
-        model: currentTurnModel || '🎙️ (AI 語音回覆)'
-      });
-      currentTurnUser = '';
-      currentTurnModel = '';
-    }
-
-    // 🔒 Build Complete Call Summary & Dialogue Memo Card
-    const turnsToSave = sessionDialogueTurns.slice();
-    const toolsToSave = sessionExecutedTools.slice();
-    const snapshotsToSave = sessionSnapshots.slice();
-    const audioChunksToTranscribe = fullSessionAudioChunks.slice();
-    sessionExecutedTools = [];
-    sessionDialogueTurns = [];
-    sessionSnapshots = [];
-    fullSessionAudioChunks = [];
-
-    const durationSec = liveCallStartTs > 0 ? Math.max(1, Math.round((Date.now() - liveCallStartTs) / 1000)) : 0;
-    const voiceName = getSelectedVoice();
-    const timeStr = new Date().toLocaleTimeString('zh-TW', { hour12: false, hour: '2-digit', minute: '2-digit' });
-    const mins = Math.floor(durationSec / 60);
-    const secs = durationSec % 60;
-    const durationText = mins > 0 ? `${mins} 分 ${secs} 秒` : `${secs} 秒`;
-
-    const memoId = `call-memo-${Date.now()}`;
-    const initialSummary = [`已完成 ${durationText} 語音通話 (音色：${voiceName})`];
-    
-    // 🌟 In-place Morph: Replace active live card directly with the finished Call Summary Card!
-    const summaryCard = buildCallSummaryCardHtml(turnsToSave, durationSec, voiceName, snapshotsToSave, memoId, initialSummary);
-    const existingInlineCard = document.getElementById('live-inline-card');
-    if (existingInlineCard && summaryCard) {
-      existingInlineCard.replaceWith(summaryCard);
-    } else if (summaryCard) {
-      const targetContainer = document.getElementById('messages-container') || messagesContainer;
-      if (targetContainer) targetContainer.appendChild(summaryCard);
-    }
-
-    if (typeof scrollToBottom === 'function') scrollToBottom(true);
-    setTimeout(() => {
-      if (typeof scrollToBottom === 'function') scrollToBottom(true);
-    }, 150);
-
-    const activeConvId = (typeof currentConversationId !== 'undefined' && currentConversationId) ? currentConversationId : null;
-    const initialUserText = turnsToSave.map(t => t.user || '').filter(Boolean).join('；') || `🗣️ 雙向語音對話 (${durationText})`;
-    const initialModelText = turnsToSave.map(t => t.model || '').filter(Boolean).join('\n') || `✨ Gemini Live 語音通話完成 (音色：${voiceName})`;
-
-    // 1. Immediate Synchronous Sync (Ensure 100% recorded even if page reloads immediately)
-    fetch('/api/live-sync', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        conversation_id: activeConvId,
-        user_message: initialUserText,
-        assistant_message: initialModelText,
-        call_memo: {
-          duration_sec: durationSec,
-          voice_name: voiceName,
-          summary: initialSummary,
-          transcript: turnsToSave,
-          tools: toolsToSave
-        }
-      })
-    }).then(res => res.json()).then(data => {
-      if (data.success && data.conversation_id && (typeof currentConversationId !== 'undefined' && !currentConversationId)) {
-        currentConversationId = data.conversation_id;
-        localStorage.setItem('agy_active_conv_id', data.conversation_id);
+      if (cameraInterval) {
+        clearInterval(cameraInterval);
+        cameraInterval = null;
       }
-      if (typeof window.loadConversations === 'function') window.loadConversations();
-    }).catch(() => {});
+      if (cameraStream) {
+        cameraStream.getTracks().forEach(t => t.stop());
+        cameraStream = null;
+      }
+      isCameraOn = false;
+
+      if (audioPlayer) {
+        audioPlayer.stopAll();
+        audioPlayer = null;
+      }
+
+      if (micProcessorNode) {
+        try { micProcessorNode.disconnect(); } catch (e) {}
+        micProcessorNode = null;
+      }
+      if (silentGainNode) {
+        try { silentGainNode.disconnect(); } catch (e) {}
+        silentGainNode = null;
+      }
+      if (micAudioSource) {
+        try { micAudioSource.disconnect(); } catch (e) {}
+        micAudioSource = null;
+      }
+      if (micMediaStream) {
+        micMediaStream.getTracks().forEach(t => t.stop());
+        micMediaStream = null;
+      }
+      if (audioContext) {
+        try { audioContext.close(); } catch (e) {}
+        audioContext = null;
+      }
+      if (ws) {
+        try { ws.close(); } catch (e) {}
+        ws = null;
+      }
+
+      if (typeof window.haptic === 'function') window.haptic('heavy');
+
+      // Reset Header Live Button
+      if (liveVoiceBtn) {
+        liveVoiceBtn.classList.remove('bg-rose-950/80', 'text-rose-300', 'border-rose-500/50');
+        const span = liveVoiceBtn.querySelector('span:last-child');
+        if (span) span.textContent = 'Live 通話';
+      }
+
+      // 📱 Option A: Restore bottom standard chat input bar
+      const standardInputBar = document.getElementById('standard-input-bar');
+      const liveBottomDock = document.getElementById('live-bottom-dock');
+      if (liveBottomDock) {
+        liveBottomDock.classList.add('hidden');
+        liveBottomDock.classList.remove('flex');
+      }
+      if (standardInputBar) standardInputBar.classList.remove('hidden');
+
+      setMediaSessionActive(false);
+
+      // Collect any remaining turn
+      if (currentTurnUser || currentTurnModel) {
+        sessionDialogueTurns.push({
+          user: currentTurnUser || '🗣️ (您的語音提問)',
+          model: currentTurnModel || '🎙️ (AI 語音回覆)'
+        });
+        currentTurnUser = '';
+        currentTurnModel = '';
+      }
+
+      // 🔒 Build Complete Call Summary & Dialogue Memo Card
+      const turnsToSave = sessionDialogueTurns.slice();
+      const toolsToSave = sessionExecutedTools.slice();
+      const snapshotsToSave = sessionSnapshots.slice();
+      const audioChunksToTranscribe = fullSessionAudioChunks.slice();
+      sessionExecutedTools = [];
+      sessionDialogueTurns = [];
+      sessionSnapshots = [];
+      fullSessionAudioChunks = [];
+
+      const durationSec = liveCallStartTs > 0 ? Math.max(1, Math.round((Date.now() - liveCallStartTs) / 1000)) : 0;
+      const voiceName = getSelectedVoice();
+      const timeStr = new Date().toLocaleTimeString('zh-TW', { hour12: false, hour: '2-digit', minute: '2-digit' });
+      const mins = Math.floor(durationSec / 60);
+      const secs = durationSec % 60;
+      const durationText = mins > 0 ? `${mins} 分 ${secs} 秒` : `${secs} 秒`;
+
+      const memoId = `call-memo-${Date.now()}`;
+      const initialSummary = [`已完成 ${durationText} 語音通話 (音色：${voiceName})`];
+      
+      console.log('[Live] Rendering call summary card...', { durationSec, turnsCount: turnsToSave.length });
+
+      // 🌟 In-place Morph: Replace active live card directly with the finished Call Summary Card!
+      const summaryCard = buildCallSummaryCardHtml(turnsToSave, durationSec, voiceName, snapshotsToSave, memoId, initialSummary);
+      const existingInlineCard = document.getElementById('live-inline-card');
+      if (existingInlineCard && summaryCard) {
+        existingInlineCard.replaceWith(summaryCard);
+      } else if (summaryCard) {
+        const targetContainer = document.getElementById('messages-container') || messagesContainer;
+        if (targetContainer) targetContainer.appendChild(summaryCard);
+      }
+
+      if (typeof scrollToBottom === 'function') scrollToBottom(true);
+      setTimeout(() => {
+        if (typeof scrollToBottom === 'function') scrollToBottom(true);
+      }, 150);
+
+      const activeConvId = (typeof currentConversationId !== 'undefined' && currentConversationId) ? currentConversationId : null;
+      const initialUserText = turnsToSave.map(t => t.user || '').filter(Boolean).join('；') || `🗣️ 雙向語音對話 (${durationText})`;
+      const initialModelText = turnsToSave.map(t => t.model || '').filter(Boolean).join('\n') || `✨ Gemini Live 語音通話完成 (音色：${voiceName})`;
+
+      // 1. Immediate Synchronous Sync (Ensure 100% recorded even if page reloads immediately)
+      fetch('/api/live-sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          conversation_id: activeConvId,
+          user_message: initialUserText,
+          assistant_message: initialModelText,
+          call_memo: {
+            duration_sec: durationSec,
+            voice_name: voiceName,
+            summary: initialSummary,
+            transcript: turnsToSave,
+            tools: toolsToSave
+          }
+        })
+      }).then(res => res.json()).then(data => {
+        if (data.success && data.conversation_id && (typeof currentConversationId !== 'undefined' && !currentConversationId)) {
+          currentConversationId = data.conversation_id;
+          localStorage.setItem('agy_active_conv_id', data.conversation_id);
+        }
+        if (typeof window.loadConversations === 'function') window.loadConversations();
+      }).catch(e => console.warn('[Live Sync Fetch Failed]', e));
+    } catch (fatalErr) {
+      console.error('[Live endLiveSession Fatal Error]', fatalErr);
+    }
 
     // 2. Background AI Audio Multimodal Transcription & Highlights Enrichment
     if (audioChunksToTranscribe.length > 4000) {
