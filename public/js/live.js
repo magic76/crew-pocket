@@ -2552,17 +2552,20 @@
 
       setMediaSessionActive(false);
 
+      // 🧹 1. Cleanly remove the in-call Live card from screen
+      removeInlineCard();
+
       // Collect any remaining turn
       if (currentTurnUser || currentTurnModel) {
         sessionDialogueTurns.push({
-          user: currentTurnUser || '🗣️ (您的語音提問)',
-          model: currentTurnModel || '🎙️ (AI 語音回覆)'
+          user: currentTurnUser || '🗣️ (雙向語音通話)',
+          model: currentTurnModel || '🎙️ (AI 即時語音回覆)'
         });
         currentTurnUser = '';
         currentTurnModel = '';
       }
 
-      // 🔒 Build Complete Call Summary & Dialogue Memo Card
+      // 🔒 Extract dialogue turns and full audio
       const turnsToSave = sessionDialogueTurns.slice();
       const toolsToSave = sessionExecutedTools.slice();
       const snapshotsToSave = sessionSnapshots.slice();
@@ -2579,43 +2582,31 @@
       const secs = durationSec % 60;
       const durationText = mins > 0 ? `${mins} 分 ${secs} 秒` : `${secs} 秒`;
 
-      const memoId = `call-memo-${Date.now()}`;
-      const initialSummary = [`已完成 ${durationText} 語音通話 (音色：${voiceName})`];
-      
-      console.log('[Live] Rendering call summary card...', { durationSec, turnsCount: turnsToSave.length });
+      const userText = turnsToSave.map(t => t.user || '').filter(Boolean).join('\n') || `🗣️ 語音通話 (${durationText})`;
+      const modelText = turnsToSave.map(t => t.model || '').filter(Boolean).join('\n') || `✨ Gemini Live 雙向語音通話完成 (音色：${voiceName} · 時長：${durationText})`;
 
-      // 🌟 In-place Morph: Replace active live card directly with the finished Call Summary Card!
-      const summaryCard = buildCallSummaryCardHtml(turnsToSave, durationSec, voiceName, snapshotsToSave, memoId, initialSummary);
-      const existingInlineCard = document.getElementById('live-inline-card');
-      if (existingInlineCard && summaryCard) {
-        existingInlineCard.replaceWith(summaryCard);
-      } else if (summaryCard) {
-        const targetContainer = document.getElementById('messages-container') || messagesContainer;
-        if (targetContainer) targetContainer.appendChild(summaryCard);
+      // 💬 2. Render standard dialogue in chat timeline
+      if (typeof appendMessage === 'function') {
+        appendMessage('user', userText, timeStr);
+        appendMessage('assistant', modelText, timeStr);
       }
 
       if (typeof scrollToBottom === 'function') scrollToBottom(true);
-      setTimeout(() => {
-        if (typeof scrollToBottom === 'function') scrollToBottom(true);
-      }, 150);
 
       const activeConvId = (typeof currentConversationId !== 'undefined' && currentConversationId) ? currentConversationId : null;
-      const initialUserText = turnsToSave.map(t => t.user || '').filter(Boolean).join('；') || `🗣️ 雙向語音對話 (${durationText})`;
-      const initialModelText = turnsToSave.map(t => t.model || '').filter(Boolean).join('\n') || `✨ Gemini Live 語音通話完成 (音色：${voiceName})`;
 
-      // 1. Immediate Synchronous Sync (Ensure 100% recorded even if page reloads immediately)
+      // 💾 3. Sync to database/transcript
       fetch('/api/live-sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           conversation_id: activeConvId,
-          user_message: initialUserText,
-          assistant_message: initialModelText,
+          user_message: userText,
+          assistant_message: modelText,
           call_memo: {
             duration_sec: durationSec,
             voice_name: voiceName,
-            summary: initialSummary,
-            transcript: turnsToSave,
+            turns: turnsToSave,
             tools: toolsToSave
           }
         })
