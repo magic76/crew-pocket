@@ -2108,9 +2108,7 @@
       let bargeInSpeechCount = 0;
       let recentSpeechRollingBuffer = [];
       let lastEmbeddingCheckTime = 0;
-      let isUtteranceVerified = false;
-      let preSendSpeechBuffer = [];
-      let lastSpeechActiveTime = 0;
+      let currentSpeechSimilarity = 0.5;
 
       // 5. Mic PCM Stream with 3D-Speaker Neural Voiceprint & Barge-In Interruption Detector
       micProcessorNode.onaudioprocess = (e) => {
@@ -2180,21 +2178,18 @@
           recentSpeechRollingBuffer = [];
         }
 
-        // 🎛️ Update Live Visual Tuning Meters
+        // 🎛️ Update Live Visual Tuning Meters & Continuous Voiceprint Verification
         const tuningDrawer = document.getElementById('live-card-tuning-drawer');
-        if (tuningDrawer && !tuningDrawer.classList.contains('hidden')) {
-          const rmsVal = document.getElementById('live-meter-rms-val');
-          const rmsBar = document.getElementById('live-meter-rms-bar');
-          if (rmsVal) rmsVal.textContent = rms.toFixed(3);
-          if (rmsBar) rmsBar.style.width = `${Math.min(100, Math.round((rms / 0.08) * 100))}%`;
+        if (userVoiceprintProfile && recentSpeechRollingBuffer.length >= 2400 && (Date.now() - lastEmbeddingCheckTime > 120)) {
+          lastEmbeddingCheckTime = Date.now();
+          computeSpeakerEmbedding(new Float32Array(recentSpeechRollingBuffer)).then(emb => {
+            if (emb) {
+              const curSim = computeVoiceprintSimilarity(emb, userVoiceprintProfile);
+              currentSpeechSimilarity = curSim;
 
-          const simVal = document.getElementById('live-meter-sim-val');
-          const simBar = document.getElementById('live-meter-sim-bar');
-          if (userVoiceprintProfile && recentSpeechRollingBuffer.length >= 3200 && (Date.now() - lastEmbeddingCheckTime > 200)) {
-            lastEmbeddingCheckTime = Date.now();
-            computeSpeakerEmbedding(new Float32Array(recentSpeechRollingBuffer)).then(emb => {
-              if (emb) {
-                const curSim = computeVoiceprintSimilarity(emb, userVoiceprintProfile);
+              if (tuningDrawer && !tuningDrawer.classList.contains('hidden')) {
+                const simVal = document.getElementById('live-meter-sim-val');
+                const simBar = document.getElementById('live-meter-sim-bar');
                 if (simVal) {
                   const isMatch = curSim >= TUNING_CONFIG.SIMILARITY_THRESHOLD;
                   simVal.textContent = `${curSim.toFixed(2)} ${isMatch ? '✅' : '❌'}`;
@@ -2206,40 +2201,36 @@
                   simBar.className = curSim >= TUNING_CONFIG.SIMILARITY_THRESHOLD ? 'bg-teal-400 h-full transition-all duration-75' : 'bg-rose-500 h-full transition-all duration-75';
                 }
               }
-            }).catch(() => {});
-          }
+
+              // Barge-in Check (Interrupt AI only if verified speaker)
+              const isAiSpeaking = isAiResponding || (audioPlayer && audioPlayer.activeSources.length > 0);
+              if (isAiSpeaking && curSim >= TUNING_CONFIG.SIMILARITY_THRESHOLD && rms > TUNING_CONFIG.RMS_THRESHOLD) {
+                if (audioPlayer) audioPlayer.stopAll();
+                isAiResponding = false;
+                lastAiSpokeTime = 0;
+                if (navigator.vibrate) navigator.vibrate(20);
+                updateDockControls();
+                updateCameraBadge(false, '待命中 (說話時自動發送)');
+                updateCardStatus('listening', '🎙️ 3D-Speaker 聲紋驗證通過 · 聆聽中');
+              }
+            }
+          }).catch(() => {});
+        }
+
+        if (tuningDrawer && !tuningDrawer.classList.contains('hidden')) {
+          const rmsVal = document.getElementById('live-meter-rms-val');
+          const rmsBar = document.getElementById('live-meter-rms-bar');
+          if (rmsVal) rmsVal.textContent = rms.toFixed(3);
+          if (rmsBar) rmsBar.style.width = `${Math.min(100, Math.round((rms / 0.08) * 100))}%`;
         }
 
         const isAiSpeaking = isAiResponding || (audioPlayer && audioPlayer.activeSources.length > 0);
         const inAiCooldown = (Date.now() - lastAiSpokeTime) < 350;
 
-        // 🎙️ Smart Barge-In Interruption Detection (3D-Speaker Neural Voiceprint + Real-time Config)
+        // When AI is actively speaking and not yet barge-in verified, discard input to avoid self-echo
         if (isAiSpeaking || inAiCooldown) {
-          if (userVoiceprintProfile) {
-            // 🧬 3D-Speaker Neural Embedding Matching Mode
-            if (rms > TUNING_CONFIG.RMS_THRESHOLD && recentSpeechRollingBuffer.length >= 3200) {
-              computeSpeakerEmbedding(new Float32Array(recentSpeechRollingBuffer)).then(emb => {
-                if (emb) {
-                  const similarity = computeVoiceprintSimilarity(emb, userVoiceprintProfile);
-                  if (similarity >= TUNING_CONFIG.SIMILARITY_THRESHOLD) {
-                    // ⚡ Instant Verified True Speaker Barge-In!
-                    if (audioPlayer) audioPlayer.stopAll();
-                    isAiResponding = false;
-                    lastAiSpokeTime = 0;
-                    bargeInSpeechCount = 0;
-                    recentSpeechRollingBuffer = [];
-                    if (navigator.vibrate) navigator.vibrate(20);
-                    updateDockControls();
-                    updateCameraBadge(false, '待命中 (說話時自動發送)');
-                    updateCardStatus('listening', '🎙️ 3D-Speaker 聲紋驗證通過 · 聆聽中');
-                  }
-                }
-              }).catch(() => {});
-            }
-            audioSendBuffer = [];
-            return;
-          } else {
-            // Fallback to near-field gate if not calibrated yet
+          if (!userVoiceprintProfile) {
+            // Near-field threshold fallback
             if (rms > (TUNING_CONFIG.RMS_THRESHOLD * 2.2)) {
               bargeInSpeechCount++;
               if (bargeInSpeechCount >= (TUNING_CONFIG.BARGEIN_FRAMES + 2)) {
@@ -2251,19 +2242,11 @@
                 updateDockControls();
                 updateCameraBadge(false, '待命中 (說話時自動發送)');
                 updateCardStatus('listening', '🎙️ 已插話打斷 · 聆聽中');
-              } else {
-                audioSendBuffer = [];
-                return;
               }
-            } else {
-              bargeInSpeechCount = Math.max(0, bargeInSpeechCount - 1);
-              audioSendBuffer = [];
-              sustainedSpeechCount = 0;
-              return;
             }
           }
-        } else {
-          bargeInSpeechCount = 0;
+          audioSendBuffer = [];
+          return;
         }
 
         // Active user speech tracking
@@ -2283,65 +2266,11 @@
 
         recordAudioSegment('user', downsampled, 16000);
 
-        // 🎙️ 3D-Speaker Neural Voiceprint Upstream Gate (Immunize AI from Hearing Bystanders)
-        if (userVoiceprintProfile) {
-          if (rms > TUNING_CONFIG.RMS_THRESHOLD) {
-            lastSpeechActiveTime = Date.now();
-            if (!isUtteranceVerified) {
-              // Accumulate in pre-send buffer until neural voiceprint is verified
-              for (let i = 0; i < downsampled.length; i++) {
-                preSendSpeechBuffer.push(downsampled[i]);
-              }
-              if (preSendSpeechBuffer.length > 9600) {
-                preSendSpeechBuffer = preSendSpeechBuffer.slice(preSendSpeechBuffer.length - 9600);
-              }
+        // Continuous streaming buffer with selective bystander mute
+        const isBystander = userVoiceprintProfile && (rms > TUNING_CONFIG.RMS_THRESHOLD) && (currentSpeechSimilarity < TUNING_CONFIG.SIMILARITY_THRESHOLD);
 
-              // Run embedding check on latest audio burst
-              if (recentSpeechRollingBuffer.length >= 2400 && (Date.now() - lastEmbeddingCheckTime > 100)) {
-                lastEmbeddingCheckTime = Date.now();
-                computeSpeakerEmbedding(new Float32Array(recentSpeechRollingBuffer)).then(emb => {
-                  if (emb) {
-                    const similarity = computeVoiceprintSimilarity(emb, userVoiceprintProfile);
-                    if (similarity >= TUNING_CONFIG.SIMILARITY_THRESHOLD) {
-                      isUtteranceVerified = true;
-                      lastSpeechActiveTime = Date.now();
-                      // Verified! Flush preSendSpeechBuffer to audioSendBuffer so no syllable is lost
-                      for (let i = 0; i < preSendSpeechBuffer.length; i++) {
-                        audioSendBuffer.push(preSendSpeechBuffer[i]);
-                      }
-                      preSendSpeechBuffer = [];
-                    }
-                  }
-                }).catch(() => {});
-              }
-              // Not verified yet (e.g. bystander / ambient noise) -> hold in pre-buffer, do not stream to Gemini!
-            } else {
-              // Already verified in this sentence -> stream directly!
-              for (let i = 0; i < downsampled.length; i++) {
-                audioSendBuffer.push(downsampled[i]);
-              }
-            }
-          } else {
-            // Low energy / pause / end of sentence
-            if (isUtteranceVerified) {
-              const silenceElapsed = Date.now() - lastSpeechActiveTime;
-              if (silenceElapsed < 800) {
-                // Stream natural silence tail so Gemini's server-side VAD detects sentence end and responds!
-                for (let i = 0; i < downsampled.length; i++) {
-                  audioSendBuffer.push(downsampled[i]);
-                }
-              } else {
-                // Turn complete, reset state for next speech burst
-                isUtteranceVerified = false;
-                preSendSpeechBuffer = [];
-              }
-            }
-          }
-        } else {
-          // No voiceprint profile registered -> send all audio
-          for (let i = 0; i < downsampled.length; i++) {
-            audioSendBuffer.push(downsampled[i]);
-          }
+        for (let i = 0; i < downsampled.length; i++) {
+          audioSendBuffer.push(isBystander ? 0 : downsampled[i]);
         }
 
         // Send every ~100ms (1600 samples at 16kHz)
