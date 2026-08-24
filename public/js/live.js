@@ -849,7 +849,7 @@
 
       <div class="bg-gradient-to-b from-slate-900 via-slate-900 to-slate-950 border border-teal-500/50 rounded-2xl rounded-tl-none p-3.5 text-xs sm:text-sm shadow-2xl shadow-teal-950/50 flex-1 max-w-[92%] space-y-3 relative overflow-hidden">
         
-        <!-- CARD TOP TOOLBAR: 狀態指示 (靠左) + 聲紋/調音/音色膠囊 (靠右) -->
+        <!-- CARD TOP TOOLBAR: 狀態指示 (靠左) + 調音/音色膠囊 (靠右) -->
         <div class="border-b border-slate-800/80 pb-2 flex items-center justify-between gap-1.5 min-w-0">
           <div class="flex items-center gap-1.5 min-w-0">
             <span id="live-card-status-dot" class="w-2 h-2 rounded-full bg-amber-400 animate-pulse shrink-0"></span>
@@ -858,13 +858,7 @@
           
           <div class="flex items-center gap-1.5 shrink-0">
             <!-- 🎛️ Live Tuning Panel Toggle Button -->
-            <button id="live-card-tuning-toggle-btn" type="button" class="w-6 h-6 rounded-full bg-slate-800/90 hover:bg-slate-700 active:scale-95 border border-slate-700 text-[11px] text-slate-300 flex items-center justify-center transition shadow-sm" title="開啟/收合即時調音台">🎛️</button>
-
-            <!-- 🧬 Voiceprint Status & Calibration Button -->
-            <button id="live-card-voiceprint-btn" type="button" class="px-2 py-0.5 rounded-full bg-slate-800/90 hover:bg-slate-700 active:scale-95 border ${userVoiceprintProfile ? 'border-teal-500/50 text-teal-300' : 'border-slate-700 text-slate-400'} text-[10px] font-medium flex items-center gap-1 transition shadow-sm" title="點擊校準個人聲紋 (AI 專屬認你的聲音插話打斷，免疫旁人干擾)">
-              <span id="live-voiceprint-dot" class="w-1.5 h-1.5 rounded-full ${userVoiceprintProfile ? 'bg-teal-400' : 'bg-slate-500'}"></span>
-              <span id="live-voiceprint-text">${userVoiceprintProfile ? '🧬 聲紋已鎖' : '🧬 校準聲紋'}</span>
-            </button>
+            <button id="live-card-tuning-toggle-btn" type="button" class="w-6 h-6 rounded-full bg-slate-800/90 hover:bg-slate-700 active:scale-95 border border-slate-700 text-[11px] text-slate-300 flex items-center justify-center transition shadow-sm cursor-pointer" title="開啟/收合即時調音台">🎛️</button>
 
             <!-- 🗣️ Voice Selector Pill (音色切換膠囊 · 靠右放置) -->
             <div class="relative inline-flex items-center shrink-0">
@@ -1067,13 +1061,6 @@
         if (framesSlider) framesSlider.value = TUNING_CONFIG.BARGEIN_FRAMES;
         if (framesLabel) framesLabel.textContent = `${TUNING_CONFIG.BARGEIN_FRAMES} 幀 (${TUNING_CONFIG.BARGEIN_FRAMES * 60}ms)`;
         if (navigator.vibrate) navigator.vibrate(20);
-      });
-    }
-
-    const voiceprintBtn = card.querySelector('#live-card-voiceprint-btn');
-    if (voiceprintBtn) {
-      voiceprintBtn.addEventListener('click', () => {
-        openVoiceprintModal();
       });
     }
 
