@@ -2567,6 +2567,7 @@
     const turnsToSave = sessionDialogueTurns.slice();
     const toolsToSave = sessionExecutedTools.slice();
     const snapshotsToSave = sessionSnapshots.slice();
+    const audioChunksToTranscribe = fullSessionAudioChunks.slice();
     sessionExecutedTools = [];
     sessionDialogueTurns = [];
     sessionSnapshots = [];
@@ -2579,38 +2580,121 @@
     const secs = durationSec % 60;
     const durationText = mins > 0 ? `${mins} 分 ${secs} 秒` : `${secs} 秒`;
 
-    if (turnsToSave.length > 0 || toolsToSave.length > 0 || durationSec >= 2) {
-      const summaryCard = buildCallSummaryCardHtml(turnsToSave, durationSec, voiceName, snapshotsToSave, null, null);
+    if (turnsToSave.length > 0 || toolsToSave.length > 0 || durationSec >= 1 || audioChunksToTranscribe.length > 4000) {
+      const memoId = `call-memo-${Date.now()}`;
+      const summaryCard = buildCallSummaryCardHtml(turnsToSave, durationSec, voiceName, snapshotsToSave, memoId, null);
       if (messagesContainer && summaryCard) {
         messagesContainer.appendChild(summaryCard);
         if (typeof scrollToBottom === 'function') scrollToBottom(true);
       }
 
-      // Sync summary into server session history
       const activeConvId = (typeof currentConversationId !== 'undefined' && currentConversationId) ? currentConversationId : null;
-      const userTextLines = turnsToSave.map(t => t.user || '').filter(Boolean).join('；') || `🗣️ 雙向語音對話 (通話時長：${durationText})`;
-      const modelTextLines = turnsToSave.map(t => t.model || '').filter(Boolean).join('\n') || `✨ Gemini Live 已完成本次語音通話 (音色：${voiceName})`;
-      
-      fetch('/api/live-sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          conversation_id: activeConvId,
-          user_message: userTextLines,
-          assistant_message: modelTextLines,
-          call_memo: {
-            duration_sec: durationSec,
-            voice_name: voiceName,
-            turns: turnsToSave,
-            tools: toolsToSave
+
+      // 🧠 Smart AI Audio Multimodal Transcription & Highlights Extraction
+      if (audioChunksToTranscribe.length > 8000) {
+        const wavBlob = encodeWAV(new Float32Array(audioChunksToTranscribe), 16000);
+        const apiKey = getApiKey();
+        generatePostCallSmartTranscript(wavBlob, apiKey, audioChunksToTranscribe.length, durationSec).then(result => {
+          if (result && result.success && result.data) {
+            const highlightsContainer = document.getElementById(`highlights-container-${memoId}`);
+            const transcriptContainer = document.getElementById(`transcript-container-${memoId}`);
+            const summaryList = result.data.summary || [];
+            const transcriptList = result.data.transcript || [];
+
+            if (highlightsContainer && summaryList.length > 0) {
+              highlightsContainer.innerHTML = `
+                <div class="p-3 rounded-xl bg-teal-950/40 border border-teal-500/40 mb-2.5">
+                  <div class="flex items-center gap-1.5 text-xs font-bold text-teal-300 mb-1.5">
+                    <span>📌</span>
+                    <span>本次對話重點整理</span>
+                  </div>
+                  <ul class="space-y-1 text-xs text-slate-200 list-disc list-inside">
+                    ${summaryList.map(s => `<li>${escapeHtml(s)}</li>`).join('')}
+                  </ul>
+                </div>
+              `;
+            }
+
+            if (transcriptContainer && transcriptList.length > 0) {
+              transcriptContainer.innerHTML = transcriptList.map((t, idx) => {
+                const isUser = t.speaker === 'user';
+                return `
+                  <div class="p-2.5 rounded-xl ${isUser ? 'bg-indigo-950/40 border border-indigo-500/30 text-indigo-100' : 'bg-slate-900/90 border border-teal-500/30 text-slate-100'} text-xs mb-2">
+                    <div class="flex items-center gap-1.5 font-bold ${isUser ? 'text-indigo-300' : 'text-teal-300'} mb-1">
+                      <span>${isUser ? `🗣️ 您 (第 ${idx + 1} 輪)：` : '✨ Gemini：'}</span>
+                    </div>
+                    <div class="leading-relaxed pl-1">${escapeHtml(t.text || '')}</div>
+                  </div>
+                `;
+              }).join('');
+            }
+
+            // Sync enriched transcript into server history
+            fetch('/api/live-sync', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                conversation_id: activeConvId,
+                user_message: transcriptList.filter(t => t.speaker === 'user').map(t => t.text).join('；') || `🗣️ 雙向語音對話 (${durationText})`,
+                assistant_message: `✨ Gemini Live 語音對話紀錄：\n` + transcriptList.map(t => `[${t.speaker === 'user' ? '您' : 'Gemini'}]: ${t.text}`).join('\n'),
+                call_memo: {
+                  duration_sec: durationSec,
+                  voice_name: voiceName,
+                  summary: summaryList,
+                  transcript: transcriptList,
+                  tools: toolsToSave
+                }
+              })
+            }).then(res => res.json()).then(data => {
+              if (data.success && data.conversation_id && (typeof currentConversationId !== 'undefined' && !currentConversationId)) {
+                currentConversationId = data.conversation_id;
+                localStorage.setItem('agy_active_conv_id', data.conversation_id);
+              }
+              if (typeof window.loadConversations === 'function') window.loadConversations();
+            }).catch(() => {});
+          } else {
+            // Fallback highlights if transcription failed or empty
+            const highlightsContainer = document.getElementById(`highlights-container-${memoId}`);
+            if (highlightsContainer) {
+              highlightsContainer.innerHTML = `
+                <div class="p-3 rounded-xl bg-teal-950/30 border border-teal-500/30 mb-2.5">
+                  <div class="flex items-center gap-1.5 text-xs font-bold text-teal-300 mb-1">
+                    <span>📌</span>
+                    <span>通話摘要</span>
+                  </div>
+                  <div class="text-xs text-slate-300">已完成 ${durationText} 語音通話 (音色: ${voiceName})</div>
+                </div>
+              `;
+            }
           }
-        })
-      }).then(res => res.json()).then(data => {
-        if (data.success && data.conversation_id && (typeof currentConversationId !== 'undefined' && !currentConversationId)) {
-          currentConversationId = data.conversation_id;
-          localStorage.setItem('agy_active_conv_id', data.conversation_id);
-        }
-      }).catch(() => {});
+        }).catch(() => {});
+      } else {
+        // Simple call sync if very short audio
+        const userTextLines = turnsToSave.map(t => t.user || '').filter(Boolean).join('；') || `🗣️ 雙向語音對話 (通話時長：${durationText})`;
+        const modelTextLines = turnsToSave.map(t => t.model || '').filter(Boolean).join('\n') || `✨ Gemini Live 已完成本次語音通話 (音色：${voiceName})`;
+        
+        fetch('/api/live-sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            conversation_id: activeConvId,
+            user_message: userTextLines,
+            assistant_message: modelTextLines,
+            call_memo: {
+              duration_sec: durationSec,
+              voice_name: voiceName,
+              turns: turnsToSave,
+              tools: toolsToSave
+            }
+          })
+        }).then(res => res.json()).then(data => {
+          if (data.success && data.conversation_id && (typeof currentConversationId !== 'undefined' && !currentConversationId)) {
+            currentConversationId = data.conversation_id;
+            localStorage.setItem('agy_active_conv_id', data.conversation_id);
+          }
+          if (typeof window.loadConversations === 'function') window.loadConversations();
+        }).catch(() => {});
+      }
     }
   }
 
