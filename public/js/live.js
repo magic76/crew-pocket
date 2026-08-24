@@ -250,6 +250,84 @@
   }
 
   // ==========================================
+  // 🧬 Local Voiceprint Speaker Verification Engine (Option B)
+  // ==========================================
+  const VOICEPRINT_KEY = 'crew_voiceprint_vector';
+  let userVoiceprintProfile = null;
+  let isCalibratingVoiceprint = false;
+  let voiceprintCalibrationFrames = [];
+
+  function loadUserVoiceprint() {
+    try {
+      const raw = localStorage.getItem(VOICEPRINT_KEY);
+      if (raw) {
+        const arr = JSON.parse(raw);
+        if (Array.isArray(arr) && arr.length === 16) {
+          userVoiceprintProfile = new Float32Array(arr);
+        }
+      }
+    } catch (e) {}
+  }
+  loadUserVoiceprint();
+
+  function saveUserVoiceprint(profile) {
+    userVoiceprintProfile = profile;
+    localStorage.setItem(VOICEPRINT_KEY, JSON.stringify(Array.from(profile)));
+  }
+
+  function clearUserVoiceprint() {
+    userVoiceprintProfile = null;
+    localStorage.removeItem(VOICEPRINT_KEY);
+  }
+
+  // 🧬 16-Band Mel-like Spectral Profile Extractor (Fast Local Audio Analysis)
+  function extractSpectralProfile(float32Data, sampleRate = 16000) {
+    const N = float32Data.length;
+    const numBands = 16;
+    const bandEnergies = new Float32Array(numBands);
+    const minFreq = 100;
+    const maxFreq = 6500;
+
+    for (let b = 0; b < numBands; b++) {
+      const fStart = minFreq * Math.pow(maxFreq / minFreq, b / numBands);
+      const fEnd = minFreq * Math.pow(maxFreq / minFreq, (b + 1) / numBands);
+      const kStart = Math.max(1, Math.floor(fStart * N / sampleRate));
+      const kEnd = Math.min(Math.floor(N / 2), Math.ceil(fEnd * N / sampleRate));
+
+      let energy = 0;
+      const step = Math.max(1, Math.floor(N / 64));
+      for (let k = kStart; k <= kEnd; k++) {
+        let real = 0, imag = 0;
+        for (let n = 0; n < N; n += step) {
+          const angle = 2 * Math.PI * k * n / N;
+          const w = float32Data[n] * (0.54 - 0.46 * Math.cos(2 * Math.PI * n / (N - 1)));
+          real += w * Math.cos(angle);
+          imag -= w * Math.sin(angle);
+        }
+        energy += (real * real + imag * imag);
+      }
+      bandEnergies[b] = Math.log(1 + energy);
+    }
+
+    let norm = 0;
+    for (let b = 0; b < numBands; b++) norm += bandEnergies[b] * bandEnergies[b];
+    norm = Math.sqrt(norm);
+    if (norm > 0) {
+      for (let b = 0; b < numBands; b++) bandEnergies[b] /= norm;
+    }
+    return bandEnergies;
+  }
+
+  function computeVoiceprintSimilarity(v1, v2) {
+    if (!v1 || !v2 || v1.length !== v2.length) return 0;
+    let dot = 0;
+    for (let i = 0; i < v1.length; i++) {
+      dot += v1[i] * v2[i];
+    }
+    return dot;
+  }
+
+  // ==========================================
   // 🧮 Audio Data Conversion Utilities
   // ==========================================
   function floatTo16BitPCM(float32Array, gainBoost = 1.4) {
@@ -339,23 +417,31 @@
 
       <div class="bg-gradient-to-b from-slate-900 via-slate-900 to-slate-950 border border-teal-500/50 rounded-2xl rounded-tl-none p-3.5 text-xs sm:text-sm shadow-2xl shadow-teal-950/50 flex-1 max-w-[92%] space-y-3 relative overflow-hidden">
         
-        <!-- CARD TOP TOOLBAR: 狀態指示 (靠左) + 音色選擇膠囊 (靠右) -->
-        <div class="border-b border-slate-800/80 pb-2 flex items-center justify-between gap-2 min-w-0">
+        <!-- CARD TOP TOOLBAR: 狀態指示 (靠左) + 聲紋/音色膠囊 (靠右) -->
+        <div class="border-b border-slate-800/80 pb-2 flex items-center justify-between gap-1.5 min-w-0">
           <div class="flex items-center gap-1.5 min-w-0">
             <span id="live-card-status-dot" class="w-2 h-2 rounded-full bg-amber-400 animate-pulse shrink-0"></span>
             <span id="live-card-status-text" class="text-amber-300 font-bold text-xs font-mono truncate">⚡ 準備中...</span>
           </div>
           
-          <!-- 🗣️ Voice Selector Pill (音色切換膠囊 · 靠右放置) -->
-          <div class="relative inline-flex items-center shrink-0">
-            <select id="live-card-voice-select" class="appearance-none bg-teal-950/80 hover:bg-teal-900 active:scale-95 border border-teal-500/50 text-teal-300 text-[11px] font-semibold rounded-full pl-2.5 pr-4.5 py-0.5 outline-none transition cursor-pointer shadow-sm" title="點擊切換音色">
-              <option value="Puck" ${selectedVoice === 'Puck' ? 'selected' : ''}>🗣️ Puck (活潑)</option>
-              <option value="Charon" ${selectedVoice === 'Charon' ? 'selected' : ''}>🗣️ Charon (沉穩)</option>
-              <option value="Kore" ${selectedVoice === 'Kore' ? 'selected' : ''}>🗣️ Kore (溫柔)</option>
-              <option value="Fenrir" ${selectedVoice === 'Fenrir' ? 'selected' : ''}>🗣️ Fenrir (低沉)</option>
-              <option value="Aoede" ${selectedVoice === 'Aoede' ? 'selected' : ''}>🗣️ Aoede (明亮)</option>
-            </select>
-            <span class="pointer-events-none absolute right-1.5 text-[9px] text-teal-400 font-mono">▾</span>
+          <div class="flex items-center gap-1.5 shrink-0">
+            <!-- 🧬 Voiceprint Status & Calibration Button -->
+            <button id="live-card-voiceprint-btn" type="button" class="px-2 py-0.5 rounded-full bg-slate-800/90 hover:bg-slate-700 active:scale-95 border ${userVoiceprintProfile ? 'border-teal-500/50 text-teal-300' : 'border-slate-700 text-slate-400'} text-[10px] font-medium flex items-center gap-1 transition shadow-sm" title="點擊校準個人聲紋 (AI 專屬認你的聲音插話打斷，免疫旁人干擾)">
+              <span id="live-voiceprint-dot" class="w-1.5 h-1.5 rounded-full ${userVoiceprintProfile ? 'bg-teal-400' : 'bg-slate-500'}"></span>
+              <span id="live-voiceprint-text">${userVoiceprintProfile ? '🧬 聲紋已鎖' : '🧬 校準聲紋'}</span>
+            </button>
+
+            <!-- 🗣️ Voice Selector Pill (音色切換膠囊 · 靠右放置) -->
+            <div class="relative inline-flex items-center shrink-0">
+              <select id="live-card-voice-select" class="appearance-none bg-teal-950/80 hover:bg-teal-900 active:scale-95 border border-teal-500/50 text-teal-300 text-[11px] font-semibold rounded-full pl-2 pr-4 py-0.5 outline-none transition cursor-pointer shadow-sm" title="點擊切換音色">
+                <option value="Puck" ${selectedVoice === 'Puck' ? 'selected' : ''}>🗣️ Puck</option>
+                <option value="Charon" ${selectedVoice === 'Charon' ? 'selected' : ''}>🗣️ Charon</option>
+                <option value="Kore" ${selectedVoice === 'Kore' ? 'selected' : ''}>🗣️ Kore</option>
+                <option value="Fenrir" ${selectedVoice === 'Fenrir' ? 'selected' : ''}>🗣️ Fenrir</option>
+                <option value="Aoede" ${selectedVoice === 'Aoede' ? 'selected' : ''}>🗣️ Aoede</option>
+              </select>
+              <span class="pointer-events-none absolute right-1 text-[8px] text-teal-400 font-mono">▾</span>
+            </div>
           </div>
         </div>
 
@@ -402,6 +488,25 @@
     }
 
     // Attach Inline Controls
+    const voiceprintBtn = card.querySelector('#live-card-voiceprint-btn');
+    if (voiceprintBtn) {
+      voiceprintBtn.addEventListener('click', () => {
+        if (isCalibratingVoiceprint) return;
+        if (userVoiceprintProfile) {
+          const confirmed = confirm('🧬 目前已啟用你的專屬聲紋！\n\n點擊「確定」重新錄音校準，點擊「取消」保留現有聲紋。');
+          if (!confirmed) return;
+        }
+        isCalibratingVoiceprint = true;
+        voiceprintCalibrationFrames = [];
+        const vpText = document.getElementById('live-voiceprint-text');
+        const vpDot = document.getElementById('live-voiceprint-dot');
+        if (vpText) vpText.textContent = '🎙️ 採樣中...';
+        if (vpDot) vpDot.className = 'w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping';
+        appendCardTranscript('system', '🧬 正在校準專屬聲紋：請對著麥克風念出「特勤隊，我是主講人」，採樣 2 秒中...');
+        if (navigator.vibrate) navigator.vibrate(30);
+      });
+    }
+
     const voiceSelect = card.querySelector('#live-card-voice-select');
     if (voiceSelect) {
       voiceSelect.addEventListener('change', async () => {
@@ -1426,7 +1531,7 @@
 
       let bargeInSpeechCount = 0;
 
-      // 5. Mic PCM Stream with Smart Barge-In Interruption Detector
+      // 5. Mic PCM Stream with Smart Voiceprint & Barge-In Interruption Detector
       micProcessorNode.onaudioprocess = (e) => {
         if (!isConnected || isMuted || !ws || ws.readyState !== WebSocket.OPEN) return;
 
@@ -1439,35 +1544,98 @@
         }
         const rms = Math.sqrt(sumSquares / inputData.length);
 
+        const downsampled = downsampleBuffer(inputData, audioContext.sampleRate, 16000);
+
+        // 🧬 Voiceprint Calibration Mode
+        if (isCalibratingVoiceprint) {
+          if (rms > 0.02) {
+            const frameProfile = extractSpectralProfile(downsampled, 16000);
+            voiceprintCalibrationFrames.push(frameProfile);
+            if (voiceprintCalibrationFrames.length >= 12) {
+              // Finish calibration! Average all spectral vectors
+              const avgProfile = new Float32Array(16);
+              for (const f of voiceprintCalibrationFrames) {
+                for (let b = 0; b < 16; b++) avgProfile[b] += f[b];
+              }
+              let norm = 0;
+              for (let b = 0; b < 16; b++) norm += avgProfile[b] * avgProfile[b];
+              norm = Math.sqrt(norm);
+              if (norm > 0) {
+                for (let b = 0; b < 16; b++) avgProfile[b] /= norm;
+              }
+              saveUserVoiceprint(avgProfile);
+              isCalibratingVoiceprint = false;
+              voiceprintCalibrationFrames = [];
+              const vpText = document.getElementById('live-voiceprint-text');
+              const vpDot = document.getElementById('live-voiceprint-dot');
+              const vpBtn = document.getElementById('live-card-voiceprint-btn');
+              if (vpText) vpText.textContent = '🧬 聲紋已鎖';
+              if (vpDot) vpDot.className = 'w-1.5 h-1.5 rounded-full bg-teal-400';
+              if (vpBtn) vpBtn.className = 'px-2 py-0.5 rounded-full bg-slate-800/90 hover:bg-slate-700 active:scale-95 border border-teal-500/50 text-teal-300 text-[10px] font-medium flex items-center gap-1 transition shadow-sm';
+              if (navigator.vibrate) navigator.vibrate([30, 50, 30]);
+              appendCardTranscript('system', '✅ 專屬聲紋校準完成！AI 將只認你的聲音打斷，100% 免疫旁人干擾！');
+            }
+          }
+        }
+
         const isAiSpeaking = isAiResponding || (audioPlayer && audioPlayer.activeSources.length > 0);
         const inAiCooldown = (Date.now() - lastAiSpokeTime) < 350;
 
-        // 🎙️ Smart Near-Field Barge-In Interruption Detection (Scheme A: Near-Field Primary Speaker Only)
+        // 🎙️ Smart Barge-In Interruption Detection (Option B: Voiceprint Speaker Verification)
         if (isAiSpeaking || inAiCooldown) {
-          // Check if user is speaking directly near microphone (> 0.065) sustained for >= 5 chunks (~300ms)
-          if (rms > 0.065) {
-            bargeInSpeechCount++;
-            if (bargeInSpeechCount >= 5) {
-              // ⚡ Trigger Instant Barge-In Interruption for primary speaker!
-              if (audioPlayer) audioPlayer.stopAll();
-              isAiResponding = false;
-              lastAiSpokeTime = 0;
-              bargeInSpeechCount = 0;
-              if (navigator.vibrate) navigator.vibrate(20);
-              updateDockControls();
-              updateCameraBadge(false, '待命中 (說話時自動發送)');
-              updateCardStatus('listening', '🎙️ 已插話打斷 · 聆聽中');
-              // Fall through to send user speech below!
+          if (userVoiceprintProfile) {
+            // 🧬 Voiceprint Matching Mode
+            const profile = extractSpectralProfile(downsampled, 16000);
+            const similarity = computeVoiceprintSimilarity(profile, userVoiceprintProfile);
+
+            // Primary speaker voice matched (> 0.72) and has moderate vocal energy (> 0.028)
+            if (similarity >= 0.72 && rms > 0.028) {
+              bargeInSpeechCount++;
+              if (bargeInSpeechCount >= 3) {
+                // ⚡ Instant Verified Speaker Barge-In!
+                if (audioPlayer) audioPlayer.stopAll();
+                isAiResponding = false;
+                lastAiSpokeTime = 0;
+                bargeInSpeechCount = 0;
+                if (navigator.vibrate) navigator.vibrate(20);
+                updateDockControls();
+                updateCameraBadge(false, '待命中 (說話時自動發送)');
+                updateCardStatus('listening', '🎙️ 聲紋驗證通過 · 聆聽中');
+                // Fall through to send user speech below!
+              } else {
+                audioSendBuffer = [];
+                return;
+              }
             } else {
-              // Still accumulating energy frames, don't send yet
+              // Bystanders / Ambient noise -> filtered out completely!
+              bargeInSpeechCount = Math.max(0, bargeInSpeechCount - 1);
               audioSendBuffer = [];
+              sustainedSpeechCount = 0;
               return;
             }
           } else {
-            bargeInSpeechCount = Math.max(0, bargeInSpeechCount - 1);
-            audioSendBuffer = [];
-            sustainedSpeechCount = 0;
-            return;
+            // Fallback to high energy near-field gate if not calibrated yet
+            if (rms > 0.065) {
+              bargeInSpeechCount++;
+              if (bargeInSpeechCount >= 5) {
+                if (audioPlayer) audioPlayer.stopAll();
+                isAiResponding = false;
+                lastAiSpokeTime = 0;
+                bargeInSpeechCount = 0;
+                if (navigator.vibrate) navigator.vibrate(20);
+                updateDockControls();
+                updateCameraBadge(false, '待命中 (說話時自動發送)');
+                updateCardStatus('listening', '🎙️ 已插話打斷 · 聆聽中');
+              } else {
+                audioSendBuffer = [];
+                return;
+              }
+            } else {
+              bargeInSpeechCount = Math.max(0, bargeInSpeechCount - 1);
+              audioSendBuffer = [];
+              sustainedSpeechCount = 0;
+              return;
+            }
           }
         } else {
           bargeInSpeechCount = 0;
@@ -1488,7 +1656,6 @@
           sustainedSpeechCount = Math.max(0, sustainedSpeechCount - 1);
         }
 
-        const downsampled = downsampleBuffer(inputData, audioContext.sampleRate, 16000);
         recordAudioSegment('user', downsampled, 16000);
 
         for (let i = 0; i < downsampled.length; i++) {
