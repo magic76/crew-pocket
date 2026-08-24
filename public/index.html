@@ -199,6 +199,17 @@
           </div>
         </button>
 
+        <!-- 4.6. Phone Agent (Wireless ADB Screen & Touch Controller) -->
+        <button id="phone-agent-btn" class="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-xs text-slate-200 hover:bg-slate-800/90 hover:text-emerald-300 transition text-left group" title="手機跨 App 操控助理">
+          <div class="w-6 h-6 rounded-lg bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 group-hover:scale-105 transition shrink-0">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
+          </div>
+          <div class="flex flex-col min-w-0">
+            <span class="font-semibold text-slate-100 group-hover:text-emerald-300">手機操控助理 (ADB)</span>
+            <span class="text-[10px] text-slate-400">截圖、觸控點擊與跨 App 操控</span>
+          </div>
+        </button>
+
         <div class="border-t border-slate-800 my-1"></div>
 
         <!-- 5. Interface Language -->
@@ -880,6 +891,118 @@
     </div>
   </div>
 
+  <!-- 📱 PHONE AGENT (WIRELESS ADB CONTROLLER) MODAL -->
+  <div id="phone-agent-modal" class="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-3 sm:p-4 opacity-0 pointer-events-none transition-opacity duration-300">
+    <div class="bg-slate-900 border border-emerald-500/40 rounded-3xl w-full max-w-md max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+      
+      <!-- Modal Header -->
+      <div class="p-3.5 sm:p-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/80 shrink-0">
+        <div class="flex items-center gap-2.5">
+          <div class="w-8 h-8 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 text-lg">
+            📱
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <h3 class="font-bold text-slate-100 text-xs sm:text-sm">手機操控助理 (Phone Agent)</h3>
+              <span id="phone-conn-badge" class="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-amber-950/80 border border-amber-500/40 text-amber-400">檢測中...</span>
+            </div>
+            <p class="text-[10px] text-slate-400">無線 ADB 截圖、觸控點擊與跨 App 自動化</p>
+          </div>
+        </div>
+        <button id="close-phone-agent-btn" class="p-1.5 text-slate-400 hover:text-white rounded-xl hover:bg-slate-800 transition">✕</button>
+      </div>
+
+      <!-- Modal Body (Scrollable) -->
+      <div class="p-3.5 sm:p-4 overflow-y-auto flex-1 space-y-3.5 text-xs">
+        
+        <!-- Connection Box -->
+        <div id="phone-connect-panel" class="p-3 bg-slate-950 rounded-2xl border border-slate-800 space-y-2.5">
+          <div class="flex items-center justify-between">
+            <span class="font-semibold text-slate-200 text-[11px] flex items-center gap-1.5">
+              <span>📶 無線偵錯配對與連線</span>
+            </span>
+            <button id="phone-refresh-status-btn" class="text-[10px] text-emerald-400 hover:underline">🔄 重新檢測</button>
+          </div>
+          
+          <div class="flex gap-2">
+            <input id="phone-port-input" type="number" placeholder="輸入無線偵錯 Port (例如 38455)" class="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-mono placeholder-slate-500 outline-none focus:border-emerald-500">
+            <button id="phone-connect-btn" class="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-slate-950 font-bold text-xs rounded-xl shadow-md transition">
+              連線
+            </button>
+          </div>
+
+          <!-- Pairing collapsible -->
+          <details class="text-[10px] text-slate-400 pt-1">
+            <summary class="cursor-pointer text-slate-300 font-semibold hover:text-emerald-300">📖 首次使用：如何開啟無線偵錯與配對碼？</summary>
+            <div class="mt-2 p-2.5 bg-slate-900/90 rounded-xl space-y-1.5 border border-slate-800 text-slate-300">
+              <p>1. 打開手機「設定」➔「開發人員選項」➔ 開啟<strong>「無線偵錯」</strong>。</p>
+              <p>2. 點擊「使用配對碼配對裝置」，記下畫面上的 <strong>IP 端口 (Port)</strong> 與 <strong>6 位數配對碼</strong>。</p>
+              <div class="flex gap-1.5 pt-1">
+                <input id="phone-pair-code-input" type="number" placeholder="6 位數配對碼" class="w-28 bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-white font-mono text-[10px]">
+                <button id="phone-pair-btn" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-emerald-300 font-bold rounded-lg text-[10px]">
+                  執行配對
+                </button>
+              </div>
+            </div>
+          </details>
+        </div>
+
+        <!-- Live Screen Canvas / Interactive Viewport -->
+        <div class="space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="font-semibold text-slate-200 text-[11px]">📱 即時螢幕投影 (點擊畫面上任意位置即可直接觸控點擊)：</span>
+            <button id="phone-snap-btn" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 active:scale-95 text-emerald-300 font-bold rounded-lg text-[10px] flex items-center gap-1 border border-emerald-500/30">
+              <span>📸 刷新截圖</span>
+            </button>
+          </div>
+
+          <div id="phone-screen-container" class="relative w-full max-w-[240px] mx-auto aspect-[9/19.5] bg-black rounded-2xl border-2 border-slate-700 overflow-hidden shadow-2xl flex items-center justify-center cursor-crosshair group">
+            <img id="phone-screen-img" src="" alt="手機螢幕截圖" class="w-full h-full object-contain select-none hidden">
+            <div id="phone-screen-placeholder" class="text-center p-4 text-slate-500 text-[11px] space-y-2">
+              <div class="text-2xl">📱</div>
+              <div>點擊上方「📸 刷新截圖」<br>或連線後載入手機螢幕</div>
+            </div>
+            <div id="phone-tap-indicator" class="absolute w-6 h-6 rounded-full border-2 border-emerald-400 bg-emerald-400/40 pointer-events-none transform -translate-x-1/2 -translate-y-1/2 scale-0 transition-transform duration-200"></div>
+          </div>
+        </div>
+
+        <!-- Physical System Keys Navigation -->
+        <div class="p-2.5 bg-slate-950 rounded-2xl border border-slate-800 flex items-center justify-around gap-1.5">
+          <button id="phone-key-back" class="flex-1 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 active:scale-95 text-slate-200 font-semibold text-xs flex items-center justify-center gap-1 border border-slate-800">
+            <span>◀ 返回</span>
+          </button>
+          <button id="phone-key-home" class="flex-1 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 active:scale-95 text-slate-200 font-semibold text-xs flex items-center justify-center gap-1 border border-slate-800">
+            <span>🏠 首頁</span>
+          </button>
+          <button id="phone-key-recents" class="flex-1 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 active:scale-95 text-slate-200 font-semibold text-xs flex items-center justify-center gap-1 border border-slate-800">
+            <span>🔲 多工</span>
+          </button>
+          <button id="phone-swipe-up" class="px-3 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 active:scale-95 text-slate-200 font-semibold text-xs border border-slate-800" title="向上滑動">
+            <span>⬆️</span>
+          </button>
+          <button id="phone-swipe-down" class="px-3 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 active:scale-95 text-slate-200 font-semibold text-xs border border-slate-800" title="向下滑動">
+            <span>⬇️</span>
+          </button>
+        </div>
+
+        <!-- AI Vision Natural Language Commander -->
+        <div class="p-3 bg-gradient-to-br from-slate-950 via-emerald-950/40 to-slate-950 rounded-2xl border border-emerald-500/30 space-y-2">
+          <div class="flex items-center gap-1.5 text-emerald-300 font-semibold text-[11px]">
+            <span>🧠 AI 視覺自動化指揮官</span>
+          </div>
+          <div class="flex gap-2">
+            <input id="phone-ai-cmd-input" type="text" placeholder="例如：點擊搜尋框、打開 LINE、往下滑..." class="flex-1 bg-slate-900/90 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 outline-none focus:border-emerald-400">
+            <button id="phone-ai-cmd-btn" class="px-3.5 py-2 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 active:scale-95 text-slate-950 font-bold text-xs rounded-xl shadow-lg shadow-emerald-900/40 transition">
+              🚀 執行
+            </button>
+          </div>
+          <div id="phone-action-log" class="text-[10px] text-slate-400 font-mono"></div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
   <!-- IMAGE LIGHTBOX MODAL -->
   <div id="lightbox" class="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4 opacity-0 pointer-events-none transition-opacity duration-200">
     <button id="close-lightbox-btn" class="absolute top-4 right-4 p-2 text-white bg-slate-800/80 rounded-full">
@@ -896,6 +1019,7 @@
   <script src="/js/tools.js?v=7.8"></script>
   <script src="/js/chat.js?v=7.9"></script>
   <script src="/js/live.js?v=7.9"></script>
+  <script src="/js/phone_agent.js?v=1.0"></script>
   <script src="/js/app.js?v=7.9"></script>
 </body>
 </html>

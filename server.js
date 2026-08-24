@@ -24,6 +24,67 @@ const { handleRunCode } = require('./lib/sandbox');
 const { handleUsage } = require('./lib/usage');
 const { handleListFiles, handleReadFile, handleSaveFile } = require('./lib/files');
 const { handleGenerateTitle, getCachedTitle } = require('./lib/title');
+const { phoneAgent } = require('./lib/phone_agent');
+
+// 📱 Phone Agent (Wireless ADB / Screen & Touch Control) API Handlers
+async function handlePhoneStatus(res) {
+  const status = await phoneAgent.getStatus();
+  res.writeHead(200, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify(status));
+}
+
+async function handlePhoneConnect(req, res) {
+  try {
+    const body = await parseJsonBody(req);
+    const result = await phoneAgent.connectWireless(body.port, body.host || '127.0.0.1');
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(result));
+  } catch (err) {
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: false, error: err.message }));
+  }
+}
+
+async function handlePhonePair(req, res) {
+  try {
+    const body = await parseJsonBody(req);
+    const result = await phoneAgent.pairWireless(body.port, body.pairingCode, body.host || '127.0.0.1');
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(result));
+  } catch (err) {
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: false, error: err.message }));
+  }
+}
+
+async function handlePhoneScreenshot(res) {
+  const result = await phoneAgent.takeScreenshot();
+  res.writeHead(200, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify(result));
+}
+
+async function handlePhoneAction(req, res) {
+  try {
+    const body = await parseJsonBody(req);
+    let result = { success: false };
+    if (body.action === 'TAP') {
+      result = await phoneAgent.tap(body.x, body.y);
+    } else if (body.action === 'SWIPE') {
+      result = await phoneAgent.swipe(body.x1, body.y1, body.x2, body.y2, body.durationMs);
+    } else if (body.action === 'KEYEVENT') {
+      result = await phoneAgent.pressKey(body.key);
+    } else if (body.action === 'TYPE') {
+      result = await phoneAgent.typeText(body.text);
+    } else if (body.action === 'LAUNCH') {
+      result = await phoneAgent.launchApp(body.package);
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(result));
+  } catch (err) {
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: false, error: err.message }));
+  }
+}
 
 // 🌐 Inbound Web Messages from Browser Extension
 const inboundWebMessages = [];
@@ -594,6 +655,16 @@ const server = http.createServer(async (req, res) => {
     return handleExportExtension(req, res);
   } else if (pathname === '/api/inbound-message') {
     return handleInboundMessage(req, res);
+  } else if (pathname === '/api/phone/status' && req.method === 'GET') {
+    return handlePhoneStatus(res);
+  } else if (pathname === '/api/phone/connect' && req.method === 'POST') {
+    return handlePhoneConnect(req, res);
+  } else if (pathname === '/api/phone/pair' && req.method === 'POST') {
+    return handlePhonePair(req, res);
+  } else if (pathname === '/api/phone/screenshot' && req.method === 'POST') {
+    return handlePhoneScreenshot(res);
+  } else if (pathname === '/api/phone/action' && req.method === 'POST') {
+    return handlePhoneAction(req, res);
   } else {
     return handleStatic(pathname, res);
   }
