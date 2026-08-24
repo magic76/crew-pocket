@@ -1205,14 +1205,10 @@ function isBtwPrompt(text = getPromptText()) {
 
 function updateBtwQueueStatus() {
   const status = document.getElementById('btw-queue-status');
-  if (!status) return;
-  const count = queuedBtwMessages.length;
-  status.textContent = count ? `💬 /btw 已排隊 ${count} 則` : '';
-  status.classList.toggle('hidden', count === 0);
+  if (status) status.classList.add('hidden');
 }
 
-// While a main response is active, /btw remains a send action instead of
-// becoming the stop button. It is queued to preserve the active session's order.
+// ⚡ While a main response is active, /btw becomes an instant parallel side-question action!
 function updateSendButtonMode() {
   if (!sendBtn || !sendIcon || !stopIcon) return;
   sendBtn.classList.remove(
@@ -1221,12 +1217,12 @@ function updateSendButtonMode() {
     'bg-teal-600', 'hover:bg-teal-500', 'active:bg-teal-700', 'shadow-teal-600/30'
   );
 
-  if (isStreaming && isBtwPrompt()) {
+  if (isBtwPrompt()) {
     sendBtn.classList.add('bg-teal-600', 'hover:bg-teal-500', 'active:bg-teal-700', 'shadow-teal-600/30');
     sendIcon.classList.remove('hidden');
     stopIcon.classList.add('hidden');
-    sendBtn.title = '排隊送出 /btw';
-    sendBtn.setAttribute('aria-label', '排隊送出 /btw');
+    sendBtn.title = '⚡ 即時並行快問快答 /btw';
+    sendBtn.setAttribute('aria-label', '⚡ 即時並行快問快答 /btw');
   } else if (isStreaming) {
     sendBtn.classList.add('bg-rose-600', 'hover:bg-rose-500', 'active:bg-rose-700', 'shadow-rose-600/30');
     sendIcon.classList.add('hidden');
@@ -1242,16 +1238,15 @@ function updateSendButtonMode() {
   }
 }
 
-function queueBtwMessage() {
-  const text = getPromptText();
-  if (!isBtwPrompt(text)) return false;
+// ⚡ Instant Concurrent Non-blocking /btw Side-Question (Compatible with both AGY & Codex)
+async function sendBtwConcurrentSidecard(customText = null, customImgPath = null) {
+  const rawText = customText !== null ? customText : getPromptText();
+  const imgPath = customImgPath !== null ? customImgPath : uploadedImagePath;
+  if (!rawText && !imgPath) return;
 
-  if (queuedBtwMessages.length >= BTW_QUEUE_LIMIT) {
-    alert(`最多可排隊 ${BTW_QUEUE_LIMIT} 則 /btw，請等待目前的支線問題送出。`);
-    return false;
-  }
+  const cleanQuery = rawText.replace(/^\/btw\b/i, '').trim() || rawText;
 
-  queuedBtwMessages.push({ text, imagePath: uploadedImagePath });
+  // 1. Clear input bar immediately so user can continue without friction
   promptInput.value = '';
   promptInput.style.height = 'auto';
   uploadedImagePath = null;
@@ -1259,23 +1254,112 @@ function queueBtwMessage() {
   if (typeof attachInput !== 'undefined' && attachInput) attachInput.value = '';
   if (imagePreviewContainer) imagePreviewContainer.classList.add('hidden');
   if (slashMenu) slashMenu.classList.add('hidden');
-  updateBtwQueueStatus();
   updateSendButtonMode();
-  if (typeof window.haptic === 'function') window.haptic([20, 35, 20]);
-  return true;
+  if (typeof window.haptic === 'function') window.haptic([25, 40]);
+
+  // 2. Append User [💬 順帶一提] Bubble
+  let userDisplay = rawText;
+  if (imgPath) userDisplay = `[Uploaded Image: ${imgPath}]\n${userDisplay}`;
+  appendMessage('user', userDisplay, undefined, [], '', true);
+
+  // 3. Append Assistant Concurrent BTW Side Card
+  const startTs = performance.now();
+  const modelObj = availableModels.find(m => m.id === currentModel);
+  const modelLabel = modelObj ? modelObj.name : 'AI';
+
+  const btwMsgDiv = document.createElement('div');
+  btwMsgDiv.className = 'w-full max-w-2xl mx-auto justify-start min-w-0 btw-side-container my-2';
+  btwMsgDiv.innerHTML = `
+    <div class="btw-card bg-gradient-to-b from-slate-900 via-slate-900 to-teal-950/40 border border-teal-500/50 text-slate-200 rounded-2xl p-3.5 sm:p-4 text-xs sm:text-sm shadow-lg shadow-teal-950/30 w-full min-w-0 prose">
+      <div class="live-status mb-2.5 rounded-2xl bg-gradient-to-b border-teal-500/40 from-slate-900 to-teal-950/40 aurora-glow-box-teal border overflow-hidden shadow-lg select-none">
+        <div class="shimmer-bar-teal h-[2px] w-full"></div>
+        <div class="p-2 flex items-center justify-between gap-2">
+          <div class="flex items-center gap-1.5 min-w-0">
+            <span class="inline-block w-2 h-2 rounded-full bg-teal-400 animate-ping shrink-0"></span>
+            <span class="text-[9px] px-1.5 py-0.5 rounded border font-mono font-semibold bg-teal-500/20 text-teal-300 border-teal-500/40 shrink-0">${escapeHtml(modelLabel)}</span>
+            <span class="btw-status-text truncate font-medium text-[11px] text-teal-200">💬 順帶一提快問快答中...</span>
+          </div>
+          <span class="btw-timer font-bold text-[10px] text-slate-300 bg-slate-800/90 px-1.5 py-0.5 rounded border border-slate-700 font-mono">0.0s</span>
+        </div>
+      </div>
+      <div class="btw-content msg-content leading-relaxed min-w-0"><span class="inline-block w-2 h-4 bg-teal-400 animate-pulse"></span></div>
+    </div>
+  `;
+  messagesContainer.appendChild(btwMsgDiv);
+  scrollToBottom();
+
+  const contentElem = btwMsgDiv.querySelector('.msg-content');
+  const liveStatusElem = btwMsgDiv.querySelector('.live-status');
+  const timerElem = btwMsgDiv.querySelector('.btw-timer');
+
+  const timerInterval = setInterval(() => {
+    if (timerElem) timerElem.textContent = ((performance.now() - startTs) / 1000).toFixed(1) + 's';
+  }, 100);
+
+  const sideAbort = new AbortController();
+  let accumulated = '';
+
+  try {
+    const response = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        prompt: `[Side Note / Quick Clarification (Answer directly, concisely and without preamble)]: ${cleanQuery}`,
+        conversation_id: currentConversationId,
+        provider: currentProvider,
+        model: currentModel,
+        effort: 'low', // Fast low reasoning for instant 1s answers across Gemini & Codex
+        image_path: imgPath
+      }),
+      signal: sideAbort.signal
+    });
+
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop();
+
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          try {
+            const parsed = JSON.parse(line.slice(6));
+            if (parsed.delta) {
+              accumulated += parsed.delta;
+              contentElem.innerHTML = formatMessageContent(accumulated);
+              scrollToBottom();
+            } else if (parsed.response && !accumulated) {
+              accumulated = parsed.response;
+              contentElem.innerHTML = formatMessageContent(accumulated);
+            }
+          } catch (e) {}
+        }
+      }
+    }
+  } catch (err) {
+    if (!accumulated) {
+      contentElem.innerHTML = `<span class="text-rose-400">⚠️ 快問快答連線中斷: ${escapeHtml(err.message)}</span>`;
+    }
+  } finally {
+    clearInterval(timerInterval);
+    if (liveStatusElem) liveStatusElem.style.display = 'none';
+    if (accumulated) {
+      contentElem.innerHTML = formatMessageContent(accumulated);
+      if (typeof enhanceCodeBlocks === 'function') enhanceCodeBlocks(btwMsgDiv);
+    }
+    if (typeof window.haptic === 'function') window.haptic([20, 30]);
+    scrollToBottom();
+  }
 }
 
-function flushQueuedBtwMessage() {
-  if (isStreaming || queuedBtwMessages.length === 0) return;
-  const queuedMessage = queuedBtwMessages.shift();
-  updateBtwQueueStatus();
-  sendMessage(queuedMessage);
-}
-
-function clearQueuedBtwMessages() {
-  queuedBtwMessages.length = 0;
-  updateBtwQueueStatus();
-}
+function flushQueuedBtwMessage() {}
+function clearQueuedBtwMessages() {}
 
 // Toggle Send / Stop button appearance & state
 function setStreamingState(streaming) {
@@ -1877,11 +1961,13 @@ function handleSendClick(e) {
     e.stopPropagation();
   }
 
+  // ⚡ /btw: Immediately launch concurrent sidecard without queueing or blocking!
+  if (isBtwPrompt()) {
+    sendBtwConcurrentSidecard();
+    return;
+  }
+
   if (isStreaming) {
-    if (isBtwPrompt()) {
-      queueBtwMessage();
-      return;
-    }
     if (Date.now() - streamingStartedAt > 800) {
       if (navigator.vibrate) navigator.vibrate([40, 40, 40]);
       stopGeneration();
