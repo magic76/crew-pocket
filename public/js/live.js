@@ -512,6 +512,239 @@
   };
 
   // ==========================================
+  // 🧬 Standalone Dedicated Voiceprint Studio Modal Manager
+  // ==========================================
+  const voiceprintModal = document.getElementById('voiceprint-modal');
+  const openVoiceprintModalBtn = document.getElementById('open-voiceprint-modal-btn');
+  const closeVoiceprintModalBtn = document.getElementById('close-voiceprint-modal-btn');
+  const modalVpDoneBtn = document.getElementById('modal-vp-done-btn');
+  const modalVpClearBtn = document.getElementById('modal-vp-clear-btn');
+  const modalVpRecordBtn = document.getElementById('modal-vp-record-btn');
+  const modalVpTestBtn = document.getElementById('modal-vp-test-btn');
+
+  function updateVoiceprintModalUI() {
+    const badge = document.getElementById('modal-voiceprint-status-badge');
+    const clearBtn = document.getElementById('modal-vp-clear-btn');
+    const testBox = document.getElementById('modal-vp-test-box');
+    const recText = document.getElementById('modal-vp-record-text');
+
+    if (userVoiceprintProfile) {
+      if (badge) {
+        badge.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold font-mono bg-teal-950 text-teal-300 border border-teal-500/50';
+        badge.textContent = '🟢 已鎖定 (192-Dim CAM++)';
+      }
+      if (clearBtn) clearBtn.classList.remove('hidden');
+      if (testBox) testBox.classList.remove('hidden');
+      if (recText) recText.textContent = '重新錄音校準 (2 秒)';
+    } else {
+      if (badge) {
+        badge.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold font-mono bg-slate-800 text-slate-400 border border-slate-700';
+        badge.textContent = '⚪ 尚未建立';
+      }
+      if (clearBtn) clearBtn.classList.add('hidden');
+      if (testBox) testBox.classList.add('hidden');
+      if (recText) recText.textContent = '開始錄音校準 (2 秒)';
+    }
+
+    // Also update in-call card badges if present
+    const liveVpText = document.getElementById('live-voiceprint-text');
+    const liveVpDot = document.getElementById('live-voiceprint-dot');
+    const liveVpBtn = document.getElementById('live-card-voiceprint-btn');
+    if (liveVpText) liveVpText.textContent = userVoiceprintProfile ? '🧬 聲紋已鎖' : '🧬 校準聲紋';
+    if (liveVpDot) liveVpDot.className = userVoiceprintProfile ? 'w-1.5 h-1.5 rounded-full bg-teal-400' : 'w-1.5 h-1.5 rounded-full bg-slate-500';
+    if (liveVpBtn) liveVpBtn.className = `px-2 py-0.5 rounded-full bg-slate-800/90 hover:bg-slate-700 active:scale-95 border ${userVoiceprintProfile ? 'border-teal-500/50 text-teal-300' : 'border-slate-700 text-slate-400'} text-[10px] font-medium flex items-center gap-1 transition shadow-sm`;
+  }
+
+  function openVoiceprintModal() {
+    if (!voiceprintModal) return;
+    initVoiceprintEngine();
+    updateVoiceprintModalUI();
+    voiceprintModal.classList.remove('opacity-0', 'pointer-events-none');
+    voiceprintModal.classList.add('opacity-100');
+    const drawer = document.getElementById('drawer');
+    const overlay = document.getElementById('drawer-overlay');
+    if (drawer) drawer.classList.add('-translate-x-full');
+    if (overlay) { overlay.classList.remove('opacity-100'); overlay.classList.add('opacity-0', 'pointer-events-none'); }
+    if (typeof window.haptic === 'function') window.haptic('light');
+  }
+
+  function closeVoiceprintModal() {
+    if (!voiceprintModal) return;
+    voiceprintModal.classList.remove('opacity-100');
+    voiceprintModal.classList.add('opacity-0', 'pointer-events-none');
+  }
+
+  if (openVoiceprintModalBtn) openVoiceprintModalBtn.addEventListener('click', openVoiceprintModal);
+  if (closeVoiceprintModalBtn) closeVoiceprintModalBtn.addEventListener('click', closeVoiceprintModal);
+  if (modalVpDoneBtn) modalVpDoneBtn.addEventListener('click', closeVoiceprintModal);
+
+  if (modalVpClearBtn) {
+    modalVpClearBtn.addEventListener('click', () => {
+      if (confirm('確定要清除已儲存的專屬聲紋嗎？清除後將還原為近場能量過濾模式。')) {
+        clearUserVoiceprint();
+        updateVoiceprintModalUI();
+        if (typeof window.haptic === 'function') window.haptic('medium');
+      }
+    });
+  }
+
+  // 🎙️ Standalone Recording Routine (Completely Isolated from AI)
+  let isStandaloneRecording = false;
+  async function startStandaloneVoiceprintCalibration() {
+    if (isStandaloneRecording) return;
+    isStandaloneRecording = true;
+
+    const recBtn = document.getElementById('modal-vp-record-btn');
+    const recText = document.getElementById('modal-vp-record-text');
+    const recIcon = document.getElementById('modal-vp-record-icon');
+    const instruction = document.getElementById('modal-vp-instruction');
+    const progressBar = document.getElementById('modal-vp-progress-bar');
+
+    if (recBtn) recBtn.disabled = true;
+    if (recIcon) recIcon.textContent = '⏳';
+    if (recText) recText.textContent = '正在準備神經網路模型...';
+
+    await initVoiceprintEngine();
+
+    if (recIcon) recIcon.textContent = '🔴';
+    if (recText) recText.textContent = '正在錄音採樣中...';
+    if (instruction) instruction.textContent = '🎙️ 請念出：「特勤隊，我是主講人」';
+    if (typeof window.haptic === 'function') window.haptic('medium');
+
+    let stream = null;
+    let audioCtx = null;
+    let recordedSamples = [];
+
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        }
+      });
+
+      const AudioCtxClass = window.AudioContext || window.webkitAudioContext;
+      audioCtx = new AudioCtxClass();
+      const source = audioCtx.createMediaStreamSource(stream);
+      const processor = audioCtx.createScriptProcessor(2048, 1, 1);
+
+      processor.onaudioprocess = (e) => {
+        if (!isStandaloneRecording) return;
+        const inputData = e.inputBuffer.getChannelData(0);
+        const downsampled = downsampleBuffer(inputData, audioCtx.sampleRate, 16000);
+        for (let i = 0; i < downsampled.length; i++) {
+          recordedSamples.push(downsampled[i]);
+        }
+        const pct = Math.min(100, Math.round((recordedSamples.length / 32000) * 100));
+        if (progressBar) progressBar.style.width = `${pct}%`;
+      };
+
+      source.connect(processor);
+      processor.connect(audioCtx.destination);
+
+      await new Promise(resolve => setTimeout(resolve, 2200));
+
+      isStandaloneRecording = false;
+      source.disconnect();
+      processor.disconnect();
+      stream.getTracks().forEach(t => t.stop());
+      audioCtx.close();
+
+      if (recIcon) recIcon.textContent = '🧠';
+      if (recText) recText.textContent = '神經網路特徵計算中...';
+
+      const embedding = await computeSpeakerEmbedding(new Float32Array(recordedSamples));
+      if (embedding && embedding.length === 192) {
+        saveUserVoiceprint(embedding);
+        updateVoiceprintModalUI();
+        if (instruction) instruction.textContent = '✅ 聲紋校準成功！已建立專屬 192 維神經特徵！';
+        if (progressBar) progressBar.style.width = '100%';
+        if (typeof window.haptic === 'function') window.haptic('heavy');
+      } else {
+        if (instruction) instruction.textContent = '⚠️ 聲音特徵不足，請再試一次';
+        if (progressBar) progressBar.style.width = '0%';
+      }
+    } catch (err) {
+      console.warn('[Standalone Voiceprint Recording Error]', err);
+      if (instruction) instruction.textContent = '⚠️ 麥克風啟動異常：' + err.message;
+    } finally {
+      isStandaloneRecording = false;
+      if (stream) stream.getTracks().forEach(t => t.stop());
+      if (audioCtx && audioCtx.state !== 'closed') audioCtx.close();
+      if (recBtn) recBtn.disabled = false;
+      if (recIcon) recIcon.textContent = '🎙️';
+      if (recText) recText.textContent = userVoiceprintProfile ? '重新錄音校準 (2 秒)' : '開始錄音校準 (2 秒)';
+    }
+  }
+  if (modalVpRecordBtn) modalVpRecordBtn.addEventListener('click', startStandaloneVoiceprintCalibration);
+
+  // 🧪 Standalone Live Voice Test Routine
+  let isTesting = false;
+  async function startStandaloneVoiceprintTest() {
+    if (isTesting || !userVoiceprintProfile) return;
+    isTesting = true;
+
+    const testBtn = document.getElementById('modal-vp-test-btn');
+    const testVal = document.getElementById('modal-vp-test-val');
+
+    if (testBtn) testBtn.innerHTML = '<span>🎙️</span><span>請說話測試 (1.5 秒)...</span>';
+    if (testVal) { testVal.textContent = '聆聽分析中...'; testVal.className = 'font-bold text-amber-300'; }
+
+    let stream = null;
+    let audioCtx = null;
+    let testSamples = [];
+
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true }
+      });
+      const AudioCtxClass = window.AudioContext || window.webkitAudioContext;
+      audioCtx = new AudioCtxClass();
+      const source = audioCtx.createMediaStreamSource(stream);
+      const processor = audioCtx.createScriptProcessor(2048, 1, 1);
+
+      processor.onaudioprocess = (e) => {
+        if (!isTesting) return;
+        const inputData = e.inputBuffer.getChannelData(0);
+        const downsampled = downsampleBuffer(inputData, audioCtx.sampleRate, 16000);
+        for (let i = 0; i < downsampled.length; i++) testSamples.push(downsampled[i]);
+      };
+
+      source.connect(processor);
+      processor.connect(audioCtx.destination);
+
+      await new Promise(resolve => setTimeout(resolve, 1500));
+
+      source.disconnect();
+      processor.disconnect();
+      stream.getTracks().forEach(t => t.stop());
+      audioCtx.close();
+
+      const embedding = await computeSpeakerEmbedding(new Float32Array(testSamples));
+      if (embedding) {
+        const similarity = computeVoiceprintSimilarity(embedding, userVoiceprintProfile);
+        const isMatch = similarity >= TUNING_CONFIG.SIMILARITY_THRESHOLD;
+        if (testVal) {
+          testVal.textContent = `${similarity.toFixed(2)} ${isMatch ? '✅ (主講人吻合)' : '❌ (旁人/不匹配)'}`;
+          testVal.className = isMatch ? 'font-bold text-teal-300' : 'font-bold text-rose-400';
+        }
+        if (typeof window.haptic === 'function') window.haptic(isMatch ? 'light' : 'heavy');
+      } else {
+        if (testVal) { testVal.textContent = '聲音過短，無法計算'; testVal.className = 'font-bold text-slate-400'; }
+      }
+    } catch (err) {
+      if (testVal) testVal.textContent = '測試失敗：' + err.message;
+    } finally {
+      isTesting = false;
+      if (stream) stream.getTracks().forEach(t => t.stop());
+      if (audioCtx && audioCtx.state !== 'closed') audioCtx.close();
+      if (testBtn) testBtn.innerHTML = '<span>🧪</span><span>按住或點擊測試我的聲音</span>';
+    }
+  }
+  if (modalVpTestBtn) modalVpTestBtn.addEventListener('click', startStandaloneVoiceprintTest);
+
+  // ==========================================
   // 🧮 Audio Data Conversion Utilities
   // ==========================================
   function floatTo16BitPCM(float32Array, gainBoost = 1.4) {
@@ -824,21 +1057,8 @@
 
     const voiceprintBtn = card.querySelector('#live-card-voiceprint-btn');
     if (voiceprintBtn) {
-      voiceprintBtn.addEventListener('click', async () => {
-        if (isCalibratingVoiceprint) return;
-        if (userVoiceprintProfile) {
-          const confirmed = confirm('🧬 目前已啟用你的 3D-Speaker 專屬神經聲紋！\n\n點擊「確定」重新錄音校準，點擊「取消」保留現有聲紋。');
-          if (!confirmed) return;
-        }
-        await initVoiceprintEngine();
-        isCalibratingVoiceprint = true;
-        voiceprintCalibrationSamples = [];
-        const vpText = document.getElementById('live-voiceprint-text');
-        const vpDot = document.getElementById('live-voiceprint-dot');
-        if (vpText) vpText.textContent = '🎙️ 採樣中...';
-        if (vpDot) vpDot.className = 'w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping';
-        appendCardTranscript('system', '🧬 正在校準 3D-Speaker 神經聲紋：請對著麥克風念出「特勤隊，我是主講人」，採樣 2.5 秒中...');
-        if (navigator.vibrate) navigator.vibrate(30);
+      voiceprintBtn.addEventListener('click', () => {
+        openVoiceprintModal();
       });
     }
 

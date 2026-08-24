@@ -287,8 +287,12 @@
       <div id="conv-list" class="flex-1 overflow-y-auto p-2 space-y-1">
         <div class="p-4 text-center text-xs text-slate-500">載入歷史紀錄中...</div>
       </div>
-      <div class="p-3 border-t border-slate-800 text-center text-xs text-slate-500">
-        所有資料 100% 存於手機本地
+      <div class="p-3 border-t border-slate-800 flex items-center justify-between">
+        <button id="open-voiceprint-modal-btn" type="button" class="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-95 border border-teal-500/40 text-teal-300 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer">
+          <span>🧬</span>
+          <span>聲紋工作室</span>
+        </button>
+        <span class="text-[10px] text-slate-500 font-mono">100% 本地存儲</span>
       </div>
     </aside>
 
@@ -797,6 +801,75 @@
     </div>
   </div>
 
+  <!-- 🧬 DEDICATED VOICEPRINT STUDIO MODAL -->
+  <div id="voiceprint-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 opacity-0 pointer-events-none transition-opacity duration-200 select-none">
+    <div class="bg-slate-900 border border-teal-500/50 rounded-3xl p-5 sm:p-6 w-full max-w-sm shadow-2xl flex flex-col space-y-4">
+      <!-- Header -->
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div class="flex items-center gap-2">
+          <div class="w-8 h-8 rounded-xl bg-teal-500/20 text-teal-300 flex items-center justify-center text-base font-bold">🧬</div>
+          <div>
+            <h3 class="font-bold text-sm text-white">3D-Speaker 專屬聲紋工作室</h3>
+            <div class="text-[10px] text-slate-400">192 維神經網路 · 獨立錄音校準</div>
+          </div>
+        </div>
+        <button id="close-voiceprint-modal-btn" class="text-slate-400 hover:text-white p-1 text-sm font-mono cursor-pointer">✕</button>
+      </div>
+
+      <!-- Status Card -->
+      <div class="p-3.5 rounded-2xl bg-slate-950/80 border border-slate-800 space-y-1.5">
+        <div class="flex items-center justify-between text-xs">
+          <span class="text-slate-400 font-medium">當前聲紋狀態：</span>
+          <span id="modal-voiceprint-status-badge" class="px-2 py-0.5 rounded-full text-[10px] font-bold font-mono bg-slate-800 text-slate-400 border border-slate-700">尚未建立</span>
+        </div>
+        <div class="text-[11px] text-slate-400 leading-relaxed">
+          建立專屬聲紋後，Live 通話時 AI <b>只認你的聲音插話打斷</b>，旁人聊天、環境電視聲將 100% 免疫過濾！
+        </div>
+      </div>
+
+      <!-- Recording / Sampling Area -->
+      <div class="p-3.5 rounded-2xl bg-slate-950/50 border border-teal-500/30 space-y-3">
+        <div class="text-center space-y-1">
+          <div id="modal-vp-instruction" class="text-xs font-semibold text-teal-300">點擊下方按鈕開始採樣</div>
+          <div class="text-[10px] text-slate-400 font-mono">請念出：「特勤隊，我是主講人」</div>
+        </div>
+
+        <!-- Progress Bar -->
+        <div class="w-full bg-slate-800 h-2.5 rounded-full overflow-hidden">
+          <div id="modal-vp-progress-bar" class="bg-gradient-to-r from-teal-400 to-indigo-500 h-full w-0 transition-all duration-75"></div>
+        </div>
+
+        <!-- Action Button -->
+        <button id="modal-vp-record-btn" type="button" class="w-full py-3 rounded-2xl bg-gradient-to-r from-teal-500 to-indigo-600 hover:from-teal-400 hover:to-indigo-500 active:scale-95 text-white font-bold text-xs shadow-lg shadow-teal-500/25 flex items-center justify-center gap-2 transition cursor-pointer">
+          <span id="modal-vp-record-icon">🎙️</span>
+          <span id="modal-vp-record-text">開始錄音校準 (2 秒)</span>
+        </button>
+      </div>
+
+      <!-- Live Test Voiceprint Area -->
+      <div id="modal-vp-test-box" class="p-3 rounded-2xl bg-slate-950/80 border border-slate-800 space-y-2 font-mono text-xs">
+        <div class="flex justify-between items-center text-[11px]">
+          <span class="text-slate-400">即時測試匹配度：</span>
+          <span id="modal-vp-test-val" class="font-bold text-slate-400">未測試</span>
+        </div>
+        <button id="modal-vp-test-btn" type="button" class="w-full py-2 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 text-[11px] font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer">
+          <span>🧪</span>
+          <span>按住或點擊測試我的聲音</span>
+        </button>
+      </div>
+
+      <!-- Footer Action -->
+      <div class="flex justify-between items-center pt-1">
+        <button id="modal-vp-clear-btn" type="button" class="text-[11px] text-rose-400 hover:text-rose-300 px-2.5 py-1.5 rounded-xl bg-rose-950/40 border border-rose-900/50 transition cursor-pointer">
+          🗑️ 清除聲紋
+        </button>
+        <button id="modal-vp-done-btn" type="button" class="px-5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition cursor-pointer">
+          關閉
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- 🔑 GEMINI API KEY & LIVE VOICE SETTINGS MODAL -->
   <div id="live-key-modal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 select-none animate-fadeIn">
     <div class="bg-slate-900 border border-slate-800 rounded-3xl p-5 sm:p-6 w-full max-w-sm shadow-2xl flex flex-col space-y-4">
@@ -1068,7 +1141,7 @@
   <script src="/js/ui.js?v=1787583171.8"></script>
   <script src="/js/tools.js?v=7.8"></script>
   <script src="/js/chat.js?v=1787589221.9"></script>
-  <script src="/js/live.js?v=1787599012.9"></script>
+  <script src="/js/live.js?v=1787599216.9"></script>
   <script src="/js/phone_agent.js?v=1.1"></script>
   <script src="/js/app.js?v=1787581834.9"></script>
 </body>
