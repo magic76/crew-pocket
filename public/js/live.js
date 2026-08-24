@@ -2563,8 +2563,10 @@
       currentTurnModel = '';
     }
 
-    // 🔒 Tool-centric Execution History & Action Summary (Option 2: 100% Tool-Driven Records)
-    const toolsToSync = sessionExecutedTools.slice();
+    // 🔒 Build Complete Call Summary & Dialogue Memo Card
+    const turnsToSave = sessionDialogueTurns.slice();
+    const toolsToSave = sessionExecutedTools.slice();
+    const snapshotsToSave = sessionSnapshots.slice();
     sessionExecutedTools = [];
     sessionDialogueTurns = [];
     sessionSnapshots = [];
@@ -2577,80 +2579,30 @@
     const secs = durationSec % 60;
     const durationText = mins > 0 ? `${mins} 分 ${secs} 秒` : `${secs} 秒`;
 
-    if (toolsToSync.length > 0) {
-      const toolCard = document.createElement('div');
-      toolCard.className = 'w-full max-w-2xl mx-auto my-3 p-4 rounded-2xl bg-gradient-to-br from-slate-900/90 via-slate-900/95 to-slate-950/90 border border-teal-500/30 text-slate-200 text-sm shadow-xl backdrop-blur-md animate-fadeIn select-text';
-
-      let actionsHtml = toolsToSync.map((t) => {
-        let icon = '⚡';
-        let label = t.name;
-        let detail = '';
-        if (t.name === 'write_file') {
-          icon = '📝';
-          label = `建立/寫入文件`;
-          detail = `<code class="text-xs bg-slate-800 text-teal-300 px-1.5 py-0.5 rounded font-mono">${escapeHtml(t.args?.path || '')}</code>`;
-        } else if (t.name === 'read_file') {
-          icon = '📖';
-          label = `讀取文件`;
-          detail = `<code class="text-xs bg-slate-800 text-teal-300 px-1.5 py-0.5 rounded font-mono">${escapeHtml(t.args?.path || '')}</code>`;
-        } else if (t.name === 'swipe_screen') {
-          icon = '👆';
-          label = `滑動螢幕 (${t.args?.direction || 'up'})`;
-        } else if (t.name === 'tap_screen') {
-          icon = '🎯';
-          label = `點擊螢幕 ${t.args?.label ? `[${t.args.label}]` : `(${Math.round(t.args?.x || 0)}, ${Math.round(t.args?.y || 0)})`}`;
-        } else if (t.name === 'press_key') {
-          icon = '🏠';
-          label = `按鍵動作 [${t.args?.key || 'HOME'}]`;
-        } else if (t.name === 'take_screenshot') {
-          icon = '📸';
-          label = `螢幕視覺分析截圖`;
-        }
-        return `
-          <div class="flex items-center gap-2.5 p-2 rounded-xl bg-slate-800/40 border border-slate-700/40 text-xs">
-            <span class="text-base">${icon}</span>
-            <span class="font-medium text-slate-200">${label}</span>
-            ${detail ? `<span class="ml-2">${detail}</span>` : ''}
-            <span class="text-[10px] text-slate-500 font-mono ml-auto">${t.time}</span>
-          </div>
-        `;
-      }).join('');
-
-      toolCard.innerHTML = `
-        <div class="flex items-center justify-between pb-2.5 border-b border-slate-700/50 mb-3">
-          <div class="flex items-center gap-2">
-            <div class="w-7 h-7 rounded-lg bg-teal-500/20 text-teal-400 flex items-center justify-center text-sm font-bold">🎙️</div>
-            <div>
-              <div class="font-bold text-slate-100 text-xs">Gemini Live 語音操作紀錄</div>
-              <div class="text-[10px] text-slate-400">通話時長：${durationText} · 音色：${voiceName}</div>
-            </div>
-          </div>
-          <span class="text-[10px] px-2 py-0.5 rounded-full bg-teal-950/80 border border-teal-500/30 text-teal-300 font-mono">${timeStr}</span>
-        </div>
-        <div class="space-y-1.5 mb-1">
-          ${actionsHtml}
-        </div>
-      `;
-
-      if (messagesContainer) {
-        messagesContainer.appendChild(toolCard);
+    if (turnsToSave.length > 0 || toolsToSave.length > 0 || durationSec >= 2) {
+      const summaryCard = buildCallSummaryCardHtml(turnsToSave, durationSec, voiceName, snapshotsToSave, null, null);
+      if (messagesContainer && summaryCard) {
+        messagesContainer.appendChild(summaryCard);
         if (typeof scrollToBottom === 'function') scrollToBottom(true);
       }
 
-      // Sync tool action summary into server session history
+      // Sync summary into server session history
       const activeConvId = (typeof currentConversationId !== 'undefined' && currentConversationId) ? currentConversationId : null;
-      const toolLines = toolsToSync.map(t => `- ${t.name}: ${JSON.stringify(t.args)} (${t.time})`).join('\n');
+      const userTextLines = turnsToSave.map(t => t.user || '').filter(Boolean).join('；') || `🗣️ 雙向語音對話 (通話時長：${durationText})`;
+      const modelTextLines = turnsToSave.map(t => t.model || '').filter(Boolean).join('\n') || `✨ Gemini Live 已完成本次語音通話 (音色：${voiceName})`;
+      
       fetch('/api/live-sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           conversation_id: activeConvId,
-          user_message: `🗣️ 語音操作指令 (通話時長：${durationText})`,
-          assistant_message: `✨ Gemini Live 執行了 ${toolsToSync.length} 項操作：\n${toolLines}`,
+          user_message: userTextLines,
+          assistant_message: modelTextLines,
           call_memo: {
             duration_sec: durationSec,
             voice_name: voiceName,
-            tools: toolsToSync
+            turns: turnsToSave,
+            tools: toolsToSave
           }
         })
       }).then(res => res.json()).then(data => {
@@ -2659,20 +2611,6 @@
           localStorage.setItem('agy_active_conv_id', data.conversation_id);
         }
       }).catch(() => {});
-
-    } else if (durationSec >= 3) {
-      const badge = document.createElement('div');
-      badge.className = 'w-full my-2 flex justify-center animate-fadeIn';
-      badge.innerHTML = `
-        <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-800/60 border border-slate-700/50 text-slate-400 text-xs">
-          <span class="w-1.5 h-1.5 rounded-full bg-teal-500"></span>
-          <span>Gemini Live 通話結束 (${durationText})</span>
-        </div>
-      `;
-      if (messagesContainer) {
-        messagesContainer.appendChild(badge);
-        if (typeof scrollToBottom === 'function') scrollToBottom(true);
-      }
     }
   }
 
