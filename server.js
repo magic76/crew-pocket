@@ -798,6 +798,10 @@ const server = http.createServer(async (req, res) => {
     return handlePhonePhoto(req, res);
   } else if (pathname === '/api/phone/action' && req.method === 'POST') {
     return handlePhoneAction(req, res);
+  } else if (pathname === '/api/phone/nodes' && req.method === 'GET') {
+    const nodesResult = await phoneAgent.getNodes();
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify(nodesResult));
   } else if (pathname === '/api/guidelines' && req.method === 'GET') {
     return handleGetGuidelines(res);
   } else if (pathname === '/api/guidelines/sync' && req.method === 'POST') {

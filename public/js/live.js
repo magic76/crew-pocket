@@ -992,10 +992,10 @@
             else if (dir === 'down') { y1 = 1200; y2 = 1600; }
           }
 
-          const res = await fetch('http://127.0.0.1:8766/swipe', {
+          const res = await fetch('/api/phone/action', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ x1, y1, x2, y2, duration: dur })
+            body: JSON.stringify({ action: 'SWIPE', x1, y1, x2, y2, durationMs: dur })
           });
           toolResult = await res.json().catch(() => ({ success: true, action: 'swiped' }));
           if (navigator.vibrate) navigator.vibrate(25);
@@ -1007,7 +1007,7 @@
 
           if (args.label && (!targetX || !targetY)) {
             try {
-              const nodeRes = await fetch('http://127.0.0.1:8766/nodes');
+              const nodeRes = await fetch('/api/phone/nodes');
               const nodeData = await nodeRes.json();
               if (nodeData.success && Array.isArray(nodeData.nodes)) {
                 const match = nodeData.nodes.find(n => 
@@ -1023,10 +1023,10 @@
           }
 
           if (targetX && targetY) {
-            const res = await fetch('http://127.0.0.1:8766/tap', {
+            const res = await fetch('/api/phone/action', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ x: targetX, y: targetY })
+              body: JSON.stringify({ action: 'TAP', x: targetX, y: targetY })
             });
             toolResult = await res.json().catch(() => ({ success: true, action: 'tapped' }));
             if (navigator.vibrate) navigator.vibrate([20, 30]);
@@ -1037,10 +1037,10 @@
 
         } else if (name === 'press_key') {
           const key = (args.key || 'HOME').toUpperCase();
-          const res = await fetch('http://127.0.0.1:8766/key', {
+          const res = await fetch('/api/phone/action', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ key })
+            body: JSON.stringify({ action: 'KEYEVENT', key })
           });
           toolResult = await res.json().catch(() => ({ success: true, action: 'keyed' }));
           if (navigator.vibrate) navigator.vibrate(30);
