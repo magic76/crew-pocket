@@ -2582,18 +2582,21 @@
       const secs = durationSec % 60;
       const durationText = mins > 0 ? `${mins} 分 ${secs} 秒` : `${secs} 秒`;
 
-      const userText = turnsToSave.map(t => t.user || '').filter(Boolean).join('\n') || `🗣️ 語音通話 (${durationText})`;
-      const modelText = turnsToSave.map(t => t.model || '').filter(Boolean).join('\n') || `✨ Gemini Live 雙向語音通話完成 (音色：${voiceName} · 時長：${durationText})`;
+      const memoId = `call-memo-${Date.now()}`;
+      const initialSummary = [`已完成 ${durationText} 語音通話 (音色：${voiceName})`];
 
-      // 💬 2. Render standard dialogue in chat timeline
-      if (typeof appendMessage === 'function') {
-        appendMessage('user', userText, timeStr);
-        appendMessage('assistant', modelText, timeStr);
+      // 📋 2. Insert the beautiful Call Summary UI Card into Chat Timeline
+      const summaryCard = buildCallSummaryCardHtml(turnsToSave, durationSec, voiceName, snapshotsToSave, memoId, initialSummary);
+      const targetContainer = document.getElementById('messages-container') || messagesContainer;
+      if (targetContainer && summaryCard) {
+        targetContainer.appendChild(summaryCard);
       }
 
       if (typeof scrollToBottom === 'function') scrollToBottom(true);
 
       const activeConvId = (typeof currentConversationId !== 'undefined' && currentConversationId) ? currentConversationId : null;
+      const userText = turnsToSave.map(t => t.user || '').filter(Boolean).join('；') || `🗣️ 雙向語音通話 (${durationText})`;
+      const modelText = turnsToSave.map(t => t.model || '').filter(Boolean).join('\n') || `✨ Gemini Live 雙向語音通話完成 (音色：${voiceName} · 時長：${durationText})`;
 
       // 💾 3. Sync to database/transcript
       fetch('/api/live-sync', {
@@ -2606,7 +2609,8 @@
           call_memo: {
             duration_sec: durationSec,
             voice_name: voiceName,
-            turns: turnsToSave,
+            summary: initialSummary,
+            transcript: turnsToSave,
             tools: toolsToSave
           }
         })
