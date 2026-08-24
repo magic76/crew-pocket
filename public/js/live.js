@@ -455,17 +455,25 @@
 
   async function computeSpeakerEmbedding(audioSamples) {
     if (!voiceprintOnnxSession) {
-      await initVoiceprintEngine();
+      const sess = await initVoiceprintEngine();
+      if (!sess) throw new Error('ONNX 聲紋模型尚未載入完成，請確認網路或稍候重試');
     }
-    if (!voiceprintOnnxSession || !melFbankExtractor) return null;
+    if (!melFbankExtractor) melFbankExtractor = new MelFbankExtractor(16000, 80, 25, 10, 512);
+
+    if (!audioSamples || audioSamples.length < 3200) {
+      throw new Error(`錄音樣本數不足 (${audioSamples ? audioSamples.length : 0} 點)，請說話至少 1 秒`);
+    }
 
     const fbankResult = melFbankExtractor.extractFbank(audioSamples);
-    if (!fbankResult || fbankResult.numFrames < 15) return null;
+    if (!fbankResult || fbankResult.numFrames < 15) {
+      throw new Error(`有效語音特徵幀數不足 (${fbankResult ? fbankResult.numFrames : 0} 幀)`);
+    }
 
     try {
       const inputTensor = new ort.Tensor('float32', fbankResult.data, [1, fbankResult.numFrames, fbankResult.numMelBins]);
       const results = await voiceprintOnnxSession.run({ speech: inputTensor });
       const outputTensor = results.embedding || results.output || results[Object.keys(results)[0]];
+      if (!outputTensor || !outputTensor.data) throw new Error('模型未返回有效特徵輸出');
       const embedding = new Float32Array(outputTensor.data);
 
       let norm = 0;
@@ -477,7 +485,7 @@
       return embedding;
     } catch (e) {
       console.warn('[Speaker Embedding Error]', e);
-      return null;
+      throw new Error('神經網路運算異常：' + (e.message || e));
     }
   }
 
@@ -643,7 +651,8 @@
       source.connect(processor);
       processor.connect(audioCtx.destination);
 
-      await new Promise(resolve => setTimeout(resolve, 2200));
+      // Record for 3.0 seconds
+      await new Promise(resolve => setTimeout(resolve, 3000));
 
       isStandaloneRecording = false;
       source.disconnect();
@@ -654,27 +663,33 @@
       if (recIcon) recIcon.textContent = '🧠';
       if (recText) recText.textContent = '神經網路特徵計算中...';
 
-      const embedding = await computeSpeakerEmbedding(new Float32Array(recordedSamples));
-      if (embedding && embedding.length === 192) {
-        saveUserVoiceprint(embedding);
-        updateVoiceprintModalUI();
-        if (instruction) instruction.textContent = '✅ 聲紋校準成功！已建立專屬 192 維神經特徵！';
-        if (progressBar) progressBar.style.width = '100%';
-        if (typeof window.haptic === 'function') window.haptic('heavy');
-      } else {
-        if (instruction) instruction.textContent = '⚠️ 聲音特徵不足，請再試一次';
+      try {
+        const embedding = await computeSpeakerEmbedding(new Float32Array(recordedSamples));
+        if (embedding && embedding.length === 192) {
+          saveUserVoiceprint(embedding);
+          updateVoiceprintModalUI();
+          if (instruction) instruction.textContent = '✅ 聲紋校準成功！已建立專屬 192 維神經特徵！';
+          if (progressBar) progressBar.style.width = '100%';
+          if (typeof window.haptic === 'function') window.haptic('heavy');
+        } else {
+          if (instruction) instruction.textContent = '⚠️ 聲音特徵不足，請再試一次';
+          if (progressBar) progressBar.style.width = '0%';
+        }
+      } catch (embErr) {
+        console.warn('[Voiceprint Embedding Calc Error]', embErr);
+        if (instruction) instruction.textContent = `⚠️ ${embErr.message || '特徵提取失敗'}`;
         if (progressBar) progressBar.style.width = '0%';
       }
     } catch (err) {
       console.warn('[Standalone Voiceprint Recording Error]', err);
-      if (instruction) instruction.textContent = '⚠️ 麥克風啟動異常：' + err.message;
+      if (instruction) instruction.textContent = '⚠️ 麥克風異常：' + err.message;
     } finally {
       isStandaloneRecording = false;
       if (stream) stream.getTracks().forEach(t => t.stop());
       if (audioCtx && audioCtx.state !== 'closed') audioCtx.close();
       if (recBtn) recBtn.disabled = false;
       if (recIcon) recIcon.textContent = '🎙️';
-      if (recText) recText.textContent = userVoiceprintProfile ? '重新錄音校準 (2 秒)' : '開始錄音校準 (2 秒)';
+      if (recText) recText.textContent = userVoiceprintProfile ? '重新錄音校準 (3 秒)' : '開始錄音校準 (3 秒)';
     }
   }
   if (modalVpRecordBtn) modalVpRecordBtn.addEventListener('click', startStandaloneVoiceprintCalibration);
