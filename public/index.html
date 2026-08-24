@@ -210,6 +210,17 @@
           </div>
         </button>
 
+        <!-- 4.7. AI Guidelines (GEMINI.md / AGENTS.md) Viewer & Copier -->
+        <button id="guidelines-btn" class="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-xs text-slate-200 hover:bg-slate-800/90 hover:text-purple-300 transition text-left group" title="檢視 / 複製 AI 專案指引 (GEMINI.md / AGENTS.md)">
+          <div class="w-6 h-6 rounded-lg bg-purple-500/20 border border-purple-500/30 flex items-center justify-center text-purple-400 group-hover:scale-105 transition shrink-0">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+          </div>
+          <div class="flex flex-col min-w-0">
+            <span class="font-semibold text-slate-100 group-hover:text-purple-300">專案指引 (GEMINI.MD)</span>
+            <span class="text-[10px] text-slate-400">一鍵複製規範供其他 Session 載入</span>
+          </div>
+        </button>
+
         <div class="border-t border-slate-800 my-1"></div>
 
         <!-- 5. Interface Language -->
@@ -839,6 +850,55 @@
     </div>
   </div>
 
+  <!-- 📋 AI PROJECT GUIDELINES (GEMINI.md / AGENTS.md) MODAL -->
+  <div id="guidelines-modal" class="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-3 sm:p-4 opacity-0 pointer-events-none transition-opacity duration-300 backdrop-blur-sm select-none">
+    <div class="bg-slate-900 border border-purple-500/40 rounded-3xl w-full max-w-lg h-[82vh] flex flex-col shadow-2xl overflow-hidden animate-fadeIn">
+      <!-- Header -->
+      <div class="p-3.5 sm:p-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/70 shrink-0">
+        <div class="flex items-center gap-2.5 min-w-0">
+          <div class="w-8 h-8 rounded-xl bg-purple-500/20 border border-purple-500/30 flex items-center justify-center text-purple-400 shrink-0">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+          </div>
+          <div class="flex flex-col min-w-0">
+            <h3 class="font-bold text-slate-100 text-sm truncate flex items-center gap-1.5">
+              <span>AI 專案指引與規範</span>
+              <span class="text-[10px] font-mono px-1.5 py-0.2 rounded bg-purple-500/20 text-purple-300 border border-purple-500/40">GEMINI.MD</span>
+            </h3>
+            <p class="text-[10px] text-slate-400 truncate">包含小幫手通訊協議、拍照規範與專案工作準則</p>
+          </div>
+        </div>
+        <button id="close-guidelines-btn" class="text-slate-400 hover:text-slate-200 p-1 rounded-lg hover:bg-slate-800 transition">✕</button>
+      </div>
+
+      <!-- Action Bar -->
+      <div class="px-3.5 py-2 bg-slate-950/40 border-b border-slate-800 flex items-center justify-between gap-2 shrink-0 flex-wrap">
+        <div class="flex items-center gap-1.5">
+          <button id="copy-guidelines-btn" class="px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 active:bg-purple-700 text-white text-xs font-semibold flex items-center gap-1.5 transition shadow-lg shadow-purple-600/30 active:scale-95">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+            <span>📋 一鍵複製全文</span>
+          </button>
+          <button id="insert-guidelines-btn" class="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium flex items-center gap-1 transition active:scale-95">
+            <span>💬 填入輸入框</span>
+          </button>
+        </div>
+        <button id="refresh-guidelines-btn" class="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition active:scale-95" title="重新整理">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+        </button>
+      </div>
+
+      <!-- Markdown / Text Content Area -->
+      <div class="flex-1 p-3.5 overflow-y-auto min-h-0 bg-slate-950/80 font-mono text-[11px] leading-relaxed text-slate-300 select-text">
+        <pre id="guidelines-content-pre" class="whitespace-pre-wrap break-words">載入中...</pre>
+      </div>
+
+      <!-- Footer -->
+      <div class="p-2.5 border-t border-slate-800 bg-slate-950/60 flex items-center justify-between text-[10px] text-slate-500 font-mono shrink-0">
+        <span id="guidelines-file-path">GEMINI.md</span>
+        <span>可用於任何 AI 工具或新 Session</span>
+      </div>
+    </div>
+  </div>
+
   <!-- 📦 EXPORT EXTENSION MODAL -->
   <div id="export-ext-modal" class="fixed inset-0 bg-black/75 z-50 flex items-center justify-center p-4 opacity-0 pointer-events-none transition-opacity duration-300">
     <div class="bg-slate-900 border border-cyan-500/40 rounded-3xl w-full max-w-sm p-4 sm:p-5 shadow-2xl space-y-4">
@@ -1003,11 +1063,11 @@
 
   <!-- Modular Scripts (Cache-busted v7.8) -->
   <script src="/js/i18n.js?v=3"></script>
-  <script src="/js/ui.js?v=7.8"></script>
+  <script src="/js/ui.js?v=1787581834.8"></script>
   <script src="/js/tools.js?v=7.8"></script>
   <script src="/js/chat.js?v=1787580029.9"></script>
   <script src="/js/live.js?v=7.9"></script>
   <script src="/js/phone_agent.js?v=1.1"></script>
-  <script src="/js/app.js?v=7.9"></script>
+  <script src="/js/app.js?v=1787581834.9"></script>
 </body>
 </html>

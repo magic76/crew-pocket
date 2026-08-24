@@ -132,6 +132,100 @@ function toggleExportExtModal(open) {
 }
 window.toggleExportExtModal = toggleExportExtModal;
 
+// 📋 AI Project Guidelines (GEMINI.md / AGENTS.md) Modal
+const guidelinesBtn = document.getElementById('guidelines-btn');
+const guidelinesModal = document.getElementById('guidelines-modal');
+const closeGuidelinesBtn = document.getElementById('close-guidelines-btn');
+const copyGuidelinesBtn = document.getElementById('copy-guidelines-btn');
+const insertGuidelinesBtn = document.getElementById('insert-guidelines-btn');
+const refreshGuidelinesBtn = document.getElementById('refresh-guidelines-btn');
+const guidelinesContentPre = document.getElementById('guidelines-content-pre');
+const guidelinesFilePath = document.getElementById('guidelines-file-path');
+
+let cachedGuidelinesContent = '';
+
+async function loadGuidelines() {
+  if (guidelinesContentPre) guidelinesContentPre.textContent = '載入中...';
+  try {
+    const res = await fetch('/api/guidelines');
+    const data = await res.json();
+    if (data.success && data.content) {
+      cachedGuidelinesContent = data.content;
+      if (guidelinesContentPre) guidelinesContentPre.textContent = data.content;
+      if (guidelinesFilePath) guidelinesFilePath.textContent = data.path || 'GEMINI.md';
+    } else {
+      if (guidelinesContentPre) guidelinesContentPre.textContent = '⚠️ 無法載入指引內容: ' + (data.error || '未知錯誤');
+    }
+  } catch (err) {
+    if (guidelinesContentPre) guidelinesContentPre.textContent = '⚠️ 網路連線錯誤: ' + err.message;
+  }
+}
+
+function toggleGuidelinesModal(open) {
+  if (!guidelinesModal) return;
+  if (typeof window.haptic === 'function') window.haptic('light');
+  if (open) {
+    guidelinesModal.classList.remove('opacity-0', 'pointer-events-none');
+    loadGuidelines();
+  } else {
+    guidelinesModal.classList.add('opacity-0', 'pointer-events-none');
+  }
+}
+
+if (guidelinesBtn) {
+  guidelinesBtn.addEventListener('click', () => {
+    if (toolsMenuDropdown) toolsMenuDropdown.classList.add('hidden');
+    toggleGuidelinesModal(true);
+  });
+}
+if (closeGuidelinesBtn) {
+  closeGuidelinesBtn.addEventListener('click', () => toggleGuidelinesModal(false));
+}
+if (guidelinesModal) {
+  guidelinesModal.addEventListener('click', (e) => {
+    if (e.target === guidelinesModal) toggleGuidelinesModal(false);
+  });
+}
+if (refreshGuidelinesBtn) {
+  refreshGuidelinesBtn.addEventListener('click', () => {
+    if (typeof window.haptic === 'function') window.haptic('light');
+    loadGuidelines();
+  });
+}
+if (copyGuidelinesBtn) {
+  copyGuidelinesBtn.addEventListener('click', async () => {
+    if (!cachedGuidelinesContent) return;
+    try {
+      await navigator.clipboard.writeText(cachedGuidelinesContent);
+      if (typeof window.haptic === 'function') window.haptic([30, 50]);
+      const origHtml = copyGuidelinesBtn.innerHTML;
+      copyGuidelinesBtn.innerHTML = '<span>✅ 已複製全文！</span>';
+      copyGuidelinesBtn.classList.remove('bg-purple-600', 'hover:bg-purple-500');
+      copyGuidelinesBtn.classList.add('bg-emerald-600', 'hover:bg-emerald-500');
+      setTimeout(() => {
+        copyGuidelinesBtn.innerHTML = origHtml;
+        copyGuidelinesBtn.classList.remove('bg-emerald-600', 'hover:bg-emerald-500');
+        copyGuidelinesBtn.classList.add('bg-purple-600', 'hover:bg-purple-500');
+      }, 2500);
+    } catch (e) {
+      alert('複製失敗，請手動選取文字');
+    }
+  });
+}
+if (insertGuidelinesBtn) {
+  insertGuidelinesBtn.addEventListener('click', () => {
+    if (!cachedGuidelinesContent) return;
+    if (promptInput) {
+      promptInput.value = cachedGuidelinesContent;
+      promptInput.style.height = 'auto';
+      promptInput.style.height = Math.min(promptInput.scrollHeight, 180) + 'px';
+      promptInput.focus();
+    }
+    toggleGuidelinesModal(false);
+    if (typeof window.haptic === 'function') window.haptic('medium');
+  });
+}
+
 // 📳 Tactical Mobile Haptic Feedback (Web Vibration API)
 function haptic(type = 'light') {
   if (typeof navigator !== 'undefined' && navigator.vibrate) {

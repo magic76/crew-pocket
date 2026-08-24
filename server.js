@@ -635,7 +635,32 @@ async function handleStatic(pathname, res) {
 
 // ==========================================
 // 🚀 Main HTTP Server Router
-// ==========================================
+// ==========================================// 📋 Guidelines Manager (GEMINI.md / AGENTS.md)
+async function handleGetGuidelines(res) {
+  try {
+    const candidates = [
+      path.join(__dirname, 'GEMINI.md'),
+      path.join(process.env.HOME || '/data/data/com.termux/files/home', 'GEMINI.md'),
+      path.join(__dirname, 'AGENTS.md')
+    ];
+    let content = '';
+    let foundPath = 'GEMINI.md';
+    for (const p of candidates) {
+      try {
+        content = await fsPromises.readFile(p, 'utf8');
+        foundPath = p;
+        break;
+      } catch (e) {}
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: true, content, path: foundPath }));
+  } catch (err) {
+    res.writeHead(500, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: false, error: err.message }));
+  }
+}
+
+// 🌐 HTTP Server Request Dispatcher
 const server = http.createServer(async (req, res) => {
   const origin = req.headers.origin;
   if (origin && /^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/.test(origin)) {
@@ -723,6 +748,8 @@ const server = http.createServer(async (req, res) => {
     return handlePhonePhoto(req, res);
   } else if (pathname === '/api/phone/action' && req.method === 'POST') {
     return handlePhoneAction(req, res);
+  } else if (pathname === '/api/guidelines' && req.method === 'GET') {
+    return handleGetGuidelines(res);
   } else {
     return handleStatic(pathname, res);
   }
