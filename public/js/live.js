@@ -207,25 +207,17 @@
     }
   }
 
-  let bgSilentAudio = null;
   let screenWakeLock = null;
 
   function setMediaSessionActive(active) {
     if (active) {
-      // 1. Silent Background Audio Loop (elevates Chrome process to Foreground Media Service)
-      if (!bgSilentAudio) {
-        bgSilentAudio = new Audio('data:audio/wav;base64,UklGRjIAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YRAAAAAAAAAAAAAAAAAA');
-        bgSilentAudio.loop = true;
-      }
-      bgSilentAudio.play().catch(e => console.warn('[BgAudio Play]', e));
-
-      // 2. MediaSession Lock
+      // 1. MediaSession Lock
       if ('mediaSession' in navigator) {
         try {
           navigator.mediaSession.metadata = new MediaMetadata({
             title: 'Gemini Live 隨身語音特勤',
             artist: 'Crew Pocket 口袋特勤隊',
-            album: '背景常駐通話中 (支援跨 App 操控)'
+            album: '即時雙向語音通話'
           });
           navigator.mediaSession.playbackState = 'playing';
 
@@ -238,16 +230,13 @@
         } catch (e) {}
       }
 
-      // 3. Screen WakeLock (prevent deep sleep during call)
+      // 2. Screen WakeLock (prevent deep sleep during call)
       if ('wakeLock' in navigator) {
         navigator.wakeLock.request('screen').then(wl => {
           screenWakeLock = wl;
         }).catch(() => {});
       }
     } else {
-      if (bgSilentAudio) {
-        try { bgSilentAudio.pause(); } catch (e) {}
-      }
       if ('mediaSession' in navigator) {
         try {
           navigator.mediaSession.playbackState = 'none';
@@ -1150,14 +1139,14 @@
 
       audioPlayer = new LiveAudioPlayer(audioContext);
 
-      // 3. Microphone Capture (Media Recording Mode - keeps Android OS in standard Media Mode instead of In-Call Phone Mode)
+      // 3. Microphone Capture with Acoustic Echo Cancellation
       try {
         micMediaStream = await navigator.mediaDevices.getUserMedia({
           audio: {
             channelCount: 1,
-            echoCancellation: false,
-            noiseSuppression: false,
-            autoGainControl: false
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true
           }
         });
       } catch (micErr) {
