@@ -420,6 +420,37 @@ function stripLegacyLanguageInstruction(content) {
     .replace(/\[Response Language: Reply in clear, natural English unless the user explicitly asks for another language\.\]\s*/g, '');
 }
 
+// 🔔 Real-time Notify Helper for Crew Floating Bubble (Haptics, Pulse Glow, Mini Pill)
+function notifyCompanionService(state, rawText = '') {
+  try {
+    let clean = '';
+    if (rawText) {
+      clean = rawText
+        .replace(/<[^>]+>/g, '')
+        .replace(/[#*`_\[\]()]/g, '')
+        .split('\n')
+        .map(l => l.trim())
+        .filter(l => l.length > 0)[0] || '';
+      if (clean.length > 48) clean = clean.slice(0, 45) + '...';
+    }
+    const data = JSON.stringify({ state, text: clean ? '✅ ' + clean : '' });
+    const req = http.request({
+      hostname: '127.0.0.1',
+      port: 8766,
+      path: '/notify',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(data)
+      },
+      timeout: 800
+    });
+    req.on('error', () => {});
+    req.write(data);
+    req.end();
+  } catch (e) {}
+}
+
 // 💬 SSE Chat Streaming with Resident Pipe
 async function handleChat(req, res) {
   let body;
@@ -450,6 +481,8 @@ async function handleChat(req, res) {
     finalPrompt = `[Uploaded Image: ${image_path}]\n${finalPrompt}`;
   }
 
+  notifyCompanionService('THINKING');
+
   // Set SSE Headers
   const origin = req.headers.origin;
   const allowOrigin = (origin && /^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/.test(origin)) ? origin : '';
@@ -472,6 +505,11 @@ async function handleChat(req, res) {
     const finish = (payload) => {
       if (ended) return;
       ended = true;
+      if (payload && payload.error) {
+        notifyCompanionService('IDLE');
+      } else {
+        notifyCompanionService('DONE', payload.response || '任務已完成');
+      }
       sendEvent('done', payload);
       res.end();
     };
