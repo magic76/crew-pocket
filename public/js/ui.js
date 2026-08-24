@@ -226,40 +226,33 @@ if (insertGuidelinesBtn) {
   });
 }
 
-// ⚡ Top Header Quick One-Click Copy Shortcut Button
-const quickCopyGuidelinesBtn = document.getElementById('quick-copy-guidelines-btn');
-if (quickCopyGuidelinesBtn) {
-  quickCopyGuidelinesBtn.addEventListener('click', async (e) => {
+// 🚀 Sync Guidelines to Default Files (~/GEMINI.md, ~/AGENTS.md, etc.)
+const syncGuidelinesBtn = document.getElementById('sync-guidelines-btn');
+if (syncGuidelinesBtn) {
+  syncGuidelinesBtn.addEventListener('click', async () => {
+    const origHtml = syncGuidelinesBtn.innerHTML;
     try {
-      if (!cachedGuidelinesContent) {
-        const res = await fetch('/api/guidelines');
-        const data = await res.json();
-        if (data.success && data.content) cachedGuidelinesContent = data.content;
-      }
-      if (cachedGuidelinesContent) {
-        await navigator.clipboard.writeText(cachedGuidelinesContent);
-        if (typeof window.haptic === 'function') window.haptic([25, 45]);
-        const origHtml = quickCopyGuidelinesBtn.innerHTML;
-        quickCopyGuidelinesBtn.innerHTML = `
-          <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-          <span class="text-[10px] font-bold font-mono text-emerald-300">已複製！</span>
-        `;
-        quickCopyGuidelinesBtn.classList.remove('bg-purple-500/20', 'border-purple-500/40');
-        quickCopyGuidelinesBtn.classList.add('bg-emerald-500/20', 'border-emerald-500/40');
+      syncGuidelinesBtn.innerHTML = '<span>⏳ 正在同步寫入...</span>';
+      const res = await fetch('/api/guidelines/sync', { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        if (typeof window.haptic === 'function') window.haptic([30, 40, 50]);
+        syncGuidelinesBtn.innerHTML = '<span>✅ 已成功寫入預設路徑！</span>';
+        syncGuidelinesBtn.classList.remove('from-emerald-600', 'to-teal-600');
+        syncGuidelinesBtn.classList.add('from-indigo-600', 'to-emerald-600');
         setTimeout(() => {
-          quickCopyGuidelinesBtn.innerHTML = origHtml;
-          quickCopyGuidelinesBtn.classList.remove('bg-emerald-500/20', 'border-emerald-500/40');
-          quickCopyGuidelinesBtn.classList.add('bg-purple-500/20', 'border-purple-500/40');
-        }, 2200);
+          syncGuidelinesBtn.innerHTML = origHtml;
+          syncGuidelinesBtn.classList.remove('from-indigo-600', 'to-emerald-600');
+          syncGuidelinesBtn.classList.add('from-emerald-600', 'to-teal-600');
+        }, 3000);
+      } else {
+        alert('同步失敗: ' + (data.error || '未知錯誤'));
+        syncGuidelinesBtn.innerHTML = origHtml;
       }
     } catch (err) {
-      toggleGuidelinesModal(true);
+      alert('連線失敗: ' + err.message);
+      syncGuidelinesBtn.innerHTML = origHtml;
     }
-  });
-
-  quickCopyGuidelinesBtn.addEventListener('contextmenu', (e) => {
-    e.preventDefault();
-    toggleGuidelinesModal(true);
   });
 }
 

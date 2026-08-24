@@ -660,6 +660,50 @@ async function handleGetGuidelines(res) {
   }
 }
 
+// 🚀 Sync Guidelines to all default locations (~/ and ~/agy-web/)
+async function handleSyncGuidelines(req, res) {
+  try {
+    const homeDir = process.env.HOME || '/data/data/com.termux/files/home';
+    const agyWebDir = __dirname;
+
+    // 1. Read base content
+    let content = '';
+    try {
+      content = await fsPromises.readFile(path.join(agyWebDir, 'GEMINI.md'), 'utf8');
+    } catch (e) {
+      try {
+        content = await fsPromises.readFile(path.join(homeDir, 'GEMINI.md'), 'utf8');
+      } catch (e2) {}
+    }
+
+    if (!content) {
+      throw new Error('未找到 GEMINI.md 原始內容');
+    }
+
+    // 2. Target paths
+    const targetPaths = [
+      path.join(homeDir, 'GEMINI.md'),
+      path.join(homeDir, 'AGENTS.md'),
+      path.join(agyWebDir, 'GEMINI.md'),
+      path.join(agyWebDir, 'AGENTS.md')
+    ];
+
+    const written = [];
+    for (const p of targetPaths) {
+      try {
+        await fsPromises.writeFile(p, content, 'utf8');
+        written.push(p.replace(homeDir, '~'));
+      } catch (e) {}
+    }
+
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: true, count: written.length, paths: written }));
+  } catch (err) {
+    res.writeHead(500, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: false, error: err.message }));
+  }
+}
+
 // 🌐 HTTP Server Request Dispatcher
 const server = http.createServer(async (req, res) => {
   const origin = req.headers.origin;
@@ -750,6 +794,8 @@ const server = http.createServer(async (req, res) => {
     return handlePhoneAction(req, res);
   } else if (pathname === '/api/guidelines' && req.method === 'GET') {
     return handleGetGuidelines(res);
+  } else if (pathname === '/api/guidelines/sync' && req.method === 'POST') {
+    return handleSyncGuidelines(req, res);
   } else {
     return handleStatic(pathname, res);
   }
