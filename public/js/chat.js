@@ -1257,8 +1257,8 @@ async function sendBtwConcurrentSidecard(customText = null, customImgPath = null
   updateSendButtonMode();
   if (typeof window.haptic === 'function') window.haptic([25, 40]);
 
-  // 2. Append User [💬 順帶一提] Bubble
-  let userDisplay = rawText;
+  // 2. Append User [💬 順帶一提] Bubble cleanly
+  let userDisplay = cleanQuery;
   if (imgPath) userDisplay = `[Uploaded Image: ${imgPath}]\n${userDisplay}`;
   appendMessage('user', userDisplay, undefined, [], '', true);
 
@@ -1304,7 +1304,7 @@ async function sendBtwConcurrentSidecard(customText = null, customImgPath = null
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        prompt: `[Side Note / Quick Clarification (Answer directly, concisely and without preamble)]: ${cleanQuery}`,
+        prompt: `/btw ${cleanQuery}`,
         conversation_id: currentConversationId,
         provider: currentProvider,
         model: currentModel,
