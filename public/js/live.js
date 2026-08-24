@@ -1230,17 +1230,48 @@
   }
 
   // ==========================================
-  // 🎙️ Real-time Speech Tracker (Native Gemini Audio - No System Chimes)
+  // 🎙️ Real-time Speech-to-Text (STT) Engine
   // ==========================================
   function startSpeechRecognition() {
-    // 🛡️ Disabled webkitSpeechRecognition to prevent Android OS audio focus conflicts,
-    // double-recording status bar icons, and annoying system "ding ding ding" prompt sounds.
-    // Gemini Live natively understands speech from the 16kHz PCM stream!
-    speechRecognizer = null;
+    if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) return;
+    try {
+      const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+      speechRecognizer = new SpeechRec();
+      speechRecognizer.continuous = true;
+      speechRecognizer.interimResults = true;
+      speechRecognizer.lang = (typeof getCrewLocale === 'function' && getCrewLocale() === 'en') ? 'en-US' : 'zh-TW';
+
+      speechRecognizer.onresult = (event) => {
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          const transcript = event.results[i][0].transcript;
+          if (event.results[i].isFinal) {
+            currentTurnUser = (currentTurnUser ? currentTurnUser + ' ' : '') + transcript;
+            appendCardTranscript('user', currentTurnUser);
+          }
+        }
+      };
+
+      speechRecognizer.onerror = (e) => {
+        console.warn('[STT Error]', e.error);
+      };
+
+      speechRecognizer.onend = () => {
+        if (isConnected && speechRecognizer) {
+          try { speechRecognizer.start(); } catch (e) {}
+        }
+      };
+
+      speechRecognizer.start();
+    } catch (e) {
+      console.warn('[STT Start Error]', e);
+    }
   }
 
   function stopSpeechRecognition() {
-    speechRecognizer = null;
+    if (speechRecognizer) {
+      try { speechRecognizer.stop(); } catch (e) {}
+      speechRecognizer = null;
+    }
   }
 
   // ==========================================
