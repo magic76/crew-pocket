@@ -45,6 +45,7 @@
   let sustainedSpeechCount = 0;
   let sessionSnapshots = [];
   let fullSessionAudioChunks = [];
+  let sessionExecutedTools = [];
 
   function recordAudioSegment(role, float32Data, inputSampleRate = 16000) {
     if (!float32Data || float32Data.length === 0) return;
@@ -1668,7 +1669,7 @@
     audioSendBuffer = [];
     sessionSnapshots = [];
     fullSessionAudioChunks = [];
-    let sessionExecutedTools = [];
+    sessionExecutedTools = [];
     isMuted = false;
     isCameraOn = false;
     liveCallStartTs = Date.now();
