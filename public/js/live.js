@@ -471,8 +471,13 @@
 
     try {
       const inputTensor = new ort.Tensor('float32', fbankResult.data, [1, fbankResult.numFrames, fbankResult.numMelBins]);
-      const results = await voiceprintOnnxSession.run({ speech: inputTensor });
-      const outputTensor = results.embedding || results.output || results[Object.keys(results)[0]];
+      const inputName = (voiceprintOnnxSession.inputNames && voiceprintOnnxSession.inputNames[0]) ? voiceprintOnnxSession.inputNames[0] : 'x';
+      const feeds = {};
+      feeds[inputName] = inputTensor;
+
+      const results = await voiceprintOnnxSession.run(feeds);
+      const outputName = (voiceprintOnnxSession.outputNames && voiceprintOnnxSession.outputNames[0]) ? voiceprintOnnxSession.outputNames[0] : Object.keys(results)[0];
+      const outputTensor = results[outputName] || results.embedding || results.output;
       if (!outputTensor || !outputTensor.data) throw new Error('模型未返回有效特徵輸出');
       const embedding = new Float32Array(outputTensor.data);
 
