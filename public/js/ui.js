@@ -202,12 +202,6 @@ if (guidelinesModal) {
     if (e.target === guidelinesModal) toggleGuidelinesModal(false);
   });
 }
-if (refreshGuidelinesBtn) {
-  refreshGuidelinesBtn.addEventListener('click', () => {
-    if (typeof window.haptic === 'function') window.haptic('light');
-    loadGuidelines();
-  });
-}
 if (copyGuidelinesBtn) {
   copyGuidelinesBtn.addEventListener('click', async () => {
     const textToCopy = guidelinesContentTextarea ? guidelinesContentTextarea.value : '';
@@ -227,20 +221,6 @@ if (copyGuidelinesBtn) {
     } catch (e) {
       alert('複製失敗，請手動選取文字');
     }
-  });
-}
-if (insertGuidelinesBtn) {
-  insertGuidelinesBtn.addEventListener('click', () => {
-    const textToInsert = guidelinesContentTextarea ? guidelinesContentTextarea.value : '';
-    if (!textToInsert) return;
-    if (promptInput) {
-      promptInput.value = textToInsert;
-      promptInput.style.height = 'auto';
-      promptInput.style.height = Math.min(promptInput.scrollHeight, 180) + 'px';
-      promptInput.focus();
-    }
-    toggleGuidelinesModal(false);
-    if (typeof window.haptic === 'function') window.haptic('medium');
   });
 }
 
