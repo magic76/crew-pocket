@@ -1,6 +1,6 @@
 # Crew Pocket (口袋特勤隊) 專案工作規範
 
-Crew Pocket 是運行於 Android Termux 的行動 AI 助理與開發工作台，由 Antigravity (`agy`) 驅動。回答保持簡潔、直接、實用；不要為 Crew Pocket 本身聯網搜尋。
+Crew Pocket 是運行於 Android Termux 的行動 AI 助理與開發工作台，由 Antigravity (`agy`) 與 OpenAI Codex 驅動。回答保持簡潔、直接、實用；不要為 Crew Pocket 本身聯網搜尋。
 
 ## 工作方式
 
@@ -17,41 +17,37 @@ Crew Pocket 是運行於 Android Termux 的行動 AI 助理與開發工作台，
 4. **消除冗餘檢索**：已知上下文時直接精準替換，避免重複讀取整個大檔。
 5. **精簡直接回報**：完成後直接條列重點與測試方式，不囉嗦贅述。
 
-## 📱 Android 原生小幫手服務 (`CrewHelper.apk` / `127.0.0.1:8766`)
+## 📱 視覺感知與手機操控標準協議 (Port 8000 統一橋接)
 
-Crew Pocket 內建專屬微型原生輔助 APK（套件名：`com.crewpocket.helper`，僅 29KB），提供 100% 離線 / 4G / 5G 免 Wi-Fi、免配對的系統級控制能力。
+為確保跨 AI 模型（AGY、Codex、子代理等）皆具備 100% 穩定且直接可用的視覺分析能力，**所有模型一律透過本機 Web 代理端點 (`http://127.0.0.1:8000`) 進行畫面與相機調用**：
 
-### 1. 本地統一通訊協議與端點 (`http://127.0.0.1:8766`)
-- `GET /status`：檢測無障礙服務與小幫手常駐狀態。
-- `POST /screenshot`：**【推薦】系統全螢幕截圖**。自動執行截圖、存檔至 `/sdcard/Pictures/CrewPocket/SCREEN_YYYYMMDD_HHMMSS.png`（與 `latest_screen_photo.png`），並回傳包含檔案路徑的 JSON：`{"success":true,"path":"/sdcard/Pictures/CrewPocket/SCREEN_...png"}`。
-- `POST /photo`：**【推薦】背景靜默拍攝物理世界照片**（參數 `{"camera":"back"}` 或 `{"camera":"front"}`）。照片存檔至 `/sdcard/Pictures/CrewPocket/IMG_YYYYMMDD_HHMMSS.jpg`，並回傳包含路徑的 JSON：`{"success":true,"path":"/sdcard/Pictures/CrewPocket/IMG_...jpg"}`。
-- `POST /key`：執行 Android 實體動作（`{"key":"HOME"}`、`{"key":"BACK"}`、`{"key":"RECENTS"}`）。
-- `POST /tap`：座標點擊 `{"x": 500, "y": 1000}`。
-- `POST /swipe`：滑動手勢 `{"x1": 500, "y1": 1500, "x2": 500, "y2": 500, "duration": 300}`。
-- `POST /notify`：實體與視覺回饋（`{"state":"THINKING"}` 啟動 360° 極光流水旋轉光環與微震動；`{"state":"DONE","text":"一句話結論"}` 翡翠光環定格、雙震動、並在懸浮球旁彈出 3.8 秒自動隱藏的結論小膠囊）。
-- `GET /nodes`：Dump 當前前景畫面的無障礙節點樹與座標邊界。
-- `POST /bubble`：喚醒螢幕全域 🤖 隨身懸浮球（具備 `[Bubble]` 快速傳訊能力）。
+### 1. 視覺感知端到端標準作業流程 (SOP)
 
-### 2. 視覺分析端到端標準作業流程 (SOP)
-
-#### 📱 A. 分析「手機螢幕畫面」（例如使用者說「看我畫面」、「螢幕上有什麼」、「這畫面什麼意思」）：
-1. **呼叫截圖 API**：
+#### 📱 A. 分析「手機螢幕畫面」（例如使用者說「看我畫面」、「這畫面什麼意思」、「螢幕上有什麼」）：
+1. **呼叫後台截圖端點**（自動觸發截圖並完成 WebP 最佳化壓縮）：
    ```bash
-   curl -s -X POST http://127.0.0.1:8766/screenshot
+   curl -s -X POST http://127.0.0.1:8000/api/phone/screenshot
    ```
-2. **多模態檢視**：從返回的 JSON 中取得 `path`（例如 `/sdcard/Pictures/CrewPocket/latest_screen_photo.png`），**立即使用 `view_file` 工具開啟該檔案**，並向使用者提供詳細的螢幕文字與畫面含義分析！
+2. **多模態檢視**：截圖檔案將存放於：
+   `/data/data/com.termux/files/home/agy-web/public/uploads/phone_screen_opt.webp`
+   **立即使用 `view_file` 工具開啟該路徑**，向使用者進行精確的螢幕文字與畫面解析！
 
-#### 📸 B. 分析「真實物理世界」（例如使用者說「拍張照片」、「看我眼前」、「拍一下」）：
-1. **呼叫相機 API**：
+#### 📸 B. 分析「真實物理環境」（例如使用者說「拍張照片」、「看我眼前」、「拍一下」）：
+1. **呼叫後台相機端點**（背景靜默拍攝，相簿保留高畫質原圖 + 自動產出 AI 壓縮圖）：
    ```bash
-   curl -s -X POST http://127.0.0.1:8766/photo -H "Content-Type: application/json" -d '{"camera":"back"}'
+   curl -s -X POST http://127.0.0.1:8000/api/phone/photo -H "Content-Type: application/json" -d '{"camera":"back"}'
    ```
-2. **多模態檢視**：從返回的 JSON 中取得 `path`（例如 `/sdcard/Pictures/CrewPocket/latest_camera_photo.jpg`），**立即使用 `view_file` 工具開啟該檔案**，向使用者提供多模態景物/文字/環境分析！
+2. **多模態檢視**：分析圖片存放於：
+   `/data/data/com.termux/files/home/agy-web/public/uploads/camera_photo_opt.webp`
+   （原圖存放於 `/sdcard/Pictures/CrewPocket/IMG_YYYYMMDD_HHMMSS.jpg`）
+   **立即使用 `view_file` 工具開啟該路徑**，向使用者進行多模態景物/文字/環境分析！
 
-#### 🕹️ C. 系統控制與導航（使用者說「按首頁」、「返回」、「切換多工」）：
-- 回首頁：`curl -s -X POST http://127.0.0.1:8766/key -H "Content-Type: application/json" -d '{"key":"HOME"}'`
-- 返回上一頁：`curl -s -X POST http://127.0.0.1:8766/key -H "Content-Type: application/json" -d '{"key":"BACK"}'`
-- 多工切換：`curl -s -X POST http://127.0.0.1:8766/key -H "Content-Type: application/json" -d '{"key":"RECENTS"}'`
+### 2. 底層原生小幫手服務 (`CrewHelper.apk` / `127.0.0.1:8766`)
+- `POST http://127.0.0.1:8766/key`：系統實體鍵（`{"key":"HOME"}`、`{"key":"BACK"}`、`{"key":"RECENTS"}`、`{"key":"SCREENSHOT"}`）。
+- `POST http://127.0.0.1:8766/tap`：座標點擊 `{"x": 500, "y": 1000}`。
+- `POST http://127.0.0.1:8766/swipe`：滑動手勢 `{"x1": 500, "y1": 1500, "x2": 500, "y2": 500, "duration": 300}`。
+- `POST http://127.0.0.1:8766/notify`：狀態通知（`{"state":"THINKING"}` 啟動 360° 流水旋轉光環；`{"state":"DONE","text":"結論"}` 翡翠定格與震動小膠囊）。
+- `GET http://127.0.0.1:8766/nodes`：Dump 當前前景 UI 節點樹。
 
 ## Crew Pocket 能力
 
