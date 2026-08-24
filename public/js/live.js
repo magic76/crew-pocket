@@ -2582,14 +2582,27 @@
 
     const memoId = `call-memo-${Date.now()}`;
     const initialSummary = [`已完成 ${durationText} 語音通話 (音色：${voiceName})`];
-    const summaryCard = buildCallSummaryCardHtml(turnsToSave, durationSec, voiceName, snapshotsToSave, memoId, turnsToSave.length > 0 ? null : initialSummary);
     
-    const targetContainer = document.getElementById('messages-container') || messagesContainer;
-    if (targetContainer && summaryCard) {
-      targetContainer.appendChild(summaryCard);
-      targetContainer.scrollTop = targetContainer.scrollHeight;
-      if (typeof scrollToBottom === 'function') scrollToBottom(true);
+    const memoData = {
+      duration_sec: durationSec,
+      voice_name: voiceName,
+      summary: initialSummary,
+      transcript: turnsToSave,
+      tools: toolsToSave,
+      snapshots: snapshotsToSave
+    };
+
+    if (typeof appendMessage === 'function') {
+      appendMessage('assistant', `<!-- CALL_MEMO_DATA:${JSON.stringify(memoData)} -->\n✨ Gemini Live 語音通話紀錄`, timeStr);
+    } else {
+      const summaryCard = buildCallSummaryCardHtml(turnsToSave, durationSec, voiceName, snapshotsToSave, memoId, initialSummary);
+      const targetContainer = document.getElementById('messages-container') || messagesContainer;
+      if (targetContainer && summaryCard) {
+        targetContainer.appendChild(summaryCard);
+        targetContainer.scrollTop = targetContainer.scrollHeight;
+      }
     }
+    if (typeof scrollToBottom === 'function') scrollToBottom(true);
 
     const activeConvId = (typeof currentConversationId !== 'undefined' && currentConversationId) ? currentConversationId : null;
     const initialUserText = turnsToSave.map(t => t.user || '').filter(Boolean).join('；') || `🗣️ 雙向語音對話 (${durationText})`;
