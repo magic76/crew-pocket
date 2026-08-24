@@ -19,7 +19,7 @@
   let phoneAiCmdInput = null;
   let phoneAiCmdBtn = null;
 
-  let currentResolution = { width: 1080, height: 2400 };
+  let currentResolution = { width: 1440, height: 3120 };
 
   function initElements() {
     phoneModal = document.getElementById("phone-agent-modal");
@@ -39,6 +39,17 @@
     phoneActionLog = document.getElementById("phone-action-log");
     phoneAiCmdInput = document.getElementById("phone-ai-cmd-input");
     phoneAiCmdBtn = document.getElementById("phone-ai-cmd-btn");
+
+    if (phoneScreenImg) {
+      phoneScreenImg.onload = () => {
+        phoneScreenImg.classList.remove("hidden");
+        if (phoneScreenPlaceholder) phoneScreenPlaceholder.classList.add("hidden");
+      };
+      phoneScreenImg.onerror = (e) => {
+        console.error("[Phone Screen Image Error]", e);
+        if (phoneActionLog) phoneActionLog.textContent = "❌ 圖片渲染失敗，正在重試...";
+      };
+    }
   }
 
   function togglePhoneModal(open) {
@@ -61,7 +72,7 @@
       const res = await fetch("/api/phone/status");
       const data = await res.json();
 
-      if (data.connected) {
+      if (data && data.connected) {
         phoneConnBadge.textContent = `🟢 已連線 (${data.activeDevice?.id || "本機 ADB"})`;
         phoneConnBadge.className = "px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-950/80 border border-emerald-500/40 text-emerald-300";
         takeScreenshot();
@@ -83,14 +94,15 @@
       const res = await fetch("/api/phone/screenshot", { method: "POST" });
       const data = await res.json();
 
-      if (data.success && data.base64) {
-        phoneScreenImg.src = `${data.base64}?t=${Date.now()}`;
+      if (data && data.success && data.base64) {
+        // Direct assignment of valid base64 data URI (without query params!)
+        phoneScreenImg.src = data.base64;
         phoneScreenImg.classList.remove("hidden");
         if (phoneScreenPlaceholder) phoneScreenPlaceholder.classList.add("hidden");
         if (data.resolution) currentResolution = data.resolution;
         if (phoneActionLog) phoneActionLog.textContent = `📸 截圖成功 (${data.resolution?.width}x${data.resolution?.height}, ${data.sizeKb}KB)`;
       } else {
-        if (phoneActionLog) phoneActionLog.textContent = `⚠️ 截圖失敗: ${data.error || "請先配對連線 ADB"}`;
+        if (phoneActionLog) phoneActionLog.textContent = `⚠️ 截圖失敗: ${data?.error || "請先配對連線 ADB"}`;
       }
     } catch (err) {
       if (phoneActionLog) phoneActionLog.textContent = `❌ 截圖連線錯誤: ${err.message}`;
@@ -109,12 +121,12 @@
       });
       const data = await res.json();
       if (phoneActionLog) {
-        phoneActionLog.textContent = data.success 
-          ? `⚡ 執行成功: ${actionObj.action} ${JSON.stringify(actionObj)}`
-          : `❌ 執行失敗: ${data.error}`;
+        phoneActionLog.textContent = data?.success 
+          ? `⚡ 執行成功: ${actionObj.action}`
+          : `❌ 執行失敗: ${data?.error || "未知錯誤"}`;
       }
       if (autoRefresh) {
-        setTimeout(takeScreenshot, 500);
+        setTimeout(takeScreenshot, 400);
       }
     } catch (e) {
       if (phoneActionLog) phoneActionLog.textContent = `❌ 動作連線錯誤: ${e.message}`;
@@ -134,7 +146,7 @@
     if (phoneConnectBtn && phonePortInput) {
       phoneConnectBtn.addEventListener("click", async () => {
         const port = phonePortInput.value.trim();
-        if (!port) return alert("請輸入無線偵錯 Port");
+        if (!port) return alert("請輸入無線偵錯 Port 或 IP:Port");
         phoneConnectBtn.disabled = true;
         phoneConnectBtn.textContent = "連線中...";
 
@@ -145,7 +157,7 @@
             body: JSON.stringify({ port })
           });
           const data = await res.json();
-          alert(data.output || (data.success ? "連線成功！" : "連線失敗"));
+          alert(data?.output || (data?.success ? "連線成功！" : "連線失敗，請確認是否已完成配對碼驗證。"));
           checkStatus();
         } catch (e) {
           alert("連線失敗: " + e.message);
@@ -171,7 +183,7 @@
             body: JSON.stringify({ port, pairingCode })
           });
           const data = await res.json();
-          alert(data.output || (data.success ? "配對成功！現在請輸入連線 Port 點擊連線。" : "配對失敗"));
+          alert(data?.output || (data?.success ? "配對成功！現在請輸入連線 Port 點擊連線。" : "配對失敗，請確認配對碼與 Port。"));
           checkStatus();
         } catch (e) {
           alert("配對失敗: " + e.message);
@@ -247,8 +259,8 @@
           const snapRes = await fetch("/api/phone/screenshot", { method: "POST" });
           const snapData = await snapRes.json();
 
-          if (!snapData.success || !snapData.base64) {
-            throw new Error(snapData.error || "截圖失敗");
+          if (!snapData || !snapData.success || !snapData.base64) {
+            throw new Error(snapData?.error || "截圖失敗");
           }
 
           const promptInput = document.getElementById("prompt-input");
