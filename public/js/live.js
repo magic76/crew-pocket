@@ -2530,8 +2530,36 @@
     let durationText = '0 秒';
     let memoId = null;
     let activeConvId = null;
+    let initialSummary = [];
     try {
       console.log('[Live] endLiveSession initiated...');
+
+      // Render first: teardown must never prevent the user-visible memo.
+      turnsToSave = sessionDialogueTurns.slice();
+      if (currentTurnUser || currentTurnModel) {
+        turnsToSave.push({
+          user: currentTurnUser || '🗣️ (雙向語音通話)',
+          model: currentTurnModel || '🎙️ (AI 即時語音回覆)'
+        });
+      }
+      toolsToSave = sessionExecutedTools.slice();
+      snapshotsToSave = sessionSnapshots.slice();
+      audioChunksToTranscribe = fullSessionAudioChunks.slice();
+      durationSec = liveCallStartTs > 0 ? Math.max(1, Math.round((Date.now() - liveCallStartTs) / 1000)) : 1;
+      voiceName = getSelectedVoice();
+      const earlyMins = Math.floor(durationSec / 60);
+      const earlySecs = durationSec % 60;
+      durationText = earlyMins > 0 ? `${earlyMins} 分 ${earlySecs} 秒` : `${earlySecs} 秒`;
+      memoId = `call-memo-${Date.now()}`;
+      initialSummary = [`已完成 ${durationText} 語音通話 (音色：${voiceName})`];
+      const earlyCard = buildCallSummaryCardHtml(turnsToSave, durationSec, voiceName, snapshotsToSave, memoId, initialSummary);
+      const earlyContainer = document.getElementById('messages-container');
+      if (earlyContainer && earlyCard) {
+        earlyContainer.appendChild(earlyCard);
+        earlyContainer.scrollTop = earlyContainer.scrollHeight;
+      }
+      if (typeof scrollToBottom === 'function') scrollToBottom(true);
+
       isConnected = false;
       stopVisualizer();
       stopSpeechRecognition();
@@ -2599,45 +2627,13 @@
       // 🧹 1. Cleanly remove the in-call Live card from screen
       removeInlineCard();
 
-      // Collect any remaining turn
-      if (currentTurnUser || currentTurnModel) {
-        sessionDialogueTurns.push({
-          user: currentTurnUser || '🗣️ (雙向語音通話)',
-          model: currentTurnModel || '🎙️ (AI 即時語音回覆)'
-        });
-        currentTurnUser = '';
-        currentTurnModel = '';
-      }
-
       // 🔒 Extract dialogue turns and full audio
-      turnsToSave = sessionDialogueTurns.slice();
-      toolsToSave = sessionExecutedTools.slice();
-      snapshotsToSave = sessionSnapshots.slice();
-      audioChunksToTranscribe = fullSessionAudioChunks.slice();
       sessionExecutedTools = [];
       sessionDialogueTurns = [];
       sessionSnapshots = [];
       fullSessionAudioChunks = [];
-
-      durationSec = liveCallStartTs > 0 ? Math.max(1, Math.round((Date.now() - liveCallStartTs) / 1000)) : 0;
-      voiceName = getSelectedVoice();
-      const timeStr = new Date().toLocaleTimeString('zh-TW', { hour12: false, hour: '2-digit', minute: '2-digit' });
-      const mins = Math.floor(durationSec / 60);
-      const secs = durationSec % 60;
-      durationText = mins > 0 ? `${mins} 分 ${secs} 秒` : `${secs} 秒`;
-
-      memoId = `call-memo-${Date.now()}`;
-      const initialSummary = [`已完成 ${durationText} 語音通話 (音色：${voiceName})`];
-
-      // 📋 2. Insert the beautiful Call Summary UI Card into Chat Timeline
-      const summaryCard = buildCallSummaryCardHtml(turnsToSave, durationSec, voiceName, snapshotsToSave, memoId, initialSummary);
-      const targetContainer = document.getElementById('messages-container');
-      if (targetContainer && summaryCard) {
-        targetContainer.appendChild(summaryCard);
-        targetContainer.scrollTop = targetContainer.scrollHeight;
-      }
-
-      if (typeof scrollToBottom === 'function') scrollToBottom(true);
+      currentTurnUser = '';
+      currentTurnModel = '';
 
       activeConvId = (typeof currentConversationId !== 'undefined' && currentConversationId) ? currentConversationId : null;
       const userText = turnsToSave.map(t => t.user || '').filter(Boolean).join('；') || `🗣️ 雙向語音通話 (${durationText})`;
