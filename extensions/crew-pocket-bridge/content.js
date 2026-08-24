@@ -17,6 +17,11 @@
     } catch (err) {}
   }
 
+  // Keepalive heartbeat to keep background service worker connected
+  setInterval(() => {
+    notifyBackground('HEARTBEAT', {});
+  }, 5000);
+
   // 1. Hook Console Logs
   const origError = console.error;
   const origWarn = console.warn;
