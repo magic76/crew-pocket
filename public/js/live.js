@@ -1073,9 +1073,27 @@
 
         } else if (name === 'take_screenshot') {
           const res = await fetch('/api/phone/screenshot', { method: 'POST' });
-          toolResult = await res.json().catch(() => ({ success: false, error: '截圖失敗' }));
-          if (navigator.vibrate) navigator.vibrate([20, 40]);
-          appendCardTranscript('system', `📸 語音觸發螢幕畫面截取`);
+          const shotData = await res.json().catch(() => ({ success: false, error: '截圖失敗' }));
+          if (shotData && shotData.success && shotData.base64) {
+            // 📸 Inject screenshot frame directly into Gemini Live's realtime multimodal vision pipeline!
+            const cleanBase64 = shotData.base64.replace(/^data:image\/\w+;base64,/, '');
+            const imageMsg = {
+              realtimeInput: {
+                mediaChunks: [
+                  {
+                    mimeType: "image/jpeg",
+                    data: cleanBase64
+                  }
+                ]
+              }
+            };
+            ws.send(JSON.stringify(imageMsg));
+            toolResult = { success: true, message: "螢幕截圖已成功傳送至即時視覺管道，請直接根據最新傳送的畫面為使用者進行多模態辨識。" };
+            if (navigator.vibrate) navigator.vibrate([20, 40]);
+            appendCardTranscript('system', `📸 語音截取螢幕並注入即時視覺感知管道`);
+          } else {
+            toolResult = { success: false, error: shotData?.error || '截圖失敗' };
+          }
 
         } else if (name === 'write_file') {
           const targetPath = args.path || args.targetPath || 'scratch/voice_note.md';
