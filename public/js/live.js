@@ -93,8 +93,8 @@
   }
 
   async function generatePostCallSmartTranscript(audioBlob, apiKey, sampleCount = 0, durationSec = 0) {
-    if (!audioBlob || audioBlob.size < 1000 || !apiKey) {
-      return { success: false, error: '音訊過短 (錄音長度不足) 或未設定 API Key' };
+    if (!audioBlob || audioBlob.size < 1000) {
+      return { success: false, error: '音訊過短 (錄音長度不足)' };
     }
 
     const base64Audio = await new Promise((resolve) => {
@@ -108,7 +108,7 @@
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          api_key: apiKey,
+          api_key: apiKey || '',
           audio_base64: base64Audio,
           mime_type: 'audio/wav',
           sample_count: sampleCount,
@@ -2580,11 +2580,13 @@
     const secs = durationSec % 60;
     const durationText = mins > 0 ? `${mins} 分 ${secs} 秒` : `${secs} 秒`;
 
-    if (turnsToSave.length > 0 || toolsToSave.length > 0 || durationSec >= 1 || audioChunksToTranscribe.length > 4000) {
+    if (turnsToSave.length > 0 || toolsToSave.length > 0 || durationSec >= 1 || audioChunksToTranscribe.length > 2000) {
       const memoId = `call-memo-${Date.now()}`;
       const summaryCard = buildCallSummaryCardHtml(turnsToSave, durationSec, voiceName, snapshotsToSave, memoId, null);
-      if (messagesContainer && summaryCard) {
-        messagesContainer.appendChild(summaryCard);
+      const targetContainer = document.getElementById('messages-container') || messagesContainer;
+      if (targetContainer && summaryCard) {
+        targetContainer.appendChild(summaryCard);
+        targetContainer.scrollTop = targetContainer.scrollHeight;
         if (typeof scrollToBottom === 'function') scrollToBottom(true);
       }
 
