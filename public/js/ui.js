@@ -226,6 +226,43 @@ if (insertGuidelinesBtn) {
   });
 }
 
+// ⚡ Top Header Quick One-Click Copy Shortcut Button
+const quickCopyGuidelinesBtn = document.getElementById('quick-copy-guidelines-btn');
+if (quickCopyGuidelinesBtn) {
+  quickCopyGuidelinesBtn.addEventListener('click', async (e) => {
+    try {
+      if (!cachedGuidelinesContent) {
+        const res = await fetch('/api/guidelines');
+        const data = await res.json();
+        if (data.success && data.content) cachedGuidelinesContent = data.content;
+      }
+      if (cachedGuidelinesContent) {
+        await navigator.clipboard.writeText(cachedGuidelinesContent);
+        if (typeof window.haptic === 'function') window.haptic([25, 45]);
+        const origHtml = quickCopyGuidelinesBtn.innerHTML;
+        quickCopyGuidelinesBtn.innerHTML = `
+          <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+          <span class="text-[10px] font-bold font-mono text-emerald-300">已複製！</span>
+        `;
+        quickCopyGuidelinesBtn.classList.remove('bg-purple-500/20', 'border-purple-500/40');
+        quickCopyGuidelinesBtn.classList.add('bg-emerald-500/20', 'border-emerald-500/40');
+        setTimeout(() => {
+          quickCopyGuidelinesBtn.innerHTML = origHtml;
+          quickCopyGuidelinesBtn.classList.remove('bg-emerald-500/20', 'border-emerald-500/40');
+          quickCopyGuidelinesBtn.classList.add('bg-purple-500/20', 'border-purple-500/40');
+        }, 2200);
+      }
+    } catch (err) {
+      toggleGuidelinesModal(true);
+    }
+  });
+
+  quickCopyGuidelinesBtn.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    toggleGuidelinesModal(true);
+  });
+}
+
 // 📳 Tactical Mobile Haptic Feedback (Web Vibration API)
 function haptic(type = 'light') {
   if (typeof navigator !== 'undefined' && navigator.vibrate) {
