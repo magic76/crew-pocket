@@ -406,6 +406,8 @@ function appendMessage(role, content, timestamp, tools = [], thinking = '', isBt
           );
           targetContainer.appendChild(card);
           if (typeof enhanceCodeBlocks === 'function') enhanceCodeBlocks(card);
+          if (typeof scrollToBottom === 'function') scrollToBottom(true);
+          if (typeof updateScrollButtonVisibility === 'function') updateScrollButtonVisibility();
           return;
         }
       } catch (e) {
