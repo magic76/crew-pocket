@@ -17,41 +17,41 @@ Crew Pocket 是運行於 Android Termux 的行動 AI 助理與開發工作台，
 4. **消除冗餘檢索**：已知上下文時直接精準替換，避免重複讀取整個大檔。
 5. **精簡直接回報**：完成後直接條列重點與測試方式，不囉嗦贅述。
 
-## 📱 Android 原生無障礙與實體相機小幫手 (`CrewHelper.apk` / `127.0.0.1:8766`)
+## 📱 Android 原生小幫手服務 (`CrewHelper.apk` / `127.0.0.1:8766`)
 
 Crew Pocket 內建專屬微型原生輔助 APK（套件名：`com.crewpocket.helper`，僅 29KB），提供 100% 離線 / 4G / 5G 免 Wi-Fi、免配對的系統級控制能力。
 
-### 1. 本地通訊協議與端點 (`http://127.0.0.1:8766`)
+### 1. 本地統一通訊協議與端點 (`http://127.0.0.1:8766`)
 - `GET /status`：檢測無障礙服務與小幫手常駐狀態。
-- `POST /photo`：背景靜默拍攝物理世界照片（參數 `{"camera":"back"}` 或 `{"camera":"front"}`）。照片儲存於 `/sdcard/Pictures/CrewPocket/IMG_YYYYMMDD_HHMMSS.jpg`，自動生成 540px 極限壓縮 WebP 供視覺模型直接分析。
-- `POST /key`：執行 Android 系統全域實體動作（`{"key":"HOME"}`、`{"key":"BACK"}`、`{"key":"RECENTS"}`、`{"key":"SCREENSHOT"}`）。
+- `POST /screenshot`：**【推薦】系統全螢幕截圖**。自動執行截圖、存檔至 `/sdcard/Pictures/CrewPocket/SCREEN_YYYYMMDD_HHMMSS.png`（與 `latest_screen_photo.png`），並回傳包含檔案路徑的 JSON：`{"success":true,"path":"/sdcard/Pictures/CrewPocket/SCREEN_...png"}`。
+- `POST /photo`：**【推薦】背景靜默拍攝物理世界照片**（參數 `{"camera":"back"}` 或 `{"camera":"front"}`）。照片存檔至 `/sdcard/Pictures/CrewPocket/IMG_YYYYMMDD_HHMMSS.jpg`，並回傳包含路徑的 JSON：`{"success":true,"path":"/sdcard/Pictures/CrewPocket/IMG_...jpg"}`。
+- `POST /key`：執行 Android 實體動作（`{"key":"HOME"}`、`{"key":"BACK"}`、`{"key":"RECENTS"}`）。
 - `POST /tap`：座標點擊 `{"x": 500, "y": 1000}`。
 - `POST /swipe`：滑動手勢 `{"x1": 500, "y1": 1500, "x2": 500, "y2": 500, "duration": 300}`。
 - `POST /notify`：實體與視覺回饋（`{"state":"THINKING"}` 啟動 360° 極光流水旋轉光環與微震動；`{"state":"DONE","text":"一句話結論"}` 翡翠光環定格、雙震動、並在懸浮球旁彈出 3.8 秒自動隱藏的結論小膠囊）。
 - `GET /nodes`：Dump 當前前景畫面的無障礙節點樹與座標邊界。
 - `POST /bubble`：喚醒螢幕全域 🤖 隨身懸浮球（具備 `[Bubble]` 快速傳訊能力）。
 
-### 2. 隨身調用與視覺分析標準作業流程 (SOP)
+### 2. 視覺分析端到端標準作業流程 (SOP)
 
-#### 📱 A. 分析「手機螢幕畫面」（例如：使用者說「看我畫面」、「螢幕上有什麼」、「這畫面什麼意思」）：
-1. **執行截圖**：直接呼叫後台截圖端點（自動壓縮並返回最新截圖路徑）：
+#### 📱 A. 分析「手機螢幕畫面」（例如使用者說「看我畫面」、「螢幕上有什麼」、「這畫面什麼意思」）：
+1. **呼叫截圖 API**：
    ```bash
-   curl -s -X POST http://127.0.0.1:8000/api/phone/screenshot
+   curl -s -X POST http://127.0.0.1:8766/screenshot
    ```
-   *(或透過 `POST http://127.0.0.1:8766/key {"key":"SCREENSHOT"}`，截圖存放於 `/sdcard/DCIM/Screenshots/` 或 `/sdcard/Pictures/Screenshots/`)*
-2. **檢視與分析**：使用 `view_file` 工具開啟該截圖檔案（例如最新生成的 `.png` 或 `/uploads/phone_screen_opt.webp`），向使用者進行多模態文字與畫面解析！
+2. **多模態檢視**：從返回的 JSON 中取得 `path`（例如 `/sdcard/Pictures/CrewPocket/latest_screen_photo.png`），**立即使用 `view_file` 工具開啟該檔案**，並向使用者提供詳細的螢幕文字與畫面含義分析！
 
-#### 📸 B. 分析「真實物理環境」（例如：使用者說「拍張照片」、「看我眼前」、「拍一下」）：
-1. **執行拍照**：呼叫小幫手相機端點：
+#### 📸 B. 分析「真實物理世界」（例如使用者說「拍張照片」、「看我眼前」、「拍一下」）：
+1. **呼叫相機 API**：
    ```bash
    curl -s -X POST http://127.0.0.1:8766/photo -H "Content-Type: application/json" -d '{"camera":"back"}'
    ```
-2. **檢視與分析**：照片儲存於 `/sdcard/Pictures/CrewPocket/IMG_YYYYMMDD_HHMMSS.jpg`（同時鏡像至 `latest_camera_photo.jpg`）。使用 `view_file` 工具檢視該照片，向使用者進行多模態視覺景物辨識與說明！
+2. **多模態檢視**：從返回的 JSON 中取得 `path`（例如 `/sdcard/Pictures/CrewPocket/latest_camera_photo.jpg`），**立即使用 `view_file` 工具開啟該檔案**，向使用者提供多模態景物/文字/環境分析！
 
 #### 🕹️ C. 系統控制與導航（使用者說「按首頁」、「返回」、「切換多工」）：
-- 首頁：`curl -s -X POST http://127.0.0.1:8766/key -H "Content-Type: application/json" -d '{"key":"HOME"}'`
-- 返回：`curl -s -X POST http://127.0.0.1:8766/key -H "Content-Type: application/json" -d '{"key":"BACK"}'`
-- 多工：`curl -s -X POST http://127.0.0.1:8766/key -H "Content-Type: application/json" -d '{"key":"RECENTS"}'`
+- 回首頁：`curl -s -X POST http://127.0.0.1:8766/key -H "Content-Type: application/json" -d '{"key":"HOME"}'`
+- 返回上一頁：`curl -s -X POST http://127.0.0.1:8766/key -H "Content-Type: application/json" -d '{"key":"BACK"}'`
+- 多工切換：`curl -s -X POST http://127.0.0.1:8766/key -H "Content-Type: application/json" -d '{"key":"RECENTS"}'`
 
 ## Crew Pocket 能力
 
