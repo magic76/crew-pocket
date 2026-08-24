@@ -188,6 +188,17 @@
           </div>
         </button>
 
+        <!-- 4.5. Browser Extension Export Picker -->
+        <button id="export-ext-btn" class="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-xs text-slate-200 hover:bg-slate-800/90 hover:text-cyan-300 transition text-left group" title="匯出 / 複製瀏覽器套件">
+          <div class="w-6 h-6 rounded-lg bg-cyan-500/20 border border-cyan-500/30 flex items-center justify-center text-cyan-400 group-hover:scale-105 transition shrink-0">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 4a2 2 0 114 0v1a1 1 0 001 1h3a1 1 0 011 1v3a1 1 0 01-1 1h-1a2 2 0 100 4h1a1 1 0 011 1v3a1 1 0 01-1 1h-3a1 1 0 01-1-1v-1a2 2 0 10-4 0v1a1 1 0 01-1 1H7a1 1 0 01-1-1v-3a1 1 0 00-1-1H4a2 2 0 110-4h1a1 1 0 001-1V7a1 1 0 011-1h3a1 1 0 001-1V4z"/></svg>
+          </div>
+          <div class="flex flex-col min-w-0">
+            <span class="font-semibold text-slate-100 group-hover:text-cyan-300">匯出瀏覽器套件</span>
+            <span class="text-[10px] text-slate-400">複製至指定目錄供 Lemur 安裝</span>
+          </div>
+        </button>
+
         <div class="border-t border-slate-800 my-1"></div>
 
         <!-- 5. Interface Language -->
@@ -451,8 +462,11 @@
         </div>
 
         <!-- Compact Footer Info -->
-        <div class="flex items-center justify-between text-[10px] text-slate-400 px-1 select-none">
-          <span>Enter 換行 · Ctrl+Enter 發送 · <code class="text-indigo-300">/</code> 快捷指令</span>
+        <div class="flex items-center justify-between gap-2 text-[10px] text-slate-400 px-1 select-none">
+          <div class="min-w-0 flex items-center gap-2">
+            <span class="truncate">Enter 換行 · Ctrl+Enter 發送 · <code class="text-indigo-300">/</code> 快捷指令</span>
+            <span id="btw-queue-status" class="hidden shrink-0 text-teal-300 font-mono"></span>
+          </div>
           <span class="text-indigo-400 font-mono">Crew Pocket 2.0</span>
         </div>
       </div>
@@ -814,6 +828,58 @@
     </div>
   </div>
 
+  <!-- 📦 EXPORT EXTENSION MODAL -->
+  <div id="export-ext-modal" class="fixed inset-0 bg-black/75 z-50 flex items-center justify-center p-4 opacity-0 pointer-events-none transition-opacity duration-300">
+    <div class="bg-slate-900 border border-cyan-500/40 rounded-3xl w-full max-w-sm p-4 sm:p-5 shadow-2xl space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div class="flex items-center gap-2">
+          <span class="text-xl">📦</span>
+          <div>
+            <h3 class="font-bold text-slate-100 text-sm">匯出 / 複製瀏覽器套件</h3>
+            <p class="text-[10px] text-slate-400">選定存放位置，方便在 Lemur 瀏覽器載入</p>
+          </div>
+        </div>
+        <button id="close-export-ext-btn" class="p-1 text-slate-400 hover:text-white rounded-lg">✕</button>
+      </div>
+
+      <!-- Quick Presets -->
+      <div class="space-y-2 text-xs">
+        <div class="text-slate-400 font-semibold text-[11px]">選擇目標目錄：</div>
+        
+        <label class="flex items-center gap-2.5 p-2.5 bg-slate-950 rounded-xl border border-slate-800 hover:border-cyan-500/60 cursor-pointer transition">
+          <input type="radio" name="ext-target-dest" value="/sdcard/crew-pocket-extension" checked class="accent-cyan-500">
+          <div>
+            <div class="font-semibold text-slate-200">📱 手機內部儲存最外層</div>
+            <div class="text-[10px] text-cyan-400 font-mono">/sdcard/crew-pocket-extension/</div>
+          </div>
+        </label>
+
+        <label class="flex items-center gap-2.5 p-2.5 bg-slate-950 rounded-xl border border-slate-800 hover:border-cyan-500/60 cursor-pointer transition">
+          <input type="radio" name="ext-target-dest" value="/sdcard/Download/crew-pocket-extension" class="accent-cyan-500">
+          <div>
+            <div class="font-semibold text-slate-200">📁 下載目錄 (Download)</div>
+            <div class="text-[10px] text-cyan-400 font-mono">/sdcard/Download/crew-pocket-extension/</div>
+          </div>
+        </label>
+
+        <label class="flex items-center gap-2.5 p-2.5 bg-slate-950 rounded-xl border border-slate-800 hover:border-cyan-500/60 cursor-pointer transition">
+          <input type="radio" name="ext-target-dest" value="/sdcard/Documents/crew-pocket-extension" class="accent-cyan-500">
+          <div>
+            <div class="font-semibold text-slate-200">📑 文件目錄 (Documents)</div>
+            <div class="text-[10px] text-cyan-400 font-mono">/sdcard/Documents/crew-pocket-extension/</div>
+          </div>
+        </label>
+      </div>
+
+      <!-- Action Button -->
+      <button id="do-export-ext-btn" class="w-full min-h-[44px] bg-cyan-600 hover:bg-cyan-500 active:scale-95 text-slate-950 font-bold text-xs rounded-xl shadow-lg shadow-cyan-900/30 transition flex items-center justify-center gap-2">
+        <span>🚀 立即複製 / 匯出套件檔案</span>
+      </button>
+
+      <div id="export-ext-status" class="hidden p-2.5 bg-emerald-950/90 border border-emerald-500/40 text-emerald-300 text-xs rounded-xl text-center"></div>
+    </div>
+  </div>
+
   <!-- IMAGE LIGHTBOX MODAL -->
   <div id="lightbox" class="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4 opacity-0 pointer-events-none transition-opacity duration-200">
     <button id="close-lightbox-btn" class="absolute top-4 right-4 p-2 text-white bg-slate-800/80 rounded-full">
@@ -828,8 +894,8 @@
   <script src="/js/i18n.js?v=3"></script>
   <script src="/js/ui.js?v=7.8"></script>
   <script src="/js/tools.js?v=7.8"></script>
-  <script src="/js/chat.js?v=7.8"></script>
+  <script src="/js/chat.js?v=7.9"></script>
   <script src="/js/live.js?v=7.9"></script>
-  <script src="/js/app.js?v=7.8"></script>
+  <script src="/js/app.js?v=7.9"></script>
 </body>
 </html>

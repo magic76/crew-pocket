@@ -1190,23 +1190,97 @@ function renderConversationItems(conversations, filterQuery = '') {
   });
 }
 
-// Toggle Send / Stop button appearance & state
-function setStreamingState(streaming) {
-  isStreaming = streaming;
+const BTW_QUEUE_LIMIT = 3;
+const queuedBtwMessages = [];
+
+function getPromptText() {
+  return (promptInput?.value || '')
+    .replace(/\[Context:[\s\S]*?(?:\](?:\n\n|\n|$)|$)/gi, '')
+    .trim();
+}
+
+function isBtwPrompt(text = getPromptText()) {
+  return /^\s*\/btw\b/i.test(text);
+}
+
+function updateBtwQueueStatus() {
+  const status = document.getElementById('btw-queue-status');
+  if (!status) return;
+  const count = queuedBtwMessages.length;
+  status.textContent = count ? `💬 /btw 已排隊 ${count} 則` : '';
+  status.classList.toggle('hidden', count === 0);
+}
+
+// While a main response is active, /btw remains a send action instead of
+// becoming the stop button. It is queued to preserve the active session's order.
+function updateSendButtonMode() {
   if (!sendBtn || !sendIcon || !stopIcon) return;
-  if (streaming) {
-    sendBtn.classList.remove('bg-indigo-600', 'hover:bg-indigo-500', 'active:bg-indigo-700', 'shadow-indigo-600/30');
+  sendBtn.classList.remove(
+    'bg-indigo-600', 'hover:bg-indigo-500', 'active:bg-indigo-700', 'shadow-indigo-600/30',
+    'bg-rose-600', 'hover:bg-rose-500', 'active:bg-rose-700', 'shadow-rose-600/30',
+    'bg-teal-600', 'hover:bg-teal-500', 'active:bg-teal-700', 'shadow-teal-600/30'
+  );
+
+  if (isStreaming && isBtwPrompt()) {
+    sendBtn.classList.add('bg-teal-600', 'hover:bg-teal-500', 'active:bg-teal-700', 'shadow-teal-600/30');
+    sendIcon.classList.remove('hidden');
+    stopIcon.classList.add('hidden');
+    sendBtn.title = '排隊送出 /btw';
+    sendBtn.setAttribute('aria-label', '排隊送出 /btw');
+  } else if (isStreaming) {
     sendBtn.classList.add('bg-rose-600', 'hover:bg-rose-500', 'active:bg-rose-700', 'shadow-rose-600/30');
     sendIcon.classList.add('hidden');
     stopIcon.classList.remove('hidden');
     sendBtn.title = '中斷生成';
+    sendBtn.setAttribute('aria-label', '中斷生成');
   } else {
-    sendBtn.classList.remove('bg-rose-600', 'hover:bg-rose-500', 'active:bg-rose-700', 'shadow-rose-600/30');
     sendBtn.classList.add('bg-indigo-600', 'hover:bg-indigo-500', 'active:bg-indigo-700', 'shadow-indigo-600/30');
     sendIcon.classList.remove('hidden');
     stopIcon.classList.add('hidden');
     sendBtn.title = '送出';
+    sendBtn.setAttribute('aria-label', '送出');
   }
+}
+
+function queueBtwMessage() {
+  const text = getPromptText();
+  if (!isBtwPrompt(text)) return false;
+
+  if (queuedBtwMessages.length >= BTW_QUEUE_LIMIT) {
+    alert(`最多可排隊 ${BTW_QUEUE_LIMIT} 則 /btw，請等待目前的支線問題送出。`);
+    return false;
+  }
+
+  queuedBtwMessages.push({ text, imagePath: uploadedImagePath });
+  promptInput.value = '';
+  promptInput.style.height = 'auto';
+  uploadedImagePath = null;
+  if (cameraInput) cameraInput.value = '';
+  if (typeof attachInput !== 'undefined' && attachInput) attachInput.value = '';
+  if (imagePreviewContainer) imagePreviewContainer.classList.add('hidden');
+  if (slashMenu) slashMenu.classList.add('hidden');
+  updateBtwQueueStatus();
+  updateSendButtonMode();
+  if (typeof window.haptic === 'function') window.haptic([20, 35, 20]);
+  return true;
+}
+
+function flushQueuedBtwMessage() {
+  if (isStreaming || queuedBtwMessages.length === 0) return;
+  const queuedMessage = queuedBtwMessages.shift();
+  updateBtwQueueStatus();
+  sendMessage(queuedMessage);
+}
+
+function clearQueuedBtwMessages() {
+  queuedBtwMessages.length = 0;
+  updateBtwQueueStatus();
+}
+
+// Toggle Send / Stop button appearance & state
+function setStreamingState(streaming) {
+  isStreaming = streaming;
+  updateSendButtonMode();
 }
 
 // Stop active generation
@@ -1230,11 +1304,9 @@ async function stopGeneration() {
 }
 
 // Send Message with Live Streaming, Tools Logging, and Abort Support
-async function sendMessage() {
-  const text = promptInput.value
-    .replace(/\[Context:[\s\S]*?(?:\](?:\n\n|\n|$)|$)/gi, '')
-    .trim();
-  const imgPath = uploadedImagePath;
+async function sendMessage(queuedMessage = null) {
+  const text = queuedMessage ? queuedMessage.text : getPromptText();
+  const imgPath = queuedMessage ? queuedMessage.imagePath : uploadedImagePath;
 
   if (!text && !imgPath) return;
   if (isStreaming) return;
@@ -1329,6 +1401,7 @@ async function sendMessage() {
     return;
   }
 
+  streamingStartedAt = Date.now();
   currentAbortController = new AbortController();
   setStreamingState(true);
 
@@ -1793,16 +1866,22 @@ async function sendMessage() {
     setStreamingState(false);
     currentAbortController = null;
     scrollToBottom();
+    setTimeout(flushQueuedBtwMessage, 0);
   }
 }
 
 function handleSendClick(e) {
+  if (e?.defaultPrevented) return;
   if (e) {
     if (e.cancelable) e.preventDefault();
     e.stopPropagation();
   }
 
   if (isStreaming) {
+    if (isBtwPrompt()) {
+      queueBtwMessage();
+      return;
+    }
     if (Date.now() - streamingStartedAt > 800) {
       if (navigator.vibrate) navigator.vibrate([40, 40, 40]);
       stopGeneration();

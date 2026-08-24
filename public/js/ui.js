@@ -113,6 +113,25 @@ const closePreviewPaneBtn = document.getElementById('close-preview-pane-btn');
 const filesBasePath = document.getElementById('files-base-path');
 const filesCountBadge = document.getElementById('files-count-badge');
 
+// 📦 Browser Extension Export Modal
+const exportExtBtn = document.getElementById('export-ext-btn');
+const exportExtModal = document.getElementById('export-ext-modal');
+const closeExportExtBtn = document.getElementById('close-export-ext-btn');
+const doExportExtBtn = document.getElementById('do-export-ext-btn');
+const exportExtStatus = document.getElementById('export-ext-status');
+
+function toggleExportExtModal(open) {
+  if (!exportExtModal) return;
+  if (typeof window.haptic === 'function') window.haptic('light');
+  if (open) {
+    if (exportExtStatus) exportExtStatus.classList.add('hidden');
+    exportExtModal.classList.remove('opacity-0', 'pointer-events-none');
+  } else {
+    exportExtModal.classList.add('opacity-0', 'pointer-events-none');
+  }
+}
+window.toggleExportExtModal = toggleExportExtModal;
+
 // 📳 Tactical Mobile Haptic Feedback (Web Vibration API)
 function haptic(type = 'light') {
   if (typeof navigator !== 'undefined' && navigator.vibrate) {

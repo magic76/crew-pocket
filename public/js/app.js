@@ -117,11 +117,58 @@ function initAppAndListeners() {
       }
     });
 
-    [newChatBtn, filesBtn, usageBtn, cheatSheetBtn, notifyBtn].forEach(btn => {
+    [newChatBtn, filesBtn, usageBtn, cheatSheetBtn, notifyBtn, exportExtBtn].forEach(btn => {
       if (btn) btn.addEventListener('click', () => {
         if (typeof window.haptic === 'function') window.haptic('light');
         toolsMenuDropdown.classList.add('hidden');
       });
+    });
+  }
+
+  // 📦 Browser Extension Export listeners
+  if (exportExtBtn) exportExtBtn.addEventListener('click', () => toggleExportExtModal(true));
+  if (closeExportExtBtn) closeExportExtBtn.addEventListener('click', () => toggleExportExtModal(false));
+  if (exportExtModal) exportExtModal.addEventListener('click', (e) => { if (e.target === exportExtModal) toggleExportExtModal(false); });
+
+  if (doExportExtBtn) {
+    doExportExtBtn.addEventListener('click', async () => {
+      if (typeof window.haptic === 'function') window.haptic('medium');
+      const selected = document.querySelector('input[name="ext-target-dest"]:checked');
+      const targetDir = selected ? selected.value : '/sdcard/crew-pocket-extension';
+      
+      const originalText = doExportExtBtn.innerHTML;
+      doExportExtBtn.disabled = true;
+      doExportExtBtn.innerHTML = '<span>⏳ 正在複製套件檔案...</span>';
+
+      try {
+        const res = await fetch('/api/export-extension', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ targetDir })
+        });
+        const data = await res.json();
+        
+        if (data.success) {
+          if (typeof window.haptic === 'function') window.haptic('success');
+          if (exportExtStatus) {
+            exportExtStatus.innerHTML = `✅ 成功匯出 ${data.filesCount} 個檔案至：<br><strong class="font-mono text-cyan-300">${data.targetDir}</strong><br><span class="text-[10px] text-slate-300">現在可以直接在 Lemur 選擇此目錄載入套件！</span>`;
+            exportExtStatus.classList.remove('hidden');
+          }
+        } else {
+          if (exportExtStatus) {
+            exportExtStatus.innerHTML = `❌ 匯出失敗: ${data.error}`;
+            exportExtStatus.classList.remove('hidden');
+          }
+        }
+      } catch (err) {
+        if (exportExtStatus) {
+          exportExtStatus.innerHTML = `❌ 連線錯誤: ${err.message}`;
+          exportExtStatus.classList.remove('hidden');
+        }
+      } finally {
+        doExportExtBtn.disabled = false;
+        doExportExtBtn.innerHTML = originalText;
+      }
     });
   }
 
@@ -261,6 +308,7 @@ function initAppAndListeners() {
     promptInput.addEventListener('input', () => {
       promptInput.style.height = 'auto';
       promptInput.style.height = Math.min(promptInput.scrollHeight, 120) + 'px';
+      if (typeof updateSendButtonMode === 'function') updateSendButtonMode();
       const val = promptInput.value.trim();
       if (val.startsWith('/') && !val.includes(' ')) {
         if (slashMenu) slashMenu.classList.remove('hidden');
@@ -275,7 +323,7 @@ function initAppAndListeners() {
       if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
         e.preventDefault();
         if (slashMenu) slashMenu.classList.add('hidden');
-        sendMessage();
+        handleSendClick(e);
       }
     });
   }
@@ -302,6 +350,7 @@ function initAppAndListeners() {
         promptInput.focus();
         promptInput.style.height = 'auto';
         promptInput.style.height = Math.min(promptInput.scrollHeight, 120) + 'px';
+        if (typeof updateSendButtonMode === 'function') updateSendButtonMode();
       }
       if (slashMenu) slashMenu.classList.add('hidden');
     });
@@ -355,6 +404,7 @@ function initAppAndListeners() {
         try { currentAbortController.abort(); } catch(e) {}
         currentAbortController = null;
       }
+      if (typeof clearQueuedBtwMessages === 'function') clearQueuedBtwMessages();
       currentConversationId = null;
       localStorage.removeItem(activeConversationStorageKey());
       revokeAllBlobUrls();
@@ -579,6 +629,29 @@ function initAppAndListeners() {
       updateEffortUI();
     }
   })();
+
+  // 🌐 Auto-Receive Messages from Browser Extension (Lemur Webpage)
+  setInterval(async () => {
+    try {
+      const res = await fetch('/api/inbound-message');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.messages && data.messages.length > 0) {
+          for (const msg of data.messages) {
+            const promptInput = document.getElementById('prompt-input');
+            if (promptInput) {
+              const formatted = `【來自網頁對話】${msg.text}\n📍 網址: ${msg.url}`;
+              promptInput.value = formatted;
+              promptInput.style.height = 'auto';
+              if (typeof window.sendMessage === 'function') {
+                window.sendMessage();
+              }
+            }
+          }
+        }
+      }
+    } catch (e) {}
+  }, 1200);
 }
 
 if (document.readyState === 'loading') {

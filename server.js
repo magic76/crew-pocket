@@ -25,6 +25,68 @@ const { handleUsage } = require('./lib/usage');
 const { handleListFiles, handleReadFile, handleSaveFile } = require('./lib/files');
 const { handleGenerateTitle, getCachedTitle } = require('./lib/title');
 
+// 🌐 Inbound Web Messages from Browser Extension
+const inboundWebMessages = [];
+
+async function handleInboundMessage(req, res) {
+  if (req.method === 'POST') {
+    try {
+      const body = await parseJsonBody(req);
+      if (body && body.text) {
+        inboundWebMessages.push(body);
+        if (inboundWebMessages.length > 50) inboundWebMessages.shift();
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true, count: inboundWebMessages.length }));
+    } catch (err) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: err.message }));
+    }
+  } else if (req.method === 'GET') {
+    const msgs = inboundWebMessages.splice(0, inboundWebMessages.length);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ messages: msgs }));
+  }
+}
+
+// 📦 Export / Copy Browser Extension to custom location
+async function handleExportExtension(req, res) {
+  try {
+    const { execSync } = require('node:child_process');
+    const body = await parseJsonBody(req);
+    const targetDir = body.targetDir || '/sdcard/crew-pocket-extension';
+    const sourceDir = path.join(process.env.HOME || '/data/data/com.termux/files/home', 'crew-pocket-extension');
+
+    await fsPromises.mkdir(targetDir, { recursive: true });
+
+    // Dynamic repack of latest files
+    const zipScript = `python3 -c "
+import zipfile, os
+files = ['manifest.json', 'background.js', 'content.js', 'popup.html', 'popup.js']
+src = '${sourceDir}'
+tgt = '${targetDir}'
+with zipfile.ZipFile(os.path.join(src, 'crew-pocket-bridge.zip'), 'w') as z:
+    for f in files:
+        z.write(os.path.join(src, f), arcname=f)
+with zipfile.ZipFile(os.path.join(tgt, 'crew-pocket-bridge.zip'), 'w') as z:
+    for f in files:
+        z.write(os.path.join(src, f), arcname=f)
+"`;
+    try { execSync(zipScript); } catch (e) {}
+
+    const files = await fsPromises.readdir(sourceDir);
+    for (const f of files) {
+      await fsPromises.copyFile(path.join(sourceDir, f), path.join(targetDir, f));
+    }
+
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: true, targetDir, filesCount: files.length }));
+  } catch (err) {
+    res.writeHead(500, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: false, error: err.message }));
+  }
+}
+
 // 🤖 List Available Models & Thinking Efforts
 async function handleGetModels(res) {
   const modelGroups = await Promise.all(listProviders().map(async provider => {
@@ -530,6 +592,10 @@ const server = http.createServer(async (req, res) => {
     return handleSaveFile(req, res);
   } else if (pathname === '/api/image' && req.method === 'GET') {
     return handleImageProxy(parsedUrl, res);
+  } else if (pathname === '/api/export-extension' && req.method === 'POST') {
+    return handleExportExtension(req, res);
+  } else if (pathname === '/api/inbound-message') {
+    return handleInboundMessage(req, res);
   } else {
     return handleStatic(pathname, res);
   }

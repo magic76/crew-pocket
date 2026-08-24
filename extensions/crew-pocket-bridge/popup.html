@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Crew Pocket Inspector</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      width: 330px;
+      padding: 12px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #090d16;
+      color: #e2e8f0;
+      font-size: 12px;
+      position: relative;
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid #1e293b;
+      padding-bottom: 8px;
+      margin-bottom: 10px;
+    }
+    .title {
+      font-size: 13px;
+      font-weight: bold;
+      color: #38bdf8;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #34d399;
+    }
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .badge {
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 9999px;
+      background: #022c22;
+      color: #34d399;
+      border: 1px solid #059669;
+      font-weight: bold;
+    }
+    .menu-trigger {
+      background: #1e293b;
+      border: 1px solid #334155;
+      color: #94a3b8;
+      width: 24px;
+      height: 24px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: bold;
+    }
+    .menu-trigger:active { background: #334155; color: white; }
+
+    /* Dropdown Drawer Menu */
+    .dropdown-menu {
+      display: none;
+      position: absolute;
+      top: 42px;
+      right: 12px;
+      width: 260px;
+      background: #0f172a;
+      border: 1px solid #38bdf8;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.8);
+      border-radius: 10px;
+      padding: 8px;
+      z-index: 100;
+    }
+    .dropdown-menu.open { display: block; }
+    .dropdown-title {
+      font-size: 10px;
+      color: #38bdf8;
+      font-weight: bold;
+      padding: 4px 6px;
+      border-bottom: 1px solid #1e293b;
+      margin-bottom: 4px;
+    }
+    .menu-item {
+      display: block;
+      width: 100%;
+      padding: 7px 8px;
+      background: transparent;
+      border: none;
+      border-radius: 6px;
+      color: #cbd5e1;
+      font-size: 11px;
+      text-align: left;
+      cursor: pointer;
+      transition: 0.15s;
+    }
+    .menu-item:hover, .menu-item:active {
+      background: #1e293b;
+      color: #38bdf8;
+    }
+
+    .tabs {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 4px;
+      background: #131b2e;
+      padding: 3px;
+      border-radius: 8px;
+      margin-bottom: 10px;
+    }
+    .tab-btn {
+      padding: 6px 2px;
+      border: none;
+      background: transparent;
+      color: #94a3b8;
+      font-size: 11px;
+      font-weight: bold;
+      border-radius: 6px;
+      cursor: pointer;
+      text-align: center;
+    }
+    .tab-btn.active {
+      background: #0284c7;
+      color: #ffffff;
+    }
+    .panel {
+      display: none;
+      background: #131b2e;
+      border: 1px solid #1e293b;
+      border-radius: 10px;
+      padding: 10px;
+      min-height: 160px;
+      max-height: 230px;
+      overflow-y: auto;
+    }
+    .panel.active { display: block; }
+    .item-box {
+      background: #090d16;
+      border: 1px solid #1e293b;
+      border-radius: 6px;
+      padding: 8px;
+      margin-bottom: 8px;
+    }
+    .item-label {
+      color: #38bdf8;
+      font-size: 10px;
+      font-weight: bold;
+      margin-bottom: 4px;
+    }
+    .item-content {
+      color: #cbd5e1;
+      font-size: 11px;
+      line-height: 1.4;
+      word-break: break-all;
+    }
+    .actions {
+      display: flex;
+      gap: 6px;
+      margin-top: 10px;
+    }
+    .action-btn {
+      flex: 1;
+      min-height: 36px;
+      border: none;
+      border-radius: 8px;
+      font-size: 11px;
+      font-weight: bold;
+      cursor: pointer;
+      transition: 0.15s;
+    }
+    .btn-refresh { background: #0284c7; color: white; }
+    .btn-highlight { background: #d97706; color: white; }
+    .action-btn:active { transform: scale(0.97); }
+    .tag {
+      display: inline-block;
+      padding: 3px 6px;
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 4px;
+      margin: 2px;
+      font-size: 10px;
+      color: #e2e8f0;
+    }
+    .toast {
+      display: none;
+      position: absolute;
+      bottom: 50px;
+      left: 12px;
+      right: 12px;
+      background: #022c22;
+      border: 1px solid #059669;
+      color: #34d399;
+      padding: 6px;
+      border-radius: 6px;
+      font-size: 10px;
+      text-align: center;
+      z-index: 200;
+    }
+  </style>
+</head>
+<body>
+  <!-- Header -->
+  <div class="header">
+    <div class="title">
+      <span class="dot"></span>
+      <span>Crew Pocket 透視</span>
+    </div>
+    <div class="header-right">
+      <span id="tabCountBadge" class="badge">READY</span>
+      <button id="menuBtn" class="menu-trigger" title="更多工具">⋮</button>
+    </div>
+  </div>
+
+  <!-- Top-Right Dropdown Menu -->
+  <div id="dropdownMenu" class="dropdown-menu">
+    <div class="dropdown-title">📦 引用與複製套件至其他位置</div>
+    <button id="copyRootPathBtn" class="menu-item">📋 複製內部儲存資料夾路徑</button>
+    <button id="copyZipPathBtn" class="menu-item">📦 複製 ZIP 壓縮包路徑</button>
+    <button id="copyDownloadPathBtn" class="menu-item">📁 複製 Download (下載) 路徑</button>
+    <button id="copyDocumentsPathBtn" class="menu-item">📑 複製 Documents (文件) 路徑</button>
+    <button id="copyTermuxCmdBtn" class="menu-item">⚡ 複製 Termux 啟動指令</button>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <button id="btnTabSeo" class="tab-btn active">🏷️ SEO 標籤</button>
+    <button id="btnTabSlides" class="tab-btn">🎠 輪播看板</button>
+    <button id="btnTabOptions" class="tab-btn">🔘 頁面選項</button>
+  </div>
+
+  <!-- Panel 1: SEO -->
+  <div id="panelSeo" class="panel active">
+    <div class="item-box">
+      <div class="item-label">📌 SEO 網頁標題 (Title)</div>
+      <div id="seoTitle" class="item-content text-amber-300">讀取中...</div>
+    </div>
+    <div class="item-box">
+      <div class="item-label">📝 Meta Description (搜尋摘要)</div>
+      <div id="seoDesc" class="item-content">讀取中...</div>
+    </div>
+    <div class="item-box">
+      <div class="item-label">🌐 Open Graph (社群分享標題)</div>
+      <div id="seoOg" class="item-content">讀取中...</div>
+    </div>
+  </div>
+
+  <!-- Panel 2: Slides / Banners -->
+  <div id="panelSlides" class="panel">
+    <div id="slidesContainer" class="item-content">
+      <div class="item-box">正在偵測輪播橫幅看板...</div>
+    </div>
+  </div>
+
+  <!-- Panel 3: Options / Buttons -->
+  <div id="panelOptions" class="panel">
+    <div class="item-label" style="margin-bottom:6px;">🔘 頁面主要按鈕與操作選項：</div>
+    <div id="optionsContainer" style="display: flex; flex-wrap: wrap;">
+      <span class="tag">讀取中...</span>
+    </div>
+  </div>
+
+  <!-- Actions -->
+  <div class="actions">
+    <button id="refreshBtn" class="action-btn btn-refresh">🔄 重新抓取資訊</button>
+    <button id="highlightBtn" class="action-btn btn-highlight">✨ 高亮網頁按鈕</button>
+  </div>
+
+  <div id="toast" class="toast">已複製到剪貼簿！</div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
