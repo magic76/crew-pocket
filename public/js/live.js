@@ -250,19 +250,21 @@
   }
 
   // ==========================================
-  // 🧬 Local Voiceprint Speaker Verification Engine (Option B)
+  // 🧬 3D-Speaker Deep Neural Voiceprint Engine (CAM++ 192-Dim Embeddings)
   // ==========================================
-  const VOICEPRINT_KEY = 'crew_voiceprint_vector';
+  const VOICEPRINT_KEY = 'crew_voiceprint_embedding_v2';
   let userVoiceprintProfile = null;
   let isCalibratingVoiceprint = false;
-  let voiceprintCalibrationFrames = [];
+  let voiceprintCalibrationSamples = [];
+  let voiceprintOnnxSession = null;
+  let melFbankExtractor = null;
 
   function loadUserVoiceprint() {
     try {
       const raw = localStorage.getItem(VOICEPRINT_KEY);
       if (raw) {
         const arr = JSON.parse(raw);
-        if (Array.isArray(arr) && arr.length === 16) {
+        if (Array.isArray(arr) && arr.length === 192) {
           userVoiceprintProfile = new Float32Array(arr);
         }
       }
@@ -280,42 +282,198 @@
     localStorage.removeItem(VOICEPRINT_KEY);
   }
 
-  // 🧬 16-Band Mel-like Spectral Profile Extractor (Fast Local Audio Analysis)
-  function extractSpectralProfile(float32Data, sampleRate = 16000) {
-    const N = float32Data.length;
-    const numBands = 16;
-    const bandEnergies = new Float32Array(numBands);
-    const minFreq = 100;
-    const maxFreq = 6500;
+  // 🧬 80-Channel Log Mel FilterBank Feature Extractor (Kaldi 16kHz compatible)
+  class MelFbankExtractor {
+    constructor(sampleRate = 16000, numMelBins = 80, frameLengthMs = 25, frameShiftMs = 10, nFft = 512) {
+      this.sampleRate = sampleRate;
+      this.numMelBins = numMelBins;
+      this.frameLength = Math.floor(sampleRate * frameLengthMs / 1000); // 400
+      this.frameShift = Math.floor(sampleRate * frameShiftMs / 1000);   // 160
+      this.nFft = nFft; // 512
+      this.numFftBins = Math.floor(nFft / 2) + 1; // 257
 
-    for (let b = 0; b < numBands; b++) {
-      const fStart = minFreq * Math.pow(maxFreq / minFreq, b / numBands);
-      const fEnd = minFreq * Math.pow(maxFreq / minFreq, (b + 1) / numBands);
-      const kStart = Math.max(1, Math.floor(fStart * N / sampleRate));
-      const kEnd = Math.min(Math.floor(N / 2), Math.ceil(fEnd * N / sampleRate));
-
-      let energy = 0;
-      const step = Math.max(1, Math.floor(N / 64));
-      for (let k = kStart; k <= kEnd; k++) {
-        let real = 0, imag = 0;
-        for (let n = 0; n < N; n += step) {
-          const angle = 2 * Math.PI * k * n / N;
-          const w = float32Data[n] * (0.54 - 0.46 * Math.cos(2 * Math.PI * n / (N - 1)));
-          real += w * Math.cos(angle);
-          imag -= w * Math.sin(angle);
-        }
-        energy += (real * real + imag * imag);
+      this.window = new Float32Array(this.frameLength);
+      for (let i = 0; i < this.frameLength; i++) {
+        this.window[i] = 0.54 - 0.46 * Math.cos(2 * Math.PI * i / (this.frameLength - 1));
       }
-      bandEnergies[b] = Math.log(1 + energy);
+
+      this.melFilters = this.createMelFilterbank(numMelBins, this.numFftBins, sampleRate, 20, 7600);
     }
 
-    let norm = 0;
-    for (let b = 0; b < numBands; b++) norm += bandEnergies[b] * bandEnergies[b];
-    norm = Math.sqrt(norm);
-    if (norm > 0) {
-      for (let b = 0; b < numBands; b++) bandEnergies[b] /= norm;
+    hzToMel(hz) {
+      return 2595.0 * Math.log10(1.0 + hz / 700.0);
     }
-    return bandEnergies;
+
+    melToHz(mel) {
+      return 700.0 * (Math.pow(10.0, mel / 2595.0) - 1.0);
+    }
+
+    createMelFilterbank(numBins, numFftBins, sampleRate, lowFreq = 20, highFreq = 7600) {
+      const lowMel = this.hzToMel(lowFreq);
+      const highMel = this.hzToMel(highFreq);
+      const melPoints = new Float32Array(numBins + 2);
+      for (let i = 0; i < numBins + 2; i++) {
+        melPoints[i] = lowMel + i * (highMel - lowMel) / (numBins + 1);
+      }
+      const binPoints = new Int32Array(numBins + 2);
+      for (let i = 0; i < numBins + 2; i++) {
+        const hz = this.melToHz(melPoints[i]);
+        binPoints[i] = Math.floor((this.nFft + 1) * hz / sampleRate);
+      }
+
+      const filters = [];
+      for (let m = 1; m <= numBins; m++) {
+        const filter = new Float32Array(numFftBins);
+        const left = binPoints[m - 1];
+        const center = binPoints[m];
+        const right = binPoints[m + 1];
+
+        for (let k = left; k < center && k < numFftBins; k++) {
+          filter[k] = (k - left) / (center - left);
+        }
+        for (let k = center; k <= right && k < numFftBins; k++) {
+          filter[k] = (right - k) / (right - center);
+        }
+        filters.push(filter);
+      }
+      return filters;
+    }
+
+    extractFbank(audioSamples) {
+      if (audioSamples.length < this.frameLength) return null;
+      const numFrames = Math.floor((audioSamples.length - this.frameLength) / this.frameShift) + 1;
+      if (numFrames <= 0) return null;
+
+      const fbank = new Float32Array(numFrames * this.numMelBins);
+
+      for (let f = 0; f < numFrames; f++) {
+        const start = f * this.frameShift;
+        const re = new Float32Array(this.nFft);
+        const im = new Float32Array(this.nFft);
+        let prev = start > 0 ? audioSamples[start - 1] : audioSamples[start];
+        for (let n = 0; n < this.frameLength; n++) {
+          const curr = audioSamples[start + n];
+          re[n] = (curr - 0.97 * prev) * this.window[n];
+          prev = curr;
+        }
+
+        this.fft(re, im);
+        const powerSpectrum = new Float32Array(this.numFftBins);
+        for (let k = 0; k < this.numFftBins; k++) {
+          powerSpectrum[k] = re[k] * re[k] + im[k] * im[k];
+        }
+
+        for (let m = 0; m < this.numMelBins; m++) {
+          const filter = this.melFilters[m];
+          let melEnergy = 0;
+          for (let k = 0; k < this.numFftBins; k++) {
+            melEnergy += powerSpectrum[k] * filter[k];
+          }
+          fbank[f * this.numMelBins + m] = Math.log(Math.max(1e-6, melEnergy));
+        }
+      }
+
+      // Global CMVN
+      for (let m = 0; m < this.numMelBins; m++) {
+        let sum = 0;
+        for (let f = 0; f < numFrames; f++) {
+          sum += fbank[f * this.numMelBins + m];
+        }
+        const mean = sum / numFrames;
+        for (let f = 0; f < numFrames; f++) {
+          fbank[f * this.numMelBins + m] -= mean;
+        }
+      }
+
+      return { data: fbank, numFrames, numMelBins: this.numMelBins };
+    }
+
+    fft(re, im) {
+      const n = 512;
+      let j = 0;
+      for (let i = 0; i < n - 1; i++) {
+        if (i < j) {
+          let tempRe = re[i]; re[i] = re[j]; re[j] = tempRe;
+          let tempIm = im[i]; im[i] = im[j]; im[j] = tempIm;
+        }
+        let k = n >> 1;
+        while (k <= j) {
+          j -= k;
+          k >>= 1;
+        }
+        j += k;
+      }
+      for (let len = 2; len <= n; len <<= 1) {
+        const halfLen = len >> 1;
+        const angle = -2 * Math.PI / len;
+        const wStepRe = Math.cos(angle);
+        const wStepIm = Math.sin(angle);
+        for (let i = 0; i < n; i += len) {
+          let wRe = 1.0;
+          let wIm = 0.0;
+          for (let k = 0; k < halfLen; k++) {
+            const uRe = re[i + k];
+            const uIm = im[i + k];
+            const vRe = re[i + k + halfLen] * wRe - im[i + k + halfLen] * wIm;
+            const vIm = re[i + k + halfLen] * wIm + im[i + k + halfLen] * wRe;
+            re[i + k] = uRe + vRe;
+            im[i + k] = uIm + vIm;
+            re[i + k + halfLen] = uRe - vRe;
+            im[i + k + halfLen] = uIm - vIm;
+            const nextWRe = wRe * wStepRe - wIm * wStepIm;
+            const nextWIm = wRe * wStepIm + wIm * wStepRe;
+            wRe = nextWRe;
+            wIm = nextWIm;
+          }
+        }
+      }
+    }
+  }
+
+  async function initVoiceprintEngine() {
+    if (voiceprintOnnxSession) return voiceprintOnnxSession;
+    try {
+      if (typeof ort === 'undefined') return null;
+      if (!melFbankExtractor) melFbankExtractor = new MelFbankExtractor(16000, 80, 25, 10, 512);
+      ort.env.wasm.wasmPaths = '/js/';
+      voiceprintOnnxSession = await ort.InferenceSession.create('/models/3dspeaker_campplus.onnx', {
+        executionProviders: ['wasm'],
+        graphOptimizationLevel: 'all'
+      });
+      console.log('✅ [Voiceprint ONNX] 3D-Speaker CAM++ Model Ready!');
+      return voiceprintOnnxSession;
+    } catch (err) {
+      console.warn('[Voiceprint ONNX] Failed to load 3D-Speaker model:', err);
+      return null;
+    }
+  }
+
+  async function computeSpeakerEmbedding(audioSamples) {
+    if (!voiceprintOnnxSession) {
+      await initVoiceprintEngine();
+    }
+    if (!voiceprintOnnxSession || !melFbankExtractor) return null;
+
+    const fbankResult = melFbankExtractor.extractFbank(audioSamples);
+    if (!fbankResult || fbankResult.numFrames < 15) return null;
+
+    try {
+      const inputTensor = new ort.Tensor('float32', fbankResult.data, [1, fbankResult.numFrames, fbankResult.numMelBins]);
+      const results = await voiceprintOnnxSession.run({ speech: inputTensor });
+      const outputTensor = results.embedding || results.output || results[Object.keys(results)[0]];
+      const embedding = new Float32Array(outputTensor.data);
+
+      let norm = 0;
+      for (let i = 0; i < embedding.length; i++) norm += embedding[i] * embedding[i];
+      norm = Math.sqrt(norm);
+      if (norm > 0) {
+        for (let i = 0; i < embedding.length; i++) embedding[i] /= norm;
+      }
+      return embedding;
+    } catch (e) {
+      console.warn('[Speaker Embedding Error]', e);
+      return null;
+    }
   }
 
   function computeVoiceprintSimilarity(v1, v2) {
@@ -329,7 +487,7 @@
 
   // 🎛️ Voice & Voiceprint Real-time Tuning Configuration
   const TUNING_CONFIG = {
-    SIMILARITY_THRESHOLD: parseFloat(localStorage.getItem('crew_live_similarity_threshold')) || 0.72,
+    SIMILARITY_THRESHOLD: parseFloat(localStorage.getItem('crew_live_similarity_threshold')) || 0.70,
     RMS_THRESHOLD: parseFloat(localStorage.getItem('crew_live_rms_threshold')) || 0.028,
     BARGEIN_FRAMES: parseInt(localStorage.getItem('crew_live_bargein_frames'), 10) || 3,
     GAIN_BOOST: parseFloat(localStorage.getItem('crew_live_gain_boost')) || 1.4,
@@ -340,7 +498,7 @@
       localStorage.setItem('crew_live_gain_boost', this.GAIN_BOOST);
     },
     reset() {
-      this.SIMILARITY_THRESHOLD = 0.72;
+      this.SIMILARITY_THRESHOLD = 0.70;
       this.RMS_THRESHOLD = 0.028;
       this.BARGEIN_FRAMES = 3;
       this.GAIN_BOOST = 1.4;
@@ -661,19 +819,20 @@
 
     const voiceprintBtn = card.querySelector('#live-card-voiceprint-btn');
     if (voiceprintBtn) {
-      voiceprintBtn.addEventListener('click', () => {
+      voiceprintBtn.addEventListener('click', async () => {
         if (isCalibratingVoiceprint) return;
         if (userVoiceprintProfile) {
-          const confirmed = confirm('🧬 目前已啟用你的專屬聲紋！\n\n點擊「確定」重新錄音校準，點擊「取消」保留現有聲紋。');
+          const confirmed = confirm('🧬 目前已啟用你的 3D-Speaker 專屬神經聲紋！\n\n點擊「確定」重新錄音校準，點擊「取消」保留現有聲紋。');
           if (!confirmed) return;
         }
+        await initVoiceprintEngine();
         isCalibratingVoiceprint = true;
-        voiceprintCalibrationFrames = [];
+        voiceprintCalibrationSamples = [];
         const vpText = document.getElementById('live-voiceprint-text');
         const vpDot = document.getElementById('live-voiceprint-dot');
         if (vpText) vpText.textContent = '🎙️ 採樣中...';
         if (vpDot) vpDot.className = 'w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping';
-        appendCardTranscript('system', '🧬 正在校準專屬聲紋：請對著麥克風念出「特勤隊，我是主講人」，採樣 2 秒中...');
+        appendCardTranscript('system', '🧬 正在校準 3D-Speaker 神經聲紋：請對著麥克風念出「特勤隊，我是主講人」，採樣 2.5 秒中...');
         if (navigator.vibrate) navigator.vibrate(30);
       });
     }
@@ -1701,8 +1860,10 @@
       };
 
       let bargeInSpeechCount = 0;
+      let recentSpeechRollingBuffer = [];
+      let lastEmbeddingCheckTime = 0;
 
-      // 5. Mic PCM Stream with Smart Voiceprint & Barge-In Interruption Detector
+      // 5. Mic PCM Stream with 3D-Speaker Neural Voiceprint & Barge-In Interruption Detector
       micProcessorNode.onaudioprocess = (e) => {
         if (!isConnected || isMuted || !ws || ws.readyState !== WebSocket.OPEN) return;
 
@@ -1717,36 +1878,48 @@
 
         const downsampled = downsampleBuffer(inputData, audioContext.sampleRate, 16000);
 
-        // 🧬 Voiceprint Calibration Mode
+        // 🧬 3D-Speaker Neural Calibration Mode (Collect ~2.5s active voice samples)
         if (isCalibratingVoiceprint) {
-          if (rms > 0.02) {
-            const frameProfile = extractSpectralProfile(downsampled, 16000);
-            voiceprintCalibrationFrames.push(frameProfile);
-            if (voiceprintCalibrationFrames.length >= 12) {
-              // Finish calibration! Average all spectral vectors
-              const avgProfile = new Float32Array(16);
-              for (const f of voiceprintCalibrationFrames) {
-                for (let b = 0; b < 16; b++) avgProfile[b] += f[b];
-              }
-              let norm = 0;
-              for (let b = 0; b < 16; b++) norm += avgProfile[b] * avgProfile[b];
-              norm = Math.sqrt(norm);
-              if (norm > 0) {
-                for (let b = 0; b < 16; b++) avgProfile[b] /= norm;
-              }
-              saveUserVoiceprint(avgProfile);
+          if (rms > 0.015) {
+            for (let i = 0; i < downsampled.length; i++) {
+              voiceprintCalibrationSamples.push(downsampled[i]);
+            }
+            if (voiceprintCalibrationSamples.length >= 36000) { // ~2.25s @ 16kHz
               isCalibratingVoiceprint = false;
-              voiceprintCalibrationFrames = [];
-              const vpText = document.getElementById('live-voiceprint-text');
-              const vpDot = document.getElementById('live-voiceprint-dot');
-              const vpBtn = document.getElementById('live-card-voiceprint-btn');
-              if (vpText) vpText.textContent = '🧬 聲紋已鎖';
-              if (vpDot) vpDot.className = 'w-1.5 h-1.5 rounded-full bg-teal-400';
-              if (vpBtn) vpBtn.className = 'px-2 py-0.5 rounded-full bg-slate-800/90 hover:bg-slate-700 active:scale-95 border border-teal-500/50 text-teal-300 text-[10px] font-medium flex items-center gap-1 transition shadow-sm';
-              if (navigator.vibrate) navigator.vibrate([30, 50, 30]);
-              appendCardTranscript('system', '✅ 專屬聲紋校準完成！AI 將只認你的聲音打斷，100% 免疫旁人干擾！');
+              const rawAudio = new Float32Array(voiceprintCalibrationSamples);
+              voiceprintCalibrationSamples = [];
+              computeSpeakerEmbedding(rawAudio).then(emb => {
+                if (emb && emb.length === 192) {
+                  saveUserVoiceprint(emb);
+                  const vpText = document.getElementById('live-voiceprint-text');
+                  const vpDot = document.getElementById('live-voiceprint-dot');
+                  const vpBtn = document.getElementById('live-card-voiceprint-btn');
+                  if (vpText) vpText.textContent = '🧬 聲紋已鎖';
+                  if (vpDot) vpDot.className = 'w-1.5 h-1.5 rounded-full bg-teal-400';
+                  if (vpBtn) vpBtn.className = 'px-2 py-0.5 rounded-full bg-slate-800/90 hover:bg-slate-700 active:scale-95 border border-teal-500/50 text-teal-300 text-[10px] font-medium flex items-center gap-1 transition shadow-sm';
+                  if (navigator.vibrate) navigator.vibrate([30, 50, 30]);
+                  appendCardTranscript('system', '✅ 3D-Speaker 192 維神經聲紋校準完成！已鎖定主講人生理聲帶共振特徵，100% 免疫旁人干擾！');
+                } else {
+                  appendCardTranscript('system', '⚠️ 聲紋採樣特徵不足，請再試一次。');
+                }
+              }).catch(err => {
+                console.warn('[Voiceprint Calibration Error]', err);
+                appendCardTranscript('system', '⚠️ 聲紋模型推論異常：' + err.message);
+              });
             }
           }
+        }
+
+        // Maintain Rolling Speech Buffer for Neural Verification
+        if (rms > 0.015) {
+          for (let i = 0; i < downsampled.length; i++) {
+            recentSpeechRollingBuffer.push(downsampled[i]);
+          }
+          if (recentSpeechRollingBuffer.length > 6400) { // Keep last 400ms
+            recentSpeechRollingBuffer = recentSpeechRollingBuffer.slice(recentSpeechRollingBuffer.length - 6400);
+          }
+        } else {
+          recentSpeechRollingBuffer = [];
         }
 
         // 🎛️ Update Live Visual Tuning Meters
@@ -1759,57 +1932,54 @@
 
           const simVal = document.getElementById('live-meter-sim-val');
           const simBar = document.getElementById('live-meter-sim-bar');
-          if (userVoiceprintProfile && rms > 0.012) {
-            const currentProfile = extractSpectralProfile(downsampled, 16000);
-            const curSim = computeVoiceprintSimilarity(currentProfile, userVoiceprintProfile);
-            if (simVal) {
-              const isMatch = curSim >= TUNING_CONFIG.SIMILARITY_THRESHOLD;
-              simVal.textContent = `${curSim.toFixed(2)} ${isMatch ? '✅' : '❌'}`;
-              simVal.className = isMatch ? 'text-teal-300 font-bold' : 'text-rose-300';
-            }
-            if (simBar) {
-              const pct = Math.min(100, Math.max(0, Math.round(((curSim - 0.5) / 0.5) * 100)));
-              simBar.style.width = `${pct}%`;
-              simBar.className = curSim >= TUNING_CONFIG.SIMILARITY_THRESHOLD ? 'bg-teal-400 h-full transition-all duration-75' : 'bg-rose-500 h-full transition-all duration-75';
-            }
+          if (userVoiceprintProfile && recentSpeechRollingBuffer.length >= 3200 && (Date.now() - lastEmbeddingCheckTime > 200)) {
+            lastEmbeddingCheckTime = Date.now();
+            computeSpeakerEmbedding(new Float32Array(recentSpeechRollingBuffer)).then(emb => {
+              if (emb) {
+                const curSim = computeVoiceprintSimilarity(emb, userVoiceprintProfile);
+                if (simVal) {
+                  const isMatch = curSim >= TUNING_CONFIG.SIMILARITY_THRESHOLD;
+                  simVal.textContent = `${curSim.toFixed(2)} ${isMatch ? '✅' : '❌'}`;
+                  simVal.className = isMatch ? 'text-teal-300 font-bold' : 'text-rose-300';
+                }
+                if (simBar) {
+                  const pct = Math.min(100, Math.max(0, Math.round(((curSim - 0.2) / 0.7) * 100)));
+                  simBar.style.width = `${pct}%`;
+                  simBar.className = curSim >= TUNING_CONFIG.SIMILARITY_THRESHOLD ? 'bg-teal-400 h-full transition-all duration-75' : 'bg-rose-500 h-full transition-all duration-75';
+                }
+              }
+            }).catch(() => {});
           }
         }
 
         const isAiSpeaking = isAiResponding || (audioPlayer && audioPlayer.activeSources.length > 0);
         const inAiCooldown = (Date.now() - lastAiSpokeTime) < 350;
 
-        // 🎙️ Smart Barge-In Interruption Detection (Voiceprint + Real-time Config)
+        // 🎙️ Smart Barge-In Interruption Detection (3D-Speaker Neural Voiceprint + Real-time Config)
         if (isAiSpeaking || inAiCooldown) {
           if (userVoiceprintProfile) {
-            // 🧬 Voiceprint Matching Mode
-            const profile = extractSpectralProfile(downsampled, 16000);
-            const similarity = computeVoiceprintSimilarity(profile, userVoiceprintProfile);
-
-            // Primary speaker voice matched threshold and has sufficient vocal energy
-            if (similarity >= TUNING_CONFIG.SIMILARITY_THRESHOLD && rms > TUNING_CONFIG.RMS_THRESHOLD) {
-              bargeInSpeechCount++;
-              if (bargeInSpeechCount >= TUNING_CONFIG.BARGEIN_FRAMES) {
-                // ⚡ Instant Verified Speaker Barge-In!
-                if (audioPlayer) audioPlayer.stopAll();
-                isAiResponding = false;
-                lastAiSpokeTime = 0;
-                bargeInSpeechCount = 0;
-                if (navigator.vibrate) navigator.vibrate(20);
-                updateDockControls();
-                updateCameraBadge(false, '待命中 (說話時自動發送)');
-                updateCardStatus('listening', '🎙️ 聲紋驗證通過 · 聆聽中');
-                // Fall through to send user speech below!
-              } else {
-                audioSendBuffer = [];
-                return;
-              }
-            } else {
-              // Bystanders / Ambient noise -> filtered out completely!
-              bargeInSpeechCount = Math.max(0, bargeInSpeechCount - 1);
-              audioSendBuffer = [];
-              sustainedSpeechCount = 0;
-              return;
+            // 🧬 3D-Speaker Neural Embedding Matching Mode
+            if (rms > TUNING_CONFIG.RMS_THRESHOLD && recentSpeechRollingBuffer.length >= 3200) {
+              computeSpeakerEmbedding(new Float32Array(recentSpeechRollingBuffer)).then(emb => {
+                if (emb) {
+                  const similarity = computeVoiceprintSimilarity(emb, userVoiceprintProfile);
+                  if (similarity >= TUNING_CONFIG.SIMILARITY_THRESHOLD) {
+                    // ⚡ Instant Verified True Speaker Barge-In!
+                    if (audioPlayer) audioPlayer.stopAll();
+                    isAiResponding = false;
+                    lastAiSpokeTime = 0;
+                    bargeInSpeechCount = 0;
+                    recentSpeechRollingBuffer = [];
+                    if (navigator.vibrate) navigator.vibrate(20);
+                    updateDockControls();
+                    updateCameraBadge(false, '待命中 (說話時自動發送)');
+                    updateCardStatus('listening', '🎙️ 3D-Speaker 聲紋驗證通過 · 聆聽中');
+                  }
+                }
+              }).catch(() => {});
             }
+            audioSendBuffer = [];
+            return;
           } else {
             // Fallback to near-field gate if not calibrated yet
             if (rms > (TUNING_CONFIG.RMS_THRESHOLD * 2.2)) {
