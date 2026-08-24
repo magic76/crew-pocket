@@ -1233,45 +1233,13 @@
   // 🎙️ Real-time Speech-to-Text (STT) Engine
   // ==========================================
   function startSpeechRecognition() {
-    if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) return;
-    try {
-      const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
-      speechRecognizer = new SpeechRec();
-      speechRecognizer.continuous = true;
-      speechRecognizer.interimResults = true;
-      speechRecognizer.lang = (typeof getCrewLocale === 'function' && getCrewLocale() === 'en') ? 'en-US' : 'zh-TW';
-
-      speechRecognizer.onresult = (event) => {
-        for (let i = event.resultIndex; i < event.results.length; ++i) {
-          const transcript = event.results[i][0].transcript;
-          if (event.results[i].isFinal) {
-            currentTurnUser = (currentTurnUser ? currentTurnUser + ' ' : '') + transcript;
-            appendCardTranscript('user', currentTurnUser);
-          }
-        }
-      };
-
-      speechRecognizer.onerror = (e) => {
-        console.warn('[STT Error]', e.error);
-      };
-
-      speechRecognizer.onend = () => {
-        if (isConnected && speechRecognizer) {
-          try { speechRecognizer.start(); } catch (e) {}
-        }
-      };
-
-      speechRecognizer.start();
-    } catch (e) {
-      console.warn('[STT Start Error]', e);
-    }
+    // Deliberately disabled: Android Web Speech repeatedly acquires audio
+    // focus and emits system chimes. Gemini Live already receives raw PCM.
+    speechRecognizer = null;
   }
 
   function stopSpeechRecognition() {
-    if (speechRecognizer) {
-      try { speechRecognizer.stop(); } catch (e) {}
-      speechRecognizer = null;
-    }
+    speechRecognizer = null;
   }
 
   // ==========================================
@@ -1556,7 +1524,7 @@
       }
     } else {
       if (cameraStream) {
-        cameraStream.getTracks().forEach(t => t.stop());
+        try { cameraStream.getTracks().forEach(t => t.stop()); } catch (e) {}
         cameraStream = null;
       }
       if (video) {
@@ -2580,7 +2548,7 @@
       isCameraOn = false;
 
       if (audioPlayer) {
-        audioPlayer.stopAll();
+        try { audioPlayer.stopAll(); } catch (e) {}
         audioPlayer = null;
       }
 
@@ -2597,7 +2565,7 @@
         micAudioSource = null;
       }
       if (micMediaStream) {
-        micMediaStream.getTracks().forEach(t => t.stop());
+        try { micMediaStream.getTracks().forEach(t => t.stop()); } catch (e) {}
         micMediaStream = null;
       }
       if (audioContext) {
@@ -2609,7 +2577,9 @@
         ws = null;
       }
 
-      if (typeof window.haptic === 'function') window.haptic('heavy');
+      if (typeof window.haptic === 'function') {
+        try { window.haptic('heavy'); } catch (e) {}
+      }
 
       // Reset Header Live Button
       if (liveVoiceBtn) {
@@ -2627,7 +2597,7 @@
       }
       if (standardInputBar) standardInputBar.classList.remove('hidden');
 
-      setMediaSessionActive(false);
+      try { setMediaSessionActive(false); } catch (e) {}
 
       // 🧹 1. Cleanly remove the in-call Live card from screen
       removeInlineCard();
@@ -2825,6 +2795,11 @@
   const dockCameraBtn = document.getElementById('live-dock-camera-btn');
   if (dockCameraBtn) {
     dockCameraBtn.addEventListener('click', toggleCamera);
+  }
+
+  const dockHangupBtn = document.getElementById('live-dock-hangup-btn');
+  if (dockHangupBtn) {
+    dockHangupBtn.addEventListener('click', endLiveSession);
   }
 
 })();
