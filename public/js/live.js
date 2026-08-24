@@ -2550,9 +2550,6 @@
 
     setMediaSessionActive(false);
 
-    // Remove active inline card cleanly
-    removeInlineCard();
-
     // Collect any remaining turn
     if (currentTurnUser || currentTurnModel) {
       sessionDialogueTurns.push({
@@ -2583,27 +2580,14 @@
     const memoId = `call-memo-${Date.now()}`;
     const initialSummary = [`已完成 ${durationText} 語音通話 (音色：${voiceName})`];
     
-    const memoData = {
-      duration_sec: durationSec,
-      voice_name: voiceName,
-      summary: initialSummary,
-      transcript: turnsToSave,
-      tools: toolsToSave,
-      snapshots: snapshotsToSave
-    };
-
-    console.log('[Live] endLiveSession saving memo:', memoData);
-
-    // 1. Direct Visual Rendering in Chat Timeline (Fail-safe Guaranteed Visibility)
-    if (typeof appendMessage === 'function') {
-      appendMessage('assistant', `<!-- CALL_MEMO_DATA:${JSON.stringify(memoData)} -->\n🎙️ **Gemini Live 通話紀錄** (${durationText} · ${voiceName})\n\n- ⏱️ **時長**：${durationText}\n- 🗣️ **音色**：${voiceName}\n- 📅 **時間**：${timeStr}\n\n✨ 通話已順利結束並記錄至上下文記憶。`, timeStr);
-    } else {
-      const summaryCard = buildCallSummaryCardHtml(turnsToSave, durationSec, voiceName, snapshotsToSave, memoId, initialSummary);
+    // 🌟 In-place Morph: Replace active live card directly with the finished Call Summary Card!
+    const summaryCard = buildCallSummaryCardHtml(turnsToSave, durationSec, voiceName, snapshotsToSave, memoId, initialSummary);
+    const existingInlineCard = document.getElementById('live-inline-card');
+    if (existingInlineCard && summaryCard) {
+      existingInlineCard.replaceWith(summaryCard);
+    } else if (summaryCard) {
       const targetContainer = document.getElementById('messages-container') || messagesContainer;
-      if (targetContainer && summaryCard) {
-        targetContainer.appendChild(summaryCard);
-        targetContainer.scrollTop = targetContainer.scrollHeight;
-      }
+      if (targetContainer) targetContainer.appendChild(summaryCard);
     }
 
     if (typeof scrollToBottom === 'function') scrollToBottom(true);
