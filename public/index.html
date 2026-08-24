@@ -903,10 +903,10 @@
           </div>
           <div>
             <div class="flex items-center gap-2">
-              <h3 class="font-bold text-slate-100 text-xs sm:text-sm">手機操控助理 (Phone Agent)</h3>
-              <span id="phone-conn-badge" class="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-amber-950/80 border border-amber-500/40 text-amber-400">檢測中...</span>
+              <h3 class="font-bold text-slate-100 text-xs sm:text-sm">手機隨身操控助理 (Phone Agent)</h3>
+              <span id="phone-conn-badge" class="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-950/80 border border-emerald-500/40 text-emerald-400">無障礙運行中</span>
             </div>
-            <p class="text-[10px] text-slate-400">無線 ADB 截圖、觸控點擊與跨 App 自動化</p>
+            <p class="text-[10px] text-slate-400">免 Wi-Fi · 4G/5G 離線全域懸浮球與跨 App 自動化</p>
           </div>
         </div>
         <button id="close-phone-agent-btn" class="p-1.5 text-slate-400 hover:text-white rounded-xl hover:bg-slate-800 transition">✕</button>
@@ -918,46 +918,21 @@
         <!-- Connection Box -->
         <div id="phone-connect-panel" class="p-3 bg-slate-950 rounded-2xl border border-slate-800 space-y-2.5">
           <div class="flex items-center justify-between">
-            <span class="font-semibold text-slate-200 text-[11px] flex items-center gap-1.5">
-              <span>📶 無線偵錯配對與連線</span>
+            <span class="font-semibold text-emerald-300 text-[11px] flex items-center gap-1.5">
+              <span>🟢 無障礙隨身小幫手 (常駐服務)</span>
             </span>
-            <button id="phone-refresh-status-btn" class="text-[10px] text-emerald-400 hover:underline">🔄 重新檢測</button>
+            <button id="phone-refresh-status-btn" class="text-[10px] text-emerald-400 hover:underline">🔄 刷新狀態</button>
           </div>
           
-          <div class="flex gap-2">
-            <input id="phone-port-input" type="number" placeholder="輸入無線偵錯 Port (例如 38455)" class="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-mono placeholder-slate-500 outline-none focus:border-emerald-500">
-            <button id="phone-connect-btn" class="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-slate-950 font-bold text-xs rounded-xl shadow-md transition">
-              連線
-            </button>
-          </div>
-
-          <!-- 🌟 Offline/4G Solution: Crew Pocket Accessibility Helper APK -->
           <div class="p-2.5 bg-gradient-to-r from-emerald-950/60 to-slate-900 rounded-xl border border-emerald-500/40 flex items-center justify-between gap-2">
             <div class="min-w-0">
-              <div class="font-bold text-emerald-300 text-[11px] flex items-center gap-1">
-                <span>🌟 離線 / 4G / 5G 免 Wi-Fi 方案</span>
-              </div>
-              <div class="text-[10px] text-slate-400">安裝極輕量無障礙小幫手 (17KB)，永久免除錯、免 Wi-Fi</div>
+              <div class="font-bold text-slate-200 text-[11px]">🤖 Crew 隨身小幫手 APK (21KB)</div>
+              <div class="text-[10px] text-slate-400">支援全域 🤖 懸浮球、即時截圖與點擊操控</div>
             </div>
             <a href="/uploads/CrewHelper.apk" download="CrewHelper.apk" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-slate-950 font-bold text-[11px] rounded-xl shadow-md transition shrink-0 flex items-center gap-1">
               <span>📥 下載 APK</span>
             </a>
           </div>
-
-          <!-- Pairing collapsible -->
-          <details class="text-[10px] text-slate-400 pt-1">
-            <summary class="cursor-pointer text-slate-300 font-semibold hover:text-emerald-300">📖 無線偵錯配對說明 (有 Wi-Fi 時可用)</summary>
-            <div class="mt-2 p-2.5 bg-slate-900/90 rounded-xl space-y-1.5 border border-slate-800 text-slate-300">
-              <p>1. 打開手機「設定」➔「開發人員選項」➔ 開啟<strong>「無線偵錯」</strong>。</p>
-              <p>2. 點擊「使用配對碼配對裝置」，記下畫面上的 <strong>IP 端口 (Port)</strong> 與 <strong>6 位數配對碼</strong>。</p>
-              <div class="flex gap-1.5 pt-1">
-                <input id="phone-pair-code-input" type="number" placeholder="6 位數配對碼" class="w-28 bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-white font-mono text-[10px]">
-                <button id="phone-pair-btn" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-emerald-300 font-bold rounded-lg text-[10px]">
-                  執行配對
-                </button>
-              </div>
-            </div>
-          </details>
         </div>
 
         <!-- Live Screen Canvas / Interactive Viewport -->
