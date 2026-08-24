@@ -988,6 +988,7 @@
     audioSendBuffer = [];
     sessionSnapshots = [];
     fullSessionAudioChunks = [];
+    let sessionExecutedTools = [];
     isMuted = false;
     isCameraOn = false;
     liveCallStartTs = Date.now();
@@ -1125,6 +1126,13 @@
       } catch (err) {
         toolResult = { success: false, error: err.message };
       }
+
+      sessionExecutedTools.push({
+        name,
+        args,
+        time: new Date().toLocaleTimeString('zh-TW', { hour12: false, hour: '2-digit', minute: '2-digit' }),
+        result: toolResult
+      });
 
       if (ws && isConnected && ws.readyState === WebSocket.OPEN) {
         const responsePayload = {
@@ -1434,13 +1442,13 @@
         const isAiSpeaking = isAiResponding || (audioPlayer && audioPlayer.activeSources.length > 0);
         const inAiCooldown = (Date.now() - lastAiSpokeTime) < 350;
 
-        // 🎙️ Smart Barge-In Interruption Detection
+        // 🎙️ Smart Near-Field Barge-In Interruption Detection (Scheme A: Near-Field Primary Speaker Only)
         if (isAiSpeaking || inAiCooldown) {
-          // Check if user is speaking with sufficient energy (> 0.032) sustained for >= 3 chunks (~180ms)
-          if (rms > 0.032) {
+          // Check if user is speaking directly near microphone (> 0.065) sustained for >= 5 chunks (~300ms)
+          if (rms > 0.065) {
             bargeInSpeechCount++;
-            if (bargeInSpeechCount >= 3) {
-              // ⚡ Trigger Instant Barge-In Interruption!
+            if (bargeInSpeechCount >= 5) {
+              // ⚡ Trigger Instant Barge-In Interruption for primary speaker!
               if (audioPlayer) audioPlayer.stopAll();
               isAiResponding = false;
               lastAiSpokeTime = 0;
@@ -1777,194 +1785,115 @@
       currentTurnModel = '';
     }
 
-    // 🔒 Silent Background Sync & Visual Summary Memo Card
-    const turnsToSync = sessionDialogueTurns.slice();
-    const snapshotsToSync = sessionSnapshots.slice();
-    const audioToTranscribe = fullSessionAudioChunks.slice();
+    // 🔒 Tool-centric Execution History & Action Summary (Option 2: 100% Tool-Driven Records)
+    const toolsToSync = sessionExecutedTools.slice();
+    sessionExecutedTools = [];
     sessionDialogueTurns = [];
     sessionSnapshots = [];
     fullSessionAudioChunks = [];
 
     const durationSec = liveCallStartTs > 0 ? Math.max(1, Math.round((Date.now() - liveCallStartTs) / 1000)) : 0;
     const voiceName = getSelectedVoice();
-    const memoId = `call-memo-${Date.now()}`;
     const timeStr = new Date().toLocaleTimeString('zh-TW', { hour12: false, hour: '2-digit', minute: '2-digit' });
     const mins = Math.floor(durationSec / 60);
     const secs = durationSec % 60;
     const durationText = mins > 0 ? `${mins} 分 ${secs} 秒` : `${secs} 秒`;
 
-    // 🚫 Ignore accidental taps: a call must last at least five seconds before
-    // we create a memo, transcribe audio, or sync anything into conversation history.
-    if (durationSec >= 5) {
-      const memoCard = buildCallSummaryCardHtml(turnsToSync, durationSec, voiceName, snapshotsToSync, memoId);
+    if (toolsToSync.length > 0) {
+      const toolCard = document.createElement('div');
+      toolCard.className = 'w-full max-w-2xl mx-auto my-3 p-4 rounded-2xl bg-gradient-to-br from-slate-900/90 via-slate-900/95 to-slate-950/90 border border-teal-500/30 text-slate-200 text-sm shadow-xl backdrop-blur-md animate-fadeIn select-text';
+
+      let actionsHtml = toolsToSync.map((t) => {
+        let icon = '⚡';
+        let label = t.name;
+        let detail = '';
+        if (t.name === 'write_file') {
+          icon = '📝';
+          label = `建立/寫入文件`;
+          detail = `<code class="text-xs bg-slate-800 text-teal-300 px-1.5 py-0.5 rounded font-mono">${escapeHtml(t.args?.path || '')}</code>`;
+        } else if (t.name === 'read_file') {
+          icon = '📖';
+          label = `讀取文件`;
+          detail = `<code class="text-xs bg-slate-800 text-teal-300 px-1.5 py-0.5 rounded font-mono">${escapeHtml(t.args?.path || '')}</code>`;
+        } else if (t.name === 'swipe_screen') {
+          icon = '👆';
+          label = `滑動螢幕 (${t.args?.direction || 'up'})`;
+        } else if (t.name === 'tap_screen') {
+          icon = '🎯';
+          label = `點擊螢幕 ${t.args?.label ? `[${t.args.label}]` : `(${Math.round(t.args?.x || 0)}, ${Math.round(t.args?.y || 0)})`}`;
+        } else if (t.name === 'press_key') {
+          icon = '🏠';
+          label = `按鍵動作 [${t.args?.key || 'HOME'}]`;
+        } else if (t.name === 'take_screenshot') {
+          icon = '📸';
+          label = `螢幕視覺分析截圖`;
+        }
+        return `
+          <div class="flex items-center gap-2.5 p-2 rounded-xl bg-slate-800/40 border border-slate-700/40 text-xs">
+            <span class="text-base">${icon}</span>
+            <span class="font-medium text-slate-200">${label}</span>
+            ${detail ? `<span class="ml-2">${detail}</span>` : ''}
+            <span class="text-[10px] text-slate-500 font-mono ml-auto">${t.time}</span>
+          </div>
+        `;
+      }).join('');
+
+      toolCard.innerHTML = `
+        <div class="flex items-center justify-between pb-2.5 border-b border-slate-700/50 mb-3">
+          <div class="flex items-center gap-2">
+            <div class="w-7 h-7 rounded-lg bg-teal-500/20 text-teal-400 flex items-center justify-center text-sm font-bold">🎙️</div>
+            <div>
+              <div class="font-bold text-slate-100 text-xs">Gemini Live 語音操作紀錄</div>
+              <div class="text-[10px] text-slate-400">通話時長：${durationText} · 音色：${voiceName}</div>
+            </div>
+          </div>
+          <span class="text-[10px] px-2 py-0.5 rounded-full bg-teal-950/80 border border-teal-500/30 text-teal-300 font-mono">${timeStr}</span>
+        </div>
+        <div class="space-y-1.5 mb-1">
+          ${actionsHtml}
+        </div>
+      `;
+
       if (messagesContainer) {
-        messagesContainer.appendChild(memoCard);
-        if (typeof enhanceCodeBlocks === 'function') enhanceCodeBlocks(memoCard);
+        messagesContainer.appendChild(toolCard);
         if (typeof scrollToBottom === 'function') scrollToBottom(true);
       }
 
+      // Sync tool action summary into server session history
       const activeConvId = (typeof currentConversationId !== 'undefined' && currentConversationId) ? currentConversationId : null;
-      const apiKey = getApiKey();
-
-      // Trigger AI Audio Transcription & Summarization in background using Flash
-      if (audioToTranscribe.length > 8000 && apiKey) {
-        const wavBlob = encodeWAV(audioToTranscribe, 16000);
-        generatePostCallSmartTranscript(wavBlob, apiKey, audioToTranscribe.length, durationSec).then(result => {
-          const highlightsEl = document.getElementById(`highlights-container-${memoId}`);
-          const transcriptEl = document.getElementById(`transcript-container-${memoId}`);
-
-          if (!result || !result.success) {
-            const errorMsg = result ? result.error : '未知伺服器異常';
-            if (highlightsEl) {
-              highlightsEl.innerHTML = `
-                <div class="p-3 rounded-xl bg-rose-950/40 border border-rose-500/50 text-rose-200 text-xs mb-2.5">
-                  <div class="font-bold text-rose-300 mb-1 flex items-center gap-1.5">
-                    <span>⚠️</span>
-                    <span>語音轉錄診斷報告 (步驟 3 異常)</span>
-                  </div>
-                  <div class="text-[11px] font-mono text-rose-200 bg-rose-950/80 p-2 rounded border border-rose-500/30 overflow-x-auto leading-relaxed mb-2">
-                    ${escapeHtml(errorMsg)}
-                  </div>
-                  <div class="text-[10px] text-slate-400 font-mono flex items-center justify-between">
-                    <span>📊 錄音樣本：${audioToTranscribe.length.toLocaleString()} 點 (${durationSec}秒)</span>
-                    <span>📦 WAV：${Math.round(wavBlob.size / 1024)} KB</span>
-                  </div>
-                </div>
-              `;
-            }
-            if (transcriptEl) {
-              transcriptEl.innerHTML = `<div class="text-slate-400 text-xs italic">通話音訊已暫存 (${durationText})，可檢視上方診斷報告</div>`;
-            }
-            return;
+      const toolLines = toolsToSync.map(t => `- ${t.name}: ${JSON.stringify(t.args)} (${t.time})`).join('\n');
+      fetch('/api/live-sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          conversation_id: activeConvId,
+          user_message: `🗣️ 語音操作指令 (通話時長：${durationText})`,
+          assistant_message: `✨ Gemini Live 執行了 ${toolsToSync.length} 項操作：\n${toolLines}`,
+          call_memo: {
+            duration_sec: durationSec,
+            voice_name: voiceName,
+            tools: toolsToSync
           }
+        })
+      }).then(res => res.json()).then(data => {
+        if (data.success && data.conversation_id && (typeof currentConversationId !== 'undefined' && !currentConversationId)) {
+          currentConversationId = data.conversation_id;
+          localStorage.setItem('agy_active_conv_id', data.conversation_id);
+        }
+      }).catch(() => {});
 
-          let newPlainText = `【Crew Pocket 語音通話備忘錄】\n時間：${timeStr} (時長：${durationText})\n音色：${voiceName}\n\n`;
-
-          if (result.summary && result.summary.length > 0 && highlightsEl) {
-            highlightsEl.innerHTML = `
-              <div class="p-3 rounded-xl bg-teal-950/40 border border-teal-500/40 mb-2.5">
-                <div class="flex items-center gap-1.5 text-xs font-bold text-teal-300 mb-1.5">
-                  <span>📌</span>
-                  <span>本次對話重點整理</span>
-                </div>
-                <ul class="space-y-1 text-xs text-slate-200 list-disc list-inside">
-                  ${result.summary.map(s => `<li>${escapeHtml(s)}</li>`).join('')}
-                </ul>
-              </div>
-            `;
-            newPlainText += `【重點摘要】\n` + result.summary.map(s => `• ${s}`).join('\n') + '\n\n';
-          }
-
-          if (result.transcript && result.transcript.length > 0 && transcriptEl) {
-            let newDialogHtml = '';
-            result.transcript.forEach((t, idx) => {
-              const isUser = t.speaker === 'user' || t.role === 'user';
-              const speakerName = isUser ? `🗣️ 您 (第 ${idx + 1} 輪)：` : '✨ Gemini：';
-              const bubbleClass = isUser 
-                ? 'bg-indigo-950/40 border-indigo-500/30 text-indigo-100' 
-                : 'bg-slate-900/90 border-teal-500/30 text-slate-100';
-              const titleColor = isUser ? 'text-indigo-300' : 'text-teal-300';
-              const formattedContent = (!isUser && typeof formatMessageContent === 'function') ? formatMessageContent(t.text) : escapeHtml(t.text);
-
-              newDialogHtml += `
-                <div class="p-2.5 rounded-xl border ${bubbleClass} text-xs mb-2">
-                  <div class="flex items-center gap-1.5 font-bold ${titleColor} mb-1">
-                    <span>${speakerName}</span>
-                  </div>
-                  <div class="leading-relaxed pl-1">${formattedContent}</div>
-                </div>
-              `;
-              newPlainText += `[${isUser ? '您' : 'Gemini'}]: ${t.text}\n`;
-            });
-            transcriptEl.innerHTML = newDialogHtml;
-
-            // Update copy button with enriched text
-            const cardElem = document.getElementById(memoId);
-            if (cardElem) {
-              const copyBtn = cardElem.querySelector('.copy-memo-btn');
-              if (copyBtn) {
-                copyBtn.onclick = () => {
-                  navigator.clipboard.writeText(newPlainText).then(() => {
-                    copyBtn.textContent = '✅ 已複製';
-                    setTimeout(() => { copyBtn.textContent = '📋 複製'; }, 1500);
-                  });
-                };
-              }
-            }
-
-            // Also update server Brain sync with the pristine transcript and rich Call Memo payload!
-            const userDialogue = result.transcript.filter(t => t.speaker === 'user' || t.role === 'user').map(t => t.text).join('\n');
-            const modelDialogue = result.transcript.filter(t => t.speaker !== 'user' && t.role !== 'user').map(t => t.text).join('\n\n');
-            fetch('/api/live-sync', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                conversation_id: activeConvId,
-                user_message: userDialogue || `🗣️ 語音通話 (時長：${durationSec}秒)`,
-                assistant_message: modelDialogue || `✨ Gemini Live 語音通話完畢`,
-                call_memo: {
-                  duration_sec: durationSec,
-                  voice_name: voiceName,
-                  summary: result.summary || [],
-                  transcript: result.transcript || [],
-                  snapshots: snapshotsToSync || []
-                }
-              })
-            }).then(res => res.json()).then(data => {
-              if (data.success && data.conversation_id && (typeof currentConversationId !== 'undefined' && !currentConversationId)) {
-                currentConversationId = data.conversation_id;
-                localStorage.setItem('agy_active_conv_id', data.conversation_id);
-              }
-            }).catch(() => {});
-          }
-        }).catch(err => {
-          console.warn('[Post-Call AI Memo Generation Failed]', err);
-          const highlightsEl = document.getElementById(`highlights-container-${memoId}`);
-          const transcriptEl = document.getElementById(`transcript-container-${memoId}`);
-          if (highlightsEl) {
-            highlightsEl.innerHTML = `
-              <div class="p-3 rounded-xl bg-rose-950/40 border border-rose-500/50 text-rose-200 text-xs mb-2.5">
-                <div class="font-bold text-rose-300 mb-1 flex items-center gap-1.5">
-                  <span>⚠️</span>
-                  <span>語音轉錄診斷報告 (網路或連線失敗)</span>
-                </div>
-                <div class="text-[11px] font-mono text-rose-200 bg-rose-950/80 p-2 rounded border border-rose-500/30 overflow-x-auto leading-relaxed mb-2">
-                  ${escapeHtml(err.message || '請求異常')}
-                </div>
-              </div>
-            `;
-          }
-          if (transcriptEl) {
-            transcriptEl.innerHTML = `<div class="text-slate-400 text-xs italic">通話音訊已記錄 (${durationText})</div>`;
-          }
-        });
-      } else {
-        const combinedUser = turnsToSync.map(t => t.user).filter(Boolean).join('\n') || `🗣️ 語音通話 (時長：${durationSec}秒)`;
-        const combinedModel = turnsToSync.map(t => t.model).filter(Boolean).join('\n\n') || `✨ Gemini Live 語音通話完畢 (${voiceName})`;
-
-        fetch('/api/live-sync', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            conversation_id: activeConvId,
-            user_message: combinedUser,
-            assistant_message: combinedModel,
-            call_memo: {
-              duration_sec: durationSec,
-              voice_name: voiceName,
-              summary: [],
-              transcript: turnsToSync,
-              snapshots: snapshotsToSync || []
-            }
-          })
-        }).then(res => res.json()).then(data => {
-          if (data.success && data.conversation_id && (typeof currentConversationId !== 'undefined' && !currentConversationId)) {
-            currentConversationId = data.conversation_id;
-            localStorage.setItem('agy_active_conv_id', data.conversation_id);
-          }
-        }).catch(err => {
-          console.warn('[Live Silent Sync Warning]', err);
-        });
+    } else if (durationSec >= 3) {
+      const badge = document.createElement('div');
+      badge.className = 'w-full my-2 flex justify-center animate-fadeIn';
+      badge.innerHTML = `
+        <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-800/60 border border-slate-700/50 text-slate-400 text-xs">
+          <span class="w-1.5 h-1.5 rounded-full bg-teal-500"></span>
+          <span>Gemini Live 通話結束 (${durationText})</span>
+        </div>
+      `;
+      if (messagesContainer) {
+        messagesContainer.appendChild(badge);
+        if (typeof scrollToBottom === 'function') scrollToBottom(true);
       }
     }
   }
