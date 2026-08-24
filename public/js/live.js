@@ -207,20 +207,56 @@
     }
   }
 
+  let bgSilentAudio = null;
+  let screenWakeLock = null;
+
   function setMediaSessionActive(active) {
-    if ('mediaSession' in navigator) {
-      try {
-        if (active) {
+    if (active) {
+      // 1. Silent Background Audio Loop (elevates Chrome process to Foreground Media Service)
+      if (!bgSilentAudio) {
+        bgSilentAudio = new Audio('data:audio/wav;base64,UklGRjIAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YRAAAAAAAAAAAAAAAAAA');
+        bgSilentAudio.loop = true;
+      }
+      bgSilentAudio.play().catch(e => console.warn('[BgAudio Play]', e));
+
+      // 2. MediaSession Lock
+      if ('mediaSession' in navigator) {
+        try {
           navigator.mediaSession.metadata = new MediaMetadata({
-            title: 'Gemini Live 雙向即時通話',
+            title: 'Gemini Live 隨身語音特勤',
             artist: 'Crew Pocket 口袋特勤隊',
-            album: '即時雙向語音'
+            album: '背景常駐通話中 (支援跨 App 操控)'
           });
           navigator.mediaSession.playbackState = 'playing';
-        } else {
+
+          navigator.mediaSession.setActionHandler('pause', () => {
+            endLiveSession();
+          });
+          navigator.mediaSession.setActionHandler('stop', () => {
+            endLiveSession();
+          });
+        } catch (e) {}
+      }
+
+      // 3. Screen WakeLock (prevent deep sleep during call)
+      if ('wakeLock' in navigator) {
+        navigator.wakeLock.request('screen').then(wl => {
+          screenWakeLock = wl;
+        }).catch(() => {});
+      }
+    } else {
+      if (bgSilentAudio) {
+        try { bgSilentAudio.pause(); } catch (e) {}
+      }
+      if ('mediaSession' in navigator) {
+        try {
           navigator.mediaSession.playbackState = 'none';
-        }
-      } catch (e) {}
+        } catch (e) {}
+      }
+      if (screenWakeLock) {
+        try { screenWakeLock.release(); } catch (e) {}
+        screenWakeLock = null;
+      }
     }
   }
 
