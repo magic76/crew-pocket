@@ -1079,12 +1079,10 @@
             const cleanBase64 = shotData.base64.replace(/^data:image\/\w+;base64,/, '');
             const imageMsg = {
               realtimeInput: {
-                mediaChunks: [
-                  {
-                    mimeType: "image/jpeg",
-                    data: cleanBase64
-                  }
-                ]
+                video: {
+                  mimeType: "image/jpeg",
+                  data: cleanBase64
+                }
               }
             };
             ws.send(JSON.stringify(imageMsg));
