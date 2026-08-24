@@ -1292,8 +1292,8 @@
               parts: [
                 {
                   text: (typeof getCrewLocale === 'function' && getCrewLocale() === 'en')
-                    ? "You are Crew Pocket, an expert AI handheld companion. You can directly control the user's phone (swipe_screen, tap_screen, press_key, take_screenshot) and write/read documents in the Termux workspace (write_file, read_file). When the user asks you to take notes, write down a plan, save a document, or operate the screen, immediately invoke the corresponding tool while speaking naturally and warmly."
-                    : "You are Crew Pocket (口袋特勤隊), an expert AI handheld companion. 你擁有直接操控手機（swipe_screen、tap_screen、press_key、take_screenshot）以及在 Termux 工作區讀寫文件（write_file、read_file）的工具。當使用者請你記錄想法、撰寫文件、記待辦事項或操作手機時，請立即調用 write_file 等工具完成存檔，並以繁體中文親切自然地口頭回應。"
+                    ? "You are Crew Pocket, an expert AI handheld companion. You can directly control the user's phone (swipe_screen, tap_screen, press_key, take_screenshot) and write/read structured documents in the Termux workspace (write_file, read_file). When the user asks you to take notes, write down a plan, summarize dialogue, log issues, or operate the screen, immediately invoke write_file or the corresponding tool, and speak concisely and warmly in Traditional Chinese."
+                    : "You are Crew Pocket (口袋特勤隊), an expert AI handheld companion. 你擁有直接操控手機（swipe_screen、tap_screen、press_key、take_screenshot）以及在 Termux 工作區讀寫結構化文件（write_file、read_file）的工具。當使用者請你記錄想法、摘要對話、記待辦事項、記錄問題或操作手機時，請主動調用 write_file 工具儲存結構化 Markdown 檔案（如 'scratch/note.md' 或 'logs/issue.md'），並以繁體中文簡潔自然地口頭回應。"
                 }
               ]
             }
@@ -1416,19 +1416,11 @@
         }
       };
 
-      // 5. Mic PCM Stream (Option A: 100% Pure Turn Lock & Half-Duplex Cutoff)
+      let bargeInSpeechCount = 0;
+
+      // 5. Mic PCM Stream with Smart Barge-In Interruption Detector
       micProcessorNode.onaudioprocess = (e) => {
         if (!isConnected || isMuted || !ws || ws.readyState !== WebSocket.OPEN) return;
-
-        const isAiSpeaking = isAiResponding || (audioPlayer && audioPlayer.activeSources.length > 0);
-        const inAiCooldown = (Date.now() - lastAiSpokeTime) < 500;
-
-        // 🛡️ Option A Turn-Lock: While AI is speaking or in 500ms room echo cooldown, ZERO mic data is sent to Google
-        if (isAiSpeaking || inAiCooldown) {
-          audioSendBuffer = [];
-          sustainedSpeechCount = 0;
-          return;
-        }
 
         const inputData = e.inputBuffer.getChannelData(0);
 
@@ -1438,6 +1430,40 @@
           sumSquares += inputData[i] * inputData[i];
         }
         const rms = Math.sqrt(sumSquares / inputData.length);
+
+        const isAiSpeaking = isAiResponding || (audioPlayer && audioPlayer.activeSources.length > 0);
+        const inAiCooldown = (Date.now() - lastAiSpokeTime) < 350;
+
+        // 🎙️ Smart Barge-In Interruption Detection
+        if (isAiSpeaking || inAiCooldown) {
+          // Check if user is speaking with sufficient energy (> 0.032) sustained for >= 3 chunks (~180ms)
+          if (rms > 0.032) {
+            bargeInSpeechCount++;
+            if (bargeInSpeechCount >= 3) {
+              // ⚡ Trigger Instant Barge-In Interruption!
+              if (audioPlayer) audioPlayer.stopAll();
+              isAiResponding = false;
+              lastAiSpokeTime = 0;
+              bargeInSpeechCount = 0;
+              if (navigator.vibrate) navigator.vibrate(20);
+              updateDockControls();
+              updateCameraBadge(false, '待命中 (說話時自動發送)');
+              updateCardStatus('listening', '🎙️ 已插話打斷 · 聆聽中');
+              // Fall through to send user speech below!
+            } else {
+              // Still accumulating energy frames, don't send yet
+              audioSendBuffer = [];
+              return;
+            }
+          } else {
+            bargeInSpeechCount = Math.max(0, bargeInSpeechCount - 1);
+            audioSendBuffer = [];
+            sustainedSpeechCount = 0;
+            return;
+          }
+        } else {
+          bargeInSpeechCount = 0;
+        }
 
         // Active user speech tracking
         if (rms > 0.015) {
