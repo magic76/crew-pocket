@@ -640,8 +640,8 @@ function initAppAndListeners() {
           for (const msg of data.messages) {
             const promptInput = document.getElementById('prompt-input');
             if (promptInput) {
-              const prefix = msg.source === 'FloatingBubble' ? '【來自隨身懸浮球指令】' : '【來自網頁對話】';
-              const sourceInfo = msg.url ? `\n📍 網址: ${msg.url}` : '';
+              const prefix = msg.source === 'FloatingBubble' ? '[Bubble] ' : '[Web] ';
+              const sourceInfo = msg.url ? `\nURL: ${msg.url}` : '';
               promptInput.value = `${prefix}${msg.text}${sourceInfo}`;
               promptInput.style.height = 'auto';
               if (typeof window.sendMessage === 'function') {
