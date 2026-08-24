@@ -30,9 +30,10 @@ function connectBridge() {
         if (!tabs || tabs.length === 0) {
           tabs = await chrome.tabs.query({});
         }
-        const tab = tabs && tabs.length > 0 ? tabs[0] : null;
+        // Find valid active web tab
+        const tab = tabs ? (tabs.find(t => t.url && /^https?:\/\//.test(t.url) && !t.url.includes('chrome://')) || tabs[0]) : null;
         if (!tab || !tab.id) {
-          ws.send(JSON.stringify({ responseTo: cmd.id, status: 'ERROR', message: 'No accessible tab found' }));
+          ws.send(JSON.stringify({ responseTo: cmd.id, status: 'ERROR', message: 'No accessible web tab found' }));
           return;
         }
 
