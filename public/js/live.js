@@ -2297,13 +2297,14 @@
               }
 
               // Run embedding check on latest audio burst
-              if (recentSpeechRollingBuffer.length >= 2400 && (Date.now() - lastEmbeddingCheckTime > 120)) {
+              if (recentSpeechRollingBuffer.length >= 2400 && (Date.now() - lastEmbeddingCheckTime > 100)) {
                 lastEmbeddingCheckTime = Date.now();
                 computeSpeakerEmbedding(new Float32Array(recentSpeechRollingBuffer)).then(emb => {
                   if (emb) {
                     const similarity = computeVoiceprintSimilarity(emb, userVoiceprintProfile);
                     if (similarity >= TUNING_CONFIG.SIMILARITY_THRESHOLD) {
                       isUtteranceVerified = true;
+                      lastSpeechActiveTime = Date.now();
                       // Verified! Flush preSendSpeechBuffer to audioSendBuffer so no syllable is lost
                       for (let i = 0; i < preSendSpeechBuffer.length; i++) {
                         audioSendBuffer.push(preSendSpeechBuffer[i]);
@@ -2313,25 +2314,27 @@
                   }
                 }).catch(() => {});
               }
-              // Not verified yet (e.g. bystander / ambient noise) -> DO NOT SEND TO GEMINI!
-              return;
+              // Not verified yet (e.g. bystander / ambient noise) -> hold in pre-buffer, do not stream to Gemini!
             } else {
-              // Already verified in this sentence burst -> stream directly!
+              // Already verified in this sentence -> stream directly!
               for (let i = 0; i < downsampled.length; i++) {
                 audioSendBuffer.push(downsampled[i]);
               }
             }
           } else {
-            // Silence / gap between sentences
-            if (Date.now() - lastSpeechActiveTime > 500) {
-              isUtteranceVerified = false;
-              preSendSpeechBuffer = [];
-            }
-            if (!isUtteranceVerified) {
-              return; // Discard background silence
-            }
-            for (let i = 0; i < downsampled.length; i++) {
-              audioSendBuffer.push(downsampled[i]);
+            // Low energy / pause / end of sentence
+            if (isUtteranceVerified) {
+              const silenceElapsed = Date.now() - lastSpeechActiveTime;
+              if (silenceElapsed < 800) {
+                // Stream natural silence tail so Gemini's server-side VAD detects sentence end and responds!
+                for (let i = 0; i < downsampled.length; i++) {
+                  audioSendBuffer.push(downsampled[i]);
+                }
+              } else {
+                // Turn complete, reset state for next speech burst
+                isUtteranceVerified = false;
+                preSendSpeechBuffer = [];
+              }
             }
           }
         } else {
