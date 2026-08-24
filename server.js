@@ -59,18 +59,16 @@ async function handleExportExtension(req, res) {
 
     await fsPromises.mkdir(targetDir, { recursive: true });
 
-    // Dynamic repack of latest files
+    // Dynamic repack of all latest files and icons
     const zipScript = `python3 -c "
 import zipfile, os
-files = ['manifest.json', 'background.js', 'content.js', 'popup.html', 'popup.js']
 src = '${sourceDir}'
 tgt = '${targetDir}'
-with zipfile.ZipFile(os.path.join(src, 'crew-pocket-bridge.zip'), 'w') as z:
-    for f in files:
-        z.write(os.path.join(src, f), arcname=f)
-with zipfile.ZipFile(os.path.join(tgt, 'crew-pocket-bridge.zip'), 'w') as z:
-    for f in files:
-        z.write(os.path.join(src, f), arcname=f)
+files = [f for f in os.listdir(src) if not f.endswith('.zip') and not f.endswith('.log') and os.path.isfile(os.path.join(src, f))]
+for d in [src, tgt]:
+    with zipfile.ZipFile(os.path.join(d, 'crew-pocket-bridge.zip'), 'w') as z:
+        for f in files:
+            z.write(os.path.join(src, f), arcname=f)
 "`;
     try { execSync(zipScript); } catch (e) {}
 
