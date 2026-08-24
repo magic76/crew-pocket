@@ -1085,16 +1085,17 @@
       }
 
       if (ws && isConnected && ws.readyState === WebSocket.OPEN) {
+        const responsePayload = {
+          response: { output: toolResult },
+          id: call.id || callId,
+          name: name
+        };
         const toolResponseMsg = {
           toolResponse: {
-            functionResponses: [
-              {
-                response: { output: toolResult },
-                id: callId
-              }
-            ]
+            functionResponses: [responsePayload]
           }
         };
+        console.log('[Gemini Live Tool Response Sent]', toolResponseMsg);
         ws.send(JSON.stringify(toolResponseMsg));
       }
     }
@@ -1318,6 +1319,11 @@
                 const float32 = base64ToFloat32PCM(inlineData.data);
                 audioPlayer.playChunk(float32, 24000);
                 hasAudioChunk = true;
+              }
+              const fc = part.functionCall || part.function_call;
+              if (fc) {
+                console.log('[Gemini Live Part FunctionCall]', fc);
+                handleLiveToolCall(fc);
               }
               if (part.text) {
                 currentTurnModel = (currentTurnModel && currentTurnModel !== '🎙️ (AI 即時語音回覆)') ? (currentTurnModel + part.text) : part.text;
