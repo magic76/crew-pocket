@@ -1429,6 +1429,7 @@ async function sendMessage(queuedMessage = null) {
       return;
     }
 
+    const targetConvId = currentConversationId;
     const focusText = text.replace(/^\/compact\s*/i, '').trim();
     appendMessage('user', text, undefined, [], '', false);
 
@@ -1454,28 +1455,36 @@ async function sendMessage(queuedMessage = null) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          conversation_id: currentConversationId,
+          conversation_id: targetConvId,
           focus: focusText,
           provider: currentProvider,
           locale: typeof getCrewLocale === 'function' ? getCrewLocale() : 'zh-TW'
         })
       });
       const data = await res.json();
-      compactingMsgDiv.remove();
+      if (compactingMsgDiv.parentNode) compactingMsgDiv.remove();
 
-      if (data.success && data.summary) {
-        // 🌟 Visual Persistence: Do not wipe screen! Append glowing checkpoint divider
-        const divider = buildCheckpointDividerHtml(data.summary, new Date().toISOString());
-        messagesContainer.appendChild(divider);
-        if (typeof enhanceCodeBlocks === 'function') enhanceCodeBlocks(divider);
-        if (navigator.vibrate) navigator.vibrate([30, 50, 30]);
-        scrollToBottom(true);
+      // 🛡️ Cross-Session Guard: Only update active DOM if user is STILL in the same conversation!
+      if (currentConversationId === targetConvId) {
+        if (data.success && data.summary) {
+          // 🌟 Visual Persistence: Do not wipe screen! Append glowing checkpoint divider
+          const divider = buildCheckpointDividerHtml(data.summary, new Date().toISOString());
+          messagesContainer.appendChild(divider);
+          if (typeof enhanceCodeBlocks === 'function') enhanceCodeBlocks(divider);
+          if (navigator.vibrate) navigator.vibrate([30, 50, 30]);
+          scrollToBottom(true);
+        } else {
+          appendMessage('assistant', `⚠️ 壓縮失敗：${data.error || '未知錯誤'}`);
+        }
       } else {
-        appendMessage('assistant', `⚠️ 壓縮失敗：${data.error || '未知錯誤'}`);
+        console.log(`[Compact] Completed background compaction for conversation ${targetConvId}`);
+        if (navigator.vibrate) navigator.vibrate([30, 50, 30]);
       }
     } catch (e) {
-      compactingMsgDiv.remove();
-      appendMessage('assistant', `⚠️ 壓縮請求失敗：${e.message}`);
+      if (compactingMsgDiv.parentNode) compactingMsgDiv.remove();
+      if (currentConversationId === targetConvId) {
+        appendMessage('assistant', `⚠️ 壓縮請求失敗：${e.message}`);
+      }
     }
     return;
   }
