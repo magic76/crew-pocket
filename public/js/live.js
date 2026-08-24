@@ -2592,8 +2592,11 @@
       snapshots: snapshotsToSave
     };
 
+    console.log('[Live] endLiveSession saving memo:', memoData);
+
+    // 1. Direct Visual Rendering in Chat Timeline (Fail-safe Guaranteed Visibility)
     if (typeof appendMessage === 'function') {
-      appendMessage('assistant', `<!-- CALL_MEMO_DATA:${JSON.stringify(memoData)} -->\n✨ Gemini Live 語音通話紀錄`, timeStr);
+      appendMessage('assistant', `<!-- CALL_MEMO_DATA:${JSON.stringify(memoData)} -->\n🎙️ **Gemini Live 通話紀錄** (${durationText} · ${voiceName})\n\n- ⏱️ **時長**：${durationText}\n- 🗣️ **音色**：${voiceName}\n- 📅 **時間**：${timeStr}\n\n✨ 通話已順利結束並記錄至上下文記憶。`, timeStr);
     } else {
       const summaryCard = buildCallSummaryCardHtml(turnsToSave, durationSec, voiceName, snapshotsToSave, memoId, initialSummary);
       const targetContainer = document.getElementById('messages-container') || messagesContainer;
@@ -2602,7 +2605,11 @@
         targetContainer.scrollTop = targetContainer.scrollHeight;
       }
     }
+
     if (typeof scrollToBottom === 'function') scrollToBottom(true);
+    setTimeout(() => {
+      if (typeof scrollToBottom === 'function') scrollToBottom(true);
+    }, 150);
 
     const activeConvId = (typeof currentConversationId !== 'undefined' && currentConversationId) ? currentConversationId : null;
     const initialUserText = turnsToSave.map(t => t.user || '').filter(Boolean).join('；') || `🗣️ 雙向語音對話 (${durationText})`;
