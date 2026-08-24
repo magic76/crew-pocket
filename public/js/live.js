@@ -433,9 +433,14 @@
   async function initVoiceprintEngine() {
     if (voiceprintOnnxSession) return voiceprintOnnxSession;
     try {
-      if (typeof ort === 'undefined') return null;
+      if (typeof ort === 'undefined') {
+        console.warn('[Voiceprint ONNX] ort library not found in window');
+        return null;
+      }
       if (!melFbankExtractor) melFbankExtractor = new MelFbankExtractor(16000, 80, 25, 10, 512);
-      ort.env.wasm.wasmPaths = '/js/';
+      ort.env.wasm.wasmPaths = window.location.origin + '/js/';
+      ort.env.wasm.numThreads = 1;
+      ort.env.wasm.simd = true;
       voiceprintOnnxSession = await ort.InferenceSession.create('/models/3dspeaker_campplus.onnx', {
         executionProviders: ['wasm'],
         graphOptimizationLevel: 'all'
@@ -1878,32 +1883,41 @@
 
         const downsampled = downsampleBuffer(inputData, audioContext.sampleRate, 16000);
 
-        // 🧬 3D-Speaker Neural Calibration Mode (Collect ~2.5s active voice samples)
+        // 🧬 3D-Speaker Neural Calibration Mode (Collect ~1.75s active voice samples)
         if (isCalibratingVoiceprint) {
-          if (rms > 0.015) {
+          if (rms > 0.012) {
             for (let i = 0; i < downsampled.length; i++) {
               voiceprintCalibrationSamples.push(downsampled[i]);
             }
-            if (voiceprintCalibrationSamples.length >= 36000) { // ~2.25s @ 16kHz
+            const vpText = document.getElementById('live-voiceprint-text');
+            const pct = Math.min(100, Math.round((voiceprintCalibrationSamples.length / 28000) * 100));
+            if (vpText) vpText.textContent = `🎙️ 採樣 ${pct}%`;
+
+            if (voiceprintCalibrationSamples.length >= 28000) { // ~1.75s @ 16kHz
               isCalibratingVoiceprint = false;
+              if (vpText) vpText.textContent = '🧬 計算特徵中...';
               const rawAudio = new Float32Array(voiceprintCalibrationSamples);
               voiceprintCalibrationSamples = [];
               computeSpeakerEmbedding(rawAudio).then(emb => {
                 if (emb && emb.length === 192) {
                   saveUserVoiceprint(emb);
-                  const vpText = document.getElementById('live-voiceprint-text');
+                  const vpTextEl = document.getElementById('live-voiceprint-text');
                   const vpDot = document.getElementById('live-voiceprint-dot');
                   const vpBtn = document.getElementById('live-card-voiceprint-btn');
-                  if (vpText) vpText.textContent = '🧬 聲紋已鎖';
+                  if (vpTextEl) vpTextEl.textContent = '🧬 聲紋已鎖';
                   if (vpDot) vpDot.className = 'w-1.5 h-1.5 rounded-full bg-teal-400';
                   if (vpBtn) vpBtn.className = 'px-2 py-0.5 rounded-full bg-slate-800/90 hover:bg-slate-700 active:scale-95 border border-teal-500/50 text-teal-300 text-[10px] font-medium flex items-center gap-1 transition shadow-sm';
                   if (navigator.vibrate) navigator.vibrate([30, 50, 30]);
                   appendCardTranscript('system', '✅ 3D-Speaker 192 維神經聲紋校準完成！已鎖定主講人生理聲帶共振特徵，100% 免疫旁人干擾！');
                 } else {
-                  appendCardTranscript('system', '⚠️ 聲紋採樣特徵不足，請再試一次。');
+                  const vpTextEl = document.getElementById('live-voiceprint-text');
+                  if (vpTextEl) vpTextEl.textContent = '🧬 重新校準';
+                  appendCardTranscript('system', '⚠️ 聲紋採樣特徵不足，請對著麥克風念出完整句子再試一次。');
                 }
               }).catch(err => {
                 console.warn('[Voiceprint Calibration Error]', err);
+                const vpTextEl = document.getElementById('live-voiceprint-text');
+                if (vpTextEl) vpTextEl.textContent = '🧬 重新校準';
                 appendCardTranscript('system', '⚠️ 聲紋模型推論異常：' + err.message);
               });
             }
