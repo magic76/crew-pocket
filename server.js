@@ -93,7 +93,9 @@ async function handleInboundMessage(req, res) {
   if (req.method === 'POST') {
     try {
       const body = await parseJsonBody(req);
-      if (body && body.text) {
+      const text = body.text || body.message || body.prompt;
+      if (body && text) {
+        body.text = text;
         inboundWebMessages.push(body);
         if (inboundWebMessages.length > 50) inboundWebMessages.shift();
       }
