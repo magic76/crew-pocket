@@ -81,9 +81,27 @@
 
     const host = document.createElement('div');
     host.id = 'crew-pocket-widget-root';
-    host.style.cssText = 'position:fixed;bottom:24px;right:20px;z-index:2147483647;font-family:sans-serif;';
-    document.documentElement.appendChild(host);
+    host.style.cssText = 'position:fixed;z-index:2147483647;font-family:sans-serif;touch-action:none;user-select:none;';
+    
+    // Load saved position or default to bottom-right
+    let savedPos = null;
+    try {
+      savedPos = JSON.parse(localStorage.getItem('crew_pocket_bubble_pos'));
+    } catch(e) {}
 
+    if (savedPos && typeof savedPos.left === 'number' && typeof savedPos.top === 'number') {
+      const maxL = Math.max(8, window.innerWidth - 65);
+      const maxT = Math.max(8, window.innerHeight - 65);
+      const left = Math.min(Math.max(8, savedPos.left), maxL);
+      const top = Math.min(Math.max(8, savedPos.top), maxT);
+      host.style.left = left + 'px';
+      host.style.top = top + 'px';
+    } else {
+      host.style.bottom = '24px';
+      host.style.right = '20px';
+    }
+
+    document.documentElement.appendChild(host);
     const shadow = host.attachShadow({ mode: 'open' });
 
     shadow.innerHTML = `
@@ -93,18 +111,24 @@
           width: 52px;
           height: 52px;
           border-radius: 26px;
-          background: linear-gradient(135deg, #0284c7, #0f172a);
-          border: 2px solid #38bdf8;
-          box-shadow: 0 4px 15px rgba(2, 132, 199, 0.5);
+          background: linear-gradient(135deg, #1e1b4b, #0f172a);
+          border: 2px solid #6366f1;
+          box-shadow: 0 4px 18px rgba(99, 102, 241, 0.55), 0 0 12px rgba(56, 189, 248, 0.4);
           display: flex;
           align-items: center;
           justify-content: center;
-          cursor: pointer;
-          font-size: 24px;
+          cursor: grab;
           user-select: none;
-          transition: transform 0.2s;
+          transition: transform 0.15s, box-shadow 0.15s;
+          padding: 6px;
         }
-        .bubble-btn:active { transform: scale(0.9); }
+        .bubble-btn:active { cursor: grabbing; transform: scale(0.92); }
+        .bubble-logo {
+          width: 34px;
+          height: 34px;
+          pointer-events: none;
+          filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
+        }
         
         /* Modal Overlay - Top-Aligned to never be blocked by mobile keyboard */
         .modal-overlay {
@@ -125,7 +149,7 @@
           width: 100%;
           max-width: 350px;
           background: #090d16;
-          border: 1.5px solid #0284c7;
+          border: 1.5px solid #6366f1;
           border-radius: 18px;
           padding: 14px;
           box-shadow: 0 15px 35px rgba(0, 0, 0, 0.9);
@@ -141,8 +165,14 @@
           padding-bottom: 8px;
           margin-bottom: 10px;
           font-weight: bold;
-          color: #38bdf8;
+          color: #818cf8;
           font-size: 13px;
+          gap: 6px;
+        }
+        .header-left {
+          display: flex;
+          align-items: center;
+          gap: 6px;
         }
         .close-btn {
           cursor: pointer;
@@ -166,11 +196,11 @@
           outline: none;
           line-height: 1.4;
         }
-        .input-area:focus { border-color: #0284c7; }
+        .input-area:focus { border-color: #6366f1; }
         .send-btn {
           width: 100%;
           min-height: 42px;
-          background: #0284c7;
+          background: linear-gradient(135deg, #4f46e5, #0284c7);
           border: none;
           border-radius: 10px;
           color: white;
@@ -182,7 +212,7 @@
           justify-content: center;
           gap: 6px;
         }
-        .send-btn:active { transform: scale(0.97); background: #0369a1; }
+        .send-btn:active { transform: scale(0.97); }
         .status-tag {
           font-size: 11px;
           color: #34d399;
@@ -195,7 +225,20 @@
       <div id="modalOverlay" class="modal-overlay">
         <div class="chat-box">
           <div class="box-header">
-            <span>⚡ Crew Pocket 網頁傳訊</span>
+            <div class="header-left">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="18" height="18">
+                <defs>
+                  <linearGradient id="glow_hdr" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stop-color="#818cf8"/>
+                    <stop offset="100%" stop-color="#38bdf8"/>
+                  </linearGradient>
+                </defs>
+                <circle cx="256" cy="256" r="185" fill="none" stroke="url(#glow_hdr)" stroke-width="24" opacity="0.6"/>
+                <path d="M256 120 L360 340 L256 300 L152 340 Z" fill="url(#glow_hdr)"/>
+                <circle cx="256" cy="200" r="28" fill="#ffffff"/>
+              </svg>
+              <span>Crew Pocket 網頁傳訊</span>
+            </div>
             <span id="closeBtn" class="close-btn">✕</span>
           </div>
           <textarea id="msgInput" class="input-area" placeholder="輸入你想傳給 Crew Pocket AI 的問題或指令..."></textarea>
@@ -206,7 +249,19 @@
         </div>
       </div>
 
-      <div id="bubbleBtn" class="bubble-btn">🤖</div>
+      <div id="bubbleBtn" class="bubble-btn" title="Crew Pocket AI (可拖曳移動位置)">
+        <svg class="bubble-logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+          <defs>
+            <linearGradient id="glow_b" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#818cf8"/>
+              <stop offset="100%" stop-color="#38bdf8"/>
+            </linearGradient>
+          </defs>
+          <circle cx="256" cy="256" r="185" fill="none" stroke="url(#glow_b)" stroke-width="24" opacity="0.6"/>
+          <path d="M256 120 L360 340 L256 300 L152 340 Z" fill="url(#glow_b)"/>
+          <circle cx="256" cy="200" r="28" fill="#ffffff"/>
+        </svg>
+      </div>
     `;
 
     const bubbleBtn = shadow.getElementById('bubbleBtn');
@@ -216,7 +271,77 @@
     const input = shadow.getElementById('msgInput');
     const status = shadow.getElementById('sendStatus');
 
-    bubbleBtn.addEventListener('click', () => {
+    // 🖐️ Smooth Mobile Touch & Desktop Mouse Dragging
+    let isDragging = false;
+    let dragMoved = false;
+    let startX = 0, startY = 0;
+    let initialLeft = 0, initialTop = 0;
+
+    function handleDragStart(e) {
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+      startX = clientX;
+      startY = clientY;
+
+      const rect = host.getBoundingClientRect();
+      initialLeft = rect.left;
+      initialTop = rect.top;
+
+      dragMoved = false;
+      isDragging = true;
+    }
+
+    function handleDragMove(e) {
+      if (!isDragging) return;
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+      const dx = clientX - startX;
+      const dy = clientY - startY;
+
+      if (Math.hypot(dx, dy) > 6) {
+        dragMoved = true;
+        if (e.cancelable) e.preventDefault();
+
+        let newL = initialLeft + dx;
+        let newT = initialTop + dy;
+
+        const maxL = window.innerWidth - 58;
+        const maxT = window.innerHeight - 58;
+        newL = Math.max(8, Math.min(newL, maxL));
+        newT = Math.max(8, Math.min(newT, maxT));
+
+        host.style.left = newL + 'px';
+        host.style.top = newT + 'px';
+        host.style.bottom = 'auto';
+        host.style.right = 'auto';
+      }
+    }
+
+    function handleDragEnd() {
+      if (!isDragging) return;
+      isDragging = false;
+      if (dragMoved) {
+        const rect = host.getBoundingClientRect();
+        try {
+          localStorage.setItem('crew_pocket_bubble_pos', JSON.stringify({ left: rect.left, top: rect.top }));
+        } catch(e) {}
+      }
+    }
+
+    bubbleBtn.addEventListener('touchstart', handleDragStart, { passive: true });
+    window.addEventListener('touchmove', handleDragMove, { passive: false });
+    window.addEventListener('touchend', handleDragEnd, { passive: true });
+
+    bubbleBtn.addEventListener('mousedown', handleDragStart);
+    window.addEventListener('mousemove', handleDragMove);
+    window.addEventListener('mouseup', handleDragEnd);
+
+    // Open chat modal only when tapped (not dragged)
+    bubbleBtn.addEventListener('click', (e) => {
+      if (dragMoved) {
+        dragMoved = false;
+        return;
+      }
       modalOverlay.classList.add('open');
       setTimeout(() => input.focus(), 100);
     });
