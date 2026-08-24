@@ -1085,6 +1085,34 @@
           toolResult = await res.json().catch(() => ({ success: false, error: '截圖失敗' }));
           if (navigator.vibrate) navigator.vibrate([20, 40]);
           appendCardTranscript('system', `📸 語音觸發螢幕畫面截取`);
+
+        } else if (name === 'write_file') {
+          const targetPath = args.path || args.targetPath || 'scratch/voice_note.md';
+          const content = args.content || '';
+          const res = await fetch('/api/file/save', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ targetPath, content })
+          });
+          const data = await res.json().catch(() => ({ success: false, error: '存檔解析失敗' }));
+          if (data.success) {
+            toolResult = { success: true, path: data.displayPath, filename: data.filename };
+            if (navigator.vibrate) navigator.vibrate([30, 60, 30]);
+            appendCardTranscript('system', `📝 語音寫入檔案：${data.displayPath}`);
+          } else {
+            toolResult = { success: false, error: data.error || '存檔失敗' };
+          }
+
+        } else if (name === 'read_file') {
+          const targetPath = args.path || args.targetPath || '';
+          const res = await fetch(`/api/file/read?path=${encodeURIComponent(targetPath)}`);
+          const data = await res.json().catch(() => ({ success: false, error: '讀檔解析失敗' }));
+          if (data.success) {
+            toolResult = { success: true, content: data.content, path: targetPath };
+            appendCardTranscript('system', `📖 語音讀取檔案：${targetPath}`);
+          } else {
+            toolResult = { success: false, error: data.error || '讀檔失敗' };
+          }
         }
       } catch (err) {
         toolResult = { success: false, error: err.message };
@@ -1224,6 +1252,29 @@
                   {
                     name: "take_screenshot",
                     description: "Capture the current phone screen to see what is displayed."
+                  },
+                  {
+                    name: "write_file",
+                    description: "Save or create a text/markdown document, notes, requirements, or code file in the Termux workspace (e.g. 'scratch/voice_note.md', 'docs/plan.md').",
+                    parameters: {
+                      type: "OBJECT",
+                      properties: {
+                        path: { type: "STRING", description: "Target file path relative to Home directory (e.g. 'scratch/note.md', 'docs/idea.md')" },
+                        content: { type: "STRING", description: "Full text or markdown content to write" }
+                      },
+                      required: ["path", "content"]
+                    }
+                  },
+                  {
+                    name: "read_file",
+                    description: "Read the content of a file in the Termux workspace.",
+                    parameters: {
+                      type: "OBJECT",
+                      properties: {
+                        path: { type: "STRING", description: "Path to read (e.g. 'scratch/note.md', 'GEMINI.md')" }
+                      },
+                      required: ["path"]
+                    }
                   }
                 ]
               }
@@ -1232,8 +1283,8 @@
               parts: [
                 {
                   text: (typeof getCrewLocale === 'function' && getCrewLocale() === 'en')
-                    ? "You are Crew Pocket, an expert AI handheld companion assisting the user. You have tools to directly control the user's phone: swipe_screen (to scroll/swipe), tap_screen (to tap buttons by label or coords), press_key (HOME/BACK), and take_screenshot. When the user asks you to scroll, swipe, click, or navigate, immediately invoke the corresponding tool while speaking naturally and warmly."
-                    : "You are Crew Pocket (口袋特勤隊), an expert AI handheld companion. 你擁有直接操控使用者手機畫面的工具：swipe_screen (滑動/滾動畫面)、tap_screen (依文字標籤或座標點擊按鈕)、press_key (按首頁/返回/多工) 與 take_screenshot (查看畫面)。當使用者要求滑動、點擊、返回或看螢幕時，請立即調用對應的工具，並以繁體中文親切自然地口頭回應。"
+                    ? "You are Crew Pocket, an expert AI handheld companion. You can directly control the user's phone (swipe_screen, tap_screen, press_key, take_screenshot) and write/read documents in the Termux workspace (write_file, read_file). When the user asks you to take notes, write down a plan, save a document, or operate the screen, immediately invoke the corresponding tool while speaking naturally and warmly."
+                    : "You are Crew Pocket (口袋特勤隊), an expert AI handheld companion. 你擁有直接操控手機（swipe_screen、tap_screen、press_key、take_screenshot）以及在 Termux 工作區讀寫文件（write_file、read_file）的工具。當使用者請你記錄想法、撰寫文件、記待辦事項或操作手機時，請立即調用 write_file 等工具完成存檔，並以繁體中文親切自然地口頭回應。"
                 }
               ]
             }
