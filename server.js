@@ -63,6 +63,22 @@ async function handlePhoneScreenshot(res) {
   res.end(JSON.stringify(result));
 }
 
+async function handlePhonePhoto(req, res) {
+  try {
+    let facing = 'back';
+    if (req.method === 'POST') {
+      const body = await parseJsonBody(req).catch(() => ({}));
+      if (body && body.camera) facing = body.camera;
+    }
+    const result = await phoneAgent.takePhoto(facing);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(result));
+  } catch (err) {
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: false, error: err.message }));
+  }
+}
+
 async function handlePhoneAction(req, res) {
   try {
     const body = await parseJsonBody(req);
@@ -703,6 +719,8 @@ const server = http.createServer(async (req, res) => {
     return handlePhonePair(req, res);
   } else if (pathname === '/api/phone/screenshot' && req.method === 'POST') {
     return handlePhoneScreenshot(res);
+  } else if (pathname === '/api/phone/photo') {
+    return handlePhonePhoto(req, res);
   } else if (pathname === '/api/phone/action' && req.method === 'POST') {
     return handlePhoneAction(req, res);
   } else {
