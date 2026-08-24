@@ -1000,6 +1000,111 @@
     isCameraOn = false;
     liveCallStartTs = Date.now();
 
+    // 🕹️ Phone Screen Automation Handler for Gemini Live Tools
+    async function handleLiveToolCall(call) {
+      if (!call || !call.name) return;
+      const name = call.name;
+      const args = call.args || {};
+      const callId = call.id || 'tool_' + Date.now();
+      let toolResult = { success: true };
+
+      console.log(`[Gemini Live Tool Executing] ${name}:`, args);
+
+      try {
+        if (name === 'swipe_screen') {
+          const dir = (args.direction || 'up').toLowerCase();
+          let x1 = 720, y1 = 1800, x2 = 720, y2 = 800, dur = 250;
+          if (dir === 'down') { x1 = 720; y1 = 800; x2 = 720; y2 = 1800; }
+          else if (dir === 'left') { x1 = 1100; y1 = 1500; x2 = 300; y2 = 1500; }
+          else if (dir === 'right') { x1 = 300; y1 = 1500; x2 = 1100; y2 = 1500; }
+
+          if (args.distance === 'long') {
+            if (dir === 'up') { y1 = 2200; y2 = 400; }
+            else if (dir === 'down') { y1 = 400; y2 = 2200; }
+          } else if (args.distance === 'short') {
+            if (dir === 'up') { y1 = 1600; y2 = 1200; }
+            else if (dir === 'down') { y1 = 1200; y2 = 1600; }
+          }
+
+          const res = await fetch('http://127.0.0.1:8766/swipe', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ x1, y1, x2, y2, duration: dur })
+          });
+          toolResult = await res.json().catch(() => ({ success: true, action: 'swiped' }));
+          if (navigator.vibrate) navigator.vibrate(25);
+          appendCardTranscript('system', `👆 語音觸發滑動：${dir}`);
+
+        } else if (name === 'tap_screen') {
+          let targetX = args.x;
+          let targetY = args.y;
+
+          if (args.label && (!targetX || !targetY)) {
+            try {
+              const nodeRes = await fetch('http://127.0.0.1:8766/nodes');
+              const nodeData = await nodeRes.json();
+              if (nodeData.success && Array.isArray(nodeData.nodes)) {
+                const match = nodeData.nodes.find(n => 
+                  (n.text && n.text.toLowerCase().includes(args.label.toLowerCase())) ||
+                  (n.desc && n.desc.toLowerCase().includes(args.label.toLowerCase()))
+                );
+                if (match && match.bounds) {
+                  targetX = (match.bounds.left + match.bounds.right) / 2;
+                  targetY = (match.bounds.top + match.bounds.bottom) / 2;
+                }
+              }
+            } catch (e) {}
+          }
+
+          if (targetX && targetY) {
+            const res = await fetch('http://127.0.0.1:8766/tap', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ x: targetX, y: targetY })
+            });
+            toolResult = await res.json().catch(() => ({ success: true, action: 'tapped' }));
+            if (navigator.vibrate) navigator.vibrate([20, 30]);
+            appendCardTranscript('system', `🎯 語音觸發點擊：(${Math.round(targetX)}, ${Math.round(targetY)}) ${args.label || ''}`);
+          } else {
+            toolResult = { success: false, error: '找不到指定按鈕座標' };
+          }
+
+        } else if (name === 'press_key') {
+          const key = (args.key || 'HOME').toUpperCase();
+          const res = await fetch('http://127.0.0.1:8766/key', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ key })
+          });
+          toolResult = await res.json().catch(() => ({ success: true, action: 'keyed' }));
+          if (navigator.vibrate) navigator.vibrate(30);
+          appendCardTranscript('system', `🏠 語音觸發按鍵：${key}`);
+
+        } else if (name === 'take_screenshot') {
+          const res = await fetch('/api/phone/screenshot', { method: 'POST' });
+          toolResult = await res.json().catch(() => ({ success: false, error: '截圖失敗' }));
+          if (navigator.vibrate) navigator.vibrate([20, 40]);
+          appendCardTranscript('system', `📸 語音觸發螢幕畫面截取`);
+        }
+      } catch (err) {
+        toolResult = { success: false, error: err.message };
+      }
+
+      if (ws && isConnected && ws.readyState === WebSocket.OPEN) {
+        const toolResponseMsg = {
+          toolResponse: {
+            functionResponses: [
+              {
+                response: { output: toolResult },
+                id: callId
+              }
+            ]
+          }
+        };
+        ws.send(JSON.stringify(toolResponseMsg));
+      }
+    }
+
     try {
       // 2. Web Audio Context
       const AudioCtxClass = window.AudioContext || window.webkitAudioContext;
@@ -1066,12 +1171,69 @@
                 }
               }
             },
+            tools: [
+              {
+                functionDeclarations: [
+                  {
+                    name: "swipe_screen",
+                    description: "Scroll or swipe the phone screen. Use 'up' to scroll down/read more content, 'down' to scroll up/go to top, 'left' or 'right' to flip cards/tabs.",
+                    parameters: {
+                      type: "OBJECT",
+                      properties: {
+                        direction: {
+                          type: "STRING",
+                          description: "Direction of scroll: 'up' (scroll down), 'down' (scroll up), 'left', 'right'",
+                          enum: ["up", "down", "left", "right"]
+                        },
+                        distance: {
+                          type: "STRING",
+                          description: "Scroll distance: 'short', 'normal', 'long'",
+                          enum: ["short", "normal", "long"]
+                        }
+                      },
+                      required: ["direction"]
+                    }
+                  },
+                  {
+                    name: "tap_screen",
+                    description: "Tap on a button or coordinate on the phone screen. Provide label (e.g. '確認', '設定') or x, y pixel coordinates.",
+                    parameters: {
+                      type: "OBJECT",
+                      properties: {
+                        label: { type: "STRING", description: "The button label or text on screen to tap" },
+                        x: { type: "NUMBER", description: "X pixel coordinate" },
+                        y: { type: "NUMBER", description: "Y pixel coordinate" }
+                      }
+                    }
+                  },
+                  {
+                    name: "press_key",
+                    description: "Press an Android system physical key (HOME, BACK, RECENTS).",
+                    parameters: {
+                      type: "OBJECT",
+                      properties: {
+                        key: {
+                          type: "STRING",
+                          description: "The key to press",
+                          enum: ["HOME", "BACK", "RECENTS"]
+                        }
+                      },
+                      required: ["key"]
+                    }
+                  },
+                  {
+                    name: "take_screenshot",
+                    description: "Capture the current phone screen to see what is displayed."
+                  }
+                ]
+              }
+            ],
             systemInstruction: {
               parts: [
                 {
                   text: (typeof getCrewLocale === 'function' && getCrewLocale() === 'en')
-                    ? "You are Crew Pocket, an expert AI handheld companion assisting the user with travel, coding, and daily tasks. You are speaking directly with the user over high-fidelity real-time voice. Keep replies concise, warm, natural, proactive, and conversational. Speak English and always output the exact English transcript of everything you speak in the text parts."
-                    : "You are Crew Pocket (口袋特勤隊), an expert AI handheld companion assisting the user with travel, coding, and daily tasks. You are speaking directly with the user over high-fidelity real-time voice. Keep your replies concise, warm, natural, and friendly in Traditional Chinese (Taiwan). Be proactive and conversational. Always output the exact Traditional Chinese text transcript of everything you speak in the text parts."
+                    ? "You are Crew Pocket, an expert AI handheld companion assisting the user. You have tools to directly control the user's phone: swipe_screen (to scroll/swipe), tap_screen (to tap buttons by label or coords), press_key (HOME/BACK), and take_screenshot. When the user asks you to scroll, swipe, click, or navigate, immediately invoke the corresponding tool while speaking naturally and warmly."
+                    : "You are Crew Pocket (口袋特勤隊), an expert AI handheld companion. 你擁有直接操控使用者手機畫面的工具：swipe_screen (滑動/滾動畫面)、tap_screen (依文字標籤或座標點擊按鈕)、press_key (按首頁/返回/多工) 與 take_screenshot (查看畫面)。當使用者要求滑動、點擊、返回或看螢幕時，請立即調用對應的工具，並以繁體中文親切自然地口頭回應。"
                 }
               ]
             }
@@ -1101,6 +1263,15 @@
           updateCardStatus('listening', '🎙️ 可以開始說話');
           startSpeechRecognition();
           return;
+        }
+
+        // 🕹️ Tool Call Handling
+        const tc = response.toolCall || response.tool_call;
+        if (tc && tc.functionCalls) {
+          console.log('[Gemini Live Tool Call]', tc.functionCalls);
+          for (const call of tc.functionCalls) {
+            handleLiveToolCall(call);
+          }
         }
 
         // Server Content
