@@ -468,7 +468,15 @@ function appendMessage(role, content, timestamp, tools = [], thinking = '', isBt
       <div class="whitespace-pre-wrap leading-relaxed break-words">${escapeHtml(userText)}</div>
     `;
   } else {
-    const timeStr = timestamp ? new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+    let timeStr = '';
+    if (timestamp) {
+      if (typeof timestamp === 'string' && /^\d{1,2}:\d{2}/.test(timestamp)) {
+        timeStr = timestamp;
+      } else {
+        const d = new Date(timestamp);
+        timeStr = isNaN(d.getTime()) ? '' : d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      }
+    }
     
     const assistantHeader = `
       <div class="flex items-center justify-between gap-2 mb-2 pb-1.5 border-b border-slate-800/90 text-[11px] text-slate-400 select-none">
