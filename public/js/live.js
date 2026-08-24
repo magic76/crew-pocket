@@ -543,7 +543,7 @@
       }
       if (clearBtn) clearBtn.classList.remove('hidden');
       if (testBox) testBox.classList.remove('hidden');
-      if (recText) recText.textContent = '重新錄音校準 (2 秒)';
+      if (recText) recText.textContent = '重新錄音校準 (3 秒)';
     } else {
       if (badge) {
         badge.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold font-mono bg-slate-800 text-slate-400 border border-slate-700';
@@ -551,16 +551,14 @@
       }
       if (clearBtn) clearBtn.classList.add('hidden');
       if (testBox) testBox.classList.add('hidden');
-      if (recText) recText.textContent = '開始錄音校準 (2 秒)';
+      if (recText) recText.textContent = '開始錄音校準 (3 秒)';
     }
 
     // Also update in-call card badges if present
     const liveVpText = document.getElementById('live-voiceprint-text');
     const liveVpDot = document.getElementById('live-voiceprint-dot');
-    const liveVpBtn = document.getElementById('live-card-voiceprint-btn');
     if (liveVpText) liveVpText.textContent = userVoiceprintProfile ? '🧬 聲紋已鎖' : '🧬 校準聲紋';
     if (liveVpDot) liveVpDot.className = userVoiceprintProfile ? 'w-1.5 h-1.5 rounded-full bg-teal-400' : 'w-1.5 h-1.5 rounded-full bg-slate-500';
-    if (liveVpBtn) liveVpBtn.className = `px-2 py-0.5 rounded-full bg-slate-800/90 hover:bg-slate-700 active:scale-95 border ${userVoiceprintProfile ? 'border-teal-500/50 text-teal-300' : 'border-slate-700 text-slate-400'} text-[10px] font-medium flex items-center gap-1 transition shadow-sm`;
   }
 
   function openVoiceprintModal() {
@@ -616,7 +614,7 @@
 
     if (recIcon) recIcon.textContent = '🔴';
     if (recText) recText.textContent = '正在錄音採樣中...';
-    if (instruction) instruction.textContent = '🎙️ 請念出：「特勤隊，我是主講人」';
+    if (instruction) instruction.innerHTML = '🎙️ 請念出：<span class="text-indigo-300 font-semibold">「今天天氣真好，幫我看一下今天的行程」</span>';
     if (typeof window.haptic === 'function') window.haptic('medium');
 
     let stream = null;
