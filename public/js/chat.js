@@ -1305,7 +1305,8 @@ async function sendBtwConcurrentSidecard(customText = null, customImgPath = null
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         prompt: `/btw ${cleanQuery}`,
-        conversation_id: currentConversationId,
+        conversation_id: null, // 🌟 Isolate to ephemeral session: NEVER touches or interrupts busy main stream!
+        is_btw: true,
         provider: currentProvider,
         model: currentModel,
         effort: 'low', // Fast low reasoning for instant 1s answers across Gemini & Codex
