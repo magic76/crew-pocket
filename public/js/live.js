@@ -2736,6 +2736,10 @@
     }
   }
 
+  // Expose the same close path used by the red hangup control. Event
+  // delegation keeps it working if the dock is re-rendered after startup.
+  window.endLiveSession = endLiveSession;
+
   // Key Modal Handlers
   function showKeyModal() {
     if (liveApiKeyInput) liveApiKeyInput.value = getApiKey();
@@ -2811,9 +2815,12 @@
     dockCameraBtn.addEventListener('click', toggleCamera);
   }
 
-  const dockHangupBtn = document.getElementById('live-dock-hangup-btn');
-  if (dockHangupBtn) {
-    dockHangupBtn.addEventListener('click', endLiveSession);
-  }
+  document.addEventListener('click', (event) => {
+    const hangupBtn = event.target.closest && event.target.closest('#live-dock-hangup-btn');
+    if (!hangupBtn) return;
+    event.preventDefault();
+    console.log('[Live] Red hangup clicked');
+    window.endLiveSession();
+  });
 
 })();
