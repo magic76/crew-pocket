@@ -130,10 +130,6 @@
         </svg>
         <span class="text-[11px] font-extrabold tracking-tight hidden sm:inline text-teal-200 font-mono">Live 通話</span>
       </button>
-      <button id="live-settings-btn" type="button" class="p-2 rounded-lg bg-slate-900/90 hover:bg-slate-800 text-slate-300 hover:text-white transition active:scale-95 shrink-0 border border-slate-700/80 min-w-[42px] min-h-[42px] flex items-center justify-center" title="⚙️ Live 語音設定">
-        <span aria-hidden="true">⚙️</span>
-      </button>
-
       <!-- 🧰 Unified Tools Dropdown Trigger Button -->
       <button id="tools-menu-btn" class="p-1.5 sm:p-2 rounded-lg bg-slate-900/90 hover:bg-slate-800 text-slate-300 hover:text-white transition active:scale-95 shrink-0 border border-slate-700/80 flex items-center gap-1" title="🧰 工具與功能選單 (檔案 / 用量 / 錦囊 / 通知)">
         <svg class="w-4 h-4 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -153,6 +149,15 @@
           <div class="flex flex-col min-w-0">
             <span class="font-semibold text-slate-100 group-hover:text-indigo-300">新對話</span>
             <span class="text-[10px] text-slate-400">開啟全新的對話</span>
+          </div>
+        </button>
+
+        <!-- Live Voice Settings -->
+        <button id="live-settings-btn" type="button" class="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-xs text-slate-200 hover:bg-slate-800/90 hover:text-teal-300 transition text-left group" title="設定 Gemini Live 語音與 Prompt">
+          <div class="w-6 h-6 rounded-lg bg-teal-500/20 border border-teal-500/30 flex items-center justify-center text-teal-300 group-hover:scale-105 transition shrink-0">⚙️</div>
+          <div class="flex flex-col min-w-0">
+            <span class="font-semibold text-slate-100 group-hover:text-teal-300">Live 語音設定</span>
+            <span class="text-[10px] text-slate-400">模型、音色與語音 Prompt</span>
           </div>
         </button>
 
@@ -1149,8 +1154,8 @@
   <script src="/js/i18n.js?v=3"></script>
   <script src="/js/ui.js?v=1787583171.8"></script>
   <script src="/js/tools.js?v=7.8"></script>
-  <script src="/js/chat.js?v=1787637491"></script>
-  <script src="/js/live.js?v=1787637491"></script>
+  <script src="/js/chat.js?v=1787637790"></script>
+  <script src="/js/live.js?v=1787637790"></script>
   <script src="/js/phone_agent.js?v=1.1"></script>
   <script src="/js/app.js?v=1787581834.9"></script>
 </body>
