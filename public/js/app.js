@@ -640,6 +640,7 @@ function initAppAndListeners() {
           for (const msg of data.messages) {
             const promptInput = document.getElementById('prompt-input');
             if (promptInput) {
+              if (msg.image_path) uploadedImagePath = msg.image_path;
               const prefix = msg.source === 'FloatingBubble' ? '[Bubble] ' : '[Web] ';
               const sourceInfo = msg.url ? `\nURL: ${msg.url}` : '';
               promptInput.value = `${prefix}${msg.text}${sourceInfo}`;

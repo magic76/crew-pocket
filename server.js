@@ -552,10 +552,13 @@ async function handleChat(req, res) {
         } else if (event.type === 'reasoning_complete') {
           sendEvent('thought', { fullThinking: event.thinking });
         } else if (event.type === 'tool') {
+          const toolLabel = event.name || '工具';
+          notifyCompanionService('TOOL', `正在執行：${toolLabel}`);
           sendEvent('tool', { state: event.state, tool_name: event.name, tool_info: event.info, duration_seconds: event.durationSeconds });
         } else if (event.type === 'context_usage') {
           sendEvent('context', event.stats);
         } else if (event.type === 'error') {
+          notifyCompanionService('ERROR', event.message || '執行失敗');
           finish({ error: event.message, provider: providerId, conversation_id });
         } else if (event.type === 'turn_completed') {
           finish({ response: event.response, conversation_id: event.conversationId, provider: providerId, status: event.status });
