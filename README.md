@@ -129,13 +129,9 @@ bash build.sh
 
 `extensions/crew-pocket-bridge/` 是 Crew Pocket 的瀏覽器橋接套件，適用於 Lemur Browser 等支援 Chromium Extension 的 Android 瀏覽器。它能把目前網頁的 DOM、截圖、網路請求與除錯資訊送到 Crew Pocket，並透過本機 Bridge Server 接收 AI 指令。
 
-套件壓縮檔位於 [`extensions/crew-pocket-bridge/crew-pocket-bridge.zip`](extensions/crew-pocket-bridge/crew-pocket-bridge.zip)。在瀏覽器的擴充功能頁面匯入或解壓後載入此目錄；需要從 Termux 啟動橋接服務：
+套件壓縮檔位於 [`extensions/crew-pocket-bridge/crew-pocket-bridge.zip`](extensions/crew-pocket-bridge/crew-pocket-bridge.zip)。在瀏覽器的擴充功能頁面匯入或解壓後載入此目錄即可；Bridge 已整合進 Crew Pocket 主服務，啟動 `node ~/agy-web/server.js` 後會自動提供 `ws://127.0.0.1:8000/api/extension/ws`。
 
-```bash
-node ~/agy-web/extensions/crew-pocket-bridge/bridge_server.js
-```
-
-Bridge 預設只監聽 `127.0.0.1:8766`，不會對區網開放。若使用 repo 內 popup 提供的指令，請確認路徑仍指向目前的 `~/agy-web` 目錄。
+Extension、Web UI 與 AI API 統一走 `127.0.0.1:8000`；Android Crew Helper 的 `8766` 僅作為 Crew Pocket 的內部本機服務，不需手動操作，也不會對區網開放。
 
 ---
 

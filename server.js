@@ -25,6 +25,7 @@ const { handleUsage } = require('./lib/usage');
 const { handleListFiles, handleReadFile, handleSaveFile } = require('./lib/files');
 const { handleGenerateTitle, getCachedTitle } = require('./lib/title');
 const { phoneAgent } = require('./lib/phone_agent');
+const { createExtensionBridge } = require('./lib/extension_bridge');
 
 // 📱 Phone Agent (Wireless ADB / Screen & Touch Control) API Handlers
 async function handlePhoneStatus(res) {
@@ -105,16 +106,22 @@ async function handlePhoneAction(req, res) {
 // 🌐 Inbound Web Messages from Browser Extension
 const inboundWebMessages = [];
 
+function enqueueInboundMessage(body) {
+  const text = body && (body.text || body.message || body.prompt);
+  if (!text) return false;
+  body.text = text;
+  inboundWebMessages.push(body);
+  if (inboundWebMessages.length > 50) inboundWebMessages.shift();
+  return true;
+}
+
+const extensionBridge = createExtensionBridge({ onInboundMessage: enqueueInboundMessage });
+
 async function handleInboundMessage(req, res) {
   if (req.method === 'POST') {
     try {
       const body = await parseJsonBody(req);
-      const text = body.text || body.message || body.prompt;
-      if (body && text) {
-        body.text = text;
-        inboundWebMessages.push(body);
-        if (inboundWebMessages.length > 50) inboundWebMessages.shift();
-      }
+      enqueueInboundMessage(body);
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ success: true, count: inboundWebMessages.length }));
     } catch (err) {
@@ -134,7 +141,7 @@ async function handleExportExtension(req, res) {
     const { execSync } = require('node:child_process');
     const body = await parseJsonBody(req);
     const targetDir = body.targetDir || '/sdcard/crew-pocket-extension';
-    const sourceDir = path.join(process.env.HOME || '/data/data/com.termux/files/home', 'crew-pocket-extension');
+    const sourceDir = path.join(__dirname, 'extensions', 'crew-pocket-bridge');
 
     await fsPromises.mkdir(targetDir, { recursive: true });
 
@@ -793,6 +800,8 @@ const server = http.createServer(async (req, res) => {
     return handleExportExtension(req, res);
   } else if (pathname === '/api/inbound-message') {
     return handleInboundMessage(req, res);
+  } else if (pathname.startsWith('/api/extension/')) {
+    return extensionBridge.handle(req, res, pathname);
   } else if (pathname === '/api/phone/status' && req.method === 'GET') {
     return handlePhoneStatus(res);
   } else if (pathname === '/api/phone/connect' && req.method === 'POST') {
@@ -817,6 +826,8 @@ const server = http.createServer(async (req, res) => {
     return handleStatic(pathname, res);
   }
 });
+
+extensionBridge.attach(server);
 
 process.on('uncaughtException', (err) => {
   console.error('[Uncaught Exception]', err);

@@ -1,5 +1,5 @@
 // Crew Pocket Background Service Worker with Full Network API Interceptor
-const BRIDGE_WS_URL = 'ws://127.0.0.1:8765';
+const BRIDGE_WS_URL = 'ws://127.0.0.1:8000/api/extension/ws';
 let ws = null;
 let reconnectTimer = null;
 const apiBuffer = [];

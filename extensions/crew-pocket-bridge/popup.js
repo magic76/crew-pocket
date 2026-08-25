@@ -72,7 +72,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   copyTermuxCmdBtn.addEventListener('click', () => {
-    copyText('node ~/crew-pocket-extension/bridge_server.js', 'Termux 啟動指令');
+    copyText('node ~/agy-web/server.js', 'Crew Pocket 啟動指令');
   });
 
   // Tab switching
