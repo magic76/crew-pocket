@@ -1917,12 +1917,13 @@
 
         const voiceName = getSelectedVoice();
         const baseSystemPrompt = (typeof getCrewLocale === 'function' && getCrewLocale() === 'en')
-          ? "You are Crew Pocket, an expert AI handheld companion. After every spoken answer, you MUST silently invoke record_call_turn with the user's request and the exact substantive answer you just gave, so the post-call memo has a complete dialogue. Do not mention this recording tool aloud. You can also control the phone (swipe_screen, tap_screen, press_key, take_screenshot) and read/write workspace files (write_file, read_file). Speak concisely and warmly."
-          : "你是 Crew Pocket（口袋特勤隊）。每次完成口頭回答後，必須靜默呼叫 record_call_turn，填入使用者剛才的語音內容與你實際回答的完整文字，供通話結束卡片逐輪還原；不要在語音中提到這個記錄工具。你也可使用 swipe_screen、tap_screen、press_key、take_screenshot 操作手機，以及 write_file、read_file 讀寫工作區。請以繁體中文簡潔自然地回應。";
+          ? "You are Crew Pocket, an expert AI handheld companion. MANDATORY dialogue protocol: for EVERY user turn that receives a substantive answer, first silently call record_call_turn exactly once with the user's request and the exact answer you intend to speak. Wait for the successful tool response, then speak that same answer. Never speak a substantive answer before recording it. Do not mention this recording tool aloud. This rule applies on every turn, even when no other tool is needed. You can also control the phone (swipe_screen, tap_screen, press_key, take_screenshot) and read/write workspace files (write_file, read_file). Speak concisely and warmly."
+          : "你是 Crew Pocket（口袋特勤隊）。【強制逐輪記錄協定】每一輪使用者問題只要需要實質回答，必須先靜默呼叫一次 record_call_turn，填入使用者問題與你準備口頭回答的完整原文；收到工具成功回覆後，才可以說出同一份回答。絕對不要先回答再記錄，也不要漏掉任何一輪；即使沒有使用其他工具也一樣。不要在語音中提到 record_call_turn。你也可使用 swipe_screen、tap_screen、press_key、take_screenshot 操作手機，以及 write_file、read_file 讀寫工作區。請以繁體中文簡潔自然地回應。";
         const customPrompt = getLivePrompt();
-        const systemPrompt = customPrompt
+        const userSystemPrompt = customPrompt
           ? `${baseSystemPrompt}\n\n【使用者本次語音 Prompt】\n${customPrompt}`
           : baseSystemPrompt;
+        const systemPrompt = `${userSystemPrompt}\n\n【系統強制規則／MANDATORY】每次實質回答前，先呼叫 record_call_turn 並等待成功；每輪恰好一次，工具成功後才開口，口頭內容必須與 assistant_text 完全一致。`;
         const setupMessage = {
           setup: {
             model: model,
@@ -1941,7 +1942,7 @@
                 functionDeclarations: [
                   {
                     name: "record_call_turn",
-                    description: "Record one completed Gemini Live dialogue turn for the post-call memo. Invoke this after every spoken answer with the user's request and the exact answer you gave. This tool is silent and must be called even when no other tool is used.",
+                    description: "MANDATORY: Record exactly one dialogue turn BEFORE speaking the answer. Call this on EVERY substantive user turn, even when no other tool is needed; wait for success, then speak the exact assistant_text. Never skip this call and never call it more than once for the same turn.",
                     parameters: {
                       type: "OBJECT",
                       properties: {
