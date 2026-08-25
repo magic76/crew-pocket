@@ -12,6 +12,14 @@
   const PROMPT_KEY = 'crew_pocket_live_prompt';
   const DEFAULT_VOICE = 'Puck';
   const DEFAULT_MODEL = 'models/gemini-3.1-flash-live-preview';
+  const GEMINI_LIVE_VOICES = [
+    ['Zephyr', '明亮'], ['Puck', '歡快'], ['Charon', '資訊豐富'], ['Kore', '堅定'], ['Fenrir', '興奮'],
+    ['Leda', '年輕'], ['Orus', '堅定'], ['Aoede', '輕快'], ['Callirrhoe', '悠閒'], ['Autonoe', '明亮'],
+    ['Enceladus', '氣聲'], ['Iapetus', '清晰'], ['Umbriel', '輕鬆'], ['Algieba', '圓潤'], ['Despina', '柔順'],
+    ['Erinome', '清楚'], ['Algenib', '沙啞'], ['Rasalgethi', '資訊豐富'], ['Laomedeia', '活潑'], ['Achernar', '柔和'],
+    ['Alnilam', '堅定'], ['Schedar', '平穩'], ['Gacrux', '成熟'], ['Pulcherrima', '前進感'], ['Achird', '友善'],
+    ['Zubenelgenubi', '隨和'], ['Vindemiatrix', '溫柔'], ['Sadachbia', '生動'], ['Sadaltager', '博學'], ['Sulafat', '溫暖']
+  ];
 
   // State
   let ws = null;
@@ -46,6 +54,7 @@
   let sustainedSpeechCount = 0;
   let sessionSnapshots = [];
   let sessionExecutedTools = [];
+  let voicePreviewSource = null;
 
   // DOM References
   const liveVoiceBtn = document.getElementById('live-voice-btn');
@@ -54,6 +63,8 @@
   const liveApiKeyInput = document.getElementById('live-api-key-input');
   const liveModelSelect = document.getElementById('live-model-select');
   const liveVoiceSelect = document.getElementById('live-voice-select');
+  const liveVoicePreviewBtn = document.getElementById('live-voice-preview-btn');
+  const liveVoicePreviewStatus = document.getElementById('live-voice-preview-status');
   const livePromptInput = document.getElementById('live-prompt-input');
   const liveSaveKeyBtn = document.getElementById('live-save-key-btn');
   const liveCloseKeyBtn = document.getElementById('live-close-key-btn');
@@ -808,11 +819,7 @@
             <!-- 🗣️ Voice Selector Pill (音色切換膠囊 · 靠右放置) -->
             <div class="relative inline-flex items-center shrink-0">
               <select id="live-card-voice-select" class="appearance-none bg-teal-950/80 hover:bg-teal-900 active:scale-95 border border-teal-500/50 text-teal-300 text-[11px] font-semibold rounded-full pl-2 pr-4 py-0.5 outline-none transition cursor-pointer shadow-sm" title="點擊切換音色">
-                <option value="Puck" ${selectedVoice === 'Puck' ? 'selected' : ''}>🗣️ Puck</option>
-                <option value="Charon" ${selectedVoice === 'Charon' ? 'selected' : ''}>🗣️ Charon</option>
-                <option value="Kore" ${selectedVoice === 'Kore' ? 'selected' : ''}>🗣️ Kore</option>
-                <option value="Fenrir" ${selectedVoice === 'Fenrir' ? 'selected' : ''}>🗣️ Fenrir</option>
-                <option value="Aoede" ${selectedVoice === 'Aoede' ? 'selected' : ''}>🗣️ Aoede</option>
+                ${renderVoiceOptions(selectedVoice)}
               </select>
               <span class="pointer-events-none absolute right-1 text-[8px] text-teal-400 font-mono">▾</span>
             </div>
@@ -1545,17 +1552,81 @@
   }
 
   function getSelectedModel() {
-    let m = localStorage.getItem(MODEL_KEY) || DEFAULT_MODEL;
-    if (m === 'models/gemini-2.0-flash-exp' || m === 'gemini-2.0-flash-exp') {
-      m = DEFAULT_MODEL;
-      localStorage.setItem(MODEL_KEY, m);
-    }
-    if (!m.startsWith('models/')) m = 'models/' + m;
-    return m;
+    localStorage.setItem(MODEL_KEY, DEFAULT_MODEL);
+    return DEFAULT_MODEL;
   }
 
   function getLivePrompt() {
     return (localStorage.getItem(PROMPT_KEY) || '').trim();
+  }
+
+  function renderVoiceOptions(selectedVoice) {
+    return GEMINI_LIVE_VOICES.map(([name, description]) =>
+      `<option value="${name}" ${selectedVoice === name ? 'selected' : ''}>${name} · ${description}</option>`
+    ).join('');
+  }
+
+  function populateVoiceSelect(select, selectedVoice) {
+    if (select) select.innerHTML = renderVoiceOptions(selectedVoice);
+  }
+
+  async function previewSelectedVoice() {
+    const apiKey = getApiKey();
+    const voiceName = liveVoiceSelect ? liveVoiceSelect.value : DEFAULT_VOICE;
+    if (!apiKey) {
+      if (liveVoicePreviewStatus) liveVoicePreviewStatus.textContent = '請先保存 API Key 才能試聽。';
+      return;
+    }
+    if (liveVoicePreviewBtn) {
+      liveVoicePreviewBtn.disabled = true;
+      liveVoicePreviewBtn.textContent = '⏳ 播放中';
+    }
+    if (liveVoicePreviewStatus) liveVoicePreviewStatus.textContent = `正在試聽 ${voiceName}…`;
+    try {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${encodeURIComponent(apiKey)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: '你好，這是 Gemini Live 語音試聽。' }] }],
+          generationConfig: {
+            responseModalities: ['AUDIO'],
+            speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName } } }
+          }
+        })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error?.message || '試聽請求失敗');
+      const part = data.candidates?.[0]?.content?.parts?.find(p => p.inlineData || p.inline_data);
+      const inlineData = part?.inlineData || part?.inline_data;
+      if (!inlineData?.data) throw new Error('沒有收到音訊資料');
+
+      if (!audioContext || audioContext.state === 'closed') audioContext = new AudioContext();
+      await audioContext.resume();
+      if (voicePreviewSource) {
+        try { voicePreviewSource.stop(); } catch (e) {}
+      }
+      const binary = atob(inlineData.data);
+      const samples = new Int16Array(binary.length / 2);
+      for (let i = 0; i < samples.length; i++) samples[i] = binary.charCodeAt(i * 2) | (binary.charCodeAt(i * 2 + 1) << 8);
+      const buffer = audioContext.createBuffer(1, samples.length, 24000);
+      const channel = buffer.getChannelData(0);
+      for (let i = 0; i < samples.length; i++) channel[i] = samples[i] / 32768;
+      voicePreviewSource = audioContext.createBufferSource();
+      voicePreviewSource.buffer = buffer;
+      voicePreviewSource.connect(audioContext.destination);
+      voicePreviewSource.onended = () => {
+        if (liveVoicePreviewStatus) liveVoicePreviewStatus.textContent = `${voiceName} 試聽完成。`;
+      };
+      voicePreviewSource.start();
+    } catch (err) {
+      console.error('[Live Voice Preview Error]', err);
+      if (liveVoicePreviewStatus) liveVoicePreviewStatus.textContent = `試聽失敗：${err.message}`;
+    } finally {
+      if (liveVoicePreviewBtn) {
+        liveVoicePreviewBtn.disabled = false;
+        liveVoicePreviewBtn.textContent = '🔊 試聽';
+      }
+    }
   }
 
   async function startLiveSession() {
@@ -2656,10 +2727,15 @@
   }
 
   if (liveVoiceSelect) {
+    populateVoiceSelect(liveVoiceSelect, getSelectedVoice());
     liveVoiceSelect.value = getSelectedVoice();
     liveVoiceSelect.addEventListener('change', () => {
       localStorage.setItem(VOICE_KEY, liveVoiceSelect.value);
     });
+  }
+
+  if (liveVoicePreviewBtn) {
+    liveVoicePreviewBtn.addEventListener('click', previewSelectedVoice);
   }
 
   if (liveModelSelect) {
