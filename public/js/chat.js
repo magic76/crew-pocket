@@ -273,7 +273,7 @@ function buildCheckpointDividerHtml(summaryText, timestamp) {
         <div class="flex items-center gap-2 min-w-0">
           <span class="text-sm">📋</span>
           <span class="font-semibold text-slate-200 truncate">查看本次提煉的核心記憶摘要</span>
-          <span class="text-[9px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-mono shrink-0">✓ 釋放 ~85% Tokens</span>
+          <span class="text-[9px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-mono shrink-0">✓ 已完成精簡</span>
         </div>
         <div class="flex items-center gap-2 shrink-0">
           <span class="text-[10px] text-slate-500 font-mono">${timeStr}</span>
