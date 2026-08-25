@@ -2269,6 +2269,24 @@
   // ==========================================
   // 📝 Post-Call Option 1: Smart Call Summary Memo Card (with Multimodal AI Transcription)
   // ==========================================
+  const CALL_MEMO_PLACEHOLDERS = new Set([
+    '🗣️（使用者語音）',
+    '🎙️（Gemini 語音回覆）',
+    '🗣️ (您的語音提問)',
+    '🎙️ (AI 語音回覆)',
+    '🗣️ (雙向語音通話)',
+    '🎙️ (AI 即時語音回覆)'
+  ]);
+
+  function hasSubstantiveCallContent(turns) {
+    return (Array.isArray(turns) ? turns : []).some(t => {
+      if (!t || t.speaker === 'system') return false;
+      const isUserSpeaker = t.speaker === 'user' || t.role === 'user' || Boolean(t.user);
+      const text = String(t.user || t.model || (isUserSpeaker ? t.text : t.text) || '').trim();
+      return Boolean(text) && !CALL_MEMO_PLACEHOLDERS.has(text);
+    });
+  }
+
   // ==========================================
   // 📝 Post-Call Option 1: Smart Call Summary Memo Card (with Multimodal AI Transcription)
   // ==========================================
@@ -2417,6 +2435,7 @@
     let memoId = null;
     let activeConvId = null;
     let initialSummary = [];
+    let shouldSaveMemo = false;
     try {
       console.log('[Live] endLiveSession initiated...');
 
@@ -2431,6 +2450,7 @@
       }
       toolsToSave = sessionExecutedTools.slice();
       snapshotsToSave = sessionSnapshots.slice();
+      shouldSaveMemo = hasSubstantiveCallContent(turnsToSave);
       durationSec = liveCallStartTs > 0 ? Math.max(1, Math.round((Date.now() - liveCallStartTs) / 1000)) : 1;
       voiceName = getSelectedVoice();
       const earlyMins = Math.floor(durationSec / 60);
@@ -2438,17 +2458,19 @@
       durationText = earlyMins > 0 ? `${earlyMins} 分 ${earlySecs} 秒` : `${earlySecs} 秒`;
       memoId = `call-memo-${Date.now()}`;
       initialSummary = [];
-      // Card rendering must never block teardown.
-      try {
-        const earlyCard = buildCallSummaryCardHtml(turnsToSave, durationSec, voiceName, snapshotsToSave, memoId, initialSummary);
-        const earlyContainer = document.getElementById('messages-container');
-        if (earlyContainer && earlyCard) {
-          earlyContainer.appendChild(earlyCard);
-          earlyContainer.scrollTop = earlyContainer.scrollHeight;
+      // Empty calls are cleaned up but do not create a memo or history entry.
+      if (shouldSaveMemo) {
+        try {
+          const earlyCard = buildCallSummaryCardHtml(turnsToSave, durationSec, voiceName, snapshotsToSave, memoId, initialSummary);
+          const earlyContainer = document.getElementById('messages-container');
+          if (earlyContainer && earlyCard) {
+            earlyContainer.appendChild(earlyCard);
+            earlyContainer.scrollTop = earlyContainer.scrollHeight;
+          }
+          if (typeof scrollToBottom === 'function') scrollToBottom(true);
+        } catch (cardErr) {
+          console.error('[Live Memo Render Error]', cardErr);
         }
-        if (typeof scrollToBottom === 'function') scrollToBottom(true);
-      } catch (cardErr) {
-        console.error('[Live Memo Render Error]', cardErr);
       }
 
       isConnected = false;
@@ -2531,8 +2553,8 @@
       const userText = turnsToSave.map(t => t.user || '').filter(Boolean).join('；') || `🗣️ 雙向語音通話 (${durationText})`;
       const modelText = turnsToSave.map(t => t.model || '').filter(Boolean).join('\n') || `✨ Gemini Live 雙向語音通話完成 (音色：${voiceName} · 時長：${durationText})`;
 
-      // 💾 3. Sync to database/transcript
-      fetch('/api/live-sync', {
+      // 💾 3. Sync substantive dialogue to database/transcript
+      if (shouldSaveMemo) fetch('/api/live-sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
