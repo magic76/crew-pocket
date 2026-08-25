@@ -9,3 +9,7 @@ scratch/
 # System & OS
 .DS_Store
 *.log
+
+# Android helper build artifacts and local signing keys
+android/crew-helper/bin/
+android/crew-helper/*.keystore

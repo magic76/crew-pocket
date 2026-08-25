@@ -113,6 +113,18 @@ agy
 
 規範包含 Termux 執行安全、Mobile-first UI、HTML 沙盒、Chart.js 與手機裝置能力等專案慣例；請保留在 fork 或部署副本中，避免 AI 修改時忽略 Crew Pocket 的既有行為。
 
+### 步驟 4.2：建置 Android Crew Helper
+
+Android 浮動泡泡、截圖、相機與無障礙服務的原始碼已整合在 [`android/crew-helper/`](android/crew-helper)。APK 由此目錄的 `build.sh` 建置，完成後會同步更新 `public/CrewHelper.apk`。
+
+```bash
+cd ~/agy-web/android/crew-helper
+export CREW_HELPER_KEYSTORE=/path/to/your/local/test.keystore
+bash build.sh
+```
+
+簽署金鑰刻意不放入 Git；請使用與手機已安裝版本相同的 keystore，否則 Android 會拒絕更新安裝。建置產物 `bin/` 與 keystore 已由 `.gitignore` 排除。
+
 ---
 
 ## 🚀 啟動與使用 (Usage)

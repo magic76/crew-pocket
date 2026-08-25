@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Crew Pocket 輔助小幫手</string>
+    <string name="accessibility_description">為 Crew Pocket AI 提供跨 App 自動化觸控、螢幕分析與無障礙操作支援。</string>
+</resources>
