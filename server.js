@@ -531,7 +531,10 @@ async function handleChat(req, res) {
     };
 
     req.on('close', () => {
-      if (!ended) abortTurn();
+      if (!ended) {
+        abortTurn();
+        notifyCompanionService('IDLE');
+      }
     });
 
     await provider.startTurn({
@@ -568,6 +571,7 @@ async function handleChat(req, res) {
 
   } catch (err) {
     console.error('[Chat Error]', err);
+    notifyCompanionService('IDLE');
     sendEvent('done', { error: err.message });
     res.end();
   }

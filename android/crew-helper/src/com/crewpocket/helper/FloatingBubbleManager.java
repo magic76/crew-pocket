@@ -223,7 +223,9 @@ public class FloatingBubbleManager {
                     safetyTimeoutRunnable = new Runnable() {
                         @Override
                         public void run() {
+                            currentState = "IDLE";
                             setThinkingState(false);
+                            updateDialogStatus("待命");
                         }
                     };
                     mainHandler.postDelayed(safetyTimeoutRunnable, 40000);
