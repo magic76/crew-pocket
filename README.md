@@ -125,6 +125,18 @@ bash build.sh
 
 簽署金鑰刻意不放入 Git；請使用與手機已安裝版本相同的 keystore，否則 Android 會拒絕更新安裝。建置產物 `bin/` 與 keystore 已由 `.gitignore` 排除。
 
+### 步驟 4.3：Crew Pocket Browser Extension
+
+`extensions/crew-pocket-bridge/` 是 Crew Pocket 的瀏覽器橋接套件，適用於 Lemur Browser 等支援 Chromium Extension 的 Android 瀏覽器。它能把目前網頁的 DOM、截圖、網路請求與除錯資訊送到 Crew Pocket，並透過本機 Bridge Server 接收 AI 指令。
+
+套件壓縮檔位於 [`extensions/crew-pocket-bridge/crew-pocket-bridge.zip`](extensions/crew-pocket-bridge/crew-pocket-bridge.zip)。在瀏覽器的擴充功能頁面匯入或解壓後載入此目錄；需要從 Termux 啟動橋接服務：
+
+```bash
+node ~/agy-web/extensions/crew-pocket-bridge/bridge_server.js
+```
+
+Bridge 預設只監聽 `127.0.0.1:8766`，不會對區網開放。若使用 repo 內 popup 提供的指令，請確認路徑仍指向目前的 `~/agy-web` 目錄。
+
 ---
 
 ## 🚀 啟動與使用 (Usage)
