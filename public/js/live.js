@@ -9,6 +9,7 @@
   const STORAGE_KEY = 'crew_pocket_gemini_api_key';
   const VOICE_KEY = 'crew_pocket_live_voice';
   const MODEL_KEY = 'crew_pocket_live_model';
+  const PROMPT_KEY = 'crew_pocket_live_prompt';
   const DEFAULT_VOICE = 'Puck';
   const DEFAULT_MODEL = 'models/gemini-3.1-flash-live-preview';
 
@@ -48,10 +49,12 @@
 
   // DOM References
   const liveVoiceBtn = document.getElementById('live-voice-btn');
+  const liveSettingsBtn = document.getElementById('live-settings-btn');
   const liveKeyModal = document.getElementById('live-key-modal');
   const liveApiKeyInput = document.getElementById('live-api-key-input');
   const liveModelSelect = document.getElementById('live-model-select');
   const liveVoiceSelect = document.getElementById('live-voice-select');
+  const livePromptInput = document.getElementById('live-prompt-input');
   const liveSaveKeyBtn = document.getElementById('live-save-key-btn');
   const liveCloseKeyBtn = document.getElementById('live-close-key-btn');
   const messagesContainer = document.getElementById('messages-container');
@@ -1551,6 +1554,10 @@
     return m;
   }
 
+  function getLivePrompt() {
+    return (localStorage.getItem(PROMPT_KEY) || '').trim();
+  }
+
   async function startLiveSession() {
     // Prevent duplicate sessions
     if (isConnected || ws) {
@@ -1826,6 +1833,13 @@
         updateCardStatus('connecting', '⚡ 準備中...');
 
         const voiceName = getSelectedVoice();
+        const baseSystemPrompt = (typeof getCrewLocale === 'function' && getCrewLocale() === 'en')
+          ? "You are Crew Pocket, an expert AI handheld companion. After every spoken answer, you MUST silently invoke record_call_turn with the user's request and the exact substantive answer you just gave, so the post-call memo has a complete dialogue. Do not mention this recording tool aloud. You can also control the phone (swipe_screen, tap_screen, press_key, take_screenshot) and read/write workspace files (write_file, read_file). Speak concisely and warmly."
+          : "你是 Crew Pocket（口袋特勤隊）。每次完成口頭回答後，必須靜默呼叫 record_call_turn，填入使用者剛才的語音內容與你實際回答的完整文字，供通話結束卡片逐輪還原；不要在語音中提到這個記錄工具。你也可使用 swipe_screen、tap_screen、press_key、take_screenshot 操作手機，以及 write_file、read_file 讀寫工作區。請以繁體中文簡潔自然地回應。";
+        const customPrompt = getLivePrompt();
+        const systemPrompt = customPrompt
+          ? `${baseSystemPrompt}\n\n【使用者本次語音 Prompt】\n${customPrompt}`
+          : baseSystemPrompt;
         const setupMessage = {
           setup: {
             model: model,
@@ -1934,9 +1948,7 @@
             systemInstruction: {
               parts: [
                 {
-                  text: (typeof getCrewLocale === 'function' && getCrewLocale() === 'en')
-                    ? "You are Crew Pocket, an expert AI handheld companion. After every spoken answer, you MUST silently invoke record_call_turn with the user's request and the exact substantive answer you just gave, so the post-call memo has a complete dialogue. Do not mention this recording tool aloud. You can also control the phone (swipe_screen, tap_screen, press_key, take_screenshot) and read/write workspace files (write_file, read_file). Speak concisely and warmly."
-                    : "你是 Crew Pocket（口袋特勤隊）。每次完成口頭回答後，必須靜默呼叫 record_call_turn，填入使用者剛才的語音內容與你實際回答的完整文字，供通話結束卡片逐輪還原；不要在語音中提到這個記錄工具。你也可使用 swipe_screen、tap_screen、press_key、take_screenshot 操作手機，以及 write_file、read_file 讀寫工作區。請以繁體中文簡潔自然地回應。"
+                  text: systemPrompt
                 }
               ]
             }
@@ -2566,6 +2578,7 @@
     if (liveApiKeyInput) liveApiKeyInput.value = getApiKey();
     if (liveModelSelect) liveModelSelect.value = getSelectedModel();
     if (liveVoiceSelect) liveVoiceSelect.value = getSelectedVoice();
+    if (livePromptInput) livePromptInput.value = getLivePrompt();
     liveKeyModal.classList.remove('hidden');
   }
 
@@ -2593,15 +2606,24 @@
     liveCloseKeyBtn.addEventListener('click', hideKeyModal);
   }
 
+  if (liveSettingsBtn) {
+    liveSettingsBtn.addEventListener('click', () => {
+      if (!isConnected) showKeyModal();
+    });
+  }
+
   if (liveSaveKeyBtn) {
     liveSaveKeyBtn.addEventListener('click', () => {
       const key = liveApiKeyInput ? liveApiKeyInput.value.trim() : '';
       const model = liveModelSelect ? liveModelSelect.value : DEFAULT_MODEL;
       const voice = liveVoiceSelect ? liveVoiceSelect.value : DEFAULT_VOICE;
+      const prompt = livePromptInput ? livePromptInput.value.trim() : '';
       if (key) {
         localStorage.setItem(STORAGE_KEY, key);
         localStorage.setItem(MODEL_KEY, model);
         localStorage.setItem(VOICE_KEY, voice);
+        if (prompt) localStorage.setItem(PROMPT_KEY, prompt);
+        else localStorage.removeItem(PROMPT_KEY);
         hideKeyModal();
         startLiveSession();
       } else {

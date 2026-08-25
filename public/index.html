@@ -130,6 +130,9 @@
         </svg>
         <span class="text-[11px] font-extrabold tracking-tight hidden sm:inline text-teal-200 font-mono">Live 通話</span>
       </button>
+      <button id="live-settings-btn" type="button" class="p-2 rounded-lg bg-slate-900/90 hover:bg-slate-800 text-slate-300 hover:text-white transition active:scale-95 shrink-0 border border-slate-700/80 min-w-[42px] min-h-[42px] flex items-center justify-center" title="⚙️ Live 語音設定">
+        <span aria-hidden="true">⚙️</span>
+      </button>
 
       <!-- 🧰 Unified Tools Dropdown Trigger Button -->
       <button id="tools-menu-btn" class="p-1.5 sm:p-2 rounded-lg bg-slate-900/90 hover:bg-slate-800 text-slate-300 hover:text-white transition active:scale-95 shrink-0 border border-slate-700/80 flex items-center gap-1" title="🧰 工具與功能選單 (檔案 / 用量 / 錦囊 / 通知)">
@@ -907,6 +910,12 @@
       </div>
 
       <div class="space-y-1">
+        <label for="live-prompt-input" class="text-[11px] text-slate-400 font-semibold">語音模型 Prompt：</label>
+        <textarea id="live-prompt-input" rows="4" maxlength="4000" placeholder="例如：你是我的會議助理，只記錄雙方原話，不做重點整理。" class="w-full resize-y bg-slate-950 border border-slate-700 focus:border-teal-500 rounded-xl px-3 py-2.5 text-xs leading-relaxed text-slate-100 placeholder-slate-600 outline-none"></textarea>
+        <div class="text-[10px] text-slate-500">每次通話開始時套用；留白代表使用預設指令。</div>
+      </div>
+
+      <div class="space-y-1">
         <label class="text-[11px] text-slate-400 font-semibold">Google AI Studio API Key：</label>
         <input id="live-api-key-input" type="password" placeholder="AIzaSy..." class="w-full bg-slate-950 border border-slate-700 focus:border-teal-500 rounded-xl px-3 py-2.5 text-xs text-slate-100 placeholder-slate-600 outline-none font-mono">
         <div class="text-[10px] text-slate-500 mt-1 flex justify-between">
@@ -1140,8 +1149,8 @@
   <script src="/js/i18n.js?v=3"></script>
   <script src="/js/ui.js?v=1787583171.8"></script>
   <script src="/js/tools.js?v=7.8"></script>
-  <script src="/js/chat.js?v=1787610051"></script>
-  <script src="/js/live.js?v=1787610051"></script>
+  <script src="/js/chat.js?v=1787637491"></script>
+  <script src="/js/live.js?v=1787637491"></script>
   <script src="/js/phone_agent.js?v=1.1"></script>
   <script src="/js/app.js?v=1787581834.9"></script>
 </body>
