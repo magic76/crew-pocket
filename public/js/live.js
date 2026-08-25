@@ -44,84 +44,7 @@
   let lastAiSpokeTime = 0;
   let sustainedSpeechCount = 0;
   let sessionSnapshots = [];
-  let fullSessionAudioChunks = [];
   let sessionExecutedTools = [];
-
-  function recordAudioSegment(role, float32Data, inputSampleRate = 16000) {
-    if (!float32Data || float32Data.length === 0) return;
-    let resampled16k = float32Data;
-    if (inputSampleRate !== 16000) {
-      resampled16k = downsampleBuffer(float32Data, inputSampleRate, 16000);
-    }
-    if (fullSessionAudioChunks.length < 1800000) {
-      for (let i = 0; i < resampled16k.length; i++) {
-        fullSessionAudioChunks.push(resampled16k[i]);
-      }
-    }
-  }
-
-  function encodeWAV(samples, sampleRate = 16000) {
-    const buffer = new ArrayBuffer(44 + samples.length * 2);
-    const view = new DataView(buffer);
-
-    function writeString(offset, string) {
-      for (let i = 0; i < string.length; i++) {
-        view.setUint8(offset + i, string.charCodeAt(i));
-      }
-    }
-
-    writeString(0, 'RIFF');
-    view.setUint32(4, 36 + samples.length * 2, true);
-    writeString(8, 'WAVE');
-    writeString(12, 'fmt ');
-    view.setUint32(16, 16, true);
-    view.setUint16(20, 1, true);
-    view.setUint16(22, 1, true);
-    view.setUint32(24, sampleRate, true);
-    view.setUint32(28, sampleRate * 2, true);
-    view.setUint16(32, 2, true);
-    view.setUint16(34, 16, true);
-    writeString(36, 'data');
-    view.setUint32(40, samples.length * 2, true);
-
-    let offset = 44;
-    for (let i = 0; i < samples.length; i++, offset += 2) {
-      const s = Math.max(-1, Math.min(1, samples[i]));
-      view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
-    }
-
-    return new Blob([buffer], { type: 'audio/wav' });
-  }
-
-  async function generatePostCallSmartTranscript(audioBlob, apiKey, sampleCount = 0, durationSec = 0) {
-    if (!audioBlob || audioBlob.size < 1000) {
-      return { success: false, error: '音訊過短 (錄音長度不足)' };
-    }
-
-    const base64Audio = await new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result.split(',')[1]);
-      reader.readAsDataURL(audioBlob);
-    });
-
-    try {
-      const res = await fetch('/api/live-transcribe', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          api_key: apiKey || '',
-          audio_base64: base64Audio,
-          mime_type: 'audio/wav',
-          sample_count: sampleCount,
-          duration_sec: durationSec
-        })
-      });
-      const data = await res.json();
-      return data;
-    } catch (err) {
-      return { success: false, error: '連線伺服器異常：' + err.message };
-    }
-  }
 
   // DOM References
   const liveVoiceBtn = document.getElementById('live-voice-btn');
@@ -146,7 +69,6 @@
 
     playChunk(float32Array, sampleRate = 24000) {
       if (!float32Array || float32Array.length === 0) return;
-      recordAudioSegment('model', float32Array, sampleRate);
       if (this.ctx.state === 'suspended') {
         this.ctx.resume();
       }
@@ -1668,7 +1590,6 @@
     
     audioSendBuffer = [];
     sessionSnapshots = [];
-    fullSessionAudioChunks = [];
     sessionExecutedTools = [];
     isMuted = false;
     isCameraOn = false;
@@ -1685,7 +1606,28 @@
       console.log(`[Gemini Live Tool Executing] ${name}:`, args);
 
       try {
-        if (name === 'swipe_screen') {
+        if (name === 'record_call_turn') {
+          const userText = String(args.user_text || '').trim();
+          const assistantText = String(args.assistant_text || '').trim();
+          if (!userText && !assistantText) {
+            toolResult = { success: false, error: '缺少通話文字' };
+          } else {
+            const turn = {
+              user: userText || '🗣️（使用者語音）',
+              model: assistantText || '🎙️（Gemini 語音回覆）'
+            };
+            const lastTurn = sessionDialogueTurns[sessionDialogueTurns.length - 1];
+            if (!lastTurn || lastTurn.user !== turn.user || lastTurn.model !== turn.model) {
+              sessionDialogueTurns.push(turn);
+              if (userText) appendCardTranscript('user', userText);
+              if (assistantText) appendCardTranscript('model', assistantText);
+            }
+            currentTurnUser = '';
+            currentTurnModel = '';
+            toolResult = { success: true, recorded: true, turn_count: sessionDialogueTurns.length };
+          }
+
+        } else if (name === 'swipe_screen') {
           const dir = (args.direction || 'up').toLowerCase();
           let x1 = 720, y1 = 1800, x2 = 720, y2 = 800, dur = 250;
           if (dir === 'down') { x1 = 720; y1 = 800; x2 = 720; y2 = 1800; }
@@ -1901,6 +1843,18 @@
               {
                 functionDeclarations: [
                   {
+                    name: "record_call_turn",
+                    description: "Record one completed Gemini Live dialogue turn for the post-call memo. Invoke this after every spoken answer with the user's request and the exact answer you gave. This tool is silent and must be called even when no other tool is used.",
+                    parameters: {
+                      type: "OBJECT",
+                      properties: {
+                        user_text: { type: "STRING", description: "The user's spoken request, faithfully transcribed or paraphrased without adding facts." },
+                        assistant_text: { type: "STRING", description: "The exact substantive answer Gemini just spoke to the user." }
+                      },
+                      required: ["user_text", "assistant_text"]
+                    }
+                  },
+                  {
                     name: "swipe_screen",
                     description: "Scroll or swipe the phone screen. Use 'up' to scroll down/read more content, 'down' to scroll up/go to top, 'left' or 'right' to flip cards/tabs.",
                     parameters: {
@@ -1981,8 +1935,8 @@
               parts: [
                 {
                   text: (typeof getCrewLocale === 'function' && getCrewLocale() === 'en')
-                    ? "You are Crew Pocket, an expert AI handheld companion. You can directly control the user's phone (swipe_screen, tap_screen, press_key, take_screenshot) and write/read structured documents in the Termux workspace (write_file, read_file). When the user asks you to take notes, write down a plan, summarize dialogue, log issues, or operate the screen, immediately invoke write_file or the corresponding tool, and speak concisely and warmly in Traditional Chinese."
-                    : "You are Crew Pocket (口袋特勤隊), an expert AI handheld companion. 你擁有直接操控手機（swipe_screen、tap_screen、press_key、take_screenshot）以及在 Termux 工作區讀寫結構化文件（write_file、read_file）的工具。當使用者請你記錄想法、摘要對話、記待辦事項、記錄問題或操作手機時，請主動調用 write_file 工具儲存結構化 Markdown 檔案（如 'scratch/note.md' 或 'logs/issue.md'），並以繁體中文簡潔自然地口頭回應。"
+                    ? "You are Crew Pocket, an expert AI handheld companion. After every spoken answer, you MUST silently invoke record_call_turn with the user's request and the exact substantive answer you just gave, so the post-call memo has a complete dialogue. Do not mention this recording tool aloud. You can also control the phone (swipe_screen, tap_screen, press_key, take_screenshot) and read/write workspace files (write_file, read_file). Speak concisely and warmly."
+                    : "你是 Crew Pocket（口袋特勤隊）。每次完成口頭回答後，必須靜默呼叫 record_call_turn，填入使用者剛才的語音內容與你實際回答的完整文字，供通話結束卡片逐輪還原；不要在語音中提到這個記錄工具。你也可使用 swipe_screen、tap_screen、press_key、take_screenshot 操作手機，以及 write_file、read_file 讀寫工作區。請以繁體中文簡潔自然地回應。"
                 }
               ]
             }
@@ -2070,7 +2024,8 @@
 
           const isTurnDone = sc.turnComplete || sc.turn_complete;
           if (isTurnDone) {
-            if (currentTurnUser || currentTurnModel) {
+            const hasTextTurn = currentTurnUser || (currentTurnModel && currentTurnModel !== '🎙️ (AI 即時語音回覆)');
+            if (hasTextTurn) {
               sessionDialogueTurns.push({
                 user: currentTurnUser || '🗣️ (您的語音提問)',
                 model: currentTurnModel || '🎙️ (AI 語音回覆)'
@@ -2266,8 +2221,6 @@
           sustainedSpeechCount = Math.max(0, sustainedSpeechCount - 1);
         }
 
-        recordAudioSegment('user', downsampled, 16000);
-
         // Continuous streaming buffer with selective bystander mute
         const isBystander = userVoiceprintProfile && (rms > TUNING_CONFIG.RMS_THRESHOLD) && (currentSpeechSimilarity < TUNING_CONFIG.SIMILARITY_THRESHOLD);
 
@@ -2357,47 +2310,7 @@
       });
     }
 
-    // 2. Build Smart Key Takeaways
-    let keyHighlightsHtml = '';
-    if (precomputedSummary && Array.isArray(precomputedSummary) && precomputedSummary.length > 0) {
-      keyHighlightsHtml = `
-        <div class="p-3 rounded-xl bg-teal-950/40 border border-teal-500/40 mb-2.5">
-          <div class="flex items-center gap-1.5 text-xs font-bold text-teal-300 mb-1.5">
-            <span>📌</span>
-            <span>本次對話重點整理</span>
-          </div>
-          <ul class="space-y-1 text-xs text-slate-200 list-disc list-inside">
-            ${precomputedSummary.map(s => `<li>${escapeHtml(s)}</li>`).join('')}
-          </ul>
-        </div>
-      `;
-    } else if (hasRealContent) {
-      keyHighlightsHtml = `
-        <div class="p-3 rounded-xl bg-teal-950/40 border border-teal-500/40 mb-2.5">
-          <div class="flex items-center gap-1.5 text-xs font-bold text-teal-300 mb-1.5">
-            <span>📌</span>
-            <span>本次對話重點整理</span>
-          </div>
-          <ul class="space-y-1 text-xs text-slate-200 list-disc list-inside">
-            ${rawTurns.slice(0, 3).map(t => {
-              const u = t.user || (t.speaker === 'user' ? t.text : '');
-              const m = t.model || (t.speaker !== 'user' ? t.text : '');
-              const preview = u ? `討論：「${u.slice(0, 40)}${u.length > 40 ? '...' : ''}」` : (m ? `回覆摘要：${m.slice(0, 50)}...` : '');
-              return preview ? `<li>${escapeHtml(preview)}</li>` : '';
-            }).filter(Boolean).join('')}
-          </ul>
-        </div>
-      `;
-    } else {
-      keyHighlightsHtml = `
-        <div class="p-3 rounded-xl bg-teal-950/30 border border-teal-500/30 mb-2.5 flex items-center gap-2">
-          <span class="w-3 h-3 rounded-full border-2 border-teal-400 border-t-transparent animate-spin shrink-0"></span>
-          <span class="text-xs text-teal-300 animate-pulse font-mono">正在透過語音 AI 自動提煉對話逐字稿與重點...</span>
-        </div>
-      `;
-    }
-
-    // 3. Build Visual Snapshots Gallery (if camera was used)
+    // 2. Build Visual Snapshots Gallery (if camera was used)
     let snapshotsHtml = '';
     if (snapshots && snapshots.length > 0) {
       snapshotsHtml = `
@@ -2435,11 +2348,6 @@
               📋 複製
             </button>
           </div>
-        </div>
-
-        <!-- 📌 Smart Key Highlights -->
-        <div id="highlights-container-${memoId}">
-          ${keyHighlightsHtml}
         </div>
 
         <!-- 📷 Visual Snapshots Gallery (if any) -->
@@ -2488,12 +2396,9 @@
   window.buildCallSummaryCardHtml = buildCallSummaryCardHtml;
 
   async function endLiveSession() {
-    // Keep post-call values outside the cleanup try block so the optional
-    // audio enrichment step can safely use them after the card is mounted.
     let turnsToSave = [];
     let toolsToSave = [];
     let snapshotsToSave = [];
-    let audioChunksToTranscribe = [];
     let durationSec = 0;
     let voiceName = 'Gemini';
     let durationText = '0 秒';
@@ -2505,7 +2410,8 @@
 
       // Render first: teardown must never prevent the user-visible memo.
       turnsToSave = sessionDialogueTurns.slice();
-      if (currentTurnUser || currentTurnModel) {
+      const hasPendingTextTurn = currentTurnUser || (currentTurnModel && currentTurnModel !== '🎙️ (AI 即時語音回覆)');
+      if (hasPendingTextTurn) {
         turnsToSave.push({
           user: currentTurnUser || '🗣️ (雙向語音通話)',
           model: currentTurnModel || '🎙️ (AI 即時語音回覆)'
@@ -2513,14 +2419,13 @@
       }
       toolsToSave = sessionExecutedTools.slice();
       snapshotsToSave = sessionSnapshots.slice();
-      audioChunksToTranscribe = fullSessionAudioChunks.slice();
       durationSec = liveCallStartTs > 0 ? Math.max(1, Math.round((Date.now() - liveCallStartTs) / 1000)) : 1;
       voiceName = getSelectedVoice();
       const earlyMins = Math.floor(durationSec / 60);
       const earlySecs = durationSec % 60;
       durationText = earlyMins > 0 ? `${earlyMins} 分 ${earlySecs} 秒` : `${earlySecs} 秒`;
       memoId = `call-memo-${Date.now()}`;
-      initialSummary = [`已完成 ${durationText} 語音通話 (音色：${voiceName})`];
+      initialSummary = [];
       // Card rendering must never block teardown.
       try {
         const earlyCard = buildCallSummaryCardHtml(turnsToSave, durationSec, voiceName, snapshotsToSave, memoId, initialSummary);
@@ -2607,7 +2512,6 @@
       sessionExecutedTools = [];
       sessionDialogueTurns = [];
       sessionSnapshots = [];
-      fullSessionAudioChunks = [];
       currentTurnUser = '';
       currentTurnModel = '';
 
@@ -2651,72 +2555,6 @@
       }
       if (fallbackInput) fallbackInput.classList.remove('hidden');
       try { removeInlineCard(); } catch (_) {}
-    }
-
-    // 2. Background AI Audio Multimodal Transcription & Highlights Enrichment
-    if (audioChunksToTranscribe.length > 4000) {
-      const wavBlob = encodeWAV(new Float32Array(audioChunksToTranscribe), 16000);
-      const apiKey = getApiKey();
-      generatePostCallSmartTranscript(wavBlob, apiKey, audioChunksToTranscribe.length, durationSec).then(result => {
-        if (result && result.success && result.data) {
-          const highlightsContainer = document.getElementById(`highlights-container-${memoId}`);
-          const transcriptContainer = document.getElementById(`transcript-container-${memoId}`);
-          const summaryList = result.data.summary || [];
-          const transcriptList = result.data.transcript || [];
-
-          if (highlightsContainer && summaryList.length > 0) {
-            highlightsContainer.innerHTML = `
-              <div class="p-3 rounded-xl bg-teal-950/40 border border-teal-500/40 mb-2.5">
-                <div class="flex items-center gap-1.5 text-xs font-bold text-teal-300 mb-1.5">
-                  <span>📌</span>
-                  <span>本次對話重點整理</span>
-                </div>
-                <ul class="space-y-1 text-xs text-slate-200 list-disc list-inside">
-                  ${summaryList.map(s => `<li>${escapeHtml(s)}</li>`).join('')}
-                </ul>
-              </div>
-            `;
-          }
-
-          if (transcriptContainer && transcriptList.length > 0) {
-            transcriptContainer.innerHTML = transcriptList.map((t, idx) => {
-              const isUser = t.speaker === 'user';
-              return `
-                <div class="p-2.5 rounded-xl ${isUser ? 'bg-indigo-950/40 border border-indigo-500/30 text-indigo-100' : 'bg-slate-900/90 border border-teal-500/30 text-slate-100'} text-xs mb-2">
-                  <div class="flex items-center gap-1.5 font-bold ${isUser ? 'text-indigo-300' : 'text-teal-300'} mb-1">
-                    <span>${isUser ? `🗣️ 您 (第 ${idx + 1} 輪)：` : '✨ Gemini：'}</span>
-                  </div>
-                  <div class="leading-relaxed pl-1">${escapeHtml(t.text || '')}</div>
-                </div>
-              `;
-            }).join('');
-          }
-
-          // Sync enriched transcript into server history
-          fetch('/api/live-sync', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              conversation_id: activeConvId,
-              user_message: transcriptList.filter(t => t.speaker === 'user').map(t => t.text).join('；') || `🗣️ 雙向語音對話 (${durationText})`,
-              assistant_message: `✨ Gemini Live 語音對話紀錄：\n` + transcriptList.map(t => `[${t.speaker === 'user' ? '您' : 'Gemini'}]: ${t.text}`).join('\n'),
-              call_memo: {
-                duration_sec: durationSec,
-                voice_name: voiceName,
-                summary: summaryList,
-                transcript: transcriptList,
-                tools: toolsToSave
-              }
-            })
-          }).then(res => res.json()).then(data => {
-            if (data.success && data.conversation_id && (typeof currentConversationId !== 'undefined' && !currentConversationId)) {
-              currentConversationId = data.conversation_id;
-              localStorage.setItem('agy_active_conv_id', data.conversation_id);
-            }
-            if (typeof window.loadConversations === 'function') window.loadConversations();
-          }).catch(() => {});
-        }
-      }).catch(() => {});
     }
   }
 
