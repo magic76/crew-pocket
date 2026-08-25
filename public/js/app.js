@@ -540,6 +540,7 @@ function initAppAndListeners() {
     const attachOptGallery = document.getElementById('attach-opt-gallery');
     const attachOptFiles = document.getElementById('attach-opt-files');
     const attachOptGps = document.getElementById('attach-opt-gps');
+    const attachOptDiscussion = document.getElementById('attach-opt-discussion');
 
     if (attachMenuBtn && attachMenuDropdown) {
       attachMenuBtn.addEventListener('click', (e) => {
@@ -585,6 +586,14 @@ function initAppAndListeners() {
           if (typeof triggerGpsLocation === 'function') {
             triggerGpsLocation();
           }
+        });
+      }
+
+      if (attachOptDiscussion) {
+        attachOptDiscussion.addEventListener('click', () => {
+          if (typeof window.haptic === 'function') window.haptic('light');
+          attachMenuDropdown.classList.add('hidden');
+          if (typeof window.startDiscussionLive === 'function') window.startDiscussionLive();
         });
       }
     }

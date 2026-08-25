@@ -30,6 +30,7 @@
   let silentGainNode = null;
   let audioPlayer = null;
   let isConnected = false;
+  let isLiveSetupReady = false;
   let isMuted = false;
   let isCameraOn = false;
   let cameraFacingMode = 'environment';
@@ -38,6 +39,10 @@
   let analyser = null;
   let animFrameId = null;
   let audioSendBuffer = [];
+  // Keep the first couple of seconds spoken while Gemini is completing setup.
+  // Without this, the mic is already open but the initial PCM frames are dropped.
+  let preSetupAudioBuffer = [];
+  const PRE_SETUP_AUDIO_MAX_SAMPLES = 32000; // ~2 seconds at 16 kHz
   
   // Real-time STT & Session Dialogue Tracker
   let speechRecognizer = null;
@@ -60,6 +65,7 @@
   // a tool response cannot race the audio stream or get sent twice.
   let liveToolQueue = Promise.resolve();
   let liveToolCallKeys = new Set();
+  let liveSessionMode = 'operation';
   let voicePreviewSource = null;
   const voicePreviewCache = new Map();
   let lastVoicePreviewAt = 0;
@@ -79,7 +85,7 @@
   const messagesContainer = document.getElementById('messages-container');
 
   // ==========================================
-  // 🔊 Gapless 24kHz PCM Audio Stream Player (Single Pristine Audio Track)
+  // 🔊 Gapless 24kHz PCM Audio Stream Player (single HTML5 media output path)
   // ==========================================
   class LiveAudioPlayer {
     constructor(ctx) {
@@ -87,6 +93,38 @@
       this.nextStartTime = 0;
       this.activeSources = [];
       this.jitterBufferSec = 0.035; // 35ms smooth jitter buffer to eliminate pops/stutters
+
+      // Route the rendered response through a real HTML5 audio element. On
+      // Android Chrome this keeps hardware volume keys on STREAM_MUSIC rather
+      // than the in-call stream. Do not also connect sources to destination:
+      // two output paths cause doubled audio and echo.
+      try {
+        this.mediaStreamDest = this.ctx.createMediaStreamDestination();
+        this.audioEl = document.createElement('audio');
+        this.audioEl.autoplay = true;
+        this.audioEl.playsInline = true;
+        this.audioEl.controls = false;
+        this.audioEl.volume = 1;
+        this.audioEl.style.cssText = 'position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;left:-10px;top:-10px;';
+        this.audioEl.srcObject = this.mediaStreamDest.stream;
+        document.body.appendChild(this.audioEl);
+        this.audioEl.play().catch(() => {});
+
+        // Keep the media track active between response chunks so Android does
+        // not fall back to the communication stream during short pauses.
+        if (typeof this.ctx.createConstantSource === 'function') {
+          const silentOsc = this.ctx.createConstantSource();
+          const silentGain = this.ctx.createGain();
+          silentGain.gain.value = 0.00001;
+          silentOsc.connect(silentGain);
+          silentGain.connect(this.mediaStreamDest);
+          silentOsc.start();
+          this.silentOsc = silentOsc;
+        }
+      } catch (e) {
+        this.mediaStreamDest = null;
+        this.audioEl = null;
+      }
     }
 
     playChunk(float32Array, sampleRate = 24000) {
@@ -101,8 +139,15 @@
       const source = this.ctx.createBufferSource();
       source.buffer = audioBuffer;
 
-      // 🔊 Single pristine direct hardware connection (no duplicate media bridge)
-      source.connect(this.ctx.destination);
+      if (this.mediaStreamDest) {
+        try {
+          source.connect(this.mediaStreamDest);
+        } catch (e) {
+          source.connect(this.ctx.destination);
+        }
+      } else {
+        source.connect(this.ctx.destination);
+      }
 
       if (analyser) {
         source.connect(analyser);
@@ -148,6 +193,18 @@
       this.activeSources = [];
       if (this.ctx) {
         this.nextStartTime = this.ctx.currentTime;
+      }
+      if (this.silentOsc) {
+        try { this.silentOsc.stop(); } catch (e) {}
+        this.silentOsc = null;
+      }
+      if (this.audioEl) {
+        try {
+          this.audioEl.pause();
+          this.audioEl.srcObject = null;
+          this.audioEl.remove();
+        } catch (e) {}
+        this.audioEl = null;
       }
     }
   }
@@ -812,6 +869,7 @@
         <!-- CARD TOP TOOLBAR: 狀態指示 (靠左) + 調音/音色膠囊 (靠右) -->
         <div class="border-b border-slate-800/80 pb-2 flex items-center justify-between gap-1.5 min-w-0">
           <div class="flex items-center gap-1.5 min-w-0">
+            ${liveSessionMode === 'discussion' ? '<span class="px-1.5 py-0.5 rounded-md bg-amber-500/15 border border-amber-500/40 text-amber-300 text-[10px] font-bold shrink-0">🗣️ 討論</span>' : ''}
             <span id="live-card-status-dot" class="w-2 h-2 rounded-full bg-amber-400 animate-pulse shrink-0"></span>
             <span id="live-card-status-text" class="text-amber-300 font-bold text-xs font-mono truncate">⚡ 準備中...</span>
           </div>
@@ -967,6 +1025,15 @@
       </div>
     `;
 
+    if (liveSessionMode === 'discussion') {
+      const cameraButton = card.querySelector('#live-card-camera-btn');
+      const cameraBox = card.querySelector('#live-card-camera-box');
+      const tuningButton = card.querySelector('#live-card-tuning-toggle-btn');
+      if (cameraButton) cameraButton.classList.add('hidden');
+      if (cameraBox) cameraBox.classList.add('hidden');
+      if (tuningButton) tuningButton.classList.add('hidden');
+    }
+
     if (messagesContainer) {
       messagesContainer.appendChild(card);
       messagesContainer.scrollTop = messagesContainer.scrollHeight;
@@ -1049,7 +1116,7 @@
         if (liveVoiceSelect) liveVoiceSelect.value = newVoice;
         if (isConnected) {
           await endLiveSession();
-          setTimeout(startLiveSession, 300);
+          setTimeout(() => startLiveSession(liveSessionMode), 300);
         }
       });
     }
@@ -1622,6 +1689,39 @@
     return (localStorage.getItem(PROMPT_KEY) || '').trim();
   }
 
+  function getDiscussionContext() {
+    const title = document.getElementById('header-title')?.textContent?.trim() || '目前對話';
+    const provider = typeof currentProvider !== 'undefined' ? currentProvider : 'antigravity';
+    const convId = typeof currentConversationId !== 'undefined' ? currentConversationId : '';
+    const container = document.getElementById('messages-container');
+    const text = container ? String(container.innerText || '').replace(/\s+/g, ' ').trim() : '';
+    const recent = text.length > 3000 ? text.slice(-3000) : text;
+    return `【目前討論上下文】\nSession：${title}\nProvider：${provider}\n${convId ? `Session ID：${convId}\n` : ''}最近畫面內容：\n${recent || '（目前沒有可用的歷史訊息）'}`;
+  }
+
+  function sendLiveAudioChunk(samples) {
+    if (!samples || samples.length === 0 || !ws || ws.readyState !== WebSocket.OPEN || !isConnected) return;
+    const pcmBuffer = floatTo16BitPCM(samples);
+    const base64Audio = arrayBufferToBase64(pcmBuffer);
+    ws.send(JSON.stringify({
+      realtimeInput: {
+        audio: {
+          mimeType: 'audio/pcm;rate=16000',
+          data: base64Audio
+        }
+      }
+    }));
+  }
+
+  function flushPreSetupAudio() {
+    if (!preSetupAudioBuffer.length) return;
+    audioSendBuffer = preSetupAudioBuffer.concat(audioSendBuffer);
+    preSetupAudioBuffer = [];
+    while (audioSendBuffer.length >= 640 && isLiveSetupReady && ws && ws.readyState === WebSocket.OPEN) {
+      sendLiveAudioChunk(new Float32Array(audioSendBuffer.splice(0, 640)));
+    }
+  }
+
   function renderVoiceOptions(selectedVoice) {
     return GEMINI_LIVE_VOICES.map(([name, description]) =>
       `<option value="${name}" ${selectedVoice === name ? 'selected' : ''}>${name} · ${description}</option>`
@@ -1701,7 +1801,7 @@
     }
   }
 
-  async function startLiveSession() {
+  async function startLiveSession(mode = 'operation') {
     // Prevent duplicate sessions
     if (isConnected || ws) {
       console.warn('[Live] Session already active, resetting...');
@@ -1709,6 +1809,7 @@
       await new Promise(r => setTimeout(r, 200));
     }
 
+    liveSessionMode = mode === 'discussion' ? 'discussion' : 'operation';
     const apiKey = getApiKey();
     if (!apiKey) {
       showKeyModal();
@@ -1742,6 +1843,8 @@
     setMediaSessionActive(true);
     
     audioSendBuffer = [];
+    preSetupAudioBuffer = [];
+    isLiveSetupReady = false;
     sessionSnapshots = [];
     sessionExecutedTools = [];
     currentTurnInputTranscript = '';
@@ -1762,7 +1865,11 @@
       console.log(`[Gemini Live Tool Executing] ${name}:`, args);
 
       try {
-        if (name === 'record_call_turn') {
+        const discussionToolAllowed = name === 'record_call_turn' || name === 'draft_message';
+        if (liveSessionMode === 'discussion' && !discussionToolAllowed) {
+          toolResult = { success: false, error: '目前是語音討論模式，此工具被停用；只允許記錄對話，或在使用者明確要求時把草稿填入主輸入框。' };
+          appendCardTranscript('system', `🛡️ 討論模式已阻擋：${name}`);
+        } else if (name === 'record_call_turn') {
           const transcriptText = currentTurnInputTranscript.trim();
           const userText = transcriptText || String(args.user_text || '').trim();
           const assistantText = String(args.assistant_text || '').trim();
@@ -1990,14 +2097,16 @@
 
       audioPlayer = new LiveAudioPlayer(audioContext);
 
-      // 3. Microphone Capture with Acoustic Echo Cancellation
+      // 3. Microphone Capture. On Android, disabling browser telephony
+      // processing keeps the hardware volume keys on the media stream.
       try {
+        const isAndroid = /Android/i.test(navigator.userAgent || '');
         micMediaStream = await navigator.mediaDevices.getUserMedia({
           audio: {
             channelCount: 1,
-            echoCancellation: true,
-            noiseSuppression: true,
-            autoGainControl: true
+            echoCancellation: !isAndroid,
+            noiseSuppression: !isAndroid,
+            autoGainControl: !isAndroid
           }
         });
       } catch (micErr) {
@@ -2026,17 +2135,21 @@
       ws.onopen = () => {
         console.log('[Gemini Live] WebSocket opened with model:', model);
         isConnected = true;
+        isLiveSetupReady = false;
         updateCardStatus('connecting', '⚡ 準備中...');
 
         const voiceName = getSelectedVoice();
         const baseSystemPrompt = (typeof getCrewLocale === 'function' && getCrewLocale() === 'en')
           ? "You are Crew Pocket, an expert AI handheld companion. MANDATORY dialogue protocol: for EVERY user turn that receives a substantive answer, first silently call record_call_turn exactly once with the user's request and the exact answer you intend to speak. Wait for the successful tool response, then speak that same answer. Never speak a substantive answer before recording it. Do not mention this recording tool aloud. This rule applies on every turn, even when no other tool is needed. You can control the phone (swipe_screen, tap_screen, press_key, take_screenshot), read/write workspace files (write_file, read_file), and use draft_message only when the user explicitly asks you to put a handoff draft into Crew Pocket's main input box. draft_message never submits the message. Speak concisely and warmly."
           : "你是 Crew Pocket（口袋指揮）。【強制逐輪記錄協定】每一輪使用者問題只要需要實質回答，必須先靜默呼叫一次 record_call_turn，填入使用者問題與你準備口頭回答的完整原文；收到工具成功回覆後，才可以說出同一份回答。絕對不要先回答再記錄，也不要漏掉任何一輪；即使沒有使用其他工具也一樣。使用者問題請以輸入語音轉錄的原文為準，不得自行改寫、猜測或替換字詞；若關鍵字聽不清楚，先用語音向使用者確認。不要在語音中提到 record_call_turn。你也可使用 swipe_screen、tap_screen、press_key、take_screenshot 操作手機，以及 write_file、read_file 讀寫工作區；只有使用者明確要求交接或填入輸入框時，才使用 draft_message，而且只填入、不自動送出。請以繁體中文簡潔自然地回應。";
+        const discussionPrompt = liveSessionMode === 'discussion'
+          ? `\n\n【語音討論模式】\n你現在只負責協助使用者釐清目前議題、追問需求、重述共識，並把零散想法整理成可交給目前 Session 的問題或開發任務。你已收到目前 Session 的摘要與最近畫面內容，但不要把暫時想法當成已確認需求。\n\n嚴格限制：不得操作手機畫面、不得截圖、不得點擊、不得滑動、不得按系統按鍵、不得寫檔、不得直接送出訊息。唯一的受控例外是：當使用者明確要求「幫我輸入」「放到輸入框」「填入這段文字」時，可以呼叫 draft_message，把指定草稿填入主輸入框，但絕對不能自動送出。只有使用者明確要求「整理成交接稿」時，才產生一份完整草稿供使用者確認；只有使用者明確要求「傳給目前 Session」時，才提示前端進入傳送確認。對「好」「可以」「嗯」等模糊回覆，不得視為送出授權。\n\n協助輸入時，請先說明你整理出的內容；收到明確輸入指令後才呼叫 draft_message，並告知使用者「已填入，尚未送出」。\n\n${getDiscussionContext()}`
+          : '';
         const customPrompt = getLivePrompt();
         const userSystemPrompt = customPrompt
           ? `${baseSystemPrompt}\n\n【使用者本次語音 Prompt】\n${customPrompt}`
           : baseSystemPrompt;
-        const systemPrompt = `${userSystemPrompt}\n\n【系統強制規則／MANDATORY】每次實質回答前，先呼叫 record_call_turn 並等待成功；每輪恰好一次，工具成功後才開口，口頭內容必須與 assistant_text 完全一致。使用者輸入請以原始語音轉錄為準，不得為了讓句子通順而改寫專有名詞、數字或指令；無法確定時先詢問使用者。`;
+        const systemPrompt = `${userSystemPrompt}${discussionPrompt}\n\n【系統強制規則／MANDATORY】每次實質回答前，先呼叫 record_call_turn 並等待成功；每輪恰好一次，工具成功後才開口，口頭內容必須與 assistant_text 完全一致。使用者輸入請以原始語音轉錄為準，不得為了讓句子通順而改寫專有名詞、數字或指令；無法確定時先詢問使用者。`;
         const setupMessage = {
           setup: {
             model: model,
@@ -2155,7 +2268,7 @@
                       required: ["path"]
                     }
                   }
-                ]
+                ].filter(tool => liveSessionMode !== 'discussion' || ['record_call_turn', 'draft_message'].includes(tool.name))
               }
             ],
             systemInstruction: {
@@ -2188,6 +2301,8 @@
         const isSetupDone = response.setupComplete || response.setup_complete;
         if (isSetupDone) {
           console.log('[Gemini Live] Setup complete, ready to talk!');
+          isLiveSetupReady = true;
+          flushPreSetupAudio();
           updateCardStatus('listening', '🎙️ 可以開始說話');
       // Browser SpeechRecognition may emit periodic start/stop beeps on
       // mobile. Gemini Live audio remains fully functional without it.
@@ -2279,6 +2394,8 @@
       ws.onclose = (e) => {
         console.log('[Gemini Live] Closed code:', e.code, 'reason:', e.reason);
         isConnected = false;
+        isLiveSetupReady = false;
+        preSetupAudioBuffer = [];
         isAiResponding = false;
         hasSentFrameForCurrentTurn = false;
         stopSpeechRecognition();
@@ -2303,7 +2420,7 @@
 
       // 5. Mic PCM Stream with 3D-Speaker Neural Voiceprint & Barge-In Interruption Detector
       micProcessorNode.onaudioprocess = (e) => {
-        if (!isConnected || isMuted || !ws || ws.readyState !== WebSocket.OPEN) return;
+        if (isMuted || !audioContext) return;
 
         const inputData = e.inputBuffer.getChannelData(0);
 
@@ -2315,6 +2432,16 @@
         const rms = Math.sqrt(sumSquares / inputData.length);
 
         const downsampled = downsampleBuffer(inputData, audioContext.sampleRate, 16000);
+
+        // The microphone can become active before the Gemini setup response.
+        // Buffer those frames instead of silently dropping the user's opening words.
+        if (!isConnected || !ws || ws.readyState !== WebSocket.OPEN || !isLiveSetupReady) {
+          for (let i = 0; i < downsampled.length; i++) preSetupAudioBuffer.push(downsampled[i]);
+          if (preSetupAudioBuffer.length > PRE_SETUP_AUDIO_MAX_SAMPLES) {
+            preSetupAudioBuffer = preSetupAudioBuffer.slice(-PRE_SETUP_AUDIO_MAX_SAMPLES);
+          }
+          return;
+        }
 
         // 🧬 3D-Speaker Neural Calibration Mode (Collect ~1.75s active voice samples)
         if (isCalibratingVoiceprint) {
@@ -2465,20 +2592,9 @@
         // Send every ~40ms (640 samples at 16kHz) to keep VAD boundaries and
         // short Mandarin consonants from being hidden in a large chunk.
         if (audioSendBuffer.length >= 640) {
-          const chunkToSend = new Float32Array(audioSendBuffer);
-          audioSendBuffer = [];
-          const pcmBuffer = floatTo16BitPCM(chunkToSend);
-          const base64Audio = arrayBufferToBase64(pcmBuffer);
-
-          const realTimeMessage = {
-            realtimeInput: {
-              audio: {
-                mimeType: "audio/pcm;rate=16000",
-                data: base64Audio
-              }
-            }
-          };
-          ws.send(JSON.stringify(realTimeMessage));
+          while (audioSendBuffer.length >= 640 && isLiveSetupReady && ws && ws.readyState === WebSocket.OPEN) {
+            sendLiveAudioChunk(new Float32Array(audioSendBuffer.splice(0, 640)));
+          }
         }
       };
 
@@ -2698,6 +2814,8 @@
       }
 
       isConnected = false;
+      isLiveSetupReady = false;
+      preSetupAudioBuffer = [];
       stopVisualizer();
       stopSpeechRecognition();
 
@@ -2810,6 +2928,8 @@
       // Teardown fallback: even if one cleanup operation fails, restore the
       // normal input UI and release the connection state.
       isConnected = false;
+      isLiveSetupReady = false;
+      preSetupAudioBuffer = [];
       const fallbackDock = document.getElementById('live-bottom-dock');
       const fallbackInput = document.getElementById('standard-input-bar');
       if (fallbackDock) {
@@ -2823,6 +2943,7 @@
 
   // Expose the close path for the red hangup control and any re-rendered dock.
   window.endLiveSession = endLiveSession;
+  window.startDiscussionLive = () => startLiveSession('discussion');
   window.isLiveSessionActive = () => Boolean(isConnected || (ws && ws.readyState !== WebSocket.CLOSED));
 
   // Key Modal Handlers
@@ -2877,7 +2998,7 @@
         if (prompt) localStorage.setItem(PROMPT_KEY, prompt);
         else localStorage.removeItem(PROMPT_KEY);
         hideKeyModal();
-        startLiveSession();
+        startLiveSession(liveSessionMode);
       } else {
         localStorage.removeItem(STORAGE_KEY);
         hideKeyModal();
