@@ -155,7 +155,7 @@
         try {
           navigator.mediaSession.metadata = new MediaMetadata({
             title: 'Gemini Live 隨身語音特勤',
-            artist: 'Crew Pocket 口袋特勤隊',
+            artist: 'Crew Pocket 口袋指揮',
             album: '即時雙向語音通話'
           });
           navigator.mediaSession.playbackState = 'playing';
@@ -862,7 +862,7 @@
           <div class="flex items-center justify-between border-b border-slate-800 pb-1.5">
             <div class="flex items-center gap-1.5 font-bold text-teal-300 text-[11px]">
               <span>🎛️</span>
-              <span>隨身特勤調音台 (即時可視化反饋)</span>
+              <span>口袋指揮調音台 (即時可視化反饋)</span>
             </div>
             <button id="live-tuning-reset-btn" type="button" class="text-[10px] text-slate-400 hover:text-rose-300 px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 transition">重設預設</button>
           </div>
@@ -1918,7 +1918,7 @@
         const voiceName = getSelectedVoice();
         const baseSystemPrompt = (typeof getCrewLocale === 'function' && getCrewLocale() === 'en')
           ? "You are Crew Pocket, an expert AI handheld companion. MANDATORY dialogue protocol: for EVERY user turn that receives a substantive answer, first silently call record_call_turn exactly once with the user's request and the exact answer you intend to speak. Wait for the successful tool response, then speak that same answer. Never speak a substantive answer before recording it. Do not mention this recording tool aloud. This rule applies on every turn, even when no other tool is needed. You can also control the phone (swipe_screen, tap_screen, press_key, take_screenshot) and read/write workspace files (write_file, read_file). Speak concisely and warmly."
-          : "你是 Crew Pocket（口袋特勤隊）。【強制逐輪記錄協定】每一輪使用者問題只要需要實質回答，必須先靜默呼叫一次 record_call_turn，填入使用者問題與你準備口頭回答的完整原文；收到工具成功回覆後，才可以說出同一份回答。絕對不要先回答再記錄，也不要漏掉任何一輪；即使沒有使用其他工具也一樣。不要在語音中提到 record_call_turn。你也可使用 swipe_screen、tap_screen、press_key、take_screenshot 操作手機，以及 write_file、read_file 讀寫工作區。請以繁體中文簡潔自然地回應。";
+          : "你是 Crew Pocket（口袋指揮）。【強制逐輪記錄協定】每一輪使用者問題只要需要實質回答，必須先靜默呼叫一次 record_call_turn，填入使用者問題與你準備口頭回答的完整原文；收到工具成功回覆後，才可以說出同一份回答。絕對不要先回答再記錄，也不要漏掉任何一輪；即使沒有使用其他工具也一樣。不要在語音中提到 record_call_turn。你也可使用 swipe_screen、tap_screen、press_key、take_screenshot 操作手機，以及 write_file、read_file 讀寫工作區。請以繁體中文簡潔自然地回應。";
         const customPrompt = getLivePrompt();
         const userSystemPrompt = customPrompt
           ? `${baseSystemPrompt}\n\n【使用者本次語音 Prompt】\n${customPrompt}`

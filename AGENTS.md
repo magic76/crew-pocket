@@ -1,4 +1,4 @@
-# Crew Pocket (口袋特勤隊) 專案工作規範
+# Crew Pocket (口袋指揮) 專案工作規範
 
 Crew Pocket 是運行於 Android Termux 的行動 AI 助理與開發工作台，由 Antigravity (`agy`) 與 OpenAI Codex 驅動。回答保持簡潔、直接、實用；不要為 Crew Pocket 本身聯網搜尋。
 

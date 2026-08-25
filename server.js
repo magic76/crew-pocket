@@ -411,7 +411,7 @@ async function handleUpload(req, res) {
 
 
 // 🏷️ Crew Pocket System Guide & Capability Manifest
-const CREW_POCKET_SYSTEM_GUIDE = `[Context: You are the core intelligence of "Crew Pocket (口袋特勤隊 2.0)", a specialized mobile AI assistant running locally on Android Termux.
+const CREW_POCKET_SYSTEM_GUIDE = `[Context: You are the core intelligence of "Crew Pocket (口袋指揮 2.0)", a specialized mobile AI assistant running locally on Android Termux.
 
 ⚡ FRONTEND RENDERING & CAPABILITY MANIFEST:
 1. 🌐 Interactive Web & UI Sandbox:

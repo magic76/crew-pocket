@@ -1,4 +1,4 @@
-# Crew Pocket (口袋特勤隊 2.0) 🚀
+# Crew Pocket (口袋指揮 2.0) 🚀
 
 > **Flagship Tactical Mobile AI Assistant running on Android Termux.**  
 > 專為行動端量身打造的旗艦級隨身特工 AI 助理。
