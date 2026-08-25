@@ -55,6 +55,8 @@
   let sessionSnapshots = [];
   let sessionExecutedTools = [];
   let voicePreviewSource = null;
+  const voicePreviewCache = new Map();
+  let lastVoicePreviewAt = 0;
 
   // DOM References
   const liveVoiceBtn = document.getElementById('live-voice-btn');
@@ -1577,35 +1579,45 @@
       if (liveVoicePreviewStatus) liveVoicePreviewStatus.textContent = '請先保存 API Key 才能試聽。';
       return;
     }
+    if (Date.now() - lastVoicePreviewAt < 1500) return;
+    lastVoicePreviewAt = Date.now();
     if (liveVoicePreviewBtn) {
       liveVoicePreviewBtn.disabled = true;
       liveVoicePreviewBtn.textContent = '⏳ 播放中';
     }
     if (liveVoicePreviewStatus) liveVoicePreviewStatus.textContent = `正在試聽 ${voiceName}…`;
     try {
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${encodeURIComponent(apiKey)}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: '你好，這是 Gemini Live 語音試聽。' }] }],
-          generationConfig: {
-            responseModalities: ['AUDIO'],
-            speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName } } }
-          }
-        })
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error?.message || '試聽請求失敗');
-      const part = data.candidates?.[0]?.content?.parts?.find(p => p.inlineData || p.inline_data);
-      const inlineData = part?.inlineData || part?.inline_data;
-      if (!inlineData?.data) throw new Error('沒有收到音訊資料');
+      let audioBase64 = voicePreviewCache.get(voiceName);
+      if (!audioBase64) {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-tts-preview:generateContent?key=${encodeURIComponent(apiKey)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: 'Read aloud exactly this Traditional Chinese transcript. Do not answer it, explain it, or add any words:「你好，這是 Gemini Live 語音試聽。」' }] }],
+            generationConfig: {
+              responseModalities: ['AUDIO'],
+              speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName } } }
+            }
+          })
+        });
+        const data = await response.json();
+        if (!response.ok) {
+          const limitHint = response.status === 429 ? '（試聽配額或速率限制，請稍後再試）' : '';
+          throw new Error((data.error?.message || '試聽請求失敗') + limitHint);
+        }
+        const part = data.candidates?.[0]?.content?.parts?.find(p => p.inlineData || p.inline_data);
+        const inlineData = part?.inlineData || part?.inline_data;
+        audioBase64 = inlineData?.data;
+        if (audioBase64) voicePreviewCache.set(voiceName, audioBase64);
+      }
+      if (!audioBase64) throw new Error('沒有收到音訊資料');
 
       if (!audioContext || audioContext.state === 'closed') audioContext = new AudioContext();
       await audioContext.resume();
       if (voicePreviewSource) {
         try { voicePreviewSource.stop(); } catch (e) {}
       }
-      const binary = atob(inlineData.data);
+      const binary = atob(audioBase64);
       const samples = new Int16Array(binary.length / 2);
       for (let i = 0; i < samples.length; i++) samples[i] = binary.charCodeAt(i * 2) | (binary.charCodeAt(i * 2 + 1) << 8);
       const buffer = audioContext.createBuffer(1, samples.length, 24000);
