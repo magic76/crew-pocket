@@ -43,6 +43,7 @@
   let speechRecognizer = null;
   let sessionDialogueTurns = [];
   let currentTurnUser = '';
+  let currentTurnInputTranscript = '';
   let currentTurnModel = '';
   let lastUserSpokeTime = 0;
   let lastVideoFrameSentTime = 0;
@@ -54,6 +55,11 @@
   let sustainedSpeechCount = 0;
   let sessionSnapshots = [];
   let sessionExecutedTools = [];
+  // Live API can surface the same function call in both toolCall and
+  // serverContent.parts. Keep tool execution serialized and de-duplicated so
+  // a tool response cannot race the audio stream or get sent twice.
+  let liveToolQueue = Promise.resolve();
+  let liveToolCallKeys = new Set();
   let voicePreviewSource = null;
   const voicePreviewCache = new Map();
   let lastVoicePreviewAt = 0;
@@ -720,7 +726,7 @@
   // ==========================================
   // 🧮 Audio Data Conversion Utilities
   // ==========================================
-  function floatTo16BitPCM(float32Array, gainBoost = 1.4) {
+  function floatTo16BitPCM(float32Array, gainBoost = 1.1) {
     const buffer = new ArrayBuffer(float32Array.length * 2);
     const view = new DataView(buffer);
     let offset = 0;
@@ -798,14 +804,10 @@
 
     const card = document.createElement('div');
     card.id = 'live-inline-card';
-    card.className = 'flex gap-2.5 w-full max-w-2xl mx-auto justify-start transition-all duration-300 animate-fadeIn';
+    card.className = 'flex w-full max-w-2xl mx-auto justify-start transition-all duration-300 animate-fadeIn';
     
     card.innerHTML = `
-      <div class="w-7 h-7 rounded-full bg-teal-500/20 border border-teal-500/50 text-teal-300 flex items-center justify-center shrink-0 text-xs font-bold mt-0.5 shadow-sm shadow-teal-500/30">
-        🎙️
-      </div>
-
-      <div class="bg-gradient-to-b from-slate-900 via-slate-900 to-slate-950 border border-teal-500/50 rounded-2xl rounded-tl-none p-3.5 text-xs sm:text-sm shadow-2xl shadow-teal-950/50 flex-1 max-w-[92%] space-y-3 relative overflow-hidden">
+      <div class="bg-gradient-to-b from-slate-900 via-slate-900 to-slate-950 border border-teal-500/50 rounded-2xl p-3.5 text-xs sm:text-sm shadow-2xl shadow-teal-950/50 w-full min-w-0 space-y-3 relative overflow-hidden">
         
         <!-- CARD TOP TOOLBAR: 狀態指示 (靠左) + 調音/音色膠囊 (靠右) -->
         <div class="border-b border-slate-800/80 pb-2 flex items-center justify-between gap-1.5 min-w-0">
@@ -826,6 +828,19 @@
               <span class="pointer-events-none absolute right-1 text-[8px] text-teal-400 font-mono">▾</span>
             </div>
           </div>
+        </div>
+
+        <!-- 🎙️ In-card call controls: keep the composer area unobstructed. -->
+        <div id="live-card-action-row" class="flex items-center gap-1.5 border-b border-slate-800/70 pb-2">
+          <button id="live-card-mute-btn" type="button" class="flex-1 min-h-[40px] px-2 rounded-lg bg-slate-800/90 hover:bg-slate-700 active:scale-95 border border-slate-700 text-slate-200 text-[11px] font-semibold flex items-center justify-center gap-1.5 transition" title="點擊切換靜音">
+            <span id="live-card-mute-icon">🎙️</span><span id="live-card-mute-label">靜音</span>
+          </button>
+          <button id="live-card-camera-btn" type="button" class="flex-1 min-h-[40px] px-2 rounded-lg bg-slate-800/90 hover:bg-slate-700 active:scale-95 border border-slate-700 text-slate-200 text-[11px] font-semibold flex items-center justify-center gap-1.5 transition" title="開啟/關閉相機">
+            <span>📷</span><span id="live-card-camera-label">相機</span>
+          </button>
+          <button id="live-card-hangup-btn" type="button" class="flex-1 min-h-[40px] px-2 rounded-lg bg-rose-600/90 hover:bg-rose-500 active:scale-95 border border-rose-500/60 text-white text-[11px] font-semibold flex items-center justify-center gap-1.5 transition" title="結束通話">
+            <span>⏹</span><span>掛斷</span>
+          </button>
         </div>
 
         <!-- 📷 CAMERA EXPANSION VIEW (相機展開區) -->
@@ -958,6 +973,14 @@
     }
 
     // Attach Inline Controls
+    const cardMuteBtn = card.querySelector('#live-card-mute-btn');
+    if (cardMuteBtn) cardMuteBtn.addEventListener('click', toggleMute);
+    const cardCameraBtn = card.querySelector('#live-card-camera-btn');
+    if (cardCameraBtn) cardCameraBtn.addEventListener('click', toggleCamera);
+    const cardHangupBtn = card.querySelector('#live-card-hangup-btn');
+    if (cardHangupBtn) cardHangupBtn.addEventListener('click', endLiveSession);
+    updateCardCallControls();
+
     const tuningToggleBtn = card.querySelector('#live-card-tuning-toggle-btn');
     const tuningDrawer = card.querySelector('#live-card-tuning-drawer');
     if (tuningToggleBtn && tuningDrawer) {
@@ -1271,7 +1294,44 @@
     }
   }
 
+  function updateCardCallControls() {
+    const muteBtn = document.getElementById('live-card-mute-btn');
+    const muteIcon = document.getElementById('live-card-mute-icon');
+    const muteLabel = document.getElementById('live-card-mute-label');
+    const cameraBtn = document.getElementById('live-card-camera-btn');
+    const cameraLabel = document.getElementById('live-card-camera-label');
+    const isAiSpeaking = isAiResponding || (audioPlayer && audioPlayer.activeSources.length > 0);
+
+    if (muteBtn) {
+      if (isAiSpeaking) {
+        muteBtn.className = 'flex-1 min-h-[40px] px-2 rounded-lg bg-amber-600/90 hover:bg-amber-500 active:scale-95 border border-amber-400/60 text-white text-[11px] font-semibold flex items-center justify-center gap-1.5 transition';
+        muteBtn.title = 'AI 說話中 · 點擊打斷';
+        if (muteIcon) muteIcon.textContent = '⏸️';
+        if (muteLabel) muteLabel.textContent = '打斷';
+      } else if (isMuted) {
+        muteBtn.className = 'flex-1 min-h-[40px] px-2 rounded-lg bg-rose-900/90 hover:bg-rose-800 active:scale-95 border border-rose-500/60 text-rose-200 text-[11px] font-semibold flex items-center justify-center gap-1.5 transition';
+        muteBtn.title = '麥克風已靜音 · 點擊開啟';
+        if (muteIcon) muteIcon.textContent = '🔇';
+        if (muteLabel) muteLabel.textContent = '開麥';
+      } else {
+        muteBtn.className = 'flex-1 min-h-[40px] px-2 rounded-lg bg-slate-800/90 hover:bg-slate-700 active:scale-95 border border-slate-700 text-slate-200 text-[11px] font-semibold flex items-center justify-center gap-1.5 transition';
+        muteBtn.title = '通話收音中 · 點擊靜音';
+        if (muteIcon) muteIcon.textContent = '🎙️';
+        if (muteLabel) muteLabel.textContent = '靜音';
+      }
+    }
+
+    if (cameraBtn) {
+      cameraBtn.className = isCameraOn
+        ? 'flex-1 min-h-[40px] px-2 rounded-lg bg-indigo-600/90 hover:bg-indigo-500 active:scale-95 border border-indigo-400/70 text-white text-[11px] font-semibold flex items-center justify-center gap-1.5 transition'
+        : 'flex-1 min-h-[40px] px-2 rounded-lg bg-slate-800/90 hover:bg-slate-700 active:scale-95 border border-slate-700 text-slate-200 text-[11px] font-semibold flex items-center justify-center gap-1.5 transition';
+      cameraBtn.title = isCameraOn ? '關閉相機' : '開啟相機';
+      if (cameraLabel) cameraLabel.textContent = isCameraOn ? '關相機' : '相機';
+    }
+  }
+
   function updateDockControls() {
+    updateCardCallControls();
     const dockMuteBtn = document.getElementById('live-dock-mute-btn');
     const dockMuteContainer = document.getElementById('live-dock-mute-icon-container');
     const dockCameraBtn = document.getElementById('live-dock-camera-btn');
@@ -1667,13 +1727,16 @@
       if (span) span.textContent = '通話中';
     }
 
-    // 📱 Option A: Switch bottom bar to Live Voice Dock (Bottom Ergonomic Action Dock)
+    // 📱 Keep the normal composer visible during Live so the voice model can
+    // draft a handoff into it without the call controls covering the input.
     const standardInputBar = document.getElementById('standard-input-bar');
     const liveBottomDock = document.getElementById('live-bottom-dock');
-    if (standardInputBar) standardInputBar.classList.add('hidden');
+    if (standardInputBar) standardInputBar.classList.remove('hidden');
     if (liveBottomDock) {
-      liveBottomDock.classList.remove('hidden');
-      liveBottomDock.classList.add('flex');
+      // Controls now live inside the Live card so the composer can be shown
+      // later without a fixed bottom dock covering it.
+      liveBottomDock.classList.add('hidden');
+      liveBottomDock.classList.remove('flex');
     }
     updateDockControls();
     setMediaSessionActive(true);
@@ -1681,6 +1744,9 @@
     audioSendBuffer = [];
     sessionSnapshots = [];
     sessionExecutedTools = [];
+    currentTurnInputTranscript = '';
+    liveToolQueue = Promise.resolve();
+    liveToolCallKeys = new Set();
     isMuted = false;
     isCameraOn = false;
     liveCallStartTs = Date.now();
@@ -1697,7 +1763,8 @@
 
       try {
         if (name === 'record_call_turn') {
-          const userText = String(args.user_text || '').trim();
+          const transcriptText = currentTurnInputTranscript.trim();
+          const userText = transcriptText || String(args.user_text || '').trim();
           const assistantText = String(args.assistant_text || '').trim();
           if (!userText && !assistantText) {
             toolResult = { success: false, error: '缺少通話文字' };
@@ -1713,6 +1780,7 @@
               if (assistantText) appendCardTranscript('model', assistantText);
             }
             currentTurnUser = '';
+            currentTurnInputTranscript = '';
             currentTurnModel = '';
             toolResult = { success: true, recorded: true, turn_count: sessionDialogueTurns.length };
           }
@@ -1786,6 +1854,28 @@
           if (navigator.vibrate) navigator.vibrate(30);
           appendCardTranscript('system', `🏠 語音觸發按鍵：${key}`);
 
+        } else if (name === 'draft_message') {
+          const draftText = String(args.text || args.message || '').trim();
+          const mode = String(args.mode || 'replace').toLowerCase() === 'append' ? 'append' : 'replace';
+          const input = document.getElementById('prompt-input');
+          if (!input) {
+            toolResult = { success: false, error: '找不到 Crew Pocket 主輸入框' };
+          } else if (!draftText) {
+            toolResult = { success: false, error: '草稿內容不可為空' };
+          } else {
+            const existing = String(input.value || '').trim();
+            input.value = mode === 'append' && existing ? `${existing}\n\n${draftText}` : draftText;
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+            input.style.height = 'auto';
+            input.style.height = `${Math.min(input.scrollHeight, 120)}px`;
+            input.dataset.voiceDraft = 'true';
+            const standardInputBar = document.getElementById('standard-input-bar');
+            if (standardInputBar) standardInputBar.classList.remove('hidden');
+            toolResult = { success: true, mode, chars: draftText.length, drafted: true };
+            if (navigator.vibrate) navigator.vibrate([20, 40, 20]);
+            appendCardTranscript('system', mode === 'append' ? '📝 已將內容追加到主輸入框' : '📝 已將內容填入主輸入框（尚未送出）');
+          }
+
         } else if (name === 'take_screenshot') {
           const res = await fetch('/api/phone/screenshot', { method: 'POST' });
           const shotData = await res.json().catch(() => ({ success: false, error: '截圖失敗' }));
@@ -1849,7 +1939,9 @@
 
       if (ws && isConnected && ws.readyState === WebSocket.OPEN) {
         const responsePayload = {
-          response: { output: toolResult },
+          // Gemini Live expects the function result under `response.result`.
+          // Using `output` can leave the model waiting without resuming audio.
+          response: { result: toolResult },
           id: call.id || callId,
           name: name
         };
@@ -1861,6 +1953,27 @@
         console.log('[Gemini Live Tool Response Sent]', toolResponseMsg);
         ws.send(JSON.stringify(toolResponseMsg));
       }
+    }
+
+    function enqueueLiveToolCall(call) {
+      if (!call || !call.name) return;
+      let key;
+      try {
+        key = call.id || `${call.name}:${JSON.stringify(call.args || {})}`;
+      } catch (e) {
+        key = call.id || `${call.name}:${Date.now()}`;
+      }
+      if (liveToolCallKeys.has(key)) {
+        console.debug('[Gemini Live] Ignoring duplicate tool call:', key);
+        return;
+      }
+      liveToolCallKeys.add(key);
+      // Never let a failed tool poison the queue; the next tool still needs to
+      // return a response so the model can continue speaking.
+      liveToolQueue = liveToolQueue
+        .catch(() => {})
+        .then(() => handleLiveToolCall(call))
+        .catch(err => console.error('[Gemini Live Tool Queue Error]', err));
     }
 
     try {
@@ -1917,13 +2030,13 @@
 
         const voiceName = getSelectedVoice();
         const baseSystemPrompt = (typeof getCrewLocale === 'function' && getCrewLocale() === 'en')
-          ? "You are Crew Pocket, an expert AI handheld companion. MANDATORY dialogue protocol: for EVERY user turn that receives a substantive answer, first silently call record_call_turn exactly once with the user's request and the exact answer you intend to speak. Wait for the successful tool response, then speak that same answer. Never speak a substantive answer before recording it. Do not mention this recording tool aloud. This rule applies on every turn, even when no other tool is needed. You can also control the phone (swipe_screen, tap_screen, press_key, take_screenshot) and read/write workspace files (write_file, read_file). Speak concisely and warmly."
-          : "你是 Crew Pocket（口袋指揮）。【強制逐輪記錄協定】每一輪使用者問題只要需要實質回答，必須先靜默呼叫一次 record_call_turn，填入使用者問題與你準備口頭回答的完整原文；收到工具成功回覆後，才可以說出同一份回答。絕對不要先回答再記錄，也不要漏掉任何一輪；即使沒有使用其他工具也一樣。不要在語音中提到 record_call_turn。你也可使用 swipe_screen、tap_screen、press_key、take_screenshot 操作手機，以及 write_file、read_file 讀寫工作區。請以繁體中文簡潔自然地回應。";
+          ? "You are Crew Pocket, an expert AI handheld companion. MANDATORY dialogue protocol: for EVERY user turn that receives a substantive answer, first silently call record_call_turn exactly once with the user's request and the exact answer you intend to speak. Wait for the successful tool response, then speak that same answer. Never speak a substantive answer before recording it. Do not mention this recording tool aloud. This rule applies on every turn, even when no other tool is needed. You can control the phone (swipe_screen, tap_screen, press_key, take_screenshot), read/write workspace files (write_file, read_file), and use draft_message only when the user explicitly asks you to put a handoff draft into Crew Pocket's main input box. draft_message never submits the message. Speak concisely and warmly."
+          : "你是 Crew Pocket（口袋指揮）。【強制逐輪記錄協定】每一輪使用者問題只要需要實質回答，必須先靜默呼叫一次 record_call_turn，填入使用者問題與你準備口頭回答的完整原文；收到工具成功回覆後，才可以說出同一份回答。絕對不要先回答再記錄，也不要漏掉任何一輪；即使沒有使用其他工具也一樣。使用者問題請以輸入語音轉錄的原文為準，不得自行改寫、猜測或替換字詞；若關鍵字聽不清楚，先用語音向使用者確認。不要在語音中提到 record_call_turn。你也可使用 swipe_screen、tap_screen、press_key、take_screenshot 操作手機，以及 write_file、read_file 讀寫工作區；只有使用者明確要求交接或填入輸入框時，才使用 draft_message，而且只填入、不自動送出。請以繁體中文簡潔自然地回應。";
         const customPrompt = getLivePrompt();
         const userSystemPrompt = customPrompt
           ? `${baseSystemPrompt}\n\n【使用者本次語音 Prompt】\n${customPrompt}`
           : baseSystemPrompt;
-        const systemPrompt = `${userSystemPrompt}\n\n【系統強制規則／MANDATORY】每次實質回答前，先呼叫 record_call_turn 並等待成功；每輪恰好一次，工具成功後才開口，口頭內容必須與 assistant_text 完全一致。`;
+        const systemPrompt = `${userSystemPrompt}\n\n【系統強制規則／MANDATORY】每次實質回答前，先呼叫 record_call_turn 並等待成功；每輪恰好一次，工具成功後才開口，口頭內容必須與 assistant_text 完全一致。使用者輸入請以原始語音轉錄為準，不得為了讓句子通順而改寫專有名詞、數字或指令；無法確定時先詢問使用者。`;
         const setupMessage = {
           setup: {
             model: model,
@@ -2000,6 +2113,22 @@
                     }
                   },
                   {
+                    name: "draft_message",
+                    description: "Only when the user explicitly asks to hand off, draft, or put the discussed content into Crew Pocket's main text input. Write the complete polished question or request into the input box; never submit it automatically.",
+                    parameters: {
+                      type: "OBJECT",
+                      properties: {
+                        text: { type: "STRING", description: "The complete draft question or instruction to place in the main input box." },
+                        mode: {
+                          type: "STRING",
+                          description: "Replace the current input or append after it.",
+                          enum: ["replace", "append"]
+                        }
+                      },
+                      required: ["text"]
+                    }
+                  },
+                  {
                     name: "take_screenshot",
                     description: "Capture the current phone screen to see what is displayed."
                   },
@@ -2071,7 +2200,7 @@
         if (tc && tc.functionCalls) {
           console.log('[Gemini Live Tool Call]', tc.functionCalls);
           for (const call of tc.functionCalls) {
-            handleLiveToolCall(call);
+            enqueueLiveToolCall(call);
           }
         }
 
@@ -2087,6 +2216,14 @@
             updateCameraBadge(false, '待命中 (說話時自動發送)');
             updateCardStatus('listening', '🎙️ 可以開始說話');
             return;
+          }
+
+          // Keep the provider's raw input transcript separate from the model's
+          // tool arguments. The latter may paraphrase or guess pronunciation.
+          const inputTranscript = sc.inputTranscription || sc.input_transcription;
+          if (inputTranscript && inputTranscript.text) {
+            currentTurnInputTranscript += String(inputTranscript.text);
+            console.debug('[Gemini Live Input Transcript]', inputTranscript.text);
           }
 
           const modelTurn = sc.modelTurn || sc.model_turn;
@@ -2106,7 +2243,7 @@
               const fc = part.functionCall || part.function_call;
               if (fc) {
                 console.log('[Gemini Live Part FunctionCall]', fc);
-                handleLiveToolCall(fc);
+                enqueueLiveToolCall(fc);
               }
               if (part.text) {
                 currentTurnModel = (currentTurnModel && currentTurnModel !== '🎙️ (AI 即時語音回覆)') ? (currentTurnModel + part.text) : part.text;
@@ -2123,10 +2260,11 @@
             const hasTextTurn = currentTurnUser || (currentTurnModel && currentTurnModel !== '🎙️ (AI 即時語音回覆)');
             if (hasTextTurn) {
               sessionDialogueTurns.push({
-                user: currentTurnUser || '🗣️ (您的語音提問)',
+                user: currentTurnUser || currentTurnInputTranscript.trim() || '🗣️ (您的語音提問)',
                 model: currentTurnModel || '🎙️ (AI 語音回覆)'
               });
               currentTurnUser = '';
+              currentTurnInputTranscript = '';
               currentTurnModel = '';
             }
           }
@@ -2324,8 +2462,9 @@
           audioSendBuffer.push(isBystander ? 0 : downsampled[i]);
         }
 
-        // Send every ~100ms (1600 samples at 16kHz)
-        if (audioSendBuffer.length >= 1600) {
+        // Send every ~40ms (640 samples at 16kHz) to keep VAD boundaries and
+        // short Mandarin consonants from being hidden in a large chunk.
+        if (audioSendBuffer.length >= 640) {
           const chunkToSend = new Float32Array(audioSendBuffer);
           audioSendBuffer = [];
           const pcmBuffer = floatTo16BitPCM(chunkToSend);
@@ -2518,6 +2657,7 @@
     let durationText = '0 秒';
     let memoId = null;
     let activeConvId = null;
+    let activeProvider = 'antigravity';
     let initialSummary = [];
     let shouldSaveMemo = false;
     try {
@@ -2631,9 +2771,13 @@
       sessionDialogueTurns = [];
       sessionSnapshots = [];
       currentTurnUser = '';
+      currentTurnInputTranscript = '';
       currentTurnModel = '';
 
       activeConvId = (typeof currentConversationId !== 'undefined' && currentConversationId) ? currentConversationId : null;
+      activeProvider = (typeof currentProvider !== 'undefined' && currentProvider)
+        ? currentProvider
+        : (localStorage.getItem('crew_current_provider') || 'antigravity');
       const userText = turnsToSave.map(t => t.user || '').filter(Boolean).join('；') || `🗣️ 雙向語音通話 (${durationText})`;
       const modelText = turnsToSave.map(t => t.model || '').filter(Boolean).join('\n') || `✨ Gemini Live 雙向語音通話完成 (音色：${voiceName} · 時長：${durationText})`;
 
@@ -2643,6 +2787,7 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           conversation_id: activeConvId,
+          provider: activeProvider,
           user_message: userText,
           assistant_message: modelText,
           call_memo: {
