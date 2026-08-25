@@ -838,6 +838,10 @@ function renderHistoryMessages(messages, convId, renderVersion, options = {}) {
 
 // Load History for a Conversation
 async function loadConversationHistory(convId) {
+  if (typeof window.isLiveSessionActive === 'function' && window.isLiveSessionActive()) {
+    alert('🎙️ 目前仍在語音通話中，請先按紅色掛斷，完成備忘錄保存後再切換歷史對話。');
+    return false;
+  }
   const renderVersion = ++historyRenderVersion;
   const loadOverlay = showHistoryLoadOverlay();
   historyPageState = null;

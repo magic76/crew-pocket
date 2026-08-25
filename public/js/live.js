@@ -2678,6 +2678,7 @@
 
   // Expose the close path for the red hangup control and any re-rendered dock.
   window.endLiveSession = endLiveSession;
+  window.isLiveSessionActive = () => Boolean(isConnected || (ws && ws.readyState !== WebSocket.CLOSED));
 
   // Key Modal Handlers
   function showKeyModal() {
