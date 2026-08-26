@@ -240,20 +240,6 @@ public class FloatingBubbleManager {
                         } catch (Exception ignored) {}
                     }
 
-                    Intent inputIntent = new Intent(context, CrewNotificationReceiver.class)
-                        .setAction(CrewNotificationReceiver.ACTION_INPUT);
-                    int mutableFlags = PendingIntent.FLAG_UPDATE_CURRENT;
-                    // FLAG_MUTABLE (API 31) kept as a literal for the Android 24 compile SDK.
-                    if (Build.VERSION.SDK_INT >= 31) mutableFlags |= 0x02000000;
-                    PendingIntent inputPending = PendingIntent.getBroadcast(context, 2, inputIntent, mutableFlags);
-                    android.app.RemoteInput remoteInput = new android.app.RemoteInput.Builder(
-                        CrewNotificationReceiver.EXTRA_INPUT).setLabel("輸入要交給 Crew Pocket 的指令").build();
-
-                    Intent openAppIntent = new Intent(context, CrewNotificationReceiver.class)
-                        .setAction(CrewNotificationReceiver.ACTION_OPEN_APP);
-                    PendingIntent openAppPending = PendingIntent.getBroadcast(
-                        context, 3, openAppIntent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-
                     Notification.Builder builder = new Notification.Builder(context);
                     if (Build.VERSION.SDK_INT >= 26) {
                         try {
@@ -267,10 +253,7 @@ public class FloatingBubbleManager {
                         .setOngoing(true)
                         .setOnlyAlertOnce(true)
                         .setShowWhen(false)
-                        .setCategory(Notification.CATEGORY_SERVICE)
-                        .addAction(new Notification.Action.Builder(android.R.drawable.ic_menu_send, "輸入指令", inputPending)
-                            .addRemoteInput(remoteInput).build())
-                        .addAction(new Notification.Action.Builder(android.R.drawable.ic_menu_view, "開啟 Crew Pocket", openAppPending).build());
+                        .setCategory(Notification.CATEGORY_SERVICE);
                     notifications.notify(NOTIFICATION_ID, builder.build());
                 } catch (Exception ignored) {}
             }
@@ -703,12 +686,6 @@ public class FloatingBubbleManager {
                 });
             }
         }).start();
-    }
-
-    public void sendNotificationMessage(String message) {
-        final String imagePath = pendingImagePath;
-        pendingImagePath = null;
-        sendMessageToCrewPocket(message, imagePath, null);
     }
 
     public void captureScreenshotForPrompt(final CaptureCallback callback) {
