@@ -3,7 +3,6 @@ package com.crewpocket.helper;
 import android.app.Activity;
 import android.content.Intent;
 import android.content.pm.PackageManager;
-import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.provider.Settings;
@@ -49,30 +48,20 @@ public class MainActivity extends Activity {
         });
         layout.addView(btnAccess);
 
-        Button btnOverlay = new Button(this);
-        btnOverlay.setText("🎈 開啟「全域懸浮球」權限");
-        btnOverlay.setOnClickListener(new View.OnClickListener() {
+        Button btnNotification = new Button(this);
+        btnNotification.setText("🔔 開啟通知欄控制");
+        btnNotification.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                    if (!Settings.canDrawOverlays(MainActivity.this)) {
-                        Intent intent = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                                Uri.parse("package:" + getPackageName()));
-                        startActivity(intent);
-                    } else {
-                        FloatingBubbleManager.getInstance(MainActivity.this).showBubble();
-                        Toast.makeText(MainActivity.this, "懸浮球已開啟！", Toast.LENGTH_SHORT).show();
-                    }
-                } else {
-                    FloatingBubbleManager.getInstance(MainActivity.this).showBubble();
-                }
+                FloatingBubbleManager.getInstance(MainActivity.this).showNotification();
+                Toast.makeText(MainActivity.this, "通知欄控制已開啟！", Toast.LENGTH_SHORT).show();
             }
         });
         LinearLayout.LayoutParams overlayLp = new LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
         );
         overlayLp.setMargins(0, 20, 0, 0);
-        layout.addView(btnOverlay, overlayLp);
+        layout.addView(btnNotification, overlayLp);
 
         Button btnCamera = new Button(this);
         btnCamera.setText("📸 開啟「相機拍照」權限");
@@ -103,6 +92,9 @@ public class MainActivity extends Activity {
             }
         }
         if (Build.VERSION.SDK_INT >= 33) {
+            if (checkSelfPermission("android.permission.POST_NOTIFICATIONS") != PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(new String[]{"android.permission.POST_NOTIFICATIONS"}, 103);
+            }
             if (checkSelfPermission("android.permission.READ_MEDIA_IMAGES") != PackageManager.PERMISSION_GRANTED) {
                 requestPermissions(new String[]{"android.permission.READ_MEDIA_IMAGES"}, 102);
             }
@@ -119,7 +111,9 @@ public class MainActivity extends Activity {
         if (CrewAccessibilityService.isServiceRunning()) {
             statusText.setText("🟢 無障礙服務已連線運行中！\n本地通訊 Port: 8766");
             statusText.setTextColor(0xFF22c55e);
-            FloatingBubbleManager.getInstance(this).showBubble();
+            FloatingBubbleManager manager = FloatingBubbleManager.getInstance(this);
+            manager.hideBubble();
+            manager.showNotification();
         } else {
             statusText.setText("🔴 無障礙服務未連線。\n請點擊上方按鈕前往開啟。");
             statusText.setTextColor(0xFFef4444);

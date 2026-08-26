@@ -50,12 +50,12 @@ public class CrewAccessibilityService extends AccessibilityService {
         isRunning = true;
         startLocalServer();
 
-        // Automatically show floating bubble when service starts
+        // Start the notification entry point; the floating bubble is opt-in only.
         mainHandler.postDelayed(new Runnable() {
             @Override
             public void run() {
                 try {
-                    FloatingBubbleManager.getInstance(CrewAccessibilityService.this).showBubble();
+                    FloatingBubbleManager.getInstance(CrewAccessibilityService.this).showNotification();
                 } catch (Exception ignored) {}
             }
         }, 800);
@@ -93,7 +93,9 @@ public class CrewAccessibilityService extends AccessibilityService {
             }
         } catch (Exception e) {}
         try {
-            FloatingBubbleManager.getInstance(this).hideBubble();
+            FloatingBubbleManager manager = FloatingBubbleManager.getInstance(this);
+            manager.hideBubble();
+            manager.cancelNotification();
         } catch (Exception ignored) {}
         instance = null;
         super.onDestroy();
@@ -357,10 +359,10 @@ public class CrewAccessibilityService extends AccessibilityService {
                 mainHandler.post(new Runnable() {
                     @Override
                     public void run() {
-                        FloatingBubbleManager.getInstance(CrewAccessibilityService.this).showBubble();
+                        FloatingBubbleManager.getInstance(CrewAccessibilityService.this).showNotification();
                     }
                 });
-                responseJson = "{\"success\":true,\"action\":\"BUBBLE_SHOWN\"}";
+                responseJson = "{\"success\":true,\"action\":\"NOTIFICATION_SHOWN\"}";
             } else if (path.startsWith("/tap")) {
                 float x = 0, y = 0;
                 try {

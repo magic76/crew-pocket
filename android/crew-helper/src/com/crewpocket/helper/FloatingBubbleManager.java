@@ -1,6 +1,9 @@
 package com.crewpocket.helper;
 
 import android.animation.ValueAnimator;
+import android.app.Notification;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
@@ -42,6 +45,8 @@ public class FloatingBubbleManager {
         void onResult(boolean success, String detail);
     }
     private static FloatingBubbleManager instance;
+    static final String NOTIFICATION_CHANNEL_ID = "crew_pocket_helper";
+    static final int NOTIFICATION_ID = 8766;
     private final Context context;
     private final WindowManager windowManager;
     private final Handler mainHandler;
@@ -202,20 +207,101 @@ public class FloatingBubbleManager {
         }
     }
 
+    /** Opens the compact command UI from the notification; falls back to the web app if overlays are disabled. */
+    public void openInputUi() {
+        if (canDrawOverlays()) {
+            mainHandler.post(new Runnable() {
+                @Override public void run() { showDialog(); }
+            });
+        } else {
+            openCrewPocket();
+        }
+    }
+
+    public void showNotification() {
+        updateNotification(friendlyState(currentState));
+    }
+
+    public void updateNotification(final String status) {
+        mainHandler.post(new Runnable() {
+            @Override public void run() {
+                try {
+                    NotificationManager notifications = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+                    if (Build.VERSION.SDK_INT >= 26) {
+                        try {
+                            Class<?> channelClass = Class.forName("android.app.NotificationChannel");
+                            Object channel = channelClass.getConstructor(String.class, CharSequence.class, int.class)
+                                .newInstance(NOTIFICATION_CHANNEL_ID, "Crew Pocket 控制", NotificationManager.IMPORTANCE_LOW);
+                            channelClass.getMethod("setDescription", String.class)
+                                .invoke(channel, "Crew Helper 的通知欄控制");
+                            channelClass.getMethod("setShowBadge", boolean.class).invoke(channel, false);
+                            NotificationManager.class.getMethod("createNotificationChannel", channelClass)
+                                .invoke(notifications, channel);
+                        } catch (Exception ignored) {}
+                    }
+
+                    Intent inputIntent = new Intent(context, CrewNotificationReceiver.class)
+                        .setAction(CrewNotificationReceiver.ACTION_INPUT);
+                    int mutableFlags = PendingIntent.FLAG_UPDATE_CURRENT;
+                    // FLAG_MUTABLE (API 31) kept as a literal for the Android 24 compile SDK.
+                    if (Build.VERSION.SDK_INT >= 31) mutableFlags |= 0x02000000;
+                    PendingIntent inputPending = PendingIntent.getBroadcast(context, 2, inputIntent, mutableFlags);
+                    android.app.RemoteInput remoteInput = new android.app.RemoteInput.Builder(
+                        CrewNotificationReceiver.EXTRA_INPUT).setLabel("輸入要交給 Crew Pocket 的指令").build();
+
+                    Intent stopIntent = new Intent(context, CrewNotificationReceiver.class)
+                        .setAction(CrewNotificationReceiver.ACTION_STOP);
+                    PendingIntent stopPending = PendingIntent.getBroadcast(
+                        context, 3, stopIntent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+
+                    Intent screenshotIntent = new Intent(context, CrewNotificationReceiver.class)
+                        .setAction(CrewNotificationReceiver.ACTION_SCREENSHOT);
+                    PendingIntent screenshotPending = PendingIntent.getBroadcast(
+                        context, 4, screenshotIntent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+
+                    Notification.Builder builder = new Notification.Builder(context);
+                    if (Build.VERSION.SDK_INT >= 26) {
+                        try {
+                            Notification.Builder.class.getMethod("setChannelId", String.class)
+                                .invoke(builder, NOTIFICATION_CHANNEL_ID);
+                        } catch (Exception ignored) {}
+                    }
+                    builder.setSmallIcon(android.R.drawable.ic_dialog_info)
+                        .setContentTitle("Crew Pocket Helper")
+                        .setContentText(status == null ? "待命" : status)
+                        .setOngoing(true)
+                        .setOnlyAlertOnce(true)
+                        .setShowWhen(false)
+                        .setCategory(Notification.CATEGORY_SERVICE)
+                        .addAction(new Notification.Action.Builder(android.R.drawable.ic_menu_camera, "截圖", screenshotPending).build())
+                        .addAction(new Notification.Action.Builder(android.R.drawable.ic_menu_send, "輸入指令", inputPending)
+                            .addRemoteInput(remoteInput).build())
+                        .addAction(new Notification.Action.Builder(android.R.drawable.ic_menu_close_clear_cancel, "停止", stopPending).build());
+                    notifications.notify(NOTIFICATION_ID, builder.build());
+                } catch (Exception ignored) {}
+            }
+        });
+    }
+
+    public void cancelNotification() {
+        try {
+            NotificationManager notifications = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+            notifications.cancel(NOTIFICATION_ID);
+        } catch (Exception ignored) {}
+    }
+
     // 🌊 Set Water Flow / Thinking State
     public void setThinkingState(final boolean thinking) {
         mainHandler.post(new Runnable() {
             @Override
             public void run() {
-                if (bubbleView == null) return;
-
                 if (safetyTimeoutRunnable != null) {
                     mainHandler.removeCallbacks(safetyTimeoutRunnable);
                     safetyTimeoutRunnable = null;
                 }
 
                 if (thinking) {
-                    bubbleView.startWaterFlow();
+                    if (bubbleView != null) bubbleView.startWaterFlow();
 
                     // 40s Safety Auto-Reset
                     safetyTimeoutRunnable = new Runnable() {
@@ -228,7 +314,7 @@ public class FloatingBubbleManager {
                     };
                     mainHandler.postDelayed(safetyTimeoutRunnable, 40000);
                 } else {
-                    bubbleView.stopWaterFlow();
+                    if (bubbleView != null) bubbleView.stopWaterFlow();
                 }
             }
         });
@@ -241,19 +327,25 @@ public class FloatingBubbleManager {
             vibrateShort();
             setThinkingState(true);
             updateDialogStatus("AI 回覆中");
+            updateNotification("AI 回覆中");
         } else if ("TOOL".equalsIgnoreCase(state)) {
             setThinkingState(true);
-            updateDialogStatus(text == null || text.isEmpty() ? "正在執行工具" : text);
+            String toolStatus = text == null || text.isEmpty() ? "正在執行工具" : text;
+            updateDialogStatus(toolStatus);
+            updateNotification(toolStatus);
         } else if ("ERROR".equalsIgnoreCase(state)) {
             setThinkingState(false);
             updateDialogStatus("執行失敗");
+            updateNotification("執行失敗");
         } else if ("DONE".equalsIgnoreCase(state) || "COMPLETED".equalsIgnoreCase(state)) {
             setThinkingState(false);
             vibrateSuccess();
             updateDialogStatus("已完成");
+            updateNotification("已完成");
         } else if ("IDLE".equalsIgnoreCase(state)) {
             setThinkingState(false);
             updateDialogStatus("待命");
+            updateNotification("待命");
         }
     }
 
@@ -558,6 +650,7 @@ public class FloatingBubbleManager {
 
     public void sendMessageToCrewPocket(final String message, final String imagePath, final SendCallback callback) {
         setThinkingState(true);
+        updateNotification("AI 回覆中");
         new Thread(new Runnable() {
             @Override
             public void run() {
@@ -609,12 +702,33 @@ public class FloatingBubbleManager {
                         if (!result) {
                             setThinkingState(false);
                             updateDialogStatus("Crew Pocket 尚未連線");
+                            updateNotification("Crew Pocket 尚未連線");
                         }
                         if (callback != null) callback.onResult(result, resultDetail);
                     }
                 });
             }
         }).start();
+    }
+
+    public void sendNotificationMessage(String message) {
+        final String imagePath = pendingImagePath;
+        pendingImagePath = null;
+        sendMessageToCrewPocket(message, imagePath, null);
+    }
+
+    public void captureScreenshotForNotification() {
+        updateNotification("正在擷取螢幕…");
+        captureScreenshotForPrompt(new CaptureCallback() {
+            @Override public void onResult(boolean success, String detail) {
+                if (success) {
+                    pendingImagePath = "/uploads/phone_screen_opt.webp";
+                    updateNotification("截圖完成，請輸入指令");
+                } else {
+                    updateNotification("截圖失敗，請重試");
+                }
+            }
+        });
     }
 
     public void captureScreenshotForPrompt(final CaptureCallback callback) {
