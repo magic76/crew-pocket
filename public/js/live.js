@@ -1871,7 +1871,9 @@
           appendCardTranscript('system', `🛡️ 討論模式已阻擋：${name}`);
         } else if (name === 'record_call_turn') {
           const transcriptText = currentTurnInputTranscript.trim();
-          const userText = transcriptText || String(args.user_text || '').trim();
+          // Prefer Gemini Live's provider transcription. The function-call
+          // argument is model-generated and may paraphrase or mishear names.
+          const userText = transcriptText || '🗣️（使用者語音，未取得原始轉錄）';
           const assistantText = String(args.assistant_text || '').trim();
           if (!userText && !assistantText) {
             toolResult = { success: false, error: '缺少通話文字' };
@@ -2163,6 +2165,9 @@
                 }
               }
             },
+            // Request Gemini Live's native microphone transcription so the
+            // memo does not depend on model-generated user_text.
+            inputAudioTranscription: {},
             tools: [
               {
                 functionDeclarations: [
