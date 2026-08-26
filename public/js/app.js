@@ -117,7 +117,7 @@ function initAppAndListeners() {
       }
     });
 
-    [newChatBtn, filesBtn, usageBtn, cheatSheetBtn, notifyBtn, exportExtBtn].forEach(btn => {
+    [newChatBtn, filesBtn, storageBtn, usageBtn, cheatSheetBtn, notifyBtn, exportExtBtn].forEach(btn => {
       if (btn) btn.addEventListener('click', () => {
         if (typeof window.haptic === 'function') window.haptic('light');
         toolsMenuDropdown.classList.add('hidden');

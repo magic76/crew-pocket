@@ -141,6 +141,7 @@ const networkDot = document.getElementById('network-dot');
 const networkOfflineBadge = document.getElementById('network-offline-badge');
 const gpsChip = document.getElementById('gps-chip');
 const filesBtn = document.getElementById('files-btn');
+const storageBtn = document.getElementById('storage-btn');
 const openFilesChip = document.getElementById('open-files-chip');
 const filesModal = document.getElementById('files-modal');
 const closeFilesBtn = document.getElementById('close-files-btn');

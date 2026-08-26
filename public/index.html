@@ -174,6 +174,11 @@
           </div>
         </button>
 
+        <button id="storage-btn" class="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-xs text-slate-200 hover:bg-slate-800/90 hover:text-amber-300 transition text-left group" title="檢視並手動清理對話與媒體">
+          <div class="w-6 h-6 rounded-lg bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-300 group-hover:scale-105 transition shrink-0">💾</div>
+          <div class="flex flex-col min-w-0"><span class="font-semibold text-slate-100 group-hover:text-amber-300">儲存空間管理</span><span class="text-[10px] text-slate-400">掃描、選擇後才刪除</span></div>
+        </button>
+
         <!-- 3. Usage Quota -->
         <button id="usage-btn" class="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-xs text-slate-200 hover:bg-slate-800/90 hover:text-sky-300 transition text-left group">
           <div class="w-6 h-6 rounded-lg bg-sky-500/20 border border-sky-500/30 flex items-center justify-center text-sky-400 group-hover:scale-105 transition shrink-0">
@@ -759,6 +764,14 @@
   </div>
 
   <!-- TERMUX FILES EXPLORER MODAL -->
+  <div id="storage-modal" class="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-3 opacity-0 pointer-events-none transition-opacity duration-200">
+    <div class="bg-slate-900 border border-slate-700/80 rounded-2xl w-full max-w-lg flex flex-col shadow-2xl overflow-hidden max-h-[88dvh]">
+      <div class="px-4 py-3 border-b border-slate-800 flex items-center justify-between bg-slate-950/60 shrink-0"><div class="flex items-center gap-2"><span class="text-lg">💾</span><div><h2 class="text-xs font-bold text-white">儲存空間管理</h2><div id="storage-subtitle" class="text-[10px] text-slate-400">掃描中…</div></div></div><button id="close-storage-btn" class="min-w-10 min-h-10 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition text-xs font-mono">✕</button></div>
+      <div id="storage-list" class="p-3 overflow-y-auto flex-1 space-y-3 text-xs"><div class="text-center text-slate-500 py-8">正在掃描本機資料…</div></div>
+      <div class="p-3 border-t border-slate-800 bg-slate-950/60 flex gap-2 shrink-0"><button id="refresh-storage-btn" class="min-h-11 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold">重新掃描</button><button id="delete-storage-btn" class="min-h-11 flex-1 px-3 rounded-xl bg-rose-600/80 hover:bg-rose-500 disabled:opacity-40 text-white text-xs font-bold">刪除已選項目</button></div>
+    </div>
+  </div>
+
   <div id="files-modal" class="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-3 opacity-0 pointer-events-none transition-opacity duration-200">
     <div class="bg-slate-900 border border-slate-700/80 rounded-2xl w-full max-w-lg flex flex-col shadow-2xl overflow-hidden max-h-[88dvh]">
       <!-- Header -->
@@ -1158,11 +1171,12 @@
   <!-- Modular Scripts (Cache-busted v7.8) -->
   <script src="/js/ort.min.js"></script>
   <script src="/js/i18n.js?v=3"></script>
-  <script src="/js/ui.js?v=1787707333"></script>
+  <script src="/js/ui.js?v=1787740001"></script>
   <script src="/js/tools.js?v=7.8"></script>
+  <script src="/js/storage.js?v=4"></script>
   <script src="/js/chat.js?v=1787707333"></script>
   <script src="/js/live.js?v=1787644000"></script>
   <script src="/js/phone_agent.js?v=1.1"></script>
-  <script src="/js/app.js?v=1787707333"></script>
+  <script src="/js/app.js?v=1787740001"></script>
 </body>
 </html>

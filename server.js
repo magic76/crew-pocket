@@ -27,6 +27,41 @@ const { handleListFiles, handleReadFile, handleSaveFile } = require('./lib/files
 const { handleGenerateTitle, getCachedTitle } = require('./lib/title');
 const { phoneAgent } = require('./lib/phone_agent');
 const { createExtensionBridge } = require('./lib/extension_bridge');
+const { getStorageReport, deleteMediaItems, getMediaThumbnail } = require('./lib/storage');
+
+async function handleStorageReport(res) {
+  try {
+    const report = await getStorageReport();
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(report));
+  } catch (err) {
+    res.writeHead(500, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: err.message }));
+  }
+}
+
+async function handleStorageDelete(req, res) {
+  try {
+    const body = await parseJsonBody(req);
+    const result = await deleteMediaItems(body.items);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: true, ...result }));
+  } catch (err) {
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: err.message }));
+  }
+}
+
+async function handleStorageThumbnail(parsedUrl, res) {
+  try {
+    const image = await getMediaThumbnail({ root: parsedUrl.query.root, path: parsedUrl.query.path });
+    res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=86400' });
+    res.end(image);
+  } catch (err) {
+    res.writeHead(404, { 'Content-Type': 'text/plain' });
+    res.end('HEIC thumbnail unavailable');
+  }
+}
 
 // 📱 Phone Agent (Wireless ADB / Screen & Touch Control) API Handlers
 async function handlePhoneStatus(res) {
@@ -859,6 +894,12 @@ const server = http.createServer(async (req, res) => {
     return handleProviderHistory(parsedUrl, res);
   } else if (pathname === '/api/conversation' && req.method === 'DELETE') {
     return handleProviderDelete(parsedUrl, res);
+  } else if (pathname === '/api/storage' && req.method === 'GET') {
+    return handleStorageReport(res);
+  } else if (pathname === '/api/storage/media' && req.method === 'DELETE') {
+    return handleStorageDelete(req, res);
+  } else if (pathname === '/api/storage/thumbnail' && req.method === 'GET') {
+    return handleStorageThumbnail(parsedUrl, res);
   } else if (pathname === '/api/chat' && req.method === 'POST') {
     return handleChat(req, res);
   } else if (pathname === '/api/stop' && req.method === 'POST') {
