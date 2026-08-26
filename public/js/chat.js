@@ -171,9 +171,89 @@ function formatToolSummary(tool) {
   return `${d.icon} ${d.label}: ${d.desc}`;
 }
 
+function getToolGroupingArgs(tool) {
+  return tool.args || (tool.tool_info && tool.tool_info.parameters) || {};
+}
+
+function serializeToolGroupingArgs(value) {
+  if (typeof value === 'string') return value.slice(0, 1600);
+  try { return JSON.stringify(value).slice(0, 1600); }
+  catch (_) { return String(value).slice(0, 1600); }
+}
+
+function getToolGroupKey(tool, fallbackIndex = 0) {
+  const explicit = tool.tool_group_id || tool.toolGroupId || tool.tool_id || tool.toolId || tool.id;
+  if (explicit) return `tool:${explicit}`;
+
+  const name = tool.name || tool.tool_name || 'action';
+  const args = serializeToolGroupingArgs(getToolGroupingArgs(tool));
+  if (!args || args === '{}' || args === 'null') return `anonymous:${name}:${fallbackIndex}`;
+  return `fallback:${name}:${args}`;
+}
+
+function getToolState(tool) {
+  return String(tool && tool.state || '').toLowerCase();
+}
+
+function isTerminalToolState(state) {
+  return ['completed', 'complete', 'success', 'succeeded', 'failed', 'error', 'cancelled', 'canceled', 'interrupted'].includes(state);
+}
+
+function isPollingTool(tool) {
+  const name = String(tool.name || tool.tool_name || '').toLowerCase();
+  const args = serializeToolGroupingArgs(getToolGroupingArgs(tool)).toLowerCase();
+  return /write_stdin|poll|yield_time_ms|session_id/.test(`${name} ${args}`);
+}
+
+function mergeToolEventIntoMap(toolMap, orderedTools, rawTool, fallbackIndex = orderedTools.length) {
+  if (!rawTool || typeof rawTool !== 'object') return null;
+
+  const key = getToolGroupKey(rawTool, fallbackIndex);
+  let current = toolMap.get(key);
+  if (!current) {
+    current = {
+      ...rawTool,
+      tool_group_id: rawTool.tool_group_id || key,
+      attempts: Math.max(1, Number(rawTool.attempts) || 1),
+      poll_count: Math.max(0, Number(rawTool.poll_count) || 0)
+    };
+    toolMap.set(key, current);
+    orderedTools.push(current);
+    return current;
+  }
+
+  const previousState = getToolState(current);
+  const incomingState = getToolState(rawTool);
+  if (incomingState === 'running' && isTerminalToolState(previousState)) {
+    if (isPollingTool(rawTool)) current.poll_count += 1;
+    else current.attempts += 1;
+  }
+
+  const previousGroupId = current.tool_group_id;
+  Object.assign(current, rawTool);
+  current.tool_group_id = rawTool.tool_group_id || previousGroupId || key;
+  current.attempts = Math.max(1, Number(current.attempts) || 1);
+  current.poll_count = Math.max(0, Number(current.poll_count) || 0);
+  return current;
+}
+
+function coalesceToolEvents(tools) {
+  const toolMap = new Map();
+  const orderedTools = [];
+  (Array.isArray(tools) ? tools : []).forEach((tool, index) => {
+    mergeToolEventIntoMap(toolMap, orderedTools, tool, index);
+  });
+  return orderedTools;
+}
+
 function buildToolItemsHtml(tools) {
   return tools.map((t) => {
     const d = getToolDetails(t);
+    const attempts = Number(t.attempts) || 1;
+    const polls = Number(t.poll_count) || 0;
+    const eventMeta = [];
+    if (attempts > 1) eventMeta.push(`執行 ×${attempts}`);
+    if (polls > 0) eventMeta.push(`等待 ${polls} 次`);
     return `
       <div class="py-1.5 border-b border-slate-800/60 last:border-b-0 flex items-center justify-between gap-2 text-xs">
         <div class="flex items-center gap-2 min-w-0">
@@ -182,7 +262,10 @@ function buildToolItemsHtml(tools) {
           </span>
           <span class="text-slate-300 font-mono text-[11px] truncate">${escapeHtml(d.desc)}</span>
         </div>
-        ${d.durationStr ? `<span class="text-[10px] text-slate-500 font-mono shrink-0">${d.durationStr}</span>` : ''}
+        <span class="text-[10px] text-slate-500 font-mono shrink-0 flex items-center gap-1">
+          ${eventMeta.length ? `<span>${escapeHtml(eventMeta.join(' · '))}</span>` : ''}
+          ${d.durationStr ? `<span>${d.durationStr}</span>` : ''}
+        </span>
       </div>
     `;
   }).join('');
@@ -190,14 +273,17 @@ function buildToolItemsHtml(tools) {
 
 // Render tools accordion HTML with rich cards
 function buildToolsAccordionHtml(tools) {
-  if (!tools || tools.length === 0) return '';
-  const itemsHtml = buildToolItemsHtml(tools);
+  const groupedTools = coalesceToolEvents(tools);
+  if (groupedTools.length === 0) return '';
+  const itemsHtml = buildToolItemsHtml(groupedTools);
+  const totalAttempts = groupedTools.reduce((sum, tool) => sum + Math.max(1, Number(tool.attempts) || 1), 0);
+  const repeatedLabel = totalAttempts > groupedTools.length ? `（實際 ${totalAttempts} 次執行）` : '';
 
   return `
     <details class="my-2 bg-slate-950/70 border border-slate-800/90 rounded-xl overflow-hidden text-xs">
       <summary class="px-3 py-1.5 cursor-pointer flex items-center justify-between text-slate-400 hover:text-slate-200 font-mono select-none bg-slate-900/60">
         <div class="flex items-center gap-1.5">
-          <span>⚙️ 執行了 ${tools.length} 個操作動作</span>
+          <span>⚙️ 執行了 ${groupedTools.length} 個操作${repeatedLabel}</span>
         </div>
         <span class="text-[10px] text-slate-500">展開 ▼</span>
       </summary>
@@ -211,11 +297,14 @@ function buildToolsAccordionHtml(tools) {
 // Historical tool output can be enormous. Keep the collapsed summary instant and
 // only construct individual cards when the user explicitly opens it.
 function buildLazyToolsAccordionHtml(tools) {
-  if (!tools || tools.length === 0) return '';
+  const groupedTools = coalesceToolEvents(tools);
+  if (groupedTools.length === 0) return '';
+  const totalAttempts = groupedTools.reduce((sum, tool) => sum + Math.max(1, Number(tool.attempts) || 1), 0);
+  const repeatedLabel = totalAttempts > groupedTools.length ? `（實際 ${totalAttempts} 次執行）` : '';
   return `
     <details class="lazy-tools my-2 bg-slate-950/70 border border-slate-800/90 rounded-xl overflow-hidden text-xs">
       <summary class="px-3 py-1.5 cursor-pointer flex items-center justify-between text-slate-400 hover:text-slate-200 font-mono select-none bg-slate-900/60">
-        <div class="flex items-center gap-1.5"><span>⚙️ 執行了 ${tools.length} 個操作動作</span></div>
+        <div class="flex items-center gap-1.5"><span>⚙️ 執行了 ${groupedTools.length} 個操作${repeatedLabel}</span></div>
         <span class="text-[10px] text-slate-500">展開 ▼</span>
       </summary>
       <div class="lazy-tools-body px-3 py-2 border-t border-slate-800/60 bg-slate-950/90 space-y-1"></div>
@@ -531,7 +620,7 @@ function appendMessage(role, content, timestamp, tools = [], thinking = '', isBt
       lazyTools.addEventListener('toggle', () => {
         if (!lazyTools.open || lazyTools.dataset.rendered) return;
         const body = lazyTools.querySelector('.lazy-tools-body');
-        if (body) body.innerHTML = buildToolItemsHtml(tools);
+        if (body) body.innerHTML = buildToolItemsHtml(coalesceToolEvents(tools));
         lazyTools.dataset.rendered = 'true';
       });
     }
@@ -1528,6 +1617,7 @@ async function sendMessage(queuedMessage = null) {
   if (imagePreviewContainer) imagePreviewContainer.classList.add('hidden');
 
   const liveTools = [];
+  const liveToolMap = new Map();
   let liveThinking = '';
   const startTs = performance.now();
 
@@ -1603,6 +1693,30 @@ async function sendMessage(queuedMessage = null) {
   const liveTickerTextElem = assistantMsgDiv.querySelector('.live-ticker-text');
   const thinkingContainerElem = assistantMsgDiv.querySelector('.thinking-container');
   const toolsContainerElem = assistantMsgDiv.querySelector('.tools-container');
+
+  let toolRenderTimer = null;
+  let toolRenderPending = false;
+  const renderLiveTools = () => {
+    toolRenderPending = false;
+    toolRenderTimer = null;
+    toolsContainerElem.innerHTML = buildToolsAccordionHtml(liveTools);
+    if (userScrolledUp) {
+      const scrollBadge = document.getElementById('scroll-bottom-badge');
+      if (scrollBadge) scrollBadge.classList.remove('hidden');
+    }
+    scrollToBottom();
+  };
+  const queueLiveToolsRender = (immediate = false) => {
+    if (immediate) {
+      if (toolRenderTimer) clearTimeout(toolRenderTimer);
+      renderLiveTools();
+      return;
+    }
+    if (toolRenderPending) return;
+    toolRenderPending = true;
+    toolRenderTimer = setTimeout(renderLiveTools, 120);
+  };
+
   scrollToBottom();
 
   function updateLiveTicker(rawText, prefix = '') {
@@ -1730,21 +1844,16 @@ async function sendMessage(queuedMessage = null) {
               const thoughtStep = pipelineSteps.get('thought');
               if (thoughtStep) thoughtStep.status = 'done';
 
-              liveTools.push(data);
-              const d = getToolDetails(data);
-              pipelineSteps.set(`tool_${liveTools.length}`, { label: `${d.icon} ${d.label}`, status: 'done' });
+              const mergedTool = mergeToolEventIntoMap(liveToolMap, liveTools, data);
+              const d = getToolDetails(mergedTool || data);
+              pipelineSteps.set('tools', { label: `⚙️ 工具 ${liveTools.length}`, status: 'done' });
               renderPipeline();
 
               statusTextElem.textContent = `${d.icon} ${d.label}: ${d.desc}`;
               if (liveTickerTextElem && d) {
                 liveTickerTextElem.textContent = `${d.icon} ${d.label}: ${d.desc}`;
               }
-              toolsContainerElem.innerHTML = buildToolsAccordionHtml(liveTools);
-              if (userScrolledUp) {
-                const scrollBadge = document.getElementById('scroll-bottom-badge');
-                if (scrollBadge) scrollBadge.classList.remove('hidden');
-              }
-              scrollToBottom();
+              queueLiveToolsRender();
             } else if (currentEvent === 'chunk' && data.accumulated) {
               const initStep = pipelineSteps.get('init');
               if (initStep) initStep.status = 'done';
@@ -1783,7 +1892,7 @@ async function sendMessage(queuedMessage = null) {
               if (data.error) accumulatedText = `⚠️ ${data.error}`;
               else if (data.response) accumulatedText = data.response;
               contentElem.innerHTML = formatMessageContent(accumulatedText);
-              toolsContainerElem.innerHTML = buildToolsAccordionHtml(liveTools);
+              queueLiveToolsRender(true);
               if (liveThinking) {
                 thinkingContainerElem.innerHTML = buildThinkingBlockHtml(liveThinking);
               }
@@ -1969,6 +2078,7 @@ async function sendMessage(queuedMessage = null) {
     }
   } finally {
     clearInterval(liveTimerInterval);
+    queueLiveToolsRender(true);
     liveStatusElem.style.display = 'none';
     setStreamingState(false);
     currentAbortController = null;

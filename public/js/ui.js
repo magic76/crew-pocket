@@ -26,6 +26,51 @@ let notificationsEnabled = localStorage.getItem('agy_notify_enabled') !== 'false
 let swRegistration = null;
 let streamingStartedAt = 0;
 const activeBlobUrls = new Set();
+let prewarmTimer = null;
+let lastPrewarmKey = '';
+let lastPrewarmAt = 0;
+let prewarmRequest = null;
+let modelsCatalogRequest = null;
+
+// Coalesce boot/model/effort/new-chat prewarm requests into one provider call.
+window.requestProviderPrewarm = function(delay = 250) {
+  const payload = { provider: currentProvider, model: currentModel, effort: currentEffort };
+  const key = JSON.stringify(payload);
+  if (prewarmTimer) clearTimeout(prewarmTimer);
+  if (key === lastPrewarmKey && Date.now() - lastPrewarmAt < 10000) return prewarmRequest;
+
+  prewarmTimer = setTimeout(() => {
+    prewarmTimer = null;
+    lastPrewarmKey = key;
+    lastPrewarmAt = Date.now();
+    prewarmRequest = fetch('/api/prewarm', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).catch(() => null);
+  }, Math.max(0, delay));
+  return prewarmRequest;
+};
+
+async function loadModelsCatalog() {
+  if (availableModels.length > 0) return { models: availableModels, efforts: availableEfforts };
+  if (!modelsCatalogRequest) {
+    modelsCatalogRequest = fetch('/api/models')
+      .then(res => {
+        if (!res.ok) throw new Error('模型清單載入失敗');
+        return res.json();
+      })
+      .then(data => {
+        availableModels = Array.isArray(data.models) ? data.models : [];
+        if (Array.isArray(data.efforts) && data.efforts.length > 0) availableEfforts = data.efforts;
+        return data;
+      })
+      .finally(() => {
+        modelsCatalogRequest = null;
+      });
+  }
+  return modelsCatalogRequest;
+}
 
 function revokeAllBlobUrls() {
   activeBlobUrls.forEach(url => URL.revokeObjectURL(url));
@@ -495,6 +540,7 @@ window.selectProvider = async function(providerId) {
     if (headerTitle) headerTitle.textContent = '新對話';
   }
   loadConversations();
+  window.requestProviderPrewarm();
 };
 
 // Model & Thinking Effort Handlers
@@ -568,11 +614,7 @@ function toggleModelModal(open) {
 async function loadModelsList() {
   if (!modelOptionsContainer) return;
   try {
-    if (availableModels.length === 0) {
-      const res = await fetch('/api/models');
-      const data = await res.json();
-      availableModels = data.models || [];
-    }
+    await loadModelsCatalog();
 
     const providerModels = availableModels.filter(m => (m.provider || 'antigravity') === currentProvider);
     modelOptionsContainer.innerHTML = providerModels.map(m => {
@@ -614,11 +656,7 @@ window.selectModel = function(modelId) {
   toggleModelModal(false);
   if (navigator.vibrate) navigator.vibrate(20);
   console.log(`🤖 已切換 AI 核心模型至: ${currentModel}`);
-  fetch('/api/prewarm', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ provider: currentProvider, model: currentModel, effort: currentEffort })
-  }).catch(() => {});
+  window.requestProviderPrewarm();
 };
 
 window.selectEffort = function(effortId) {
@@ -628,11 +666,7 @@ window.selectEffort = function(effortId) {
   renderEffortOptions();
   if (navigator.vibrate) navigator.vibrate(20);
   console.log(`🧠 已切換思考強度至: ${currentEffort}`);
-  fetch('/api/prewarm', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ provider: currentProvider, model: currentModel, effort: currentEffort })
-  }).catch(() => {});
+  window.requestProviderPrewarm();
 };
 
 // Push Notification Helpers

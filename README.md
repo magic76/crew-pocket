@@ -73,6 +73,7 @@ agy --version
 agy
 ```
 > 💡 **Android 登入小提示**：首次啟動 `agy` 若 Termux 未自動喚醒瀏覽器，請長按複製終端中顯示的 OAuth 授權網址，貼到手機 Chrome/Edge 中完成登入，完成後回到終端按 `Ctrl+C` 結束 TUI 即可。
+> 若 Crew Pocket 顯示「AGY 登入已過期」，請在 Termux 互動執行一次 `agy` 完成重新授權；Web 服務會暫停重複 prewarm，避免失敗程序持續重啟。
 
 #### 🔹 核心 B（可選擴充）：OpenAI Codex CLI (`codex`)
 若您希望在模型選單中無縫切換到 OpenAI Codex 系列模型（如 Sol、Terra、Luna 等），請安裝 Codex CLI：
@@ -111,7 +112,7 @@ cd ~/agy-web
 agy
 ```
 
-規範包含 Termux 執行安全、Mobile-first UI、HTML 沙盒、Chart.js 與手機裝置能力等專案慣例；請保留在 fork 或部署副本中，避免 AI 修改時忽略 Crew Pocket 的既有行為。
+規範包含 Termux 執行安全、Mobile-first UI、HTML 沙盒、Chart.js、手機裝置能力，以及子代理協作規則（任務拆分、唯讀優先、避免同檔衝突、主代理統一整合與 commit／push）與工具效率規範（無明確要求不使用外部搜尋、批次讀取、單次修改與集中測試）等專案慣例；請保留在 fork 或部署副本中，避免 AI 修改時忽略 Crew Pocket 的既有行為。
 
 ### 步驟 4.2：建置 Android Crew Helper
 

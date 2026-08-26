@@ -423,7 +423,7 @@ function initAppAndListeners() {
       toggleDrawer(false);
 
       // 🔥 Pre-warm standby resident process in background
-      fetch('/api/prewarm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ provider: currentProvider, model: currentModel, effort: currentEffort }) }).catch(() => {});
+      if (typeof window.requestProviderPrewarm === 'function') window.requestProviderPrewarm();
     });
   }
 
@@ -610,9 +610,7 @@ function initAppAndListeners() {
   (async function initProviderState() {
     try {
       await loadProviderCatalog();
-      const modelsRes = await fetch('/api/models');
-      const modelsData = await modelsRes.json();
-      availableModels = modelsData.models || [];
+      const modelsData = await loadModelsCatalog();
       const providerModels = availableModels.filter(model => (model.provider || 'antigravity') === currentProvider);
       currentModel = localStorage.getItem(providerStorageKey('current_model')) || (providerModels.find(model => model.isDefault) || providerModels[0] || {}).id || 'gemini-3.7-flash';
       const selectedModel = providerModels.find(model => model.id === currentModel);
@@ -622,6 +620,7 @@ function initAppAndListeners() {
       if (modelsData.efforts) availableEfforts = modelsData.efforts;
       updateModelUI();
       updateEffortUI();
+      if (typeof window.requestProviderPrewarm === 'function') window.requestProviderPrewarm();
 
       const savedConvId = localStorage.getItem(activeConversationStorageKey());
       const res = await fetch(`/api/conversations?${providerQuery()}`);

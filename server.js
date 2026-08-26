@@ -3,6 +3,7 @@ const fs = require('node:fs');
 const fsPromises = require('node:fs/promises');
 const path = require('node:path');
 const url = require('node:url');
+const crypto = require('node:crypto');
 
 const {
   PORT,
@@ -474,6 +475,30 @@ function notifyCompanionService(state, rawText = '') {
   } catch (e) {}
 }
 
+function stableToolSerialize(value) {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value);
+  if (Array.isArray(value)) return '[' + value.map(stableToolSerialize).join(',') + ']';
+  return '{' + Object.keys(value).sort().map(key => JSON.stringify(key) + ':' + stableToolSerialize(value[key])).join(',') + '}';
+}
+
+function getServerToolKey(event) {
+  const explicit = event.toolGroupId || event.tool_group_id || event.toolId || event.tool_id;
+  if (explicit) return 'tool:' + explicit;
+  const name = event.name || event.tool_name || 'tool';
+  const parameters = event.info && event.info.parameters ? event.info.parameters : {};
+  return name + ':' + stableToolSerialize(parameters);
+}
+
+function isTerminalToolState(state) {
+  return ['completed', 'done', 'failed', 'error', 'cancelled', 'canceled'].includes(String(state || '').toLowerCase());
+}
+
+function isPollingToolEvent(event) {
+  const name = String(event.name || event.tool_name || '').toLowerCase();
+  const parameters = stableToolSerialize(event.info && event.info.parameters ? event.info.parameters : {}).toLowerCase();
+  return name.includes('write_stdin') || name.includes('poll') || parameters.includes('session_id') || parameters.includes('yield_time_ms');
+}
+
 // 💬 SSE Chat Streaming with Resident Pipe
 async function handleChat(req, res) {
   let body;
@@ -523,24 +548,91 @@ async function handleChat(req, res) {
 
   try {
     const provider = getProvider(providerId);
+    const requestId = crypto.randomUUID();
+    const toolRuns = new Map();
+    let toolEventCount = 0;
+    let metricsLogged = false;
     let ended = false;
     let abortTurn = () => {};
+    const getToolMetrics = () => {
+      let executions = 0;
+      let polls = 0;
+      for (const run of toolRuns.values()) {
+        executions += run.attempts;
+        polls += run.pollCount;
+      }
+      return {
+        events: toolEventCount,
+        unique_tools: toolRuns.size,
+        executions,
+        polls
+      };
+    };
+    const logToolMetrics = (reason) => {
+      if (metricsLogged) return;
+      metricsLogged = true;
+      console.log('[ToolMetrics] ' + JSON.stringify({
+        request_id: requestId,
+        provider: providerId,
+        conversation_id: conversation_id || null,
+        reason,
+        ...getToolMetrics()
+      }));
+    };
+    const recordToolEvent = (event) => {
+      const key = getServerToolKey(event);
+      const state = String(event.state || '').toLowerCase();
+      const existing = toolRuns.get(key);
+      const previousState = existing ? existing.lastState : '';
+      const run = existing || {
+        name: event.name || event.tool_name || 'tool',
+        attempts: 1,
+        pollCount: 0,
+        lastState: '',
+        notified: false
+      };
+      const retryStarted = Boolean(existing && state === 'running' && isTerminalToolState(previousState));
+      const polling = isPollingToolEvent(event);
+      if (retryStarted) {
+        if (polling) run.pollCount += 1;
+        else run.attempts += 1;
+      }
+      run.lastState = state || run.lastState;
+      const shouldNotify = !run.notified || (retryStarted && !polling);
+      run.notified = true;
+      toolRuns.set(key, run);
+      toolEventCount += 1;
+      return {
+        key,
+        attempts: run.attempts,
+        pollCount: run.pollCount,
+        shouldNotify
+      };
+    };
     const finish = (payload) => {
       if (ended) return;
       ended = true;
-      if (payload && payload.error) {
+      const finalPayload = {
+        ...(payload || {}),
+        request_id: requestId,
+        tool_metrics: getToolMetrics()
+      };
+      logToolMetrics(finalPayload.error ? 'error' : 'completed');
+      if (finalPayload.error) {
         notifyCompanionService('IDLE');
       } else {
-        notifyCompanionService('DONE', payload.response || '任務已完成');
+        notifyCompanionService('DONE', finalPayload.response || '任務已完成');
       }
-      sendEvent('done', payload);
+      sendEvent('done', finalPayload);
       res.end();
     };
 
     req.on('close', () => {
       if (!ended) {
+        ended = true;
         abortTurn();
         notifyCompanionService('IDLE');
+        logToolMetrics('client_closed');
       }
     });
 
@@ -562,9 +654,24 @@ async function handleChat(req, res) {
         } else if (event.type === 'reasoning_complete') {
           sendEvent('thought', { fullThinking: event.thinking });
         } else if (event.type === 'tool') {
-          const toolLabel = event.name || '工具';
-          notifyCompanionService('TOOL', `正在執行：${toolLabel}`);
-          sendEvent('tool', { state: event.state, tool_name: event.name, tool_info: event.info, duration_seconds: event.durationSeconds });
+          const tracking = recordToolEvent(event);
+          const toolLabel = event.name || event.tool_name || '工具';
+          if (tracking.shouldNotify) {
+            notifyCompanionService('TOOL', '正在執行：' + toolLabel);
+          }
+          sendEvent('tool', {
+            request_id: requestId,
+            state: event.state,
+            tool_id: event.toolId || event.tool_id || null,
+            tool_group_id: event.toolGroupId || event.tool_group_id || tracking.key,
+            tool_name: event.name || event.tool_name,
+            tool_info: event.info,
+            duration_seconds: event.durationSeconds,
+            attempts: tracking.attempts,
+            poll_count: tracking.pollCount,
+            tool_event_count: toolEventCount,
+            unique_tool_count: toolRuns.size
+          });
         } else if (event.type === 'context_usage') {
           sendEvent('context', event.stats);
         } else if (event.type === 'error') {
@@ -579,8 +686,10 @@ async function handleChat(req, res) {
   } catch (err) {
     console.error('[Chat Error]', err);
     notifyCompanionService('IDLE');
-    sendEvent('done', { error: err.message });
-    res.end();
+    if (!res.writableEnded && !res.destroyed) {
+      sendEvent('done', { error: err.message });
+      res.end();
+    }
   }
 }
 
@@ -775,9 +884,9 @@ const server = http.createServer(async (req, res) => {
   } else if (pathname === '/api/prewarm' && req.method === 'POST') {
     const body = await parseJsonBody(req);
     const providerId = normalizeProviderId(body.provider);
-    await getProvider(providerId).prewarm(body.model, body.effort);
+    const result = await getProvider(providerId).prewarm(body.model, body.effort);
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    return res.end(JSON.stringify({ success: true, prewarmed: true, provider: providerId }));
+    return res.end(JSON.stringify({ success: true, prewarmed: true, prewarm: result || null, provider: providerId }));
   } else if (pathname === '/api/rename-conversation' && req.method === 'POST') {
     return handleProviderRename(req, res);
   } else if (pathname === '/api/models' && req.method === 'GET') {
@@ -844,6 +953,6 @@ server.listen(PORT, HOST, () => {
   
   // 🔥 Pre-warm standby resident process immediately on server boot
   setTimeout(() => {
-    sessionManager.prewarm('gemini-3.7-flash-low');
+    sessionManager.prewarm('gemini-3.7-flash', 'low');
   }, 1000);
 });

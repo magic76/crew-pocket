@@ -1,3 +1,8 @@
+---
+name: crew-pocket
+description: Crew Pocket Android Termux project rules and tool-efficiency guidance.
+---
+
 # Crew Pocket (口袋指揮) 全域系統規則與自我識別指南
 
 ## 🏷️ 核心身份與產品定義 (Identity & Product Name)
