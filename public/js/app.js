@@ -200,8 +200,8 @@ function initAppAndListeners() {
   }
 
   // Model & Effort Selector listeners
-  if (modelSelectorBtn) modelSelectorBtn.addEventListener('click', () => toggleModelModal(true));
-  if (effortSelectorBtn) effortSelectorBtn.addEventListener('click', () => toggleModelModal(true));
+  if (modelSelectorBtn) modelSelectorBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleModelModal(true); });
+  if (effortSelectorBtn) effortSelectorBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleModelModal(true); });
   if (closeModelBtn) closeModelBtn.addEventListener('click', () => toggleModelModal(false));
   if (modelModal) modelModal.addEventListener('click', (e) => { if (e.target === modelModal) toggleModelModal(false); });
 

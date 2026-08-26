@@ -961,6 +961,12 @@ async function loadConversationHistory(convId) {
     const res = await fetch(`/api/history?id=${convId}&${providerQuery()}`);
     const data = await res.json();
     if (renderVersion !== historyRenderVersion || currentConversationId !== convId) return;
+
+    // Conversations own their model choice. Restore it before rendering so the
+    // header and the next message always agree with this thread.
+    if (typeof window.applyConversationSettings === 'function') {
+      window.applyConversationSettings(data.conversation_settings);
+    }
     
     // 🧠 Update Top Context Usage Pill
     if (data.context_stats) {

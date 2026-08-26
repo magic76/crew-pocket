@@ -569,6 +569,44 @@ function selectedModelConfig() {
   return availableModels.find(model => model.id === currentModel);
 }
 
+window.applyConversationSettings = function(settings) {
+  if (!settings || settings.provider !== currentProvider) return false;
+  const providerModels = availableModels.filter(model => (model.provider || 'antigravity') === currentProvider);
+  const selected = providerModels.find(model => model.id === settings.model);
+  if (!selected) return false; // Model may have been removed from this device.
+
+  currentModel = selected.id;
+  const supported = selected.supportedReasoningEfforts || ['low', 'medium', 'high'];
+  currentEffort = supported.includes(settings.effort)
+    ? settings.effort
+    : (selected.defaultReasoningEffort || supported[0] || 'low');
+  localStorage.setItem(providerStorageKey('current_model'), currentModel);
+  localStorage.setItem(providerStorageKey('current_effort'), currentEffort);
+  updateModelUI();
+  updateEffortUI();
+  return true;
+};
+
+window.saveCurrentConversationSettings = function() {
+  if (!currentConversationId) return Promise.resolve(null);
+  return fetch('/api/conversation-settings', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      provider: currentProvider,
+      conversation_id: currentConversationId,
+      model: currentModel,
+      effort: currentEffort
+    })
+  }).then(res => {
+    if (!res.ok) throw new Error('儲存對話模型設定失敗');
+    return res.json();
+  }).catch(err => {
+    console.warn('[Conversation Settings]', err.message);
+    return null;
+  });
+};
+
 function supportedEffortsForCurrentModel() {
   const model = selectedModelConfig();
   return model?.supportedReasoningEfforts?.length ? model.supportedReasoningEfforts : ['low', 'medium', 'high'];
@@ -600,15 +638,18 @@ function renderEffortOptions() {
   }).join('');
 }
 
+let isModelModalOpen = false;
+
 function toggleModelModal(open) {
   if (!modelModal) return;
+  if (isModelModalOpen === open) return;
+  isModelModalOpen = open;
+  modelModal.classList.toggle('hidden', !open);
+  modelModal.setAttribute('aria-hidden', open ? 'false' : 'true');
   if (open) {
-    modelModal.classList.remove('opacity-0', 'pointer-events-none');
     renderProviderOptions();
     loadModelsList();
     renderEffortOptions();
-  } else {
-    modelModal.classList.add('opacity-0', 'pointer-events-none');
   }
 }
 
@@ -657,6 +698,7 @@ window.selectModel = function(modelId) {
   toggleModelModal(false);
   if (navigator.vibrate) navigator.vibrate(20);
   console.log(`🤖 已切換 AI 核心模型至: ${currentModel}`);
+  window.saveCurrentConversationSettings();
   window.requestProviderPrewarm();
 };
 
@@ -667,6 +709,7 @@ window.selectEffort = function(effortId) {
   renderEffortOptions();
   if (navigator.vibrate) navigator.vibrate(20);
   console.log(`🧠 已切換思考強度至: ${currentEffort}`);
+  window.saveCurrentConversationSettings();
   window.requestProviderPrewarm();
 };
 

@@ -28,6 +28,7 @@ const { handleGenerateTitle, getCachedTitle } = require('./lib/title');
 const { phoneAgent } = require('./lib/phone_agent');
 const { createExtensionBridge } = require('./lib/extension_bridge');
 const { getStorageReport, deleteMediaItems, getMediaThumbnail } = require('./lib/storage');
+const { getConversationSettings, saveConversationSettings, deleteConversationSettings } = require('./lib/conversation-settings');
 
 async function handleStorageReport(res) {
   try {
@@ -333,13 +334,14 @@ async function handleProviderHistory(parsedUrl, res) {
     const provider = getProvider(providerId);
     if (!provider.metadata.capabilities.history || typeof provider.getHistory !== 'function') throw new Error('Provider does not support conversation history');
     const history = await provider.getHistory(parsedUrl.query.id);
+    const conversationSettings = await getConversationSettings(providerId, parsedUrl.query.id);
     if (Array.isArray(history.messages)) {
       history.messages = history.messages.map(message => message.role === 'user'
         ? { ...message, content: stripLegacyLanguageInstruction(message.content) }
         : message);
     }
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify(history));
+    res.end(JSON.stringify({ ...history, conversation_settings: conversationSettings }));
   } catch (err) {
     res.writeHead(err.statusCode || 404, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: err.message }));
@@ -358,6 +360,7 @@ async function handleProviderDelete(parsedUrl, res) {
     const provider = getProvider(providerId);
     if (!provider.metadata.capabilities.delete || typeof provider.deleteConversation !== 'function') throw new Error('Provider does not support deleting conversations');
     const result = await provider.deleteConversation(conversationId);
+    await deleteConversationSettings(providerId, conversationId).catch(() => {});
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
       success: true,
@@ -368,6 +371,22 @@ async function handleProviderDelete(parsedUrl, res) {
     }));
   } catch (err) {
     res.writeHead(err.statusCode || 500, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: err.message }));
+  }
+}
+
+async function handleConversationSettings(req, res) {
+  try {
+    const body = await parseJsonBody(req);
+    const providerId = normalizeProviderId(body.provider);
+    const settings = await saveConversationSettings(providerId, body.conversation_id, {
+      model: body.model,
+      effort: body.effort
+    });
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: true, conversation_settings: settings }));
+  } catch (err) {
+    res.writeHead(400, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: err.message }));
   }
 }
@@ -726,6 +745,13 @@ async function handleChat(req, res) {
       onEvent(event) {
         if (ended) return;
         if (event.type === 'session_started') {
+          // A new thread only has an id after its provider starts. Persist here
+          // as well as on manual selector changes so new conversations are
+          // immediately bound to their first model.
+          saveConversationSettings(providerId, event.conversationId, {
+            model: event.model || model,
+            effort: event.effort || effort || 'low'
+          }).catch(err => console.warn('[Conversation Settings] Save failed:', err.message));
           sendEvent('init', { conversation_id: event.conversationId, provider: providerId, model: event.model, effort: event.effort });
         } else if (event.type === 'text_delta') {
           sendEvent('chunk', { delta: event.delta, accumulated: event.accumulated });
@@ -939,6 +965,8 @@ const server = http.createServer(async (req, res) => {
     return handleProviderHistory(parsedUrl, res);
   } else if (pathname === '/api/conversation' && req.method === 'DELETE') {
     return handleProviderDelete(parsedUrl, res);
+  } else if (pathname === '/api/conversation-settings' && req.method === 'POST') {
+    return handleConversationSettings(req, res);
   } else if (pathname === '/api/storage' && req.method === 'GET') {
     return handleStorageReport(res);
   } else if (pathname === '/api/storage/media' && req.method === 'DELETE') {
