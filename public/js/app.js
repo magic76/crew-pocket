@@ -77,7 +77,9 @@ document.addEventListener('visibilitychange', () => {
   if (!document.hidden) checkInternetConnection();
 });
 
-setInterval(checkInternetConnection, 30000);
+setInterval(() => {
+  if (!document.hidden) checkInternetConnection();
+}, 30000);
 checkInternetConnection();
 
 // 4. Bind Global UI Listeners
@@ -638,8 +640,12 @@ function initAppAndListeners() {
     }
   })();
 
-  // 🌐 Auto-Receive Messages from Browser Extension (Lemur Webpage)
-  setInterval(async () => {
+  // 🌐 Opt-in receive from Browser Extension (disabled by default)
+  const extensionReceiveBtn = document.getElementById('extension-receive-btn');
+  const extensionReceiveLabel = document.getElementById('extension-receive-label');
+  let extensionReceiveEnabled = localStorage.getItem('crew-pocket-extension-receive') === '1';
+  let extensionPollTimer = null;
+  const pollInboundMessages = async () => {
     try {
       const res = await fetch('/api/inbound-message');
       if (res.ok) {
@@ -661,7 +667,35 @@ function initAppAndListeners() {
         }
       }
     } catch (e) {}
-  }, 1000);
+  };
+  const stopExtensionPolling = () => {
+    if (extensionPollTimer) clearInterval(extensionPollTimer);
+    extensionPollTimer = null;
+  };
+  const updateExtensionReceiveUi = () => {
+    if (extensionReceiveLabel) extensionReceiveLabel.textContent = `接收瀏覽器訊息：${extensionReceiveEnabled ? '開啟' : '關閉'}`;
+    if (extensionReceiveBtn) extensionReceiveBtn.classList.toggle('bg-cyan-950/40', extensionReceiveEnabled);
+  };
+  const startExtensionPolling = () => {
+    stopExtensionPolling();
+    if (!extensionReceiveEnabled) return;
+    pollInboundMessages();
+    extensionPollTimer = setInterval(() => {
+      if (!document.hidden) pollInboundMessages();
+    }, 3000);
+  };
+  if (extensionReceiveBtn) extensionReceiveBtn.addEventListener('click', () => {
+    extensionReceiveEnabled = !extensionReceiveEnabled;
+    localStorage.setItem('crew-pocket-extension-receive', extensionReceiveEnabled ? '1' : '0');
+    updateExtensionReceiveUi();
+    startExtensionPolling();
+  });
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) stopExtensionPolling();
+    else startExtensionPolling();
+  });
+  updateExtensionReceiveUi();
+  startExtensionPolling();
 }
 
 if (document.readyState === 'loading') {
