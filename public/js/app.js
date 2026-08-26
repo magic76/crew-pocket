@@ -44,27 +44,8 @@ function updateNetworkUI(online) {
   }
 }
 
-async function checkInternetConnection() {
-  if (!navigator.onLine) {
-    updateNetworkUI(false);
-    return false;
-  }
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 2500);
-    await fetch('https://www.gstatic.com/generate_204', { mode: 'no-cors', cache: 'no-store', signal: controller.signal });
-    clearTimeout(timeoutId);
-    updateNetworkUI(true);
-    return true;
-  } catch (e) {
-    updateNetworkUI(navigator.onLine);
-    return navigator.onLine;
-  }
-}
-
 window.addEventListener('online', () => {
   updateNetworkUI(true);
-  checkInternetConnection();
   if (navigator.vibrate) navigator.vibrate(20);
 });
 
@@ -73,14 +54,7 @@ window.addEventListener('offline', () => {
   if (navigator.vibrate) navigator.vibrate([40, 40, 40]);
 });
 
-document.addEventListener('visibilitychange', () => {
-  if (!document.hidden) checkInternetConnection();
-});
-
-setInterval(() => {
-  if (!document.hidden) checkInternetConnection();
-}, 30000);
-checkInternetConnection();
+updateNetworkUI(navigator.onLine);
 
 // 4. Bind Global UI Listeners
 function initAppAndListeners() {
