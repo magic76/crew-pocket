@@ -249,10 +249,10 @@ public class FloatingBubbleManager {
                     android.app.RemoteInput remoteInput = new android.app.RemoteInput.Builder(
                         CrewNotificationReceiver.EXTRA_INPUT).setLabel("輸入要交給 Crew Pocket 的指令").build();
 
-                    Intent stopIntent = new Intent(context, CrewNotificationReceiver.class)
-                        .setAction(CrewNotificationReceiver.ACTION_STOP);
-                    PendingIntent stopPending = PendingIntent.getBroadcast(
-                        context, 3, stopIntent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+                    Intent openAppIntent = new Intent(context, CrewNotificationReceiver.class)
+                        .setAction(CrewNotificationReceiver.ACTION_OPEN_APP);
+                    PendingIntent openAppPending = PendingIntent.getBroadcast(
+                        context, 3, openAppIntent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
 
                     Notification.Builder builder = new Notification.Builder(context);
                     if (Build.VERSION.SDK_INT >= 26) {
@@ -270,7 +270,7 @@ public class FloatingBubbleManager {
                         .setCategory(Notification.CATEGORY_SERVICE)
                         .addAction(new Notification.Action.Builder(android.R.drawable.ic_menu_send, "輸入指令", inputPending)
                             .addRemoteInput(remoteInput).build())
-                        .addAction(new Notification.Action.Builder(android.R.drawable.ic_menu_close_clear_cancel, "停止", stopPending).build());
+                        .addAction(new Notification.Action.Builder(android.R.drawable.ic_menu_view, "開啟 Crew Pocket", openAppPending).build());
                     notifications.notify(NOTIFICATION_ID, builder.build());
                 } catch (Exception ignored) {}
             }

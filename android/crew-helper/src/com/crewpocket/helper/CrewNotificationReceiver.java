@@ -4,12 +4,13 @@ import android.app.RemoteInput;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.net.Uri;
 
 /** Handles the small set of actions exposed by the persistent Crew Helper notification. */
 public class CrewNotificationReceiver extends BroadcastReceiver {
     public static final String ACTION_INPUT = "com.crewpocket.helper.NOTIFICATION_INPUT";
     public static final String ACTION_OPEN_INPUT = "com.crewpocket.helper.NOTIFICATION_OPEN_INPUT";
-    public static final String ACTION_STOP = "com.crewpocket.helper.NOTIFICATION_STOP";
+    public static final String ACTION_OPEN_APP = "com.crewpocket.helper.NOTIFICATION_OPEN_APP";
     public static final String EXTRA_INPUT = "crew_command";
 
     @Override
@@ -20,9 +21,12 @@ public class CrewNotificationReceiver extends BroadcastReceiver {
             manager.openInputUi();
             return;
         }
-        if (ACTION_STOP.equals(action)) {
-            manager.stopCrewPocketGeneration();
-            manager.updateNotification("已停止");
+        if (ACTION_OPEN_APP.equals(action)) {
+            Intent open = new Intent(Intent.ACTION_VIEW, Uri.parse("http://127.0.0.1:8000"));
+            open.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            try {
+                context.startActivity(open);
+            } catch (Exception ignored) {}
             return;
         }
         if (ACTION_INPUT.equals(action)) {
