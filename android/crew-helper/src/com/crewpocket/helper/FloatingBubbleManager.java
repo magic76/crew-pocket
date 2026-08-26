@@ -240,6 +240,15 @@ public class FloatingBubbleManager {
                         } catch (Exception ignored) {}
                     }
 
+                    Intent inputIntent = new Intent(context, CrewNotificationReceiver.class)
+                        .setAction(CrewNotificationReceiver.ACTION_INPUT);
+                    int mutableFlags = PendingIntent.FLAG_UPDATE_CURRENT;
+                    // FLAG_MUTABLE (API 31) kept as a literal for the Android 24 compile SDK.
+                    if (Build.VERSION.SDK_INT >= 31) mutableFlags |= 0x02000000;
+                    PendingIntent inputPending = PendingIntent.getBroadcast(context, 2, inputIntent, mutableFlags);
+                    android.app.RemoteInput remoteInput = new android.app.RemoteInput.Builder(
+                        CrewNotificationReceiver.EXTRA_INPUT).setLabel("輸入給最近對話的訊息").build();
+
                     Notification.Builder builder = new Notification.Builder(context);
                     if (Build.VERSION.SDK_INT >= 26) {
                         try {
@@ -253,7 +262,9 @@ public class FloatingBubbleManager {
                         .setOngoing(true)
                         .setOnlyAlertOnce(true)
                         .setShowWhen(false)
-                        .setCategory(Notification.CATEGORY_SERVICE);
+                        .setCategory(Notification.CATEGORY_SERVICE)
+                        .addAction(new Notification.Action.Builder(android.R.drawable.ic_menu_send, "輸入訊息", inputPending)
+                            .addRemoteInput(remoteInput).build());
                     notifications.notify(NOTIFICATION_ID, builder.build());
                 } catch (Exception ignored) {}
             }
@@ -287,6 +298,7 @@ public class FloatingBubbleManager {
                             currentState = "IDLE";
                             setThinkingState(false);
                             updateDialogStatus("待命");
+                            updateNotification("待命");
                         }
                     };
                     mainHandler.postDelayed(safetyTimeoutRunnable, 40000);
@@ -303,8 +315,9 @@ public class FloatingBubbleManager {
         if ("THINKING".equalsIgnoreCase(state)) {
             vibrateShort();
             setThinkingState(true);
-            updateDialogStatus("AI 回覆中");
-            updateNotification("AI 回覆中");
+            String thinkingStatus = text == null || text.isEmpty() ? "AI 回覆中" : "AI 回覆中 · " + text;
+            updateDialogStatus(thinkingStatus);
+            updateNotification(thinkingStatus);
         } else if ("TOOL".equalsIgnoreCase(state)) {
             setThinkingState(true);
             String toolStatus = text == null || text.isEmpty() ? "正在執行工具" : text;
@@ -317,8 +330,9 @@ public class FloatingBubbleManager {
         } else if ("DONE".equalsIgnoreCase(state) || "COMPLETED".equalsIgnoreCase(state)) {
             setThinkingState(false);
             vibrateSuccess();
-            updateDialogStatus("已完成");
-            updateNotification("已完成");
+            String doneStatus = text == null || text.isEmpty() ? "已完成" : "已完成 · " + text;
+            updateDialogStatus(doneStatus);
+            updateNotification(doneStatus);
         } else if ("IDLE".equalsIgnoreCase(state)) {
             setThinkingState(false);
             updateDialogStatus("待命");
@@ -684,6 +698,45 @@ public class FloatingBubbleManager {
                         if (callback != null) callback.onResult(result, resultDetail);
                     }
                 });
+            }
+        }).start();
+    }
+
+    public void sendNotificationMessage(final String message) {
+        setThinkingState(true);
+        updateNotification("正在傳送訊息");
+        new Thread(new Runnable() {
+            @Override public void run() {
+                boolean success = false;
+                HttpURLConnection conn = null;
+                try {
+                    URL url = new URL("http://127.0.0.1:8000/api/helper-message");
+                    conn = (HttpURLConnection) url.openConnection();
+                    conn.setRequestMethod("POST");
+                    conn.setRequestProperty("Content-Type", "application/json; charset=utf-8");
+                    conn.setDoOutput(true);
+                    conn.setConnectTimeout(4000);
+                    conn.setReadTimeout(4000);
+                    String payload = "{\"message\":\"" + escapeJson(message) + "\"}";
+                    byte[] bytes = payload.getBytes(StandardCharsets.UTF_8);
+                    conn.setFixedLengthStreamingMode(bytes.length);
+                    OutputStream os = conn.getOutputStream();
+                    os.write(bytes);
+                    os.close();
+                    int code = conn.getResponseCode();
+                    success = code >= 200 && code < 300;
+                } catch (Exception ignored) {
+                } finally {
+                    if (conn != null) conn.disconnect();
+                }
+                if (!success) {
+                    mainHandler.post(new Runnable() {
+                        @Override public void run() {
+                            setThinkingState(false);
+                            updateNotification("Crew Pocket 尚未連線");
+                        }
+                    });
+                }
             }
         }).start();
     }

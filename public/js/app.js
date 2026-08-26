@@ -642,6 +642,21 @@ function initAppAndListeners() {
       }
     } catch (e) {}
   };
+  // Persistent, event-driven intake for the Helper notification. Unlike extension polling,
+  // this socket stays idle until the user actually submits a quick message.
+  const helperEvents = new EventSource('/api/helper-events');
+  helperEvents.addEventListener('helper-message', (event) => {
+    try {
+      const msg = JSON.parse(event.data);
+      const promptInput = document.getElementById('prompt-input');
+      if (!promptInput || !msg || !msg.text) return;
+      promptInput.value = `[Helper] ${msg.text}`;
+      promptInput.style.height = 'auto';
+      if (typeof window.sendMessage === 'function') window.sendMessage();
+    } catch (e) {
+      console.warn('Helper message parse failed', e);
+    }
+  });
   const stopExtensionPolling = () => {
     if (extensionPollTimer) clearInterval(extensionPollTimer);
     extensionPollTimer = null;

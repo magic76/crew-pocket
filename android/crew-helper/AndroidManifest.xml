@@ -44,5 +44,9 @@
                 android:name="android.accessibilityservice"
                 android:resource="@xml/accessibility_service_config" />
         </service>
+
+        <receiver
+            android:name=".CrewNotificationReceiver"
+            android:exported="false" />
     </application>
 </manifest>

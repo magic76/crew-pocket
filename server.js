@@ -141,6 +141,51 @@ async function handlePhoneAction(req, res) {
 
 // 🌐 Inbound Web Messages from Browser Extension
 const inboundWebMessages = [];
+const pendingHelperMessages = [];
+const helperEventClients = new Set();
+
+function writeHelperEvent(res, message) {
+  res.write(`event: helper-message\ndata: ${JSON.stringify(message)}\n\n`);
+}
+
+function enqueueHelperMessage(body) {
+  const text = body && (body.text || body.message || body.prompt);
+  if (!text) return false;
+  const message = { text: String(text), source: 'CrewHelper', received_at: Date.now() };
+  if (helperEventClients.size === 0) {
+    pendingHelperMessages.push(message);
+    if (pendingHelperMessages.length > 20) pendingHelperMessages.shift();
+    return true;
+  }
+  for (const client of helperEventClients) {
+    try { writeHelperEvent(client, message); } catch (_) { helperEventClients.delete(client); }
+  }
+  return true;
+}
+
+function handleHelperEvents(req, res) {
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream; charset=utf-8',
+    'Cache-Control': 'no-cache, no-transform',
+    'Connection': 'keep-alive'
+  });
+  res.write('retry: 5000\n\n');
+  helperEventClients.add(res);
+  while (pendingHelperMessages.length > 0) writeHelperEvent(res, pendingHelperMessages.shift());
+  req.on('close', () => helperEventClients.delete(res));
+}
+
+async function handleHelperMessage(req, res) {
+  try {
+    const body = await parseJsonBody(req);
+    if (!enqueueHelperMessage(body)) throw new Error('訊息不可為空');
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: true, delivered: helperEventClients.size > 0 }));
+  } catch (err) {
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: false, error: err.message }));
+  }
+}
 
 function enqueueInboundMessage(body) {
   const text = body && (body.text || body.message || body.prompt);
@@ -492,7 +537,7 @@ function notifyCompanionService(state, rawText = '') {
         .filter(l => l.length > 0)[0] || '';
       if (clean.length > 48) clean = clean.slice(0, 45) + '...';
     }
-    const data = JSON.stringify({ state, text: clean ? '✅ ' + clean : '' });
+    const data = JSON.stringify({ state, text: clean });
     const req = http.request({
       hostname: '127.0.0.1',
       port: 8766,
@@ -564,7 +609,7 @@ async function handleChat(req, res) {
     finalPrompt = `[Uploaded Image: ${image_path}]\n${finalPrompt}`;
   }
 
-  notifyCompanionService('THINKING');
+  notifyCompanionService('THINKING', prompt || '正在分析圖片');
 
   // Set SSE Headers
   const origin = req.headers.origin;
@@ -654,7 +699,7 @@ async function handleChat(req, res) {
       };
       logToolMetrics(finalPayload.error ? 'error' : 'completed');
       if (finalPayload.error) {
-        notifyCompanionService('IDLE');
+        notifyCompanionService('ERROR', finalPayload.error);
       } else {
         notifyCompanionService('DONE', finalPayload.response || '任務已完成');
       }
@@ -720,7 +765,7 @@ async function handleChat(req, res) {
 
   } catch (err) {
     console.error('[Chat Error]', err);
-    notifyCompanionService('IDLE');
+    notifyCompanionService('ERROR', err.message || '執行失敗');
     if (!res.writableEnded && !res.destroyed) {
       sendEvent('done', { error: err.message });
       res.end();
@@ -948,6 +993,10 @@ const server = http.createServer(async (req, res) => {
     return handleImageProxy(parsedUrl, res);
   } else if (pathname === '/api/export-extension' && req.method === 'POST') {
     return handleExportExtension(req, res);
+  } else if (pathname === '/api/helper-events' && req.method === 'GET') {
+    return handleHelperEvents(req, res);
+  } else if (pathname === '/api/helper-message' && req.method === 'POST') {
+    return handleHelperMessage(req, res);
   } else if (pathname === '/api/inbound-message') {
     return handleInboundMessage(req, res);
   } else if (pathname.startsWith('/api/extension/')) {
