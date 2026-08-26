@@ -49,10 +49,8 @@ public class FloatingBubbleManager {
 
     private FluidBubbleView bubbleView = null;
     private View dialogView = null;
-    private View pillView = null;
     private WindowManager.LayoutParams bubbleParams = null;
     private WindowManager.LayoutParams dialogParams = null;
-    private WindowManager.LayoutParams pillParams = null;
     private boolean isDialogShowing = false;
     private String currentState = "IDLE";
     private TextView dialogStatusText = null;
@@ -236,71 +234,6 @@ public class FloatingBubbleManager {
         });
     }
 
-    // 💬 Mini Result Pill Callout (3.8s Auto-Dismiss)
-    public void showResultPill(final String text) {
-        if (!canDrawOverlays() || text == null || text.trim().isEmpty()) return;
-
-        mainHandler.post(new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    hideResultPill();
-
-                    int overlayType = Build.VERSION.SDK_INT >= 26 
-                        ? 2038 
-                        : WindowManager.LayoutParams.TYPE_PHONE;
-
-                    pillParams = new WindowManager.LayoutParams(
-                        WindowManager.LayoutParams.WRAP_CONTENT,
-                        WindowManager.LayoutParams.WRAP_CONTENT,
-                        overlayType,
-                        WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
-                        PixelFormat.TRANSLUCENT
-                    );
-                    pillParams.gravity = Gravity.TOP | Gravity.START;
-                    pillParams.x = bubbleParams != null ? Math.min(bubbleParams.x + 130, 800) : 160;
-                    pillParams.y = bubbleParams != null ? bubbleParams.y : 400;
-
-                    TextView tv = new TextView(context);
-                    tv.setText(text);
-                    tv.setTextSize(12);
-                    tv.setTextColor(Color.WHITE);
-                    tv.setMaxWidth(680);
-                    tv.setPadding(28, 18, 28, 18);
-
-                    GradientDrawable bg = new GradientDrawable();
-                    bg.setColor(Color.parseColor("#0f172a"));
-                    bg.setCornerRadius(24f);
-                    bg.setStroke(3, Color.parseColor("#34d399"));
-                    tv.setBackground(bg);
-                    tv.setElevation(20f);
-
-                    pillView = tv;
-                    windowManager.addView(pillView, pillParams);
-
-                    // Auto hide after 3.8s
-                    mainHandler.postDelayed(new Runnable() {
-                        @Override
-                        public void run() {
-                            hideResultPill();
-                        }
-                    }, 3800);
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
-            }
-        });
-    }
-
-    public void hideResultPill() {
-        if (pillView != null) {
-            try {
-                windowManager.removeView(pillView);
-            } catch (Exception ignored) {}
-            pillView = null;
-        }
-    }
-
     // 🔔 Real-time Notify Dispatcher from Backend
     public void handleNotify(String state, String text) {
         currentState = state == null ? "IDLE" : state.toUpperCase();
@@ -318,9 +251,6 @@ public class FloatingBubbleManager {
             setThinkingState(false);
             vibrateSuccess();
             updateDialogStatus("已完成");
-            if (text != null && !text.isEmpty()) {
-                showResultPill(text);
-            }
         } else if ("IDLE".equalsIgnoreCase(state)) {
             setThinkingState(false);
             updateDialogStatus("待命");
@@ -378,7 +308,7 @@ public class FloatingBubbleManager {
 
                     LinearLayout card = new LinearLayout(context);
                     card.setOrientation(LinearLayout.VERTICAL);
-                    card.setPadding(dp(16), dp(14), dp(16), dp(16));
+                    card.setPadding(dp(16), dp(7), dp(16), dp(16));
 
                     GradientDrawable cardBg = new GradientDrawable();
                     cardBg.setColor(Color.parseColor("#0f172a"));
@@ -472,7 +402,7 @@ public class FloatingBubbleManager {
                     btnSnap.setTextColor(Color.parseColor("#38bdf8"));
                     btnSnap.setTextSize(12);
                     btnSnap.setAllCaps(false);
-                    btnSnap.setMinHeight(dp(44));
+                    btnSnap.setMinHeight(dp(40));
                     btnSnap.setPadding(dp(4), 0, dp(4), 0);
                     GradientDrawable snapBg = new GradientDrawable();
                     snapBg.setColor(Color.parseColor("#1e293b"));
@@ -507,7 +437,7 @@ public class FloatingBubbleManager {
                     btnSend.setTextColor(Color.parseColor("#020617"));
                     btnSend.setTextSize(13);
                     btnSend.setAllCaps(false);
-                    btnSend.setMinHeight(dp(44));
+                    btnSend.setMinHeight(dp(40));
                     btnSend.setPadding(dp(4), 0, dp(4), 0);
                     GradientDrawable sendBg = new GradientDrawable();
                     sendBg.setColor(Color.parseColor("#38bdf8"));
@@ -543,12 +473,11 @@ public class FloatingBubbleManager {
                     btnOpen.setTextColor(Color.parseColor("#a5b4fc"));
                     btnOpen.setTextSize(12);
                     btnOpen.setAllCaps(false);
-                    btnOpen.setMinHeight(dp(42));
+                    btnOpen.setMinHeight(dp(40));
                     btnOpen.setPadding(dp(4), 0, dp(4), 0);
                     GradientDrawable openBg = new GradientDrawable();
                     openBg.setColor(Color.parseColor("#1e1b4b"));
                     openBg.setCornerRadius(dp(8));
-                    openBg.setStroke(1, Color.parseColor("#6366f1"));
                     btnOpen.setBackground(openBg);
                     btnOpen.setOnClickListener(new View.OnClickListener() {
                         @Override public void onClick(View v) {
@@ -569,7 +498,7 @@ public class FloatingBubbleManager {
                     dialogStopButton.setTextColor(Color.parseColor("#fecaca"));
                     dialogStopButton.setTextSize(12);
                     dialogStopButton.setAllCaps(false);
-                    dialogStopButton.setMinHeight(dp(42));
+                    dialogStopButton.setMinHeight(dp(40));
                     dialogStopButton.setPadding(dp(4), 0, dp(4), 0);
                     GradientDrawable stopBg = new GradientDrawable();
                     stopBg.setColor(Color.parseColor("#451a1a"));
@@ -679,7 +608,7 @@ public class FloatingBubbleManager {
                     @Override public void run() {
                         if (!result) {
                             setThinkingState(false);
-                            showResultPill("⚠️ Crew Pocket 尚未連線");
+                            updateDialogStatus("Crew Pocket 尚未連線");
                         }
                         if (callback != null) callback.onResult(result, resultDetail);
                     }

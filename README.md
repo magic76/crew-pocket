@@ -171,6 +171,14 @@ http://127.0.0.1:8000
 
 > `/compact` 依目前 Provider 執行：AGY 使用 Crew Pocket 的既有記憶摘要機制；Codex 使用 CLI 原生的 context compaction。
 
+### `/compact` 歷史留存驗證（AGY）
+
+1. 在同一個對話先傳送兩則有辨識度的訊息，例如「驗證 A」與「驗證 B」，再執行一次 `/compact`。
+2. 再傳送「驗證 C」與一張照片，執行第二次 `/compact`。
+3. 重新整理頁面、切換到另一個歷史對話後再切回來；A、B、C 與照片訊息都必須仍在，且只會多出 checkpoint 分隔卡。
+
+AGY 每次 compact 前會把 active `transcript.jsonl` 的新增 records 依完整紀錄身分去重後封存進 `transcript_full.jsonl`；compact 只縮小模型工作快照，不會刪除 Web 歷史。
+
 ---
 
 ## 🧩 Provider 與對話資料
