@@ -173,14 +173,17 @@ public class CrewAccessibilityService extends AccessibilityService {
 
             StringBuilder bodyBuilder = new StringBuilder();
             if (contentLength > 0) {
-                char[] buf = new char[contentLength];
-                int read = 0;
-                while (read < contentLength) {
-                    int r = reader.read(buf, read, contentLength - read);
+                // HTTP Content-Length is measured in bytes, not Java UTF-16 chars.
+                // Reading a Chinese JSON payload by char count made the request wait forever.
+                char[] buf = new char[Math.min(contentLength, 1024)];
+                int bytesRead = 0;
+                while (bytesRead < contentLength) {
+                    int r = reader.read(buf, 0, Math.min(buf.length, contentLength - bytesRead));
                     if (r == -1) break;
-                    read += r;
+                    String chunk = new String(buf, 0, r);
+                    bodyBuilder.append(chunk);
+                    bytesRead += chunk.getBytes(StandardCharsets.UTF_8).length;
                 }
-                bodyBuilder.append(buf, 0, read);
             }
             String body = bodyBuilder.toString();
 
