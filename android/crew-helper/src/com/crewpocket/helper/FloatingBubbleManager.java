@@ -254,11 +254,6 @@ public class FloatingBubbleManager {
                     PendingIntent stopPending = PendingIntent.getBroadcast(
                         context, 3, stopIntent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
 
-                    Intent screenshotIntent = new Intent(context, CrewNotificationReceiver.class)
-                        .setAction(CrewNotificationReceiver.ACTION_SCREENSHOT);
-                    PendingIntent screenshotPending = PendingIntent.getBroadcast(
-                        context, 4, screenshotIntent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-
                     Notification.Builder builder = new Notification.Builder(context);
                     if (Build.VERSION.SDK_INT >= 26) {
                         try {
@@ -273,7 +268,6 @@ public class FloatingBubbleManager {
                         .setOnlyAlertOnce(true)
                         .setShowWhen(false)
                         .setCategory(Notification.CATEGORY_SERVICE)
-                        .addAction(new Notification.Action.Builder(android.R.drawable.ic_menu_camera, "截圖", screenshotPending).build())
                         .addAction(new Notification.Action.Builder(android.R.drawable.ic_menu_send, "輸入指令", inputPending)
                             .addRemoteInput(remoteInput).build())
                         .addAction(new Notification.Action.Builder(android.R.drawable.ic_menu_close_clear_cancel, "停止", stopPending).build());
@@ -715,20 +709,6 @@ public class FloatingBubbleManager {
         final String imagePath = pendingImagePath;
         pendingImagePath = null;
         sendMessageToCrewPocket(message, imagePath, null);
-    }
-
-    public void captureScreenshotForNotification() {
-        updateNotification("正在擷取螢幕…");
-        captureScreenshotForPrompt(new CaptureCallback() {
-            @Override public void onResult(boolean success, String detail) {
-                if (success) {
-                    pendingImagePath = "/uploads/phone_screen_opt.webp";
-                    updateNotification("截圖完成，請輸入指令");
-                } else {
-                    updateNotification("截圖失敗，請重試");
-                }
-            }
-        });
     }
 
     public void captureScreenshotForPrompt(final CaptureCallback callback) {

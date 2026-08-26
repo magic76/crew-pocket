@@ -9,7 +9,6 @@ import android.content.Intent;
 public class CrewNotificationReceiver extends BroadcastReceiver {
     public static final String ACTION_INPUT = "com.crewpocket.helper.NOTIFICATION_INPUT";
     public static final String ACTION_OPEN_INPUT = "com.crewpocket.helper.NOTIFICATION_OPEN_INPUT";
-    public static final String ACTION_SCREENSHOT = "com.crewpocket.helper.NOTIFICATION_SCREENSHOT";
     public static final String ACTION_STOP = "com.crewpocket.helper.NOTIFICATION_STOP";
     public static final String EXTRA_INPUT = "crew_command";
 
@@ -24,10 +23,6 @@ public class CrewNotificationReceiver extends BroadcastReceiver {
         if (ACTION_STOP.equals(action)) {
             manager.stopCrewPocketGeneration();
             manager.updateNotification("已停止");
-            return;
-        }
-        if (ACTION_SCREENSHOT.equals(action)) {
-            manager.captureScreenshotForNotification();
             return;
         }
         if (ACTION_INPUT.equals(action)) {
