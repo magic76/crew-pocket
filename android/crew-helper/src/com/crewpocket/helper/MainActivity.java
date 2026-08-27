@@ -26,7 +26,7 @@ public class MainActivity extends Activity {
         layout.setPadding(60, 60, 60, 60);
 
         TextView title = new TextView(this);
-        title.setText("🤖 Crew Pocket 輔助小幫手 v1.2");
+        title.setText("🤖 Crew Pocket 輔助小幫手 v1.3.3");
         title.setTextSize(20);
         title.setGravity(Gravity.CENTER);
         layout.addView(title);

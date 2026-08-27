@@ -614,77 +614,97 @@ function initAppAndListeners() {
     }
   })();
 
-  // 🌐 Opt-in receive from Browser Extension (disabled by default)
+  // 🌐 Unified real-time intake from CrewHelper and Browser Extension.
   const extensionReceiveBtn = document.getElementById('extension-receive-btn');
   const extensionReceiveLabel = document.getElementById('extension-receive-label');
   let extensionReceiveEnabled = localStorage.getItem('crew-pocket-extension-receive') === '1';
-  let extensionPollTimer = null;
-  const pollInboundMessages = async () => {
-    try {
-      const res = await fetch('/api/inbound-message');
-      if (res.ok) {
-        const data = await res.json();
-        if (data.messages && data.messages.length > 0) {
-          for (const msg of data.messages) {
-            const promptInput = document.getElementById('prompt-input');
-            if (promptInput) {
-              if (msg.image_path) uploadedImagePath = msg.image_path;
-              const prefix = msg.source === 'FloatingBubble' ? '[Bubble] ' : '[Web] ';
-              const sourceInfo = msg.url ? `\nURL: ${msg.url}` : '';
-              promptInput.value = `${prefix}${msg.text}${sourceInfo}`;
-              promptInput.style.height = 'auto';
-              if (typeof window.sendMessage === 'function') {
-                window.sendMessage();
-              }
-            }
-          }
-        }
-      }
-    } catch (e) {}
+  const inboundQueue = [];
+  const handledInboundIds = new Set();
+  const handledInboundOrder = [];
+  let inboundQueueRunning = false;
+
+  const rememberInboundId = (id) => {
+    if (!id || handledInboundIds.has(id)) return false;
+    handledInboundIds.add(id);
+    handledInboundOrder.push(id);
+    if (handledInboundOrder.length > 100) {
+      handledInboundIds.delete(handledInboundOrder.shift());
+    }
+    return true;
   };
-  // Persistent, event-driven intake for the Helper notification. Unlike extension polling,
-  // this socket stays idle until the user actually submits a quick message.
-  const helperEvents = new EventSource('/api/helper-events');
-  helperEvents.addEventListener('helper-message', (event) => {
+
+  const waitForMainStreamIdle = () => {
+    if (!isStreaming) return Promise.resolve();
+    return new Promise(resolve => {
+      const onState = (event) => {
+        if (event.detail?.streaming !== false) return;
+        window.removeEventListener('crew:streaming-state', onState);
+        resolve();
+      };
+      window.addEventListener('crew:streaming-state', onState);
+    });
+  };
+
+  const formatInboundPrompt = (msg) => {
+    let prefix = '[External] ';
+    if (msg.source === 'FloatingBubble') prefix = '[Bubble] ';
+    else if (msg.source === 'CrewHelper') prefix = '[Helper] ';
+    else if (msg.source === 'BrowserExtension') prefix = '[Web] ';
+    const sourceInfo = msg.url ? `\nURL: ${msg.url}` : '';
+    return `${prefix}${msg.text}${sourceInfo}`;
+  };
+
+  const processInboundQueue = async () => {
+    if (inboundQueueRunning) return;
+    inboundQueueRunning = true;
     try {
-      const msg = JSON.parse(event.data);
-      const promptInput = document.getElementById('prompt-input');
-      if (!promptInput || !msg || !msg.text) return;
-      promptInput.value = `[Helper] ${msg.text}`;
-      promptInput.style.height = 'auto';
-      if (typeof window.sendMessage === 'function') window.sendMessage();
+      while (inboundQueue.length > 0) {
+        await waitForMainStreamIdle();
+        const msg = inboundQueue.shift();
+        if (!msg) continue;
+        if (typeof window.sendMessage !== 'function') {
+          inboundQueue.unshift(msg);
+          break;
+        }
+        await window.sendMessage({
+          text: formatInboundPrompt(msg),
+          imagePath: msg.image_path || null
+        });
+      }
+    } finally {
+      inboundQueueRunning = false;
+    }
+  };
+
+  const enqueueInboundForChat = (msg) => {
+    if (!msg || !msg.text || !rememberInboundId(msg.id)) return;
+    if (msg.source === 'BrowserExtension' && !extensionReceiveEnabled) return;
+    inboundQueue.push(msg);
+    processInboundQueue();
+  };
+
+  const inboundEvents = new EventSource('/api/inbound/events');
+  inboundEvents.addEventListener('inbound-message', (event) => {
+    try {
+      enqueueInboundForChat(JSON.parse(event.data));
     } catch (e) {
-      console.warn('Helper message parse failed', e);
+      console.warn('Inbound message parse failed', e);
     }
   });
-  const stopExtensionPolling = () => {
-    if (extensionPollTimer) clearInterval(extensionPollTimer);
-    extensionPollTimer = null;
-  };
+  inboundEvents.addEventListener('error', () => {
+    console.warn('Inbound event stream disconnected; browser will reconnect automatically.');
+  });
+
   const updateExtensionReceiveUi = () => {
     if (extensionReceiveLabel) extensionReceiveLabel.textContent = `接收瀏覽器訊息：${extensionReceiveEnabled ? '開啟' : '關閉'}`;
     if (extensionReceiveBtn) extensionReceiveBtn.classList.toggle('bg-cyan-950/40', extensionReceiveEnabled);
-  };
-  const startExtensionPolling = () => {
-    stopExtensionPolling();
-    if (!extensionReceiveEnabled) return;
-    pollInboundMessages();
-    extensionPollTimer = setInterval(() => {
-      if (!document.hidden) pollInboundMessages();
-    }, 3000);
   };
   if (extensionReceiveBtn) extensionReceiveBtn.addEventListener('click', () => {
     extensionReceiveEnabled = !extensionReceiveEnabled;
     localStorage.setItem('crew-pocket-extension-receive', extensionReceiveEnabled ? '1' : '0');
     updateExtensionReceiveUi();
-    startExtensionPolling();
-  });
-  document.addEventListener('visibilitychange', () => {
-    if (document.hidden) stopExtensionPolling();
-    else startExtensionPolling();
   });
   updateExtensionReceiveUi();
-  startExtensionPolling();
 }
 
 if (document.readyState === 'loading') {

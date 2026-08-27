@@ -651,7 +651,7 @@ public class FloatingBubbleManager {
                     for (int attempt = 1; attempt <= 3 && !success; attempt++) {
                         HttpURLConnection conn = null;
                         try {
-                            URL url = new URL("http://127.0.0.1:8000/api/inbound-message");
+                            URL url = new URL("http://127.0.0.1:8000/api/inbound/messages");
                             conn = (HttpURLConnection) url.openConnection();
                             conn.setRequestMethod("POST");
                             conn.setRequestProperty("Content-Type", "application/json; charset=utf-8");
@@ -710,14 +710,14 @@ public class FloatingBubbleManager {
                 boolean success = false;
                 HttpURLConnection conn = null;
                 try {
-                    URL url = new URL("http://127.0.0.1:8000/api/helper-message");
+                    URL url = new URL("http://127.0.0.1:8000/api/inbound/messages");
                     conn = (HttpURLConnection) url.openConnection();
                     conn.setRequestMethod("POST");
                     conn.setRequestProperty("Content-Type", "application/json; charset=utf-8");
                     conn.setDoOutput(true);
                     conn.setConnectTimeout(4000);
                     conn.setReadTimeout(4000);
-                    String payload = "{\"message\":\"" + escapeJson(message) + "\"}";
+                    String payload = "{\"message\":\"" + escapeJson(message) + "\",\"source\":\"CrewHelper\"}";
                     byte[] bytes = payload.getBytes(StandardCharsets.UTF_8);
                     conn.setFixedLengthStreamingMode(bytes.length);
                     OutputStream os = conn.getOutputStream();

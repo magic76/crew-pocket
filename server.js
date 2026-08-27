@@ -140,82 +140,94 @@ async function handlePhoneAction(req, res) {
   }
 }
 
-// 🌐 Inbound Web Messages from Browser Extension
-const inboundWebMessages = [];
-const pendingHelperMessages = [];
-const helperEventClients = new Set();
+// Unified inbound message broker for CrewHelper and Browser Extension.
+const pendingInboundMessages = [];
+const inboundEventClients = new Set();
+const INBOUND_QUEUE_LIMIT = 50;
+let inboundMessageCounter = 0;
 
-function writeHelperEvent(res, message) {
-  res.write(`event: helper-message\ndata: ${JSON.stringify(message)}\n\n`);
-}
-
-function enqueueHelperMessage(body) {
+function normalizeInboundMessage(body) {
   const text = body && (body.text || body.message || body.prompt);
-  if (!text) return false;
-  const message = { text: String(text), source: 'CrewHelper', received_at: Date.now() };
-  if (helperEventClients.size === 0) {
-    pendingHelperMessages.push(message);
-    if (pendingHelperMessages.length > 20) pendingHelperMessages.shift();
-    return true;
+  if (!text || !String(text).trim()) return null;
+
+  const receivedAt = Date.now();
+  const message = {
+    id: `inbound_${receivedAt.toString(36)}_${(++inboundMessageCounter).toString(36)}`,
+    source: String(body.source || 'External').slice(0, 48),
+    text: String(text),
+    created_at: Number(body.created_at || body.timestamp) || receivedAt,
+    received_at: receivedAt
+  };
+
+  for (const key of ['image_path', 'url', 'title', 'lastError']) {
+    if (typeof body[key] === 'string' && body[key]) message[key] = body[key];
   }
-  for (const client of helperEventClients) {
-    try { writeHelperEvent(client, message); } catch (_) { helperEventClients.delete(client); }
-  }
-  return true;
+  return message;
 }
 
-function handleHelperEvents(req, res) {
+function writeInboundEvent(res, message) {
+  res.write(`id: ${message.id}\nevent: inbound-message\ndata: ${JSON.stringify(message)}\n\n`);
+}
+
+function enqueueInboundMessage(body) {
+  const message = normalizeInboundMessage(body);
+  if (!message) return null;
+
+  let delivered = 0;
+  for (const client of inboundEventClients) {
+    try {
+      writeInboundEvent(client, message);
+      delivered++;
+    } catch (_) {
+      inboundEventClients.delete(client);
+    }
+  }
+
+  if (delivered === 0) {
+    pendingInboundMessages.push(message);
+    if (pendingInboundMessages.length > INBOUND_QUEUE_LIMIT) pendingInboundMessages.shift();
+  }
+  return message;
+}
+
+function handleInboundEvents(req, res) {
   res.writeHead(200, {
     'Content-Type': 'text/event-stream; charset=utf-8',
     'Cache-Control': 'no-cache, no-transform',
     'Connection': 'keep-alive'
   });
   res.write('retry: 5000\n\n');
-  helperEventClients.add(res);
-  while (pendingHelperMessages.length > 0) writeHelperEvent(res, pendingHelperMessages.shift());
-  req.on('close', () => helperEventClients.delete(res));
+  inboundEventClients.add(res);
+  while (pendingInboundMessages.length > 0) writeInboundEvent(res, pendingInboundMessages.shift());
+
+  const keepAlive = setInterval(() => {
+    try { res.write(`: keepalive ${Date.now()}\n\n`); } catch (_) {}
+  }, 25000);
+  req.on('close', () => {
+    clearInterval(keepAlive);
+    inboundEventClients.delete(res);
+  });
 }
 
-async function handleHelperMessage(req, res) {
+async function handleInboundMessage(req, res) {
   try {
     const body = await parseJsonBody(req);
-    if (!enqueueHelperMessage(body)) throw new Error('訊息不可為空');
+    const message = enqueueInboundMessage(body);
+    if (!message) throw new Error('訊息不可為空');
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ success: true, delivered: helperEventClients.size > 0 }));
+    res.end(JSON.stringify({
+      success: true,
+      id: message.id,
+      delivered: inboundEventClients.size > 0,
+      pending: pendingInboundMessages.length
+    }));
   } catch (err) {
     res.writeHead(400, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ success: false, error: err.message }));
   }
 }
 
-function enqueueInboundMessage(body) {
-  const text = body && (body.text || body.message || body.prompt);
-  if (!text) return false;
-  body.text = text;
-  inboundWebMessages.push(body);
-  if (inboundWebMessages.length > 50) inboundWebMessages.shift();
-  return true;
-}
-
 const extensionBridge = createExtensionBridge({ onInboundMessage: enqueueInboundMessage });
-
-async function handleInboundMessage(req, res) {
-  if (req.method === 'POST') {
-    try {
-      const body = await parseJsonBody(req);
-      enqueueInboundMessage(body);
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ success: true, count: inboundWebMessages.length }));
-    } catch (err) {
-      res.writeHead(400, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: err.message }));
-    }
-  } else if (req.method === 'GET') {
-    const msgs = inboundWebMessages.splice(0, inboundWebMessages.length);
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ messages: msgs }));
-  }
-}
 
 // 📦 Export / Copy Browser Extension to custom location
 async function handleExportExtension(req, res) {
@@ -1021,11 +1033,9 @@ const server = http.createServer(async (req, res) => {
     return handleImageProxy(parsedUrl, res);
   } else if (pathname === '/api/export-extension' && req.method === 'POST') {
     return handleExportExtension(req, res);
-  } else if (pathname === '/api/helper-events' && req.method === 'GET') {
-    return handleHelperEvents(req, res);
-  } else if (pathname === '/api/helper-message' && req.method === 'POST') {
-    return handleHelperMessage(req, res);
-  } else if (pathname === '/api/inbound-message') {
+  } else if (pathname === '/api/inbound/events' && req.method === 'GET') {
+    return handleInboundEvents(req, res);
+  } else if (pathname === '/api/inbound/messages' && req.method === 'POST') {
     return handleInboundMessage(req, res);
   } else if (pathname.startsWith('/api/extension/')) {
     return extensionBridge.handle(req, res, pathname);
@@ -1049,6 +1059,9 @@ const server = http.createServer(async (req, res) => {
     return handleGetGuidelines(res);
   } else if (pathname === '/api/guidelines/sync' && req.method === 'POST') {
     return handleSyncGuidelines(req, res);
+  } else if (pathname.startsWith('/api/')) {
+    res.writeHead(404, { 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify({ error: 'Unknown API endpoint' }));
   } else {
     return handleStatic(pathname, res);
   }

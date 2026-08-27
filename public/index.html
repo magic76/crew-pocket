@@ -123,12 +123,10 @@
     
     <div class="relative flex items-center gap-1 sm:gap-1.5 shrink-0">
       <!-- 🎙️ Gemini 2.0 Live Full-Duplex Voice Call Button -->
-      <button id="live-voice-btn" class="p-1.5 sm:p-2 rounded-lg bg-gradient-to-r from-teal-500/20 via-indigo-500/20 to-purple-500/20 hover:from-teal-500/30 hover:to-purple-500/30 text-teal-300 hover:text-white transition active:scale-95 shrink-0 border border-teal-500/40 shadow-sm shadow-teal-500/20 flex items-center gap-1.5" title="🎙️ Gemini 2.0 Live 原生雙向全雙工通話 (端到端音訊)">
-        <span class="w-1.5 h-1.5 rounded-full bg-teal-400 animate-ping shrink-0"></span>
-        <svg class="w-4 h-4 text-teal-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <button id="live-voice-btn" class="w-8 h-8 p-1.5 rounded-full bg-teal-500/15 hover:bg-teal-500/25 text-teal-300 hover:text-white transition active:scale-95 shrink-0 border border-teal-500/50 shadow-sm shadow-teal-500/20 flex items-center justify-center" title="🎙️ Gemini 2.0 Live 原生雙向全雙工通話 (端到端音訊)">
+        <svg class="w-4 h-4 text-current" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/>
         </svg>
-        <span class="text-[11px] font-extrabold tracking-tight hidden sm:inline text-teal-200 font-mono">Live 通話</span>
       </button>
       <!-- 🧰 Unified Tools Dropdown Trigger Button -->
       <button id="tools-menu-btn" class="p-1.5 sm:p-2 rounded-lg bg-slate-900/90 hover:bg-slate-800 text-slate-300 hover:text-white transition active:scale-95 shrink-0 border border-slate-700/80 flex items-center gap-1" title="🧰 工具與功能選單 (檔案 / 用量 / 錦囊 / 通知)">
@@ -322,9 +320,6 @@
       <!-- Conversations List -->
       <div id="conv-list" class="flex-1 overflow-y-auto p-2 space-y-1">
         <div class="p-4 text-center text-xs text-slate-500">載入歷史紀錄中...</div>
-      </div>
-      <div class="p-3 border-t border-slate-800 flex items-center justify-between">
-        <span class="text-[10px] text-slate-500 font-mono">🛡️ 語音資料 100% 本地處理</span>
       </div>
     </aside>
 
@@ -962,12 +957,15 @@
         <div class="text-[10px] text-slate-500">每次通話開始時套用；留白代表使用預設指令。</div>
       </div>
 
+      <div class="space-y-1">
       <div class="flex items-center justify-between gap-3 p-2.5 rounded-xl bg-slate-950/70 border border-slate-800">
         <div class="min-w-0">
           <div class="text-[11px] text-slate-200 font-semibold">🧬 聲紋辨識</div>
           <div class="text-[10px] text-slate-500">降低旁人聲音對通話的干擾</div>
         </div>
         <button id="open-voiceprint-modal-btn" type="button" class="min-h-[40px] shrink-0 px-3 rounded-xl bg-teal-500/15 hover:bg-teal-500/25 active:scale-95 border border-teal-500/40 text-teal-300 text-[11px] font-semibold transition cursor-pointer">開啟工作室</button>
+      </div>
+      <div class="text-[10px] text-slate-500 font-mono text-center">🛡️ 語音資料 100% 本地處理</div>
       </div>
 
       <div class="space-y-1">
@@ -1124,10 +1122,10 @@
           
           <div class="p-2.5 bg-gradient-to-r from-emerald-950/60 to-slate-900 rounded-xl border border-emerald-500/40 flex items-center justify-between gap-2">
             <div class="min-w-0">
-              <div class="font-bold text-slate-200 text-[11px]">🤖 Crew 隨身小幫手 APK (21KB)</div>
+              <div class="font-bold text-slate-200 text-[11px]">🤖 Crew 隨身小幫手 APK v1.3.3</div>
               <div class="text-[10px] text-slate-400">支援全域 🤖 懸浮球、即時截圖與點擊操控</div>
             </div>
-            <a href="/uploads/CrewHelper.apk" download="CrewHelper.apk" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-slate-950 font-bold text-[11px] rounded-xl shadow-md transition shrink-0 flex items-center gap-1">
+            <a href="/CrewHelper.apk" download="CrewHelper.apk" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-slate-950 font-bold text-[11px] rounded-xl shadow-md transition shrink-0 flex items-center gap-1">
               <span>📥 下載 APK</span>
             </a>
           </div>
@@ -1205,9 +1203,9 @@
   <script src="/js/ui.js?v=1787740201"></script>
   <script src="/js/tools.js?v=7.8"></script>
   <script src="/js/storage.js?v=4"></script>
-  <script src="/js/chat.js?v=1787740101"></script>
-  <script src="/js/live.js?v=1787644004"></script>
+  <script src="/js/chat.js?v=1787851401"></script>
+  <script src="/js/live.js?v=1787644011"></script>
   <script src="/js/phone_agent.js?v=1.1"></script>
-  <script src="/js/app.js?v=1787740201"></script>
+  <script src="/js/app.js?v=1787851401"></script>
 </body>
 </html>

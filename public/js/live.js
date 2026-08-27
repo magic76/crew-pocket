@@ -55,6 +55,8 @@
   let isCameraExpanded = false;
   let liveCallStartTs = 0;
   let isAiResponding = false;
+  let liveCardExpanded = false;
+  let liveCardVisible = true;
   let hasSentFrameForCurrentTurn = false;
   let lastAiSpokeTime = 0;
   let sustainedSpeechCount = 0;
@@ -859,15 +861,17 @@
   // ==========================================
   function createInlineCardElement() {
     removeInlineCard();
+    liveCardExpanded = false;
+    liveCardVisible = true;
 
     const selectedVoice = getSelectedVoice();
 
     const card = document.createElement('div');
     card.id = 'live-inline-card';
-    card.className = 'flex w-full max-w-2xl mx-auto justify-start transition-all duration-300 animate-fadeIn';
+    card.className = 'fixed left-2 right-2 top-[60px] z-40 flex justify-center transition-all duration-300 animate-fadeIn pointer-events-none';
     
     card.innerHTML = `
-      <div class="bg-gradient-to-b from-slate-900 via-slate-900 to-slate-950 border border-teal-500/50 rounded-2xl p-3.5 text-xs sm:text-sm shadow-2xl shadow-teal-950/50 w-full min-w-0 space-y-3 relative overflow-hidden">
+      <div class="bg-gradient-to-b from-slate-900 via-slate-900 to-slate-950 border border-teal-500/50 rounded-2xl p-2.5 sm:p-3.5 text-xs sm:text-sm shadow-2xl shadow-teal-950/50 w-full max-w-2xl min-w-0 space-y-2.5 relative overflow-hidden pointer-events-auto">
         
         <!-- CARD TOP TOOLBAR: 狀態指示 (靠左) + 調音/音色膠囊 (靠右) -->
         <div class="border-b border-slate-800/80 pb-2 flex items-center justify-between gap-1.5 min-w-0">
@@ -878,8 +882,9 @@
           </div>
           
           <div class="flex items-center gap-1.5 shrink-0">
+            <button id="live-card-expand-toggle-btn" type="button" class="w-7 h-7 rounded-full bg-indigo-950/80 hover:bg-indigo-900 active:scale-95 border border-indigo-500/40 text-indigo-300 text-[11px] flex items-center justify-center transition shadow-sm cursor-pointer" title="展開通話面板">↗</button>
             <!-- 🎛️ Live Tuning Panel Toggle Button -->
-            <button id="live-card-tuning-toggle-btn" type="button" class="w-6 h-6 rounded-full bg-slate-800/90 hover:bg-slate-700 active:scale-95 border border-slate-700 text-[11px] text-slate-300 flex items-center justify-center transition shadow-sm cursor-pointer" title="開啟/收合即時調音台">🎛️</button>
+            <button id="live-card-tuning-toggle-btn" type="button" class="hidden w-6 h-6 rounded-full bg-slate-800/90 hover:bg-slate-700 active:scale-95 border border-slate-700 text-[11px] text-slate-300 flex items-center justify-center transition shadow-sm cursor-pointer" title="開啟/收合即時調音台">🎛️</button>
 
             <!-- 🗣️ Voice Selector Pill (音色切換膠囊 · 靠右放置) -->
             <div class="relative inline-flex items-center shrink-0">
@@ -903,6 +908,8 @@
             <span>⏹</span><span>掛斷</span>
           </button>
         </div>
+
+        <div id="live-card-details" class="hidden space-y-2.5">
 
         <!-- 📷 CAMERA EXPANSION VIEW (相機展開區) -->
         <div id="live-card-camera-box" class="hidden transition-all duration-300 overflow-hidden rounded-xl border border-indigo-500/40 bg-slate-950 relative">
@@ -1025,6 +1032,8 @@
           <div id="live-card-placeholder" class="text-slate-500 text-center text-[11px] font-mono py-1">💬 請說話...</div>
         </div>
 
+        </div>
+
       </div>
     `;
 
@@ -1037,24 +1046,42 @@
       if (tuningButton) tuningButton.classList.add('hidden');
     }
 
-    if (messagesContainer) {
-      messagesContainer.appendChild(card);
-      messagesContainer.scrollTop = messagesContainer.scrollHeight;
-    }
+    // Mount at the document root so the fixed panel is never clipped by the
+    // chat area's overflow scrolling container.
+    document.body.appendChild(card);
 
     // Attach Inline Controls
     const cardMuteBtn = card.querySelector('#live-card-mute-btn');
     if (cardMuteBtn) cardMuteBtn.addEventListener('click', toggleMute);
     const cardCameraBtn = card.querySelector('#live-card-camera-btn');
-    if (cardCameraBtn) cardCameraBtn.addEventListener('click', toggleCamera);
+    const expandToggleBtn = card.querySelector('#live-card-expand-toggle-btn');
+    const details = card.querySelector('#live-card-details');
+    const tuningToggleBtn = card.querySelector('#live-card-tuning-toggle-btn');
+    const canTune = liveSessionMode !== 'discussion';
+    const setExpanded = (expanded) => {
+      liveCardExpanded = expanded;
+      if (details) details.classList.toggle('hidden', !expanded);
+      if (tuningToggleBtn) tuningToggleBtn.classList.toggle('hidden', !expanded || !canTune);
+      if (expandToggleBtn) {
+        expandToggleBtn.textContent = expanded ? '↙' : '↗';
+        expandToggleBtn.title = expanded ? '收合通話面板' : '展開通話面板';
+      }
+    };
+    if (expandToggleBtn) expandToggleBtn.addEventListener('click', () => setExpanded(!liveCardExpanded));
+
+    if (cardCameraBtn) cardCameraBtn.addEventListener('click', () => {
+      setExpanded(true);
+      toggleCamera();
+    });
     const cardHangupBtn = card.querySelector('#live-card-hangup-btn');
     if (cardHangupBtn) cardHangupBtn.addEventListener('click', endLiveSession);
     updateCardCallControls();
 
-    const tuningToggleBtn = card.querySelector('#live-card-tuning-toggle-btn');
     const tuningDrawer = card.querySelector('#live-card-tuning-drawer');
     if (tuningToggleBtn && tuningDrawer) {
+      tuningToggleBtn.classList.add('hidden');
       tuningToggleBtn.addEventListener('click', () => {
+        setExpanded(true);
         tuningDrawer.classList.toggle('hidden');
         if (navigator.vibrate) navigator.vibrate(15);
       });
@@ -1139,6 +1166,17 @@
   function removeInlineCard() {
     const existing = document.getElementById('live-inline-card');
     if (existing) existing.remove();
+  }
+
+  function toggleLiveCardVisibility() {
+    const card = document.getElementById('live-inline-card');
+    if (!card) return;
+    liveCardVisible = !liveCardVisible;
+    card.classList.toggle('hidden', !liveCardVisible);
+    if (liveVoiceBtn) {
+      liveVoiceBtn.title = liveCardVisible ? 'Gemini Live 通話中 · 點擊隱藏控制面板' : 'Gemini Live 通話中 · 點擊顯示控制面板';
+    }
+    if (typeof window.haptic === 'function') window.haptic('light');
   }
 
   function updateCardStatus(state, text) {
@@ -1292,21 +1330,15 @@
     if (video) {
       if (isCameraExpanded) {
         video.classList.remove('max-h-52');
-        video.classList.add('max-h-[70vh]', 'h-[50vh]');
+        video.classList.add('max-h-[78vh]', 'h-[62vh]');
         if (expandBtn) expandBtn.innerHTML = '🗗 縮小';
       } else {
-        video.classList.remove('max-h-[70vh]', 'h-[50vh]');
+        video.classList.remove('max-h-[78vh]', 'h-[62vh]');
         video.classList.add('max-h-52');
         if (expandBtn) expandBtn.innerHTML = '⛶ 放大';
       }
     }
 
-    setTimeout(() => {
-      const liveCard = document.getElementById('live-inline-card');
-      if (liveCard) {
-        liveCard.scrollIntoView({ behavior: 'smooth', block: 'end' });
-      }
-    }, 120);
   }
 
   async function snapPhoto() {
@@ -1594,7 +1626,7 @@
       }
       if (video) {
         video.srcObject = null;
-        video.classList.remove('max-h-[70vh]', 'h-[50vh]');
+        video.classList.remove('max-h-[78vh]', 'h-[62vh]');
         video.classList.add('max-h-52');
       }
       isCameraExpanded = false;
@@ -1826,7 +1858,9 @@
 
     // Update Header Live Button
     if (liveVoiceBtn) {
-      liveVoiceBtn.classList.add('bg-rose-950/80', 'text-rose-300', 'border-rose-500/50');
+      liveVoiceBtn.classList.remove('bg-teal-500/15', 'hover:bg-teal-500/25', 'text-teal-300', 'border-teal-500/50', 'shadow-teal-500/20');
+      liveVoiceBtn.classList.add('bg-rose-950/80', 'text-rose-300', 'border-rose-500/50', 'shadow-rose-500/30');
+      liveVoiceBtn.title = 'Gemini Live 通話中 · 點擊隱藏控制面板';
       const span = liveVoiceBtn.querySelector('span:last-child');
       if (span) span.textContent = '通話中';
     }
@@ -2873,7 +2907,9 @@
 
       // Reset Header Live Button
       if (liveVoiceBtn) {
-        liveVoiceBtn.classList.remove('bg-rose-950/80', 'text-rose-300', 'border-rose-500/50');
+        liveVoiceBtn.classList.remove('bg-rose-950/80', 'text-rose-300', 'border-rose-500/50', 'shadow-rose-500/30');
+        liveVoiceBtn.classList.add('bg-teal-500/15', 'hover:bg-teal-500/25', 'text-teal-300', 'border-teal-500/50', 'shadow-teal-500/20');
+        liveVoiceBtn.title = '🎙️ Gemini Live 原生雙向全雙工通話 (端到端音訊)';
         const span = liveVoiceBtn.querySelector('span:last-child');
         if (span) span.textContent = 'Live 通話';
       }
@@ -2971,7 +3007,7 @@
   if (liveVoiceBtn) {
     liveVoiceBtn.addEventListener('click', () => {
       if (isConnected) {
-        endLiveSession();
+        toggleLiveCardVisibility();
       } else {
         const key = getApiKey();
         if (!key) {

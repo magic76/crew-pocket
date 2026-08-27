@@ -1474,6 +1474,9 @@ function clearQueuedBtwMessages() {}
 function setStreamingState(streaming) {
   isStreaming = streaming;
   updateSendButtonMode();
+  window.dispatchEvent(new CustomEvent('crew:streaming-state', {
+    detail: { streaming: isStreaming }
+  }));
 }
 
 // Stop active generation
