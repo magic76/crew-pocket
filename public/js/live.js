@@ -49,17 +49,22 @@
   let sessionDialogueTurns = [];
   let currentTurnUser = '';
   let currentTurnInputTranscript = '';
+  let currentTurnOutputTranscript = '';
   let currentTurnModel = '';
+  let currentTurnHadAudio = false;
   let lastUserSpokeTime = 0;
   let lastVideoFrameSentTime = 0;
   let isCameraExpanded = false;
   let liveCallStartTs = 0;
   let isAiResponding = false;
+  let isModelTurnComplete = true;
   let liveCardExpanded = false;
   let liveCardVisible = true;
   let hasSentFrameForCurrentTurn = false;
   let lastAiSpokeTime = 0;
   let sustainedSpeechCount = 0;
+  let userSpeechActive = false;
+  let cameraFrameSequence = 0;
   let sessionSnapshots = [];
   let sessionExecutedTools = [];
   // Live API can surface the same function call in both toolCall and
@@ -71,6 +76,9 @@
   let voicePreviewSource = null;
   const voicePreviewCache = new Map();
   let lastVoicePreviewAt = 0;
+  const IS_ANDROID_DEVICE = /Android/i.test(navigator.userAgent || '');
+  const AI_ECHO_GUARD_MS = 300;
+  const VOICEPRINT_PREROLL_SAMPLES = 4800; // 300ms at 16 kHz
 
   // DOM References
   const liveVoiceBtn = document.getElementById('live-voice-btn');
@@ -94,6 +102,8 @@
       this.ctx = ctx;
       this.nextStartTime = 0;
       this.activeSources = [];
+      this.stopped = false;
+      this.hasStartedAudio = false;
       this.jitterBufferSec = 0.035; // 35ms smooth jitter buffer to eliminate pops/stutters
 
       // Route the rendered response through a real HTML5 audio element. On
@@ -102,6 +112,9 @@
       // two output paths cause doubled audio and echo.
       try {
         this.mediaStreamDest = this.ctx.createMediaStreamDestination();
+        this.outputGain = this.ctx.createGain();
+        this.outputGain.gain.value = 0;
+        this.outputGain.connect(this.mediaStreamDest);
         this.audioEl = document.createElement('audio');
         this.audioEl.autoplay = true;
         this.audioEl.playsInline = true;
@@ -110,14 +123,17 @@
         this.audioEl.style.cssText = 'position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;left:-10px;top:-10px;';
         this.audioEl.srcObject = this.mediaStreamDest.stream;
         document.body.appendChild(this.audioEl);
-        this.audioEl.play().catch(() => {});
+        this.audioEl.play().catch(err => {
+          console.warn('[Live Audio] Initial HTML5 playback was blocked:', err.message);
+        });
 
         // Keep the media track active between response chunks so Android does
         // not fall back to the communication stream during short pauses.
         if (typeof this.ctx.createConstantSource === 'function') {
           const silentOsc = this.ctx.createConstantSource();
           const silentGain = this.ctx.createGain();
-          silentGain.gain.value = 0.00001;
+          // Exact digital silence avoids a DC step/pop when the route opens.
+          silentGain.gain.value = 0;
           silentOsc.connect(silentGain);
           silentGain.connect(this.mediaStreamDest);
           silentOsc.start();
@@ -131,8 +147,9 @@
 
     playChunk(float32Array, sampleRate = 24000) {
       if (!float32Array || float32Array.length === 0) return;
+      this.stopped = false;
       if (this.ctx.state === 'suspended') {
-        this.ctx.resume();
+        this.ctx.resume().catch(err => console.warn('[Live Audio] AudioContext resume failed:', err.message));
       }
 
       const audioBuffer = this.ctx.createBuffer(1, float32Array.length, sampleRate);
@@ -143,7 +160,7 @@
 
       if (this.mediaStreamDest) {
         try {
-          source.connect(this.mediaStreamDest);
+          source.connect(this.outputGain || this.mediaStreamDest);
         } catch (e) {
           source.connect(this.ctx.destination);
         }
@@ -156,6 +173,12 @@
       }
 
       const currentTime = this.ctx.currentTime;
+      if (!this.hasStartedAudio && this.outputGain) {
+        this.outputGain.gain.cancelScheduledValues(currentTime);
+        this.outputGain.gain.setValueAtTime(0, currentTime);
+        this.outputGain.gain.linearRampToValueAtTime(1, currentTime + 0.03);
+        this.hasStartedAudio = true;
+      }
       let startTime = this.nextStartTime;
       if (startTime < currentTime) {
         startTime = currentTime + this.jitterBufferSec;
@@ -168,27 +191,27 @@
       source.onended = () => {
         const idx = this.activeSources.indexOf(source);
         if (idx > -1) this.activeSources.splice(idx, 1);
-        lastAiSpokeTime = Date.now();
-        if (this.activeSources.length === 0 && isConnected) {
-          // 350ms room echo clearance buffer before re-opening mic
-          setTimeout(() => {
-            if (this.activeSources.length === 0 && isConnected) {
-              isAiResponding = false;
-              hasSentFrameForCurrentTurn = false;
-              updateDockControls();
-              updateCameraBadge(false, '待命中 (說話時自動發送)');
-              if (isMuted) {
-                updateCardStatus('muted', '🔇 麥克風已靜音');
-              } else {
-                updateCardStatus('listening', '🎙️ 可以開始說話');
-              }
-            }
-          }, 350);
+        if (this.activeSources.length === 0 && isConnected && isModelTurnComplete) {
+          scheduleMicReopenAfterPlayback();
         }
       };
     }
 
     stopAll() {
+      // Interrupt only the currently queued speech. Keep the HTML5 audio
+      // element and MediaStreamDestination alive for the next Gemini turn.
+      this.stopped = false;
+      for (const src of this.activeSources) {
+        try { src.stop(); } catch (e) {}
+      }
+      this.activeSources = [];
+      if (this.ctx) {
+        this.nextStartTime = this.ctx.currentTime;
+      }
+    }
+
+    destroy() {
+      this.stopped = true;
       for (const src of this.activeSources) {
         try { src.stop(); } catch (e) {}
       }
@@ -209,6 +232,23 @@
         this.audioEl = null;
       }
     }
+  }
+
+  function scheduleMicReopenAfterPlayback() {
+    lastAiSpokeTime = Date.now();
+    setTimeout(() => {
+      const playbackEmpty = !audioPlayer || audioPlayer.activeSources.length === 0;
+      if (!playbackEmpty || !isConnected || !isModelTurnComplete) return;
+      isAiResponding = false;
+      hasSentFrameForCurrentTurn = false;
+      updateDockControls();
+      updateCameraBadge(false, '待命中 (說話時自動發送)');
+      if (isMuted) {
+        updateCardStatus('muted', '🔇 麥克風已靜音');
+      } else {
+        updateCardStatus('listening', '🎙️ 可以開始說話');
+      }
+    }, AI_ECHO_GUARD_MS);
   }
 
   let screenWakeLock = null;
@@ -1506,6 +1546,7 @@
     if (isAiResponding || (audioPlayer && audioPlayer.activeSources.length > 0)) {
       if (audioPlayer) audioPlayer.stopAll();
       isAiResponding = false;
+      isModelTurnComplete = true;
       hasSentFrameForCurrentTurn = false;
       lastAiSpokeTime = 0;
       updateCardStatus('listening', '🎙️ 可以開始說話');
@@ -1590,6 +1631,7 @@
           video.playsInline = true;
           video.srcObject = cameraStream;
           video.play().catch(() => {});
+          scheduleFreshCameraFrame('camera_opened');
         }
         if (audioContext && audioContext.state === 'suspended') {
           audioContext.resume().catch(() => {});
@@ -1630,6 +1672,8 @@
         video.classList.add('max-h-52');
       }
       isCameraExpanded = false;
+      hasSentFrameForCurrentTurn = false;
+      userSpeechActive = false;
       const expandBtn = document.getElementById('live-card-expand-btn');
       if (expandBtn) expandBtn.innerHTML = '⛶ 放大';
 
@@ -1652,37 +1696,55 @@
         cameraStream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: cameraFacingMode, width: { ideal: 1920 }, height: { ideal: 1080 } }
         });
-        if (video) video.srcObject = cameraStream;
+        if (video) {
+          video.srcObject = cameraStream;
+          video.play().catch(() => {});
+          scheduleFreshCameraFrame('camera_flipped');
+        }
       } catch (e) {
         console.warn('Flip Camera Failed', e);
       }
     }
   }
 
-  function trySendVideoFrame() {
-    if (!isConnected || !ws || ws.readyState !== WebSocket.OPEN || !isCameraOn) return;
-    if (isAiResponding || (audioPlayer && audioPlayer.activeSources.length > 0) || (Date.now() - lastAiSpokeTime < 1200)) {
+  function scheduleFreshCameraFrame(reason) {
+    const video = document.getElementById('live-card-video');
+    if (!video) return;
+    const send = () => setTimeout(() => captureCameraFrame({ force: true, reason }), 120);
+    if (video.readyState >= 2 && video.videoWidth > 0) send();
+    else video.addEventListener('loadeddata', send, { once: true });
+  }
+
+  function captureCameraFrame({ force = false, reason = 'auto_speech', maxWidth = 480, quality = 0.6 } = {}) {
+    if (!isConnected || !ws || ws.readyState !== WebSocket.OPEN || !isCameraOn) {
+      return { success: false, error: 'Live 相機尚未開啟或連線未就緒' };
+    }
+    if (!force && (isAiResponding || (audioPlayer && audioPlayer.activeSources.length > 0) || (Date.now() - lastAiSpokeTime < 1200))) {
       updateCameraBadge(false, 'AI 說話中 (暫停傳圖)');
-      return;
+      return { success: false, error: 'AI 正在回應，暫停自動傳圖' };
     }
-    if (hasSentFrameForCurrentTurn) {
-      return;
+    if (!force && hasSentFrameForCurrentTurn) {
+      return { success: false, error: '本輪已傳送相機畫面' };
     }
-    if (Date.now() - lastVideoFrameSentTime < 3000) {
-      return;
+    if (!force && Date.now() - lastVideoFrameSentTime < 3000) {
+      return { success: false, error: '相機畫面傳送冷卻中' };
     }
 
     const video = document.getElementById('live-card-video');
-    if (!video || video.videoWidth === 0) return;
+    if (!video || video.videoWidth === 0) {
+      return { success: false, error: '相機影像尚未載入完成' };
+    }
 
     try {
       const tempCanvas = document.createElement('canvas');
       const tempCtx = tempCanvas.getContext('2d');
-      tempCanvas.width = 480;
-      tempCanvas.height = Math.round((video.videoHeight / video.videoWidth) * 480);
+      tempCanvas.width = Math.min(maxWidth, video.videoWidth);
+      tempCanvas.height = Math.round((video.videoHeight / video.videoWidth) * tempCanvas.width);
       tempCtx.drawImage(video, 0, 0, tempCanvas.width, tempCanvas.height);
-      const jpegDataUrl = tempCanvas.toDataURL('image/jpeg', 0.6);
+      const jpegDataUrl = tempCanvas.toDataURL('image/jpeg', quality);
       const cleanBase64 = jpegDataUrl.replace(/^data:image\/\w+;base64,/, '');
+      const capturedAt = new Date().toISOString();
+      const frameId = `camera_frame_${++cameraFrameSequence}`;
 
       const videoMsg = {
         realtimeInput: {
@@ -1698,10 +1760,25 @@
       if (sessionSnapshots.length < 6) {
         sessionSnapshots.push(jpegDataUrl);
       }
-      updateCameraBadge(true, '📸 已捕捉畫面送出給 AI');
+      updateCameraBadge(true, `📸 ${frameId} 已送出`);
+      console.debug('[Gemini Live Camera Frame]', { frameId, capturedAt, reason });
+      return {
+        success: true,
+        source: 'live_camera',
+        frame_id: frameId,
+        captured_at: capturedAt,
+        width: tempCanvas.width,
+        height: tempCanvas.height,
+        reason
+      };
     } catch (e) {
       console.warn('[Video Frame Send Error]', e);
+      return { success: false, error: e.message };
     }
+  }
+
+  function trySendVideoFrame() {
+    return captureCameraFrame();
   }
 
   // ==========================================
@@ -1854,7 +1931,6 @@
     // 1. Create Inline Live Card in Chat Timeline
     createInlineCardElement();
     updateCardStatus('connecting', '⚡ 準備中...');
-    if (typeof window.haptic === 'function') window.haptic('success');
 
     // Update Header Live Button
     if (liveVoiceBtn) {
@@ -1885,8 +1961,17 @@
     sessionSnapshots = [];
     sessionExecutedTools = [];
     currentTurnInputTranscript = '';
+    currentTurnOutputTranscript = '';
+    currentTurnHadAudio = false;
     liveToolQueue = Promise.resolve();
     liveToolCallKeys = new Set();
+    hasSentFrameForCurrentTurn = false;
+    lastVideoFrameSentTime = 0;
+    cameraFrameSequence = 0;
+    userSpeechActive = false;
+    sustainedSpeechCount = 0;
+    isAiResponding = false;
+    isModelTurnComplete = true;
     isMuted = false;
     isCameraOn = false;
     liveCallStartTs = Date.now();
@@ -1902,35 +1987,10 @@
       console.log(`[Gemini Live Tool Executing] ${name}:`, args);
 
       try {
-        const discussionToolAllowed = name === 'record_call_turn' || name === 'draft_message';
+        const discussionToolAllowed = name === 'draft_message';
         if (liveSessionMode === 'discussion' && !discussionToolAllowed) {
-          toolResult = { success: false, error: '目前是語音討論模式，此工具被停用；只允許記錄對話，或在使用者明確要求時把草稿填入主輸入框。' };
+          toolResult = { success: false, error: '目前是語音討論模式，此工具被停用；只允許在使用者明確要求時把草稿填入主輸入框。' };
           appendCardTranscript('system', `🛡️ 討論模式已阻擋：${name}`);
-        } else if (name === 'record_call_turn') {
-          const transcriptText = currentTurnInputTranscript.trim();
-          // Prefer Gemini Live's provider transcription. The function-call
-          // argument is model-generated and may paraphrase or mishear names.
-          const userText = transcriptText || '🗣️（使用者語音，未取得原始轉錄）';
-          const assistantText = String(args.assistant_text || '').trim();
-          if (!userText && !assistantText) {
-            toolResult = { success: false, error: '缺少通話文字' };
-          } else {
-            const turn = {
-              user: userText || '🗣️（使用者語音）',
-              model: assistantText || '🎙️（Gemini 語音回覆）'
-            };
-            const lastTurn = sessionDialogueTurns[sessionDialogueTurns.length - 1];
-            if (!lastTurn || lastTurn.user !== turn.user || lastTurn.model !== turn.model) {
-              sessionDialogueTurns.push(turn);
-              if (userText) appendCardTranscript('user', userText);
-              if (assistantText) appendCardTranscript('model', assistantText);
-            }
-            currentTurnUser = '';
-            currentTurnInputTranscript = '';
-            currentTurnModel = '';
-            toolResult = { success: true, recorded: true, turn_count: sessionDialogueTurns.length };
-          }
-
         } else if (name === 'swipe_screen') {
           const dir = (args.direction || 'up').toLowerCase();
           let x1 = 720, y1 = 1800, x2 = 720, y2 = 800, dur = 250;
@@ -2020,6 +2080,25 @@
             toolResult = { success: true, mode, chars: draftText.length, drafted: true };
             if (navigator.vibrate) navigator.vibrate([20, 40, 20]);
             appendCardTranscript('system', mode === 'append' ? '📝 已將內容追加到主輸入框' : '📝 已將內容填入主輸入框（尚未送出）');
+          }
+
+        } else if (name === 'capture_camera_frame') {
+          const frame = captureCameraFrame({
+            force: true,
+            reason: 'explicit_camera_tool',
+            maxWidth: 960,
+            quality: 0.78
+          });
+          if (frame.success) {
+            toolResult = {
+              ...frame,
+              message: `Fresh ${frame.frame_id} captured at ${frame.captured_at}. This is the authoritative current Live camera view. Ignore every older camera image when answering this turn.`
+            };
+            if (navigator.vibrate) navigator.vibrate([20, 35]);
+            appendCardTranscript('system', `📷 已擷取最新相機畫面：${frame.frame_id}`);
+          } else {
+            toolResult = frame;
+            appendCardTranscript('system', `⚠️ 無法取得最新相機畫面：${frame.error}`);
           }
 
         } else if (name === 'take_screenshot') {
@@ -2136,16 +2215,15 @@
 
       audioPlayer = new LiveAudioPlayer(audioContext);
 
-      // 3. Microphone Capture. On Android, disabling browser telephony
-      // processing keeps the hardware volume keys on the media stream.
+      // 3. Microphone Capture. Live output is routed through a media <audio>
+      // element, so Android can safely enable acoustic echo control here.
       try {
-        const isAndroid = /Android/i.test(navigator.userAgent || '');
         micMediaStream = await navigator.mediaDevices.getUserMedia({
           audio: {
             channelCount: 1,
-            echoCancellation: !isAndroid,
-            noiseSuppression: !isAndroid,
-            autoGainControl: !isAndroid
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true
           }
         });
       } catch (micErr) {
@@ -2179,8 +2257,8 @@
 
         const voiceName = getSelectedVoice();
         const baseSystemPrompt = (typeof getCrewLocale === 'function' && getCrewLocale() === 'en')
-          ? "You are Crew Pocket, an expert AI handheld companion. MANDATORY dialogue protocol: for EVERY user turn that receives a substantive answer, first silently call record_call_turn exactly once with the user's request and the exact answer you intend to speak. Wait for the successful tool response, then speak that same answer. Never speak a substantive answer before recording it. Do not mention this recording tool aloud. This rule applies on every turn, even when no other tool is needed. You can control the phone (swipe_screen, tap_screen, press_key, take_screenshot), read/write workspace files (write_file, read_file), and use draft_message only when the user explicitly asks you to put a handoff draft into Crew Pocket's main input box. draft_message never submits the message. Speak concisely and warmly."
-          : "你是 Crew Pocket（口袋指揮）。【強制逐輪記錄協定】每一輪使用者問題只要需要實質回答，必須先靜默呼叫一次 record_call_turn，填入使用者問題與你準備口頭回答的完整原文；收到工具成功回覆後，才可以說出同一份回答。絕對不要先回答再記錄，也不要漏掉任何一輪；即使沒有使用其他工具也一樣。使用者問題請以輸入語音轉錄的原文為準，不得自行改寫、猜測或替換字詞；若關鍵字聽不清楚，先用語音向使用者確認。不要在語音中提到 record_call_turn。你也可使用 swipe_screen、tap_screen、press_key、take_screenshot 操作手機，以及 write_file、read_file 讀寫工作區；只有使用者明確要求交接或填入輸入框時，才使用 draft_message，而且只填入、不自動送出。請以繁體中文簡潔自然地回應。";
+          ? "You are Crew Pocket, an expert AI handheld companion. Every substantive response must be spoken as AUDIO; never replace speech with a text-only response. Execute any required perception or action tools first, wait for their results, then answer directly in audio. The client records the user's and assistant's native audio transcriptions automatically, so never call a logging tool. For camera, lens, surroundings, or what the user is pointing at, call capture_camera_frame and use only its newest frame; never substitute a phone screenshot. Use take_screenshot only for the phone display, apps, UI, or buttons. You can control the phone (swipe_screen, tap_screen, press_key, take_screenshot), read/write workspace files (write_file, read_file), and use draft_message only when the user explicitly asks you to put a handoff draft into Crew Pocket's main input box. draft_message never submits the message. Speak concisely and warmly."
+          : "你是 Crew Pocket（口袋指揮）。每一輪實質回答都必須直接以 AUDIO 語音說出，禁止用純文字取代語音。若本輪需要感知或操作工具，先完成工具並等待結果，再直接用語音回答。前端會以 Gemini 原生的輸入／輸出音訊轉錄自動記錄雙方逐字稿，不需要也不得呼叫額外記錄工具。使用者問題請以輸入語音轉錄的原文為準；若關鍵字聽不清楚，先用語音向使用者確認。當使用者問相機、鏡頭、眼前、周遭或正在拍什麼時，必須先呼叫 capture_camera_frame，且只採信最新 frame；禁止用手機螢幕截圖代替。只有詢問手機顯示內容、App、UI 或按鈕時才使用 take_screenshot。你也可使用 swipe_screen、tap_screen、press_key、take_screenshot 操作手機，以及 write_file、read_file 讀寫工作區；只有使用者明確要求交接或填入輸入框時，才使用 draft_message，而且只填入、不自動送出。請以繁體中文簡潔自然地回應。";
         const discussionPrompt = liveSessionMode === 'discussion'
           ? `\n\n【語音討論模式】\n你現在只負責協助使用者釐清目前議題、追問需求、重述共識，並把零散想法整理成可交給目前 Session 的問題或開發任務。你已收到目前 Session 的摘要與最近畫面內容，但不要把暫時想法當成已確認需求。\n\n嚴格限制：不得操作手機畫面、不得截圖、不得點擊、不得滑動、不得按系統按鍵、不得寫檔、不得直接送出訊息。唯一的受控例外是：當使用者明確要求「幫我輸入」「放到輸入框」「填入這段文字」時，可以呼叫 draft_message，把指定草稿填入主輸入框，但絕對不能自動送出。只有使用者明確要求「整理成交接稿」時，才產生一份完整草稿供使用者確認；只有使用者明確要求「傳給目前 Session」時，才提示前端進入傳送確認。對「好」「可以」「嗯」等模糊回覆，不得視為送出授權。\n\n協助輸入時，請先說明你整理出的內容；收到明確輸入指令後才呼叫 draft_message，並告知使用者「已填入，尚未送出」。\n\n${getDiscussionContext()}`
           : '';
@@ -2188,7 +2266,7 @@
         const userSystemPrompt = customPrompt
           ? `${baseSystemPrompt}\n\n【使用者本次語音 Prompt】\n${customPrompt}`
           : baseSystemPrompt;
-        const systemPrompt = `${userSystemPrompt}${discussionPrompt}\n\n【系統強制規則／MANDATORY】每次實質回答前，先呼叫 record_call_turn 並等待成功；每輪恰好一次，工具成功後才開口，口頭內容必須與 assistant_text 完全一致。使用者輸入請以原始語音轉錄為準，不得為了讓句子通順而改寫專有名詞、數字或指令；無法確定時先詢問使用者。`;
+        const systemPrompt = `${userSystemPrompt}${discussionPrompt}\n\n【系統強制規則／MANDATORY】每輪工具順序固定：先完成本輪所需的感知／操作工具並取得結果，再直接輸出 AUDIO 語音回答；不得回傳純文字後直接結束本輪。逐字稿由前端原生音訊轉錄自動保存。視覺來源必須嚴格分流：相機／鏡頭／眼前先使用 capture_camera_frame，手機螢幕／App UI 先使用 take_screenshot；回答相機內容時，只能依據工具回傳的最新 frame_id，忽略所有舊圖片。使用者輸入請以原始語音轉錄為準，不得為了讓句子通順而改寫專有名詞、數字或指令；無法確定時先詢問使用者。`;
         const setupMessage = {
           setup: {
             model: model,
@@ -2205,21 +2283,10 @@
             // Request Gemini Live's native microphone transcription so the
             // memo does not depend on model-generated user_text.
             inputAudioTranscription: {},
+            outputAudioTranscription: {},
             tools: [
               {
                 functionDeclarations: [
-                  {
-                    name: "record_call_turn",
-                    description: "MANDATORY: Record exactly one dialogue turn BEFORE speaking the answer. Call this on EVERY substantive user turn, even when no other tool is needed; wait for success, then speak the exact assistant_text. Never skip this call and never call it more than once for the same turn.",
-                    parameters: {
-                      type: "OBJECT",
-                      properties: {
-                        user_text: { type: "STRING", description: "The user's spoken request, faithfully transcribed or paraphrased without adding facts." },
-                        assistant_text: { type: "STRING", description: "The exact substantive answer Gemini just spoke to the user." }
-                      },
-                      required: ["user_text", "assistant_text"]
-                    }
-                  },
                   {
                     name: "swipe_screen",
                     description: "Scroll or swipe the phone screen. Use 'up' to scroll down/read more content, 'down' to scroll up/go to top, 'left' or 'right' to flip cards/tabs.",
@@ -2284,8 +2351,12 @@
                     }
                   },
                   {
+                    name: "capture_camera_frame",
+                    description: "Capture a brand-new frame from the currently open Gemini Live camera. MANDATORY for questions about the camera, lens, surroundings, what is in front of the user, or what the user is pointing at. Always trust the returned latest frame_id and ignore older camera images. Never substitute take_screenshot."
+                  },
+                  {
                     name: "take_screenshot",
-                    description: "Capture the current phone screen to see what is displayed."
+                    description: "Capture the current PHONE DISPLAY for app UI, buttons, or on-screen content only. Never use this for the Live camera, lens, surroundings, or what is physically in front of the user."
                   },
                   {
                     name: "write_file",
@@ -2310,7 +2381,7 @@
                       required: ["path"]
                     }
                   }
-                ].filter(tool => liveSessionMode !== 'discussion' || ['record_call_turn', 'draft_message'].includes(tool.name))
+                ].filter(tool => liveSessionMode !== 'discussion' || tool.name === 'draft_message')
               }
             ],
             systemInstruction: {
@@ -2368,6 +2439,7 @@
             console.log('[Gemini Live] Interrupted by user!');
             audioPlayer.stopAll();
             isAiResponding = false;
+            isModelTurnComplete = true;
             hasSentFrameForCurrentTurn = false;
             updateDockControls();
             updateCameraBadge(false, '待命中 (說話時自動發送)');
@@ -2384,8 +2456,16 @@
           }
 
           const modelTurn = sc.modelTurn || sc.model_turn;
+          // Setup requests `outputAudioTranscription`, while serverContent
+          // returns the transcript under `outputTranscription`.
+          const outputTranscript = sc.outputTranscription || sc.output_transcription;
+          if (outputTranscript && outputTranscript.text) {
+            currentTurnOutputTranscript += String(outputTranscript.text);
+            console.debug('[Gemini Live Output Audio Transcript]', outputTranscript.text);
+          }
           if (modelTurn && modelTurn.parts) {
             isAiResponding = true;
+            isModelTurnComplete = false;
             updateDockControls();
             updateCameraBadge(false, 'AI 說話中 (暫停傳圖)');
             updateCardStatus('speaking', '🔊 Gemini 說話中 · 點擊按鈕可打斷');
@@ -2396,6 +2476,7 @@
                 const float32 = base64ToFloat32PCM(inlineData.data);
                 audioPlayer.playChunk(float32, 24000);
                 hasAudioChunk = true;
+                currentTurnHadAudio = true;
               }
               const fc = part.functionCall || part.function_call;
               if (fc) {
@@ -2410,19 +2491,48 @@
             if (hasAudioChunk && !currentTurnModel) {
               currentTurnModel = '🎙️ (AI 即時語音回覆)';
             }
+            if (!hasAudioChunk && modelTurn.parts.some(part => part.text)) {
+              console.warn('[Gemini Live] Received model text without inline audio; the visible text is not spoken audio.');
+            }
           }
 
           const isTurnDone = sc.turnComplete || sc.turn_complete;
           if (isTurnDone) {
-            const hasTextTurn = currentTurnUser || (currentTurnModel && currentTurnModel !== '🎙️ (AI 即時語音回覆)');
-            if (hasTextTurn) {
-              sessionDialogueTurns.push({
-                user: currentTurnUser || currentTurnInputTranscript.trim() || '🗣️ (您的語音提問)',
-                model: currentTurnModel || '🎙️ (AI 語音回覆)'
-              });
+            isModelTurnComplete = true;
+            const userText = currentTurnUser || currentTurnInputTranscript.trim();
+            const spokenText = currentTurnOutputTranscript.trim();
+            const fallbackModelText = currentTurnModel && currentTurnModel !== '🎙️ (AI 即時語音回覆)'
+              ? currentTurnModel.trim()
+              : '';
+            const modelText = spokenText || fallbackModelText;
+            const hasAssistantOutput = currentTurnHadAudio || Boolean(modelText);
+            if (hasAssistantOutput) {
+              if (!currentTurnHadAudio && modelText) {
+                appendCardTranscript('system', '⚠️ Gemini 此輪只回傳文字，未收到可播放的 AUDIO 音訊');
+              }
+              const turn = {
+                user: userText || '🗣️（使用者語音，未取得原始轉錄）',
+                model: modelText || '🎙️（Gemini 語音回覆，未取得輸出轉錄）'
+              };
+              const lastTurn = sessionDialogueTurns[sessionDialogueTurns.length - 1];
+              if (!lastTurn || lastTurn.user !== turn.user || lastTurn.model !== turn.model) {
+                sessionDialogueTurns.push(turn);
+                appendCardTranscript('user', turn.user);
+                appendCardTranscript('model', turn.model);
+              }
               currentTurnUser = '';
               currentTurnInputTranscript = '';
+              currentTurnOutputTranscript = '';
               currentTurnModel = '';
+              currentTurnHadAudio = false;
+            }
+            // A new visual turn must never depend on audio playback ending.
+            // Text-only/model-tool turns still release the previous frame lock.
+            hasSentFrameForCurrentTurn = false;
+            userSpeechActive = false;
+            sustainedSpeechCount = 0;
+            if (!audioPlayer || audioPlayer.activeSources.length === 0) {
+              scheduleMicReopenAfterPlayback();
             }
           }
         }
@@ -2439,6 +2549,7 @@
         isLiveSetupReady = false;
         preSetupAudioBuffer = [];
         isAiResponding = false;
+        isModelTurnComplete = true;
         hasSentFrameForCurrentTurn = false;
         stopSpeechRecognition();
         if (e.code !== 1000) {
@@ -2456,9 +2567,13 @@
       };
 
       let bargeInSpeechCount = 0;
+      let voiceprintBargeInCount = 0;
       let recentSpeechRollingBuffer = [];
       let lastEmbeddingCheckTime = 0;
+      let lastVoiceprintResultAt = 0;
       let currentSpeechSimilarity = 0.5;
+      let voiceprintDelayFrames = [];
+      let voiceprintDelaySamples = 0;
 
       // 5. Mic PCM Stream with 3D-Speaker Neural Voiceprint & Barge-In Interruption Detector
       micProcessorNode.onaudioprocess = (e) => {
@@ -2540,12 +2655,13 @@
 
         // 🎛️ Update Live Visual Tuning Meters & Continuous Voiceprint Verification
         const tuningDrawer = document.getElementById('live-card-tuning-drawer');
-        if (userVoiceprintProfile && recentSpeechRollingBuffer.length >= 2400 && (Date.now() - lastEmbeddingCheckTime > 120)) {
+        if (!IS_ANDROID_DEVICE && userVoiceprintProfile && recentSpeechRollingBuffer.length >= 2400 && (Date.now() - lastEmbeddingCheckTime > 120)) {
           lastEmbeddingCheckTime = Date.now();
           computeSpeakerEmbedding(new Float32Array(recentSpeechRollingBuffer)).then(emb => {
             if (emb) {
               const curSim = computeVoiceprintSimilarity(emb, userVoiceprintProfile);
               currentSpeechSimilarity = curSim;
+              lastVoiceprintResultAt = Date.now();
 
               if (tuningDrawer && !tuningDrawer.classList.contains('hidden')) {
                 const simVal = document.getElementById('live-meter-sim-val');
@@ -2565,13 +2681,20 @@
               // Barge-in Check (Interrupt AI only if verified speaker)
               const isAiSpeaking = isAiResponding || (audioPlayer && audioPlayer.activeSources.length > 0);
               if (isAiSpeaking && curSim >= TUNING_CONFIG.SIMILARITY_THRESHOLD && rms > TUNING_CONFIG.RMS_THRESHOLD) {
-                if (audioPlayer) audioPlayer.stopAll();
-                isAiResponding = false;
-                lastAiSpokeTime = 0;
-                if (navigator.vibrate) navigator.vibrate(20);
-                updateDockControls();
-                updateCameraBadge(false, '待命中 (說話時自動發送)');
-                updateCardStatus('listening', '🎙️ 3D-Speaker 聲紋驗證通過 · 聆聽中');
+                voiceprintBargeInCount++;
+                if (voiceprintBargeInCount >= TUNING_CONFIG.BARGEIN_FRAMES) {
+                  if (audioPlayer) audioPlayer.stopAll();
+                  isAiResponding = false;
+                  isModelTurnComplete = true;
+                  lastAiSpokeTime = 0;
+                  voiceprintBargeInCount = 0;
+                  if (navigator.vibrate) navigator.vibrate(20);
+                  updateDockControls();
+                  updateCameraBadge(false, '待命中 (說話時自動發送)');
+                  updateCardStatus('listening', '🎙️ 3D-Speaker 聲紋驗證通過 · 聆聽中');
+                }
+              } else {
+                voiceprintBargeInCount = 0;
               }
             }
           }).catch(() => {});
@@ -2585,17 +2708,18 @@
         }
 
         const isAiSpeaking = isAiResponding || (audioPlayer && audioPlayer.activeSources.length > 0);
-        const inAiCooldown = (Date.now() - lastAiSpokeTime) < 350;
+        const inAiCooldown = (Date.now() - lastAiSpokeTime) < AI_ECHO_GUARD_MS;
 
         // When AI is actively speaking and not yet barge-in verified, discard input to avoid self-echo
         if (isAiSpeaking || inAiCooldown) {
-          if (!userVoiceprintProfile) {
+          if (!IS_ANDROID_DEVICE && !userVoiceprintProfile) {
             // Near-field threshold fallback
             if (rms > (TUNING_CONFIG.RMS_THRESHOLD * 2.2)) {
               bargeInSpeechCount++;
               if (bargeInSpeechCount >= (TUNING_CONFIG.BARGEIN_FRAMES + 2)) {
                 if (audioPlayer) audioPlayer.stopAll();
                 isAiResponding = false;
+                isModelTurnComplete = true;
                 lastAiSpokeTime = 0;
                 bargeInSpeechCount = 0;
                 if (navigator.vibrate) navigator.vibrate(20);
@@ -2603,14 +2727,23 @@
                 updateCameraBadge(false, '待命中 (說話時自動發送)');
                 updateCardStatus('listening', '🎙️ 已插話打斷 · 聆聽中');
               }
+            } else {
+              // Only uninterrupted near-field speech may trigger barge-in.
+              bargeInSpeechCount = 0;
             }
           }
           audioSendBuffer = [];
+          voiceprintDelayFrames = [];
+          voiceprintDelaySamples = 0;
           return;
         }
 
         // Active user speech tracking
         if (rms > 0.015) {
+          if (!userSpeechActive) {
+            userSpeechActive = true;
+            hasSentFrameForCurrentTurn = false;
+          }
           sustainedSpeechCount++;
           lastUserSpokeTime = Date.now();
 
@@ -2622,13 +2755,35 @@
           }
         } else {
           sustainedSpeechCount = Math.max(0, sustainedSpeechCount - 1);
+          if (userSpeechActive && Date.now() - lastUserSpokeTime > 500) {
+            userSpeechActive = false;
+          }
         }
 
-        // Continuous streaming buffer with selective bystander mute
-        const isBystander = userVoiceprintProfile && (rms > TUNING_CONFIG.RMS_THRESHOLD) && (currentSpeechSimilarity < TUNING_CONFIG.SIMILARITY_THRESHOLD);
-
-        for (let i = 0; i < downsampled.length; i++) {
-          audioSendBuffer.push(isBystander ? 0 : downsampled[i]);
+        // Android uses the raw echo-controlled microphone stream. Running the
+        // desktop voiceprint gate without embeddings would otherwise clip the
+        // beginning of every utterance when a saved threshold exceeds 0.5.
+        if (IS_ANDROID_DEVICE || !userVoiceprintProfile) {
+          voiceprintDelayFrames = [];
+          voiceprintDelaySamples = 0;
+          for (let i = 0; i < downsampled.length; i++) audioSendBuffer.push(downsampled[i]);
+        } else {
+          // Hold 300ms so the neural embedding can validate the speaker before
+          // deciding whether to mute. If validation is not ready, fail open so
+          // short leading consonants are never discarded.
+          voiceprintDelayFrames.push({ samples: downsampled, rms });
+          voiceprintDelaySamples += downsampled.length;
+          while (voiceprintDelaySamples > VOICEPRINT_PREROLL_SAMPLES && voiceprintDelayFrames.length) {
+            const frame = voiceprintDelayFrames.shift();
+            voiceprintDelaySamples -= frame.samples.length;
+            const hasFreshMatch = (Date.now() - lastVoiceprintResultAt) < 600;
+            const isBystander = hasFreshMatch
+              && frame.rms > TUNING_CONFIG.RMS_THRESHOLD
+              && currentSpeechSimilarity < TUNING_CONFIG.SIMILARITY_THRESHOLD;
+            for (let i = 0; i < frame.samples.length; i++) {
+              audioSendBuffer.push(isBystander ? 0 : frame.samples[i]);
+            }
+          }
         }
 
         // Send every ~40ms (640 samples at 16kHz) to keep VAD boundaries and
@@ -2823,11 +2978,14 @@
 
       // Render first: teardown must never prevent the user-visible memo.
       turnsToSave = sessionDialogueTurns.slice();
-      const hasPendingTextTurn = currentTurnUser || (currentTurnModel && currentTurnModel !== '🎙️ (AI 即時語音回覆)');
+      const pendingUserText = currentTurnUser || currentTurnInputTranscript.trim();
+      const pendingModelText = currentTurnOutputTranscript.trim()
+        || ((currentTurnModel && currentTurnModel !== '🎙️ (AI 即時語音回覆)') ? currentTurnModel : '');
+      const hasPendingTextTurn = pendingUserText || pendingModelText;
       if (hasPendingTextTurn) {
         turnsToSave.push({
-          user: currentTurnUser || '🗣️ (雙向語音通話)',
-          model: currentTurnModel || '🎙️ (AI 即時語音回覆)'
+          user: pendingUserText || '🗣️ (雙向語音通話)',
+          model: pendingModelText || '🎙️ (AI 即時語音回覆)'
         });
       }
       toolsToSave = sessionExecutedTools.slice();
@@ -2858,6 +3016,8 @@
       isConnected = false;
       isLiveSetupReady = false;
       preSetupAudioBuffer = [];
+      isAiResponding = false;
+      isModelTurnComplete = true;
       stopVisualizer();
       stopSpeechRecognition();
 
@@ -2872,7 +3032,7 @@
       isCameraOn = false;
 
       if (audioPlayer) {
-        try { audioPlayer.stopAll(); } catch (e) {}
+        try { audioPlayer.destroy(); } catch (e) {}
         audioPlayer = null;
       }
 
@@ -2934,7 +3094,9 @@
       sessionSnapshots = [];
       currentTurnUser = '';
       currentTurnInputTranscript = '';
+      currentTurnOutputTranscript = '';
       currentTurnModel = '';
+      currentTurnHadAudio = false;
 
       activeConvId = (typeof currentConversationId !== 'undefined' && currentConversationId) ? currentConversationId : null;
       activeProvider = (typeof currentProvider !== 'undefined' && currentProvider)
