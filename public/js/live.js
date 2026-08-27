@@ -586,6 +586,9 @@
 
   function openVoiceprintModal() {
     if (!voiceprintModal) return;
+    // Voiceprint Studio is a child setting flow; never leave the parent
+    // Live settings modal stacked underneath it.
+    hideKeyModal();
     initVoiceprintEngine();
     updateVoiceprintModalUI();
     voiceprintModal.classList.remove('opacity-0', 'pointer-events-none');

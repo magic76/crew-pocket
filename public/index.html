@@ -139,7 +139,9 @@
       </button>
 
       <!-- 🧰 Tools Dropdown Popover Menu -->
-      <div id="tools-menu-dropdown" class="hidden absolute right-0 top-11 z-50 bg-slate-900/95 border border-slate-700/90 rounded-2xl shadow-2xl backdrop-blur-xl p-1.5 w-52 space-y-1 select-none animate-fadeIn">
+      <div id="tools-menu-dropdown" class="hidden absolute right-0 top-11 z-50 bg-slate-900/95 border border-slate-700/90 rounded-2xl shadow-2xl backdrop-blur-xl p-1.5 w-56 max-h-[78vh] overflow-y-auto space-y-1 select-none animate-fadeIn">
+
+        <div class="px-2 pt-1 pb-0.5 text-[10px] font-bold tracking-wider text-slate-500">操作</div>
 
         <!-- 1. Start a New Conversation -->
         <button id="new-chat-btn" class="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-xs text-slate-200 hover:bg-slate-800/90 hover:text-indigo-300 transition text-left group" title="開啟新對話">
@@ -152,6 +154,8 @@
           </div>
         </button>
 
+        <div class="px-2 pt-1 pb-0.5 text-[10px] font-bold tracking-wider text-teal-500/80">LIVE 語音</div>
+
         <!-- Live Voice Settings -->
         <button id="live-settings-btn" type="button" class="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-xs text-slate-200 hover:bg-slate-800/90 hover:text-teal-300 transition text-left group" title="設定 Gemini Live 語音與 Prompt">
           <div class="w-6 h-6 rounded-lg bg-teal-500/20 border border-teal-500/30 flex items-center justify-center text-teal-300 group-hover:scale-105 transition shrink-0">⚙️</div>
@@ -162,7 +166,8 @@
         </button>
 
         <div class="border-t border-slate-800 my-1"></div>
-        
+        <div class="px-2 pt-1 pb-0.5 text-[10px] font-bold tracking-wider text-emerald-500/80">工作區</div>
+
         <!-- 2. Files Explorer -->
         <button id="files-btn" class="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-xs text-slate-200 hover:bg-slate-800/90 hover:text-emerald-300 transition text-left group">
           <div class="w-6 h-6 rounded-lg bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 group-hover:scale-105 transition shrink-0">
@@ -178,6 +183,12 @@
           <div class="w-6 h-6 rounded-lg bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-300 group-hover:scale-105 transition shrink-0">💾</div>
           <div class="flex flex-col min-w-0"><span class="font-semibold text-slate-100 group-hover:text-amber-300">儲存空間管理</span><span class="text-[10px] text-slate-400">掃描、選擇後才刪除</span></div>
         </button>
+
+        <details class="group">
+          <summary class="flex items-center justify-between px-2 py-1.5 rounded-xl cursor-pointer text-[10px] font-bold tracking-wider text-slate-400 hover:bg-slate-800/70 hover:text-slate-200 transition list-none">
+            <span>更多工具</span>
+            <span class="text-slate-500 group-open:rotate-180 transition-transform">⌄</span>
+          </summary>
 
         <!-- 3. Usage Quota -->
         <button id="usage-btn" class="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-xs text-slate-200 hover:bg-slate-800/90 hover:text-sky-300 transition text-left group">
@@ -242,7 +253,11 @@
           </div>
         </button>
 
+        </details>
+
         <div class="border-t border-slate-800 my-1"></div>
+
+        <div class="px-2 pt-1 pb-0.5 text-[10px] font-bold tracking-wider text-cyan-500/80">偏好設定</div>
 
         <!-- 5. Interface Language -->
         <button id="language-toggle-btn" class="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-xs text-slate-200 hover:bg-slate-800/90 hover:text-cyan-300 transition text-left group" title="切換介面語言">
@@ -309,11 +324,7 @@
         <div class="p-4 text-center text-xs text-slate-500">載入歷史紀錄中...</div>
       </div>
       <div class="p-3 border-t border-slate-800 flex items-center justify-between">
-        <button id="open-voiceprint-modal-btn" type="button" class="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-95 border border-teal-500/40 text-teal-300 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer">
-          <span>🧬</span>
-          <span>聲紋工作室</span>
-        </button>
-        <span class="text-[10px] text-slate-500 font-mono">100% 本地存儲</span>
+        <span class="text-[10px] text-slate-500 font-mono">🛡️ 語音資料 100% 本地處理</span>
       </div>
     </aside>
 
@@ -951,6 +962,14 @@
         <div class="text-[10px] text-slate-500">每次通話開始時套用；留白代表使用預設指令。</div>
       </div>
 
+      <div class="flex items-center justify-between gap-3 p-2.5 rounded-xl bg-slate-950/70 border border-slate-800">
+        <div class="min-w-0">
+          <div class="text-[11px] text-slate-200 font-semibold">🧬 聲紋辨識</div>
+          <div class="text-[10px] text-slate-500">降低旁人聲音對通話的干擾</div>
+        </div>
+        <button id="open-voiceprint-modal-btn" type="button" class="min-h-[40px] shrink-0 px-3 rounded-xl bg-teal-500/15 hover:bg-teal-500/25 active:scale-95 border border-teal-500/40 text-teal-300 text-[11px] font-semibold transition cursor-pointer">開啟工作室</button>
+      </div>
+
       <div class="space-y-1">
         <label class="text-[11px] text-slate-400 font-semibold">Google AI Studio API Key：</label>
         <input id="live-api-key-input" type="password" placeholder="AIzaSy..." class="w-full bg-slate-950 border border-slate-700 focus:border-teal-500 rounded-xl px-3 py-2.5 text-xs text-slate-100 placeholder-slate-600 outline-none font-mono">
@@ -1187,7 +1206,7 @@
   <script src="/js/tools.js?v=7.8"></script>
   <script src="/js/storage.js?v=4"></script>
   <script src="/js/chat.js?v=1787740101"></script>
-  <script src="/js/live.js?v=1787644003"></script>
+  <script src="/js/live.js?v=1787644004"></script>
   <script src="/js/phone_agent.js?v=1.1"></script>
   <script src="/js/app.js?v=1787740201"></script>
 </body>
