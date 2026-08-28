@@ -596,8 +596,6 @@ function initAppAndListeners() {
       if (modelsData.efforts) availableEfforts = modelsData.efforts;
       updateModelUI();
       updateEffortUI();
-      if (typeof window.requestProviderPrewarm === 'function') window.requestProviderPrewarm();
-
       const savedConvId = localStorage.getItem(activeConversationStorageKey());
       const res = await fetch(`/api/conversations?${providerQuery()}`);
       const data = await res.json();

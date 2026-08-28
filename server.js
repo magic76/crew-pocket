@@ -28,7 +28,7 @@ const { handleGenerateTitle, getCachedTitle } = require('./lib/title');
 const { phoneAgent } = require('./lib/phone_agent');
 const { createExtensionBridge } = require('./lib/extension_bridge');
 const { getStorageReport, deleteMediaItems, getMediaThumbnail } = require('./lib/storage');
-const { getConversationSettings, saveConversationSettings, deleteConversationSettings } = require('./lib/conversation-settings');
+const { getConversationSettings, saveConversationSettings, saveConversationTitle, deleteConversationSettings } = require('./lib/conversation-settings');
 
 async function handleStorageReport(res) {
   try {
@@ -975,6 +975,7 @@ async function handleProviderRename(req, res) {
     const provider = getProvider(providerId);
     if (!provider.metadata.capabilities.rename || typeof provider.renameConversation !== 'function') throw new Error('Provider does not support renaming conversations');
     await provider.renameConversation(body.conversation_id, title);
+    await saveConversationTitle(providerId, body.conversation_id, title);
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ success: true, conversation_id: body.conversation_id, title, provider: providerId }));
   } catch (err) {
@@ -1227,9 +1228,4 @@ server.listen(PORT, HOST, () => {
   console.log(`=================================================`);
   console.log(`🚀 Crew Pocket Web UI (Resident Pipe) at: http://${HOST}:${PORT}`);
   console.log(`=================================================`);
-  
-  // 🔥 Pre-warm standby resident process immediately on server boot
-  setTimeout(() => {
-    sessionManager.prewarm('gemini-3.7-flash', 'low');
-  }, 1000);
 });

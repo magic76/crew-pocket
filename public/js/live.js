@@ -554,6 +554,20 @@
     return voiceprintWorkerInitPromise;
   }
 
+  function releaseVoiceprintWorker() {
+    for (const pending of voiceprintRequests.values()) {
+      clearTimeout(pending.timer);
+      pending.reject(new Error('聲紋引擎已釋放'));
+    }
+    voiceprintRequests.clear();
+    if (voiceprintWorker) {
+      try { voiceprintWorker.terminate(); } catch (_) {}
+    }
+    voiceprintWorker = null;
+    voiceprintWorkerReady = false;
+    voiceprintWorkerInitPromise = null;
+  }
+
   async function computeSpeakerEmbedding(audioSamples) {
     if (!audioSamples || audioSamples.length < 3200) {
       throw new Error(`錄音樣本數不足 (${audioSamples ? audioSamples.length : 0} 點)`);
@@ -3529,6 +3543,7 @@
         try { audioContext.close(); } catch (e) {}
         audioContext = null;
       }
+      releaseVoiceprintWorker();
       if (ws) {
         try { ws.close(); } catch (e) {}
         ws = null;
