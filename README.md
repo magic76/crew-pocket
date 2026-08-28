@@ -116,7 +116,7 @@ agy
 
 ### 步驟 4.2：建置 Android Crew Helper
 
-Android 浮動泡泡、截圖、相機與無障礙服務的原始碼已整合在 [`android/crew-helper/`](android/crew-helper)。APK 由此目錄的 `build.sh` 建置，完成後會同步更新 `public/CrewHelper.apk`。
+Android 浮動泡泡、截圖、相機、媒體音量與無障礙服務的原始碼已整合在 [`android/crew-helper/`](android/crew-helper)。APK 由此目錄的 `build.sh` 建置，完成後會同步更新 `public/CrewHelper.apk`。
 
 ```bash
 cd ~/agy-web/android/crew-helper

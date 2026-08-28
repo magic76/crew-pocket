@@ -8,6 +8,7 @@ import android.graphics.Path;
 import android.graphics.Rect;
 import android.os.Handler;
 import android.os.Looper;
+import android.media.AudioManager;
 import android.provider.MediaStore;
 import android.database.Cursor;
 import android.content.ContentUris;
@@ -190,6 +191,24 @@ public class CrewAccessibilityService extends AccessibilityService {
             String responseJson = "{\"status\":\"OK\"}";
             if (path.startsWith("/status")) {
                 responseJson = "{\"active\":true,\"service\":\"CrewAccessibilityService\",\"port\":8766}";
+            } else if (path.startsWith("/volume")) {
+                try {
+                    AudioManager audioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+                    int maxVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
+                    if ("POST".equalsIgnoreCase(method) && body.contains("\"percent\":")) {
+                        int start = body.indexOf("\"percent\":") + 10;
+                        int requestedPercent = Integer.parseInt(body.substring(start).split("[,}]")[0].trim());
+                        requestedPercent = Math.max(0, Math.min(100, requestedPercent));
+                        int targetVolume = Math.round(maxVolume * requestedPercent / 100.0f);
+                        audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, targetVolume, 0);
+                    }
+                    int currentVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC);
+                    int percent = maxVolume > 0 ? Math.round(currentVolume * 100.0f / maxVolume) : 0;
+                    responseJson = "{\"success\":true,\"stream\":\"music\",\"current\":" + currentVolume
+                            + ",\"max\":" + maxVolume + ",\"percent\":" + percent + "}";
+                } catch (Exception e) {
+                    responseJson = "{\"success\":false,\"error\":\"" + e.getMessage().replace("\"", "\\\"") + "\"}";
+                }
             } else if (path.startsWith("/screenshot")) {
                 final Object lock = new Object();
                 final String[] result = new String[]{"{\"success\":false,\"error\":\"Screenshot failed\"}"};

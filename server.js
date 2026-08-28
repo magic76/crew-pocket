@@ -101,6 +101,23 @@ async function handlePhoneScreenshot(res) {
   res.end(JSON.stringify(result));
 }
 
+async function handlePhoneVolume(req, res) {
+  try {
+    let result;
+    if (req.method === 'POST') {
+      const body = await parseJsonBody(req);
+      result = await phoneAgent.setMediaVolume(body.percent);
+    } else {
+      result = await phoneAgent.getMediaVolume();
+    }
+    res.writeHead(result?.success === false ? 503 : 200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(result));
+  } catch (err) {
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: false, error: err.message }));
+  }
+}
+
 async function handlePhonePhoto(req, res) {
   try {
     let facing = 'back';
@@ -295,6 +312,129 @@ function handleSessionStatus(parsedUrl, res) {
   const status = getProvider(providerId).getStatus(convId);
   res.writeHead(200, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({ ...status, provider: providerId }));
+}
+
+const LIVE_DELEGATE_TIMEOUT_MS = 60000;
+const LIVE_DELEGATE_JOB_TTL_MS = 5 * 60 * 1000;
+const liveDelegateJobs = new Map();
+
+function liveDelegateError(message, statusCode = 500) {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  return error;
+}
+
+async function runLiveDelegatedTurn({ providerId, conversationId, model, effort, task }) {
+  const provider = getProvider(providerId);
+  const status = provider.getStatus(conversationId);
+  if (status && status.isBusy) {
+    throw liveDelegateError('主對話正在處理另一個任務，請稍候再交辦。', 409);
+  }
+
+  const delegationPrompt = `[🎙️ Live 已確認委派]\n${task}\n\n【回覆規則】這是使用者透過 Live 語音確認後交辦給你的任務。請自行使用你原有且必要的工具完成它；不要把任務委派回 Live，不要要求 Live 執行工具。完成後只回傳可直接口語報告的精簡結論，以及必要的關鍵證據或下一步。`;
+
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    let abortTurn = () => {};
+    let streamedResponse = '';
+    const finish = (callback, value) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      callback(value);
+    };
+    const timeout = setTimeout(() => {
+      try { abortTurn(); } catch (_) {}
+      finish(reject, liveDelegateError('主對話逾時未完成，任務已停止。', 504));
+    }, LIVE_DELEGATE_TIMEOUT_MS);
+
+    Promise.resolve(provider.startTurn({
+      conversationId,
+      model,
+      effort: effort || 'low',
+      prompt: delegationPrompt,
+      onAbort(handler) { abortTurn = typeof handler === 'function' ? handler : abortTurn; },
+      onEvent(event) {
+        if (settled || !event) return;
+        if (event.type === 'text_delta') {
+          streamedResponse = event.accumulated || `${streamedResponse}${event.delta || ''}`;
+        } else if (event.type === 'error') {
+          finish(reject, liveDelegateError(event.message || '主對話執行失敗。', 502));
+        } else if (event.type === 'turn_completed') {
+          finish(resolve, {
+            conversationId: event.conversationId || conversationId,
+            response: String(event.response || streamedResponse || '').trim(),
+            status: event.status || 'completed'
+          });
+        }
+      }
+    })).catch(error => finish(reject, error));
+  });
+}
+
+async function handleLiveDelegate(req, res) {
+  try {
+    const body = await parseJsonBody(req);
+    const providerId = normalizeProviderId(body.provider);
+    const conversationId = String(body.conversation_id || '').trim();
+    const task = String(body.task || '').trim();
+    if (!conversationId || !/^[a-zA-Z0-9_-]+$/.test(conversationId)) {
+      throw liveDelegateError('找不到目前主對話，請先在主聊天開啟或建立一個對話。', 400);
+    }
+    if (!task || task.length > 5000) {
+      throw liveDelegateError('交辦內容不可為空，且最多 5000 字。', 400);
+    }
+
+    const status = getProvider(providerId).getStatus(conversationId);
+    if (status && status.isBusy) throw liveDelegateError('主對話正在處理另一個任務，請稍候再交辦。', 409);
+
+    const jobId = crypto.randomUUID();
+    const job = { id: jobId, status: 'running', provider: providerId, conversationId, createdAt: Date.now() };
+    liveDelegateJobs.set(jobId, job);
+    runLiveDelegatedTurn({ providerId, conversationId, model: body.model, effort: body.effort, task })
+      .then(result => {
+        job.status = 'completed';
+        job.conversationId = result.conversationId;
+        job.reply = result.response.slice(0, 7000);
+      })
+      .catch(error => {
+        job.status = 'failed';
+        job.error = error.message || '主對話委派失敗';
+      })
+      .finally(() => setTimeout(() => liveDelegateJobs.delete(jobId), LIVE_DELEGATE_JOB_TTL_MS));
+
+    res.writeHead(202, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      success: true,
+      accepted: true,
+      job_id: jobId,
+      provider: providerId,
+      conversation_id: conversationId,
+      status: 'running'
+    }));
+  } catch (err) {
+    res.writeHead(err.statusCode || 500, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: false, error: err.message || '主對話委派失敗' }));
+  }
+}
+
+function handleLiveDelegateStatus(parsedUrl, res) {
+  const jobId = String(parsedUrl.query.job_id || '').trim();
+  const job = liveDelegateJobs.get(jobId);
+  if (!job) {
+    res.writeHead(404, { 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify({ success: false, error: '委派工作不存在或已過期。' }));
+  }
+  res.writeHead(200, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify({
+    success: true,
+    job_id: job.id,
+    status: job.status,
+    provider: job.provider,
+    conversation_id: job.conversationId,
+    reply: job.status === 'completed' ? job.reply : undefined,
+    error: job.status === 'failed' ? job.error : undefined
+  }));
 }
 
 async function handleProviderConversations(parsedUrl, res) {
@@ -987,6 +1127,10 @@ const server = http.createServer(async (req, res) => {
     return handleStorageThumbnail(parsedUrl, res);
   } else if (pathname === '/api/chat' && req.method === 'POST') {
     return handleChat(req, res);
+  } else if (pathname === '/api/live-delegate' && req.method === 'POST') {
+    return handleLiveDelegate(req, res);
+  } else if (pathname === '/api/live-delegate' && req.method === 'GET') {
+    return handleLiveDelegateStatus(parsedUrl, res);
   } else if (pathname === '/api/stop' && req.method === 'POST') {
     return handleStop(req, res);
   } else if (pathname === '/api/upload' && req.method === 'POST') {
@@ -1047,6 +1191,8 @@ const server = http.createServer(async (req, res) => {
     return handlePhonePair(req, res);
   } else if (pathname === '/api/phone/screenshot' && req.method === 'POST') {
     return handlePhoneScreenshot(res);
+  } else if (pathname === '/api/phone/volume' && (req.method === 'GET' || req.method === 'POST')) {
+    return handlePhoneVolume(req, res);
   } else if (pathname === '/api/phone/photo') {
     return handlePhonePhoto(req, res);
   } else if (pathname === '/api/phone/action' && req.method === 'POST') {

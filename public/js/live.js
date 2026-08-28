@@ -8,6 +8,9 @@
 
   const STORAGE_KEY = 'crew_pocket_gemini_api_key';
   const VOICE_KEY = 'crew_pocket_live_voice';
+  const VOLUME_KEY = 'crew_pocket_live_volume';
+  const RESPONSE_PACE_KEY = 'crew_pocket_live_response_pace';
+  const INTERRUPTION_MODE_KEY = 'crew_pocket_live_interruption_mode';
   const MODEL_KEY = 'crew_pocket_live_model';
   const PROMPT_KEY = 'crew_pocket_live_prompt';
   const DEFAULT_VOICE = 'Puck';
@@ -26,8 +29,6 @@
   let audioContext = null;
   let micMediaStream = null;
   let micAudioSource = null;
-  let micProcessorNode = null;
-  let silentGainNode = null;
   let audioPlayer = null;
   let isConnected = false;
   let isLiveSetupReady = false;
@@ -67,18 +68,41 @@
   let cameraFrameSequence = 0;
   let sessionSnapshots = [];
   let sessionExecutedTools = [];
+  let pendingMainTask = null;
+  let pendingMainTaskTimer = null;
+  let mainTaskPollTimer = null;
+  const MAIN_TASK_CONFIRM_TTL_MS = 60000;
+  let isGoAwayClosing = false;
+  let callProtectionTimer = null;
+  let callProtectionWarned = false;
   // Live API can surface the same function call in both toolCall and
   // serverContent.parts. Keep tool execution serialized and de-duplicated so
   // a tool response cannot race the audio stream or get sent twice.
   let liveToolQueue = Promise.resolve();
   let liveToolCallKeys = new Set();
   let liveSessionMode = 'operation';
+  const LIVE_PHASE = Object.freeze({
+    IDLE: 'idle',
+    CONNECTING: 'connecting',
+    LISTENING: 'listening',
+    VERIFYING: 'verifying',
+    SPEAKING: 'speaking',
+    DRAINING: 'draining',
+    COOLDOWN: 'cooldown'
+  });
+  let livePhase = LIVE_PHASE.IDLE;
   let voicePreviewSource = null;
+  let mediaVolumeUpdateTimer = null;
+  let mediaVolumeRequestSequence = 0;
   const voicePreviewCache = new Map();
   let lastVoicePreviewAt = 0;
-  const IS_ANDROID_DEVICE = /Android/i.test(navigator.userAgent || '');
   const AI_ECHO_GUARD_MS = 300;
-  const VOICEPRINT_PREROLL_SAMPLES = 4800; // 300ms at 16 kHz
+  // Keep a whole opening phrase locally until its speaker is verified.  This
+  // is deliberately longer than one embedding window so a verified user never
+  // loses their first syllables while an unverified speaker never leaks a
+  // partial command to Live.
+  const VOICEPRINT_PENDING_MAX_SAMPLES = 48000; // 3s safety cap at 16 kHz
+  const VOICEPRINT_SEGMENT_GAP_MS = 450;
 
   // DOM References
   const liveVoiceBtn = document.getElementById('live-voice-btn');
@@ -89,31 +113,54 @@
   const liveVoiceSelect = document.getElementById('live-voice-select');
   const liveVoicePreviewBtn = document.getElementById('live-voice-preview-btn');
   const liveVoicePreviewStatus = document.getElementById('live-voice-preview-status');
+  const liveResponsePaceSelect = document.getElementById('live-response-pace-select');
+  const liveInterruptionSelect = document.getElementById('live-interruption-select');
   const livePromptInput = document.getElementById('live-prompt-input');
   const liveSaveKeyBtn = document.getElementById('live-save-key-btn');
   const liveCloseKeyBtn = document.getElementById('live-close-key-btn');
   const messagesContainer = document.getElementById('messages-container');
 
   // ==========================================
-  // 🔊 Gapless 24kHz PCM Audio Stream Player (single HTML5 media output path)
+  // 🔊 Gapless duplex AudioWorklet (single HTML5 media output path)
   // ==========================================
   class LiveAudioPlayer {
     constructor(ctx) {
       this.ctx = ctx;
-      this.nextStartTime = 0;
-      this.activeSources = [];
       this.stopped = false;
-      this.hasStartedAudio = false;
-      this.jitterBufferSec = 0.035; // 35ms smooth jitter buffer to eliminate pops/stutters
+      this.isPlaying = false;
+      this.micFrameHandler = null;
+      this.node = new AudioWorkletNode(ctx, 'crew-live-audio', {
+        numberOfInputs: 1,
+        numberOfOutputs: 1,
+        outputChannelCount: [1]
+      });
+      this.node.port.onmessage = (event) => {
+        const message = event.data || {};
+        if (message.type === 'mic-frame' && this.micFrameHandler) {
+          this.micFrameHandler({
+            samples: new Float32Array(message.samples),
+            rms: Number(message.rms) || 0
+          });
+        } else if (message.type === 'output-started') {
+          this.isPlaying = true;
+        } else if (message.type === 'output-drained') {
+          const wasPlaying = this.isPlaying;
+          this.isPlaying = false;
+          if (wasPlaying && isConnected && isModelTurnComplete) {
+            scheduleMicReopenAfterPlayback();
+          }
+        }
+      };
 
       // Route the rendered response through a real HTML5 audio element. On
       // Android Chrome this keeps hardware volume keys on STREAM_MUSIC rather
       // than the in-call stream. Do not also connect sources to destination:
       // two output paths cause doubled audio and echo.
+      this.outputGain = this.ctx.createGain();
+      this.outputGain.gain.value = 1;
+      this.node.connect(this.outputGain);
       try {
         this.mediaStreamDest = this.ctx.createMediaStreamDestination();
-        this.outputGain = this.ctx.createGain();
-        this.outputGain.gain.value = 0;
         this.outputGain.connect(this.mediaStreamDest);
         this.audioEl = document.createElement('audio');
         this.audioEl.autoplay = true;
@@ -127,101 +174,65 @@
           console.warn('[Live Audio] Initial HTML5 playback was blocked:', err.message);
         });
 
-        // Keep the media track active between response chunks so Android does
-        // not fall back to the communication stream during short pauses.
-        if (typeof this.ctx.createConstantSource === 'function') {
-          const silentOsc = this.ctx.createConstantSource();
-          const silentGain = this.ctx.createGain();
-          // Exact digital silence avoids a DC step/pop when the route opens.
-          silentGain.gain.value = 0;
-          silentOsc.connect(silentGain);
-          silentGain.connect(this.mediaStreamDest);
-          silentOsc.start();
-          this.silentOsc = silentOsc;
-        }
       } catch (e) {
         this.mediaStreamDest = null;
         this.audioEl = null;
+        try { this.outputGain.disconnect(); } catch (disconnectError) {}
+        this.outputGain.connect(this.ctx.destination);
       }
+    }
+
+    get activeSources() {
+      return this.isPlaying ? [true] : [];
+    }
+
+    connectMic(source) {
+      source.connect(this.node);
+    }
+
+    setMicFrameHandler(handler) {
+      this.micFrameHandler = typeof handler === 'function' ? handler : null;
+    }
+
+    setCaptureEnabled(enabled) {
+      if (this.node) this.node.port.postMessage({ type: 'capture', enabled: Boolean(enabled) });
+    }
+
+    markTurnComplete() {
+      if (this.node) this.node.port.postMessage({ type: 'turn-complete' });
     }
 
     playChunk(float32Array, sampleRate = 24000) {
       if (!float32Array || float32Array.length === 0) return;
       this.stopped = false;
+      this.isPlaying = true;
+      // Keep low-cost capture active only when a local owner voiceprint can
+      // safely authorize spoken barge-in. Without a profile, interruption
+      // remains an explicit button action.
+      this.setCaptureEnabled(canOwnerAutoInterrupt() && !isMuted);
       if (this.ctx.state === 'suspended') {
         this.ctx.resume().catch(err => console.warn('[Live Audio] AudioContext resume failed:', err.message));
       }
-
-      const audioBuffer = this.ctx.createBuffer(1, float32Array.length, sampleRate);
-      audioBuffer.getChannelData(0).set(float32Array);
-
-      const source = this.ctx.createBufferSource();
-      source.buffer = audioBuffer;
-
-      if (this.mediaStreamDest) {
-        try {
-          source.connect(this.outputGain || this.mediaStreamDest);
-        } catch (e) {
-          source.connect(this.ctx.destination);
-        }
-      } else {
-        source.connect(this.ctx.destination);
-      }
-
-      if (analyser) {
-        source.connect(analyser);
-      }
-
-      const currentTime = this.ctx.currentTime;
-      if (!this.hasStartedAudio && this.outputGain) {
-        this.outputGain.gain.cancelScheduledValues(currentTime);
-        this.outputGain.gain.setValueAtTime(0, currentTime);
-        this.outputGain.gain.linearRampToValueAtTime(1, currentTime + 0.03);
-        this.hasStartedAudio = true;
-      }
-      let startTime = this.nextStartTime;
-      if (startTime < currentTime) {
-        startTime = currentTime + this.jitterBufferSec;
-      }
-
-      source.start(startTime);
-      this.nextStartTime = startTime + audioBuffer.duration;
-
-      this.activeSources.push(source);
-      source.onended = () => {
-        const idx = this.activeSources.indexOf(source);
-        if (idx > -1) this.activeSources.splice(idx, 1);
-        if (this.activeSources.length === 0 && isConnected && isModelTurnComplete) {
-          scheduleMicReopenAfterPlayback();
-        }
-      };
+      const samples = float32Array instanceof Float32Array ? float32Array : new Float32Array(float32Array);
+      this.node.port.postMessage({ type: 'output', samples: samples.buffer, sampleRate }, [samples.buffer]);
     }
 
     stopAll() {
       // Interrupt only the currently queued speech. Keep the HTML5 audio
       // element and MediaStreamDestination alive for the next Gemini turn.
       this.stopped = false;
-      for (const src of this.activeSources) {
-        try { src.stop(); } catch (e) {}
-      }
-      this.activeSources = [];
-      if (this.ctx) {
-        this.nextStartTime = this.ctx.currentTime;
-      }
+      this.isPlaying = false;
+      if (this.node) this.node.port.postMessage({ type: 'clear-output' });
     }
 
     destroy() {
       this.stopped = true;
-      for (const src of this.activeSources) {
-        try { src.stop(); } catch (e) {}
-      }
-      this.activeSources = [];
-      if (this.ctx) {
-        this.nextStartTime = this.ctx.currentTime;
-      }
-      if (this.silentOsc) {
-        try { this.silentOsc.stop(); } catch (e) {}
-        this.silentOsc = null;
+      this.isPlaying = false;
+      this.micFrameHandler = null;
+      if (this.node) {
+        try { this.node.port.postMessage({ type: 'clear-output' }); } catch (e) {}
+        try { this.node.disconnect(); } catch (e) {}
+        this.node = null;
       }
       if (this.audioEl) {
         try {
@@ -236,10 +247,13 @@
 
   function scheduleMicReopenAfterPlayback() {
     lastAiSpokeTime = Date.now();
+    livePhase = LIVE_PHASE.COOLDOWN;
     setTimeout(() => {
       const playbackEmpty = !audioPlayer || audioPlayer.activeSources.length === 0;
       if (!playbackEmpty || !isConnected || !isModelTurnComplete) return;
       isAiResponding = false;
+      livePhase = LIVE_PHASE.LISTENING;
+      if (audioPlayer) audioPlayer.setCaptureEnabled(!isMuted);
       hasSentFrameForCurrentTurn = false;
       updateDockControls();
       updateCameraBadge(false, '待命中 (說話時自動發送)');
@@ -300,8 +314,11 @@
   let userVoiceprintProfile = null;
   let isCalibratingVoiceprint = false;
   let voiceprintCalibrationSamples = [];
-  let voiceprintOnnxSession = null;
-  let melFbankExtractor = null;
+  let voiceprintWorker = null;
+  let voiceprintWorkerReady = false;
+  let voiceprintWorkerInitPromise = null;
+  let voiceprintRequestSequence = 0;
+  const voiceprintRequests = new Map();
 
   function loadUserVoiceprint() {
     try {
@@ -484,71 +501,73 @@
   }
 
   async function initVoiceprintEngine() {
-    if (voiceprintOnnxSession) return voiceprintOnnxSession;
-    try {
-      if (typeof ort === 'undefined') {
-        console.warn('[Voiceprint ONNX] ort library not found in window');
-        return null;
+    if (voiceprintWorkerReady && voiceprintWorker) return voiceprintWorker;
+    if (voiceprintWorkerInitPromise) return voiceprintWorkerInitPromise;
+
+    voiceprintWorkerInitPromise = new Promise((resolve, reject) => {
+      try {
+        voiceprintWorker = new Worker('/js/voiceprint-worker.js?v=1787857600');
+        voiceprintWorker.onmessage = (event) => {
+          const message = event.data || {};
+          if (message.type === 'ready') {
+            voiceprintWorkerReady = true;
+            console.log('✅ [Voiceprint Worker] 3D-Speaker CAM++ ready');
+            resolve(voiceprintWorker);
+            return;
+          }
+          if (message.type === 'error' && !message.id) {
+            voiceprintWorkerReady = false;
+            voiceprintWorkerInitPromise = null;
+            reject(new Error(message.message || '聲紋 Worker 初始化失敗'));
+            return;
+          }
+          if ((message.type === 'result' || message.type === 'error') && message.id) {
+            const pending = voiceprintRequests.get(message.id);
+            if (!pending) return;
+            voiceprintRequests.delete(message.id);
+            clearTimeout(pending.timer);
+            if (message.type === 'result') {
+              pending.resolve(new Float32Array(message.embedding));
+            } else {
+              pending.reject(new Error(message.message || '聲紋推論失敗'));
+            }
+          }
+        };
+        voiceprintWorker.onerror = (event) => {
+          const error = new Error(event.message || '聲紋 Worker 啟動失敗');
+          voiceprintWorkerReady = false;
+          voiceprintWorkerInitPromise = null;
+          for (const pending of voiceprintRequests.values()) {
+            clearTimeout(pending.timer);
+            pending.reject(error);
+          }
+          voiceprintRequests.clear();
+          reject(error);
+        };
+        voiceprintWorker.postMessage({ type: 'init' });
+      } catch (error) {
+        voiceprintWorkerInitPromise = null;
+        reject(error);
       }
-      if (!melFbankExtractor) melFbankExtractor = new MelFbankExtractor(16000, 80, 25, 10, 512);
-      ort.env.wasm.wasmPaths = window.location.origin + '/js/';
-      ort.env.wasm.numThreads = 1;
-      ort.env.wasm.simd = true;
-      voiceprintOnnxSession = await ort.InferenceSession.create('/models/3dspeaker_campplus.onnx', {
-        executionProviders: ['wasm'],
-        graphOptimizationLevel: 'all'
-      });
-      console.log('✅ [Voiceprint ONNX] 3D-Speaker CAM++ Model Ready!');
-      return voiceprintOnnxSession;
-    } catch (err) {
-      console.warn('[Voiceprint ONNX] Failed to load 3D-Speaker model:', err);
-      return null;
-    }
+    });
+    return voiceprintWorkerInitPromise;
   }
 
   async function computeSpeakerEmbedding(audioSamples) {
-    if (!voiceprintOnnxSession) {
-      const sess = await initVoiceprintEngine();
-      if (!sess) throw new Error('ONNX 聲紋模型尚未載入完成，請確認網路或稍候重試');
-    }
-    if (!melFbankExtractor) melFbankExtractor = new MelFbankExtractor(16000, 80, 25, 10, 512);
-
     if (!audioSamples || audioSamples.length < 3200) {
-      throw new Error(`錄音樣本數不足 (${audioSamples ? audioSamples.length : 0} 點)，請說話至少 1 秒`);
+      throw new Error(`錄音樣本數不足 (${audioSamples ? audioSamples.length : 0} 點)`);
     }
-
-    const fbankResult = melFbankExtractor.extractFbank(audioSamples);
-    if (!fbankResult || fbankResult.numFrames < 15) {
-      throw new Error(`有效語音特徵幀數不足 (${fbankResult ? fbankResult.numFrames : 0} 幀)`);
-    }
-
-    try {
-      const inputTensor = new ort.Tensor('float32', fbankResult.data, [1, fbankResult.numFrames, fbankResult.numMelBins]);
-      const inputName = (voiceprintOnnxSession.inputNames && voiceprintOnnxSession.inputNames[0]) ? voiceprintOnnxSession.inputNames[0] : 'x';
-      const feeds = {};
-      feeds[inputName] = inputTensor;
-
-      const results = await voiceprintOnnxSession.run(feeds);
-      const outputName = (voiceprintOnnxSession.outputNames && voiceprintOnnxSession.outputNames[0]) ? voiceprintOnnxSession.outputNames[0] : Object.keys(results)[0];
-      const outputTensor = results[outputName] || results.embedding || results.output;
-      if (!outputTensor || !outputTensor.data) throw new Error('模型未返回有效特徵輸出');
-      const embedding = new Float32Array(outputTensor.data);
-
-      let norm = 0;
-      for (let i = 0; i < embedding.length; i++) {
-        if (!isNaN(embedding[i])) norm += embedding[i] * embedding[i];
-      }
-      norm = Math.sqrt(norm);
-      if (norm > 1e-6 && !isNaN(norm)) {
-        for (let i = 0; i < embedding.length; i++) embedding[i] /= norm;
-      } else {
-        throw new Error('神經網路特徵計算結果異常 (norm is zero or NaN)');
-      }
-      return embedding;
-    } catch (e) {
-      console.warn('[Speaker Embedding Error]', e);
-      throw new Error('神經網路運算異常：' + (e.message || e));
-    }
+    await initVoiceprintEngine();
+    const requestId = `vp-${Date.now()}-${++voiceprintRequestSequence}`;
+    const samples = audioSamples instanceof Float32Array ? audioSamples : new Float32Array(audioSamples);
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        voiceprintRequests.delete(requestId);
+        reject(new Error('聲紋判定逾時'));
+      }, 3000);
+      voiceprintRequests.set(requestId, { resolve, reject, timer });
+      voiceprintWorker.postMessage({ type: 'embed', id: requestId, samples: samples.buffer }, [samples.buffer]);
+    });
   }
 
   function computeVoiceprintSimilarity(v1, v2) {
@@ -567,18 +586,15 @@
   const TUNING_CONFIG = {
     SIMILARITY_THRESHOLD: parseFloat(localStorage.getItem('crew_live_similarity_threshold')) || 0.45,
     RMS_THRESHOLD: parseFloat(localStorage.getItem('crew_live_rms_threshold')) || 0.028,
-    BARGEIN_FRAMES: parseInt(localStorage.getItem('crew_live_bargein_frames'), 10) || 3,
     GAIN_BOOST: parseFloat(localStorage.getItem('crew_live_gain_boost')) || 1.4,
     save() {
       localStorage.setItem('crew_live_similarity_threshold', this.SIMILARITY_THRESHOLD);
       localStorage.setItem('crew_live_rms_threshold', this.RMS_THRESHOLD);
-      localStorage.setItem('crew_live_bargein_frames', this.BARGEIN_FRAMES);
       localStorage.setItem('crew_live_gain_boost', this.GAIN_BOOST);
     },
     reset() {
       this.SIMILARITY_THRESHOLD = 0.45;
       this.RMS_THRESHOLD = 0.028;
-      this.BARGEIN_FRAMES = 3;
       this.GAIN_BOOST = 1.4;
       this.save();
     }
@@ -905,6 +921,7 @@
     liveCardVisible = true;
 
     const selectedVoice = getSelectedVoice();
+    const selectedVolume = getLiveVolumePercent();
 
     const card = document.createElement('div');
     card.id = 'live-inline-card';
@@ -947,6 +964,26 @@
           <button id="live-card-hangup-btn" type="button" class="flex-1 min-h-[40px] px-2 rounded-lg bg-rose-600/90 hover:bg-rose-500 active:scale-95 border border-rose-500/60 text-white text-[11px] font-semibold flex items-center justify-center gap-1.5 transition" title="結束通話">
             <span>⏹</span><span>掛斷</span>
           </button>
+        </div>
+
+        <div class="flex items-center gap-2 px-1" title="調整 Android 系統媒體音量">
+          <span class="text-slate-400 text-xs shrink-0">🔈</span>
+          <input id="live-card-volume-slider" type="range" min="0" max="100" step="1" value="${selectedVolume}" class="flex-1 h-8 accent-teal-400 cursor-pointer">
+          <span id="live-card-volume-value" class="w-9 text-right text-[10px] font-mono text-teal-300 shrink-0">${selectedVolume}%</span>
+        </div>
+
+        <div id="live-call-protection-status" class="rounded-lg border border-slate-800 bg-slate-950/70 px-2 py-1.5 text-[10px] font-mono text-slate-400">🛡️ 長通話保護待命</div>
+
+        <div id="live-main-task-card" class="hidden rounded-xl border border-amber-500/45 bg-amber-950/25 p-2.5 space-y-2">
+          <div class="flex items-center justify-between gap-2">
+            <span id="live-main-task-title" class="text-[11px] font-bold text-amber-300">📨 待交辦主對話</span>
+            <span id="live-main-task-expiry" class="text-[10px] font-mono text-amber-400/80">60 秒內確認</span>
+          </div>
+          <p id="live-main-task-text" class="whitespace-pre-wrap break-words text-[11px] leading-relaxed text-slate-200"></p>
+          <div class="flex gap-2">
+            <button id="live-main-task-cancel-btn" type="button" class="flex-1 min-h-[40px] rounded-lg border border-slate-700 bg-slate-900 text-[11px] font-semibold text-slate-300 active:scale-95">取消</button>
+            <button id="live-main-task-confirm-btn" type="button" class="flex-1 min-h-[40px] rounded-lg border border-amber-400/60 bg-amber-500/20 text-[11px] font-bold text-amber-200 active:scale-95">Confirm</button>
+          </div>
         </div>
 
         <div id="live-card-details" class="hidden space-y-2.5">
@@ -1048,22 +1085,6 @@
               </div>
             </div>
 
-            <!-- Slider 3: Barge-in Reaction Speed (Frames) -->
-            <div>
-              <div class="flex justify-between items-center mb-1">
-                <span class="text-slate-300 flex items-center gap-1">
-                  <span>⚡</span>
-                  <span>打斷反應時間 (防短暫咳嗽)</span>
-                </span>
-                <span id="live-tuning-frames-label" class="font-mono text-teal-300 text-[10px] bg-slate-900 px-1.5 py-0.5 rounded border border-slate-800">${TUNING_CONFIG.BARGEIN_FRAMES} 幀 (${TUNING_CONFIG.BARGEIN_FRAMES * 60}ms)</span>
-              </div>
-              <input id="live-tuning-frames-slider" type="range" min="2" max="6" step="1" value="${TUNING_CONFIG.BARGEIN_FRAMES}" class="w-full h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-teal-400">
-              <div class="flex justify-between text-[9px] text-slate-500 font-mono mt-0.5">
-                <span>2幀 (120ms 極速)</span>
-                <span>3幀 (180ms 穩定)</span>
-                <span>6幀 (360ms 穩健)</span>
-              </div>
-            </div>
           </div>
         </div>
 
@@ -1151,18 +1172,6 @@
       });
     }
 
-    // Slider 3: Frames Slider
-    const framesSlider = card.querySelector('#live-tuning-frames-slider');
-    const framesLabel = card.querySelector('#live-tuning-frames-label');
-    if (framesSlider && framesLabel) {
-      framesSlider.addEventListener('input', (e) => {
-        const val = parseInt(e.target.value, 10);
-        TUNING_CONFIG.BARGEIN_FRAMES = val;
-        framesLabel.textContent = `${val} 幀 (${val * 60}ms)`;
-        TUNING_CONFIG.save();
-      });
-    }
-
     // Reset Button
     const resetBtn = card.querySelector('#live-tuning-reset-btn');
     if (resetBtn) {
@@ -1172,8 +1181,6 @@
         if (simLabel) simLabel.textContent = TUNING_CONFIG.SIMILARITY_THRESHOLD.toFixed(2);
         if (rmsSlider) rmsSlider.value = TUNING_CONFIG.RMS_THRESHOLD;
         if (rmsLabel) rmsLabel.textContent = TUNING_CONFIG.RMS_THRESHOLD.toFixed(3);
-        if (framesSlider) framesSlider.value = TUNING_CONFIG.BARGEIN_FRAMES;
-        if (framesLabel) framesLabel.textContent = `${TUNING_CONFIG.BARGEIN_FRAMES} 幀 (${TUNING_CONFIG.BARGEIN_FRAMES * 60}ms)`;
         if (navigator.vibrate) navigator.vibrate(20);
       });
     }
@@ -1191,6 +1198,18 @@
       });
     }
 
+    const cardVolumeSlider = card.querySelector('#live-card-volume-slider');
+    if (cardVolumeSlider) {
+      cardVolumeSlider.addEventListener('input', () => applyLiveVolume(cardVolumeSlider.value));
+      cardVolumeSlider.addEventListener('change', () => applyLiveVolume(cardVolumeSlider.value, true));
+      syncSystemMediaVolume();
+    }
+
+    const taskConfirmBtn = card.querySelector('#live-main-task-confirm-btn');
+    const taskCancelBtn = card.querySelector('#live-main-task-cancel-btn');
+    if (taskConfirmBtn) taskConfirmBtn.addEventListener('click', requestMainTaskConfirmation);
+    if (taskCancelBtn) taskCancelBtn.addEventListener('click', () => clearPendingMainTask('已取消待交辦任務。'));
+
     const snapBtn = card.querySelector('#live-card-snap-btn');
     if (snapBtn) snapBtn.addEventListener('click', snapPhoto);
 
@@ -1206,6 +1225,201 @@
   function removeInlineCard() {
     const existing = document.getElementById('live-inline-card');
     if (existing) existing.remove();
+  }
+
+  function renderPendingMainTask() {
+    const card = document.getElementById('live-main-task-card');
+    if (!card) return;
+    const task = pendingMainTask;
+    if (!task) {
+      card.classList.add('hidden');
+      return;
+    }
+    const title = document.getElementById('live-main-task-title');
+    const text = document.getElementById('live-main-task-text');
+    const expiry = document.getElementById('live-main-task-expiry');
+    const confirm = document.getElementById('live-main-task-confirm-btn');
+    const cancel = document.getElementById('live-main-task-cancel-btn');
+    const remainingSec = Math.max(0, Math.ceil((task.expiresAt - Date.now()) / 1000));
+    if (title) title.textContent = task.executing ? '⏳ 正在交辦主對話' : task.dispatched ? '⏳ 主對話背景處理中' : task.completed ? '✅ 主對話已完成' : '📨 待交辦主對話';
+    if (text) text.textContent = task.task;
+    if (expiry) expiry.textContent = task.executing ? '請稍候…' : task.dispatched ? '通話可繼續進行' : task.completed ? '已寫入主對話' : `${remainingSec} 秒內確認`;
+    if (confirm) {
+      confirm.disabled = Boolean(task.executing || task.dispatched || task.completed);
+      confirm.classList.toggle('opacity-50', Boolean(task.executing || task.dispatched || task.completed));
+    }
+    if (cancel) {
+      cancel.disabled = Boolean(task.executing || task.completed);
+      cancel.classList.toggle('opacity-50', Boolean(task.executing || task.completed));
+    }
+    card.classList.remove('hidden');
+  }
+
+  function clearPendingMainTask(notice = '') {
+    if (pendingMainTaskTimer) clearTimeout(pendingMainTaskTimer);
+    if (mainTaskPollTimer) clearTimeout(mainTaskPollTimer);
+    pendingMainTaskTimer = null;
+    mainTaskPollTimer = null;
+    pendingMainTask = null;
+    renderPendingMainTask();
+    if (notice) appendCardTranscript('system', notice);
+  }
+
+  function getPendingMainTask() {
+    if (!pendingMainTask) return null;
+    if (pendingMainTask.expiresAt <= Date.now() && !pendingMainTask.executing && !pendingMainTask.completed) {
+      clearPendingMainTask('待交辦任務已逾時，未送出。');
+      return null;
+    }
+    return pendingMainTask;
+  }
+
+  function prepareMainTask(args = {}) {
+    const task = String(args.task || args.message || '').trim().replace(/\s{3,}/g, ' ');
+    if (!task) return { success: false, error: '交辦內容不可為空；請先確認使用者要主對話做什麼。' };
+    if (task.length > 5000) return { success: false, error: '交辦內容過長，請先濃縮為 5000 字內的明確任務。' };
+    if (typeof currentConversationId === 'undefined' || !currentConversationId) {
+      return { success: false, error: '目前沒有主對話可接收任務；請先在主聊天建立或開啟一個對話。' };
+    }
+    if (pendingMainTask && (pendingMainTask.executing || pendingMainTask.dispatched)) {
+      return { success: false, error: '已有主對話任務正在背景處理，請等待完成後再交辦下一項。' };
+    }
+    if (pendingMainTaskTimer) clearTimeout(pendingMainTaskTimer);
+    pendingMainTask = {
+      id: `main-task-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      task,
+      expiresAt: Date.now() + MAIN_TASK_CONFIRM_TTL_MS,
+      executing: false,
+      completed: false
+    };
+    pendingMainTaskTimer = setTimeout(() => {
+      if (pendingMainTask && !pendingMainTask.executing && !pendingMainTask.dispatched && !pendingMainTask.completed) {
+        clearPendingMainTask('待交辦任務已逾時，未送出。');
+      }
+    }, MAIN_TASK_CONFIRM_TTL_MS + 100);
+    renderPendingMainTask();
+    appendCardTranscript('system', '📨 已建立待交辦任務；請說「Confirm」或點擊按鈕。');
+    return { success: true, status: 'pending_confirmation', task_id: pendingMainTask.id, task, expires_in_seconds: 60 };
+  }
+
+  function requestMainTaskConfirmation() {
+    const task = getPendingMainTask();
+    if (!task || task.executing || task.completed) return;
+    if (!ws || !isConnected || ws.readyState !== WebSocket.OPEN) {
+      appendCardTranscript('system', 'Live 連線已中斷，無法確認交辦。');
+      return;
+    }
+    ws.send(JSON.stringify({
+      clientContent: {
+        turns: [{ role: 'user', parts: [{ text: `Confirm pending main-chat task, task_id: ${task.id}` }] }],
+        turnComplete: true
+      }
+    }));
+    appendCardTranscript('system', '✅ 已送出確認指令，準備交辦主對話。');
+  }
+
+  async function confirmMainTask() {
+    const task = getPendingMainTask();
+    if (!task) return { success: false, error: '沒有可確認的待交辦任務，可能已取消、逾時或任務編號不符。' };
+    if (task.executing) return { success: false, error: '主對話正在處理這個任務，請等待結果。' };
+    if (task.dispatched) return { success: true, status: 'running', message: '主對話正在背景處理，請繼續與使用者通話；完成後系統會送回結果。' };
+    if (task.completed) {
+      return {
+        success: true,
+        status: 'already_completed',
+        reply: task.reply || '',
+        message: '這個任務已完成；請直接根據既有結果回覆使用者，不要再次交辦。'
+      };
+    }
+    task.executing = true;
+    renderPendingMainTask();
+    appendCardTranscript('system', '⏳ 正在交辦給目前主對話…');
+    try {
+      const response = await fetch('/api/live-delegate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          provider: typeof currentProvider !== 'undefined' ? currentProvider : 'antigravity',
+          conversation_id: currentConversationId,
+          model: typeof currentModel !== 'undefined' ? currentModel : undefined,
+          effort: typeof currentEffort !== 'undefined' ? currentEffort : 'low',
+          task: task.task
+        })
+      });
+      const data = await response.json().catch(() => ({ success: false, error: '主對話回覆格式無法解析。' }));
+      if (!response.ok || !data.success) throw new Error(data.error || `主對話委派失敗（${response.status}）`);
+      if (!data.accepted || !data.job_id) throw new Error(data.error || '主對話未接受背景任務。');
+      task.executing = false;
+      task.dispatched = true;
+      task.jobId = data.job_id;
+      if (pendingMainTaskTimer) clearTimeout(pendingMainTaskTimer);
+      renderPendingMainTask();
+      appendCardTranscript('system', '⏳ 主對話已在背景處理；您可繼續與 Live 對話。');
+      pollMainTaskResult(task);
+      return {
+        success: true,
+        status: 'accepted',
+        conversation_id: data.conversation_id,
+        message: '主對話已開始背景處理。請立即告知使用者任務已交辦，並繼續正常對話；完成後系統會自動提供結果。'
+      };
+    } catch (error) {
+      task.executing = false;
+      renderPendingMainTask();
+      appendCardTranscript('system', `⚠️ 主對話未完成：${error.message}`);
+      return { success: false, error: error.message };
+    }
+  }
+
+  function finishMainTask(task, data) {
+    if (!task || task.completed) return;
+    task.dispatched = false;
+    task.completed = true;
+    task.reply = String(data.reply || '').slice(0, 5000);
+    if (!task.renderedToMainChat && typeof appendMessage === 'function') {
+      appendMessage('user', `[🎙️ Live 已確認委派]\n${task.task}`);
+      appendMessage('assistant', task.reply || '主對話已完成任務，但未回傳文字內容。');
+      task.renderedToMainChat = true;
+      if (typeof scrollToBottom === 'function') scrollToBottom(true);
+    }
+    renderPendingMainTask();
+    appendCardTranscript('system', '✅ 主對話已完成並寫入原對話紀錄。');
+    if (ws && isConnected && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({
+        clientContent: {
+          turns: [{ role: 'user', parts: [{ text: `【系統委派結果】主對話已完成剛才任務。請立刻用 AUDIO 向使用者簡潔報告以下結果；不要再呼叫 confirm_main_task：\n${task.reply || '任務完成，未取得文字結果。'}` }] }],
+          turnComplete: true
+        }
+      }));
+    }
+    setTimeout(() => {
+      if (pendingMainTask === task && task.completed) clearPendingMainTask();
+    }, 1600);
+  }
+
+  async function pollMainTaskResult(task) {
+    if (!task || !task.jobId) return;
+    try {
+      const response = await fetch(`/api/live-delegate?job_id=${encodeURIComponent(task.jobId)}`);
+      const data = await response.json().catch(() => ({ success: false, error: '主對話工作狀態無法解析。' }));
+      if (!response.ok || !data.success) throw new Error(data.error || '無法讀取主對話工作狀態。');
+      if (data.status === 'completed') {
+        finishMainTask(task, data);
+      } else if (data.status === 'failed') {
+        task.dispatched = false;
+        task.error = data.error || '主對話任務失敗。';
+        renderPendingMainTask();
+        appendCardTranscript('system', `⚠️ 主對話未完成：${task.error}`);
+      } else if (pendingMainTask === task) {
+        mainTaskPollTimer = setTimeout(() => pollMainTaskResult(task), 900);
+      }
+    } catch (error) {
+      if (pendingMainTask === task) {
+        task.dispatched = false;
+        task.error = error.message;
+        renderPendingMainTask();
+        appendCardTranscript('system', `⚠️ 無法追蹤主對話：${error.message}`);
+      }
+    }
   }
 
   function toggleLiveCardVisibility() {
@@ -1447,7 +1661,7 @@
     if (muteBtn) {
       if (isAiSpeaking) {
         muteBtn.className = 'flex-1 min-h-[40px] px-2 rounded-lg bg-amber-600/90 hover:bg-amber-500 active:scale-95 border border-amber-400/60 text-white text-[11px] font-semibold flex items-center justify-center gap-1.5 transition';
-        muteBtn.title = 'AI 說話中 · 點擊打斷';
+        muteBtn.title = userVoiceprintProfile ? 'AI 說話中 · 本人開口或點擊皆可打斷' : 'AI 說話中 · 點擊打斷';
         if (muteIcon) muteIcon.textContent = '⏸️';
         if (muteLabel) muteLabel.textContent = '打斷';
       } else if (isMuted) {
@@ -1483,7 +1697,7 @@
     if (isAiSpeaking) {
       if (dockMuteBtn) {
         dockMuteBtn.className = 'flex-1 h-[52px] px-4 rounded-2xl bg-gradient-to-r from-amber-500 to-rose-600 hover:from-amber-400 hover:to-rose-500 active:scale-95 text-white shadow-xl shadow-amber-500/40 flex items-center justify-center transition border border-amber-300/50';
-        dockMuteBtn.title = 'AI 說話中 · 點擊打斷';
+        dockMuteBtn.title = userVoiceprintProfile ? 'AI 說話中 · 本人開口或點擊皆可打斷' : 'AI 說話中 · 點擊打斷';
       }
       if (dockMuteContainer) {
         dockMuteContainer.innerHTML = `
@@ -1545,8 +1759,10 @@
     // 🛑 Tap-to-Interrupt: If AI is speaking, clicking center button instantly interrupts the AI
     if (isAiResponding || (audioPlayer && audioPlayer.activeSources.length > 0)) {
       if (audioPlayer) audioPlayer.stopAll();
+      if (audioPlayer) audioPlayer.setCaptureEnabled(!isMuted);
       isAiResponding = false;
       isModelTurnComplete = true;
+      livePhase = LIVE_PHASE.LISTENING;
       hasSentFrameForCurrentTurn = false;
       lastAiSpokeTime = 0;
       updateCardStatus('listening', '🎙️ 可以開始說話');
@@ -1556,6 +1772,7 @@
     }
 
     isMuted = !isMuted;
+    if (audioPlayer) audioPlayer.setCaptureEnabled(!isMuted);
 
     // 🛡️ Smooth Silence Flush: send 100ms zeroed audio frame so Gemini server VAD cleanly detects turn completion
     if (isMuted && ws && ws.readyState === WebSocket.OPEN) {
@@ -1685,6 +1902,7 @@
       if (label) label.textContent = '相機';
       updateDockControls();
     }
+    startCallProtection();
   }
 
   async function flipCamera() {
@@ -1792,6 +2010,58 @@
     return localStorage.getItem(VOICE_KEY) || DEFAULT_VOICE;
   }
 
+  function getLiveVolumePercent() {
+    const stored = Number.parseInt(localStorage.getItem(VOLUME_KEY), 10);
+    return Number.isFinite(stored) ? Math.max(0, Math.min(100, stored)) : 100;
+  }
+
+  function renderLiveVolume(value, persist = true) {
+    const percent = Math.max(0, Math.min(100, Number.parseInt(value, 10) || 0));
+    if (persist) localStorage.setItem(VOLUME_KEY, String(percent));
+    const cardSlider = document.getElementById('live-card-volume-slider');
+    const cardValue = document.getElementById('live-card-volume-value');
+    if (cardSlider && cardSlider.value !== String(percent)) cardSlider.value = String(percent);
+    if (cardValue) cardValue.textContent = `${percent}%`;
+    return percent;
+  }
+
+  async function syncSystemMediaVolume() {
+    const requestSequence = ++mediaVolumeRequestSequence;
+    try {
+      const response = await fetch('/api/phone/volume', { cache: 'no-store' });
+      const result = await response.json();
+      if (requestSequence === mediaVolumeRequestSequence && result.success === true && Number.isFinite(Number(result.percent))) {
+        renderLiveVolume(result.percent);
+      }
+    } catch (error) {
+      console.debug('[Live Volume] CrewHelper volume sync unavailable:', error.message);
+    }
+  }
+
+  function applyLiveVolume(value, immediate = false) {
+    const percent = renderLiveVolume(value);
+    const requestSequence = ++mediaVolumeRequestSequence;
+    if (mediaVolumeUpdateTimer) clearTimeout(mediaVolumeUpdateTimer);
+    const update = async () => {
+      mediaVolumeUpdateTimer = null;
+      try {
+        const response = await fetch('/api/phone/volume', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ percent })
+        });
+        const result = await response.json();
+        if (requestSequence === mediaVolumeRequestSequence && result.success === true && Number.isFinite(Number(result.percent))) {
+          renderLiveVolume(result.percent);
+        }
+      } catch (error) {
+        console.warn('[Live Volume] Unable to set Android media volume:', error.message);
+      }
+    };
+    if (immediate) update();
+    else mediaVolumeUpdateTimer = setTimeout(update, 80);
+  }
+
   function getSelectedModel() {
     localStorage.setItem(MODEL_KEY, DEFAULT_MODEL);
     return DEFAULT_MODEL;
@@ -1801,14 +2071,75 @@
     return (localStorage.getItem(PROMPT_KEY) || '').trim();
   }
 
-  function getDiscussionContext() {
+  function getResponsePace() {
+    const pace = localStorage.getItem(RESPONSE_PACE_KEY) || 'normal';
+    return ['brief', 'normal', 'calm'].includes(pace) ? pace : 'normal';
+  }
+
+  function getInterruptionMode() {
+    const mode = localStorage.getItem(INTERRUPTION_MODE_KEY) || 'owner';
+    return ['owner', 'button'].includes(mode) ? mode : 'owner';
+  }
+
+  function canOwnerAutoInterrupt() {
+    return getInterruptionMode() === 'owner' && Boolean(userVoiceprintProfile);
+  }
+
+  function getResponsePaceInstruction() {
+    const pace = getResponsePace();
+    if (pace === 'brief') return '【回覆節奏：精簡】每次以一到兩句回答；先講結論，除非追問否則不要展開。';
+    if (pace === 'calm') return '【回覆節奏：從容】語速自然偏慢，使用短句並在重點間留出自然停頓；仍避免冗長重複。';
+    return '【回覆節奏：正常】自然清楚地回答，長度符合問題複雜度。';
+  }
+
+  function updateCallProtection() {
+    if (!liveCallStartTs || !isConnected) return;
+    const limitMs = isCameraOn ? 105000 : 870000; // 1m45 with video / 14m30 audio
+    const remainingMs = Math.max(0, limitMs - (Date.now() - liveCallStartTs));
+    const remainingSec = Math.ceil(remainingMs / 1000);
+    const status = document.getElementById('live-call-protection-status');
+    if (status) {
+      const mins = Math.floor(remainingSec / 60);
+      const secs = remainingSec % 60;
+      status.textContent = `🛡️ 長通話保護 · 約剩 ${mins}:${String(secs).padStart(2, '0')} ${isCameraOn ? '（相機模式）' : ''}`;
+      status.className = remainingSec <= 60
+        ? 'rounded-lg border border-amber-500/50 bg-amber-950/35 px-2 py-1.5 text-[10px] font-mono text-amber-300'
+        : 'rounded-lg border border-slate-800 bg-slate-950/70 px-2 py-1.5 text-[10px] font-mono text-slate-400';
+    }
+    if (remainingSec <= 0) {
+      appendCardTranscript('system', '🛡️ 已在 Gemini 強制斷線前安全結束並保存通話。');
+      endLiveSession();
+      return;
+    }
+    if (remainingSec <= 60 && !callProtectionWarned) {
+      callProtectionWarned = true;
+      appendCardTranscript('system', '🛡️ 通話時段即將結束，系統會先保存，避免 GoAway 強制中斷。');
+    }
+    callProtectionTimer = setTimeout(updateCallProtection, 1000);
+  }
+
+  function startCallProtection() {
+    if (callProtectionTimer) clearTimeout(callProtectionTimer);
+    callProtectionTimer = null;
+    callProtectionWarned = false;
+    updateCallProtection();
+  }
+
+  function stopCallProtection() {
+    if (callProtectionTimer) clearTimeout(callProtectionTimer);
+    callProtectionTimer = null;
+  }
+
+  function getLiveSessionContext() {
     const title = document.getElementById('header-title')?.textContent?.trim() || '目前對話';
     const provider = typeof currentProvider !== 'undefined' ? currentProvider : 'antigravity';
-    const convId = typeof currentConversationId !== 'undefined' ? currentConversationId : '';
     const container = document.getElementById('messages-container');
-    const text = container ? String(container.innerText || '').replace(/\s+/g, ' ').trim() : '';
-    const recent = text.length > 3000 ? text.slice(-3000) : text;
-    return `【目前討論上下文】\nSession：${title}\nProvider：${provider}\n${convId ? `Session ID：${convId}\n` : ''}最近畫面內容：\n${recent || '（目前沒有可用的歷史訊息）'}`;
+    const recentNodes = container
+      ? Array.from(container.children).filter(node => node.id !== 'live-inline-card').slice(-8)
+      : [];
+    const text = recentNodes.map(node => String(node.innerText || '')).join(' ').replace(/\s+/g, ' ').trim();
+    const recent = text.length > 1800 ? text.slice(-1800) : text;
+    return `【主 Session 背景】\n標題：${title}\nProvider：${provider}\n最近對話：${recent || '（無）'}\n此段只供理解背景；以使用者最新口頭指令為最高優先。`;
   }
 
   function sendLiveAudioChunk(samples) {
@@ -1960,6 +2291,7 @@
     isLiveSetupReady = false;
     sessionSnapshots = [];
     sessionExecutedTools = [];
+    clearPendingMainTask();
     currentTurnInputTranscript = '';
     currentTurnOutputTranscript = '';
     currentTurnHadAudio = false;
@@ -1974,6 +2306,7 @@
     isModelTurnComplete = true;
     isMuted = false;
     isCameraOn = false;
+    isGoAwayClosing = false;
     liveCallStartTs = Date.now();
 
     // 🕹️ Phone Screen Automation Handler for Gemini Live Tools
@@ -1987,7 +2320,7 @@
       console.log(`[Gemini Live Tool Executing] ${name}:`, args);
 
       try {
-        const discussionToolAllowed = name === 'draft_message';
+        const discussionToolAllowed = ['draft_message', 'prepare_main_task', 'confirm_main_task'].includes(name);
         if (liveSessionMode === 'discussion' && !discussionToolAllowed) {
           toolResult = { success: false, error: '目前是語音討論模式，此工具被停用；只允許在使用者明確要求時把草稿填入主輸入框。' };
           appendCardTranscript('system', `🛡️ 討論模式已阻擋：${name}`);
@@ -2059,6 +2392,12 @@
           toolResult = await res.json().catch(() => ({ success: true, action: 'keyed' }));
           if (navigator.vibrate) navigator.vibrate(30);
           appendCardTranscript('system', `🏠 語音觸發按鍵：${key}`);
+
+        } else if (name === 'prepare_main_task') {
+          toolResult = prepareMainTask(args);
+
+        } else if (name === 'confirm_main_task') {
+          toolResult = await confirmMainTask(args);
 
         } else if (name === 'draft_message') {
           const draftText = String(args.text || args.message || '').trim();
@@ -2202,9 +2541,21 @@
     }
 
     try {
+      // Pre-warm identity verification before opening the microphone. This
+      // keeps the first authorized utterance intact and makes verifier failure
+      // visible instead of silently bypassing or timing out mid-sentence.
+      if (userVoiceprintProfile) {
+        updateCardStatus('connecting', '🧬 載入本人聲紋...');
+        await initVoiceprintEngine();
+      }
+
       // 2. Web Audio Context
       const AudioCtxClass = window.AudioContext || window.webkitAudioContext;
-      audioContext = new AudioCtxClass();
+      try {
+        audioContext = new AudioCtxClass({ latencyHint: 'interactive', sampleRate: 48000 });
+      } catch (contextError) {
+        audioContext = new AudioCtxClass();
+      }
       if (audioContext.state === 'suspended') {
         await audioContext.resume();
       }
@@ -2213,6 +2564,10 @@
       analyser.fftSize = 128;
       analyser.smoothingTimeConstant = 0.8;
 
+      if (!audioContext.audioWorklet) {
+        throw new Error('此瀏覽器不支援低延遲 AudioWorklet，請更新 Android Chrome／WebView');
+      }
+      await audioContext.audioWorklet.addModule('/js/live-audio-worklet.js?v=1787857600');
       audioPlayer = new LiveAudioPlayer(audioContext);
 
       // 3. Microphone Capture. Live output is routed through a media <audio>
@@ -2234,14 +2589,7 @@
 
       micAudioSource = audioContext.createMediaStreamSource(micMediaStream);
       micAudioSource.connect(analyser);
-
-      silentGainNode = audioContext.createGain();
-      silentGainNode.gain.value = 0;
-
-      micProcessorNode = audioContext.createScriptProcessor(1024, 1, 1);
-      micAudioSource.connect(micProcessorNode);
-      micProcessorNode.connect(silentGainNode);
-      silentGainNode.connect(audioContext.destination);
+      audioPlayer.connectMic(micAudioSource);
 
       // 4. Connect to Google Gemini Bidi WebSocket
       const model = getSelectedModel();
@@ -2253,20 +2601,22 @@
         console.log('[Gemini Live] WebSocket opened with model:', model);
         isConnected = true;
         isLiveSetupReady = false;
+        livePhase = LIVE_PHASE.CONNECTING;
+        startCallProtection();
         updateCardStatus('connecting', '⚡ 準備中...');
 
         const voiceName = getSelectedVoice();
         const baseSystemPrompt = (typeof getCrewLocale === 'function' && getCrewLocale() === 'en')
-          ? "You are Crew Pocket, an expert AI handheld companion. Every substantive response must be spoken as AUDIO; never replace speech with a text-only response. Execute any required perception or action tools first, wait for their results, then answer directly in audio. The client records the user's and assistant's native audio transcriptions automatically, so never call a logging tool. For camera, lens, surroundings, or what the user is pointing at, call capture_camera_frame and use only its newest frame; never substitute a phone screenshot. Use take_screenshot only for the phone display, apps, UI, or buttons. You can control the phone (swipe_screen, tap_screen, press_key, take_screenshot), read/write workspace files (write_file, read_file), and use draft_message only when the user explicitly asks you to put a handoff draft into Crew Pocket's main input box. draft_message never submits the message. Speak concisely and warmly."
-          : "你是 Crew Pocket（口袋指揮）。每一輪實質回答都必須直接以 AUDIO 語音說出，禁止用純文字取代語音。若本輪需要感知或操作工具，先完成工具並等待結果，再直接用語音回答。前端會以 Gemini 原生的輸入／輸出音訊轉錄自動記錄雙方逐字稿，不需要也不得呼叫額外記錄工具。使用者問題請以輸入語音轉錄的原文為準；若關鍵字聽不清楚，先用語音向使用者確認。當使用者問相機、鏡頭、眼前、周遭或正在拍什麼時，必須先呼叫 capture_camera_frame，且只採信最新 frame；禁止用手機螢幕截圖代替。只有詢問手機顯示內容、App、UI 或按鈕時才使用 take_screenshot。你也可使用 swipe_screen、tap_screen、press_key、take_screenshot 操作手機，以及 write_file、read_file 讀寫工作區；只有使用者明確要求交接或填入輸入框時，才使用 draft_message，而且只填入、不自動送出。請以繁體中文簡潔自然地回應。";
+          ? "You are Crew Pocket's live voice assistant. Answer naturally, accurately, and concisely, and always speak the final answer as AUDIO. For ordinary questions or conversation, answer directly without tools. Use a tool only when the user explicitly asks to inspect or operate the phone, inspect the camera, access a file, draft text, or explicitly asks the main chat to handle a task. For main-chat delegation, first call prepare_main_task with a precise task. Read the short task back and wait for the exact word 'Confirm' or an explicit confirm button; never treat 'okay', 'yes', or 'confirm delegation' as confirmation. Only then call confirm_main_task; it always confirms the one pending task, so never invent an ID. After confirm_main_task returns a result, speak that result immediately and never call confirm_main_task again for the same task. Camera or surroundings require capture_camera_frame and its newest frame; phone UI requires take_screenshot. If a name, number, or command is unclear, ask a short clarifying question instead of guessing. The client handles transcripts; never log the conversation yourself."
+          : "你是 Crew Pocket 的即時語音助理。請以繁體中文自然、準確、簡潔地回答，最終回答一律以 AUDIO 語音說出。一般知識、時間、閒聊或解釋直接回答，不使用工具。只有使用者明確要求查看或操作手機、查看相機、讀寫檔案、填入草稿，或明確要主對話處理任務時才使用對應工具。委派主對話時，先用 prepare_main_task 建立精確任務，念出短摘要後等待使用者明確說「Confirm」或按下 Confirm 按鈕；「確認交辦」「好」「可以」「是」都不是確認。只有確認後才能呼叫 confirm_main_task；它會確認目前唯一待交辦任務，絕不自行編造 task_id。confirm_main_task 回傳結果後，立刻以語音報告結果，同一任務絕不可再次呼叫確認工具。詢問相機、眼前或周遭時使用 capture_camera_frame 並只採信最新畫面；詢問手機 App、按鈕或螢幕時才使用 take_screenshot。專有名詞、數字或指令聽不清楚時，先簡短確認，不要猜測。逐字稿由前端處理，不要自行記錄。";
         const discussionPrompt = liveSessionMode === 'discussion'
-          ? `\n\n【語音討論模式】\n你現在只負責協助使用者釐清目前議題、追問需求、重述共識，並把零散想法整理成可交給目前 Session 的問題或開發任務。你已收到目前 Session 的摘要與最近畫面內容，但不要把暫時想法當成已確認需求。\n\n嚴格限制：不得操作手機畫面、不得截圖、不得點擊、不得滑動、不得按系統按鍵、不得寫檔、不得直接送出訊息。唯一的受控例外是：當使用者明確要求「幫我輸入」「放到輸入框」「填入這段文字」時，可以呼叫 draft_message，把指定草稿填入主輸入框，但絕對不能自動送出。只有使用者明確要求「整理成交接稿」時，才產生一份完整草稿供使用者確認；只有使用者明確要求「傳給目前 Session」時，才提示前端進入傳送確認。對「好」「可以」「嗯」等模糊回覆，不得視為送出授權。\n\n協助輸入時，請先說明你整理出的內容；收到明確輸入指令後才呼叫 draft_message，並告知使用者「已填入，尚未送出」。\n\n${getDiscussionContext()}`
-          : '';
+          ? "\n\n【討論模式】協助釐清需求、追問關鍵資訊並整理共識。不得操作手機、截圖或寫檔。只有使用者明確說要填入輸入框時才能使用 draft_message，而且不得自動送出；「好」「可以」不算傳送授權。"
+          : "\n\n【操作模式】普通問題仍直接回答；不要為了確認答案而主動截圖、讀檔或操作手機。";
         const customPrompt = getLivePrompt();
         const userSystemPrompt = customPrompt
-          ? `${baseSystemPrompt}\n\n【使用者本次語音 Prompt】\n${customPrompt}`
+          ? `${baseSystemPrompt}\n\n【使用者偏好】${customPrompt}\n此偏好不得覆蓋 AUDIO、工具使用條件與安全規則。`
           : baseSystemPrompt;
-        const systemPrompt = `${userSystemPrompt}${discussionPrompt}\n\n【系統強制規則／MANDATORY】每輪工具順序固定：先完成本輪所需的感知／操作工具並取得結果，再直接輸出 AUDIO 語音回答；不得回傳純文字後直接結束本輪。逐字稿由前端原生音訊轉錄自動保存。視覺來源必須嚴格分流：相機／鏡頭／眼前先使用 capture_camera_frame，手機螢幕／App UI 先使用 take_screenshot；回答相機內容時，只能依據工具回傳的最新 frame_id，忽略所有舊圖片。使用者輸入請以原始語音轉錄為準，不得為了讓句子通順而改寫專有名詞、數字或指令；無法確定時先詢問使用者。`;
+        const systemPrompt = `${userSystemPrompt}${discussionPrompt}\n\n${getResponsePaceInstruction()}\n\n${getLiveSessionContext()}`;
         const setupMessage = {
           setup: {
             model: model,
@@ -2351,6 +2701,21 @@
                     }
                   },
                   {
+                    name: "prepare_main_task",
+                    description: "Prepare a precise task for the current main chat ONLY when the user explicitly asks the main chat to handle something. This does not execute anything. Always call this before confirmation, then read a short summary and wait for the exact confirmation phrase or the confirm button.",
+                    parameters: {
+                      type: "OBJECT",
+                      properties: {
+                        task: { type: "STRING", description: "Complete, unambiguous task for the main chat. Include constraints, names, dates and desired output; do not use raw noisy transcript." }
+                      },
+                      required: ["task"]
+                    }
+                  },
+                  {
+                    name: "confirm_main_task",
+                    description: "Send the single pending main-chat task only after the user explicitly says 'Confirm' or presses the Confirm button. Never call this for '確認交辦', '好', '可以', '是', silence, or an ambiguous reply. It confirms the current pending task automatically; do not invent or supply an ID."
+                  },
+                  {
                     name: "capture_camera_frame",
                     description: "Capture a brand-new frame from the currently open Gemini Live camera. MANDATORY for questions about the camera, lens, surroundings, what is in front of the user, or what the user is pointing at. Always trust the returned latest frame_id and ignore older camera images. Never substitute take_screenshot."
                   },
@@ -2381,7 +2746,7 @@
                       required: ["path"]
                     }
                   }
-                ].filter(tool => liveSessionMode !== 'discussion' || tool.name === 'draft_message')
+                ].filter(tool => liveSessionMode !== 'discussion' || ['draft_message', 'prepare_main_task', 'confirm_main_task'].includes(tool.name))
               }
             ],
             systemInstruction: {
@@ -2410,11 +2775,25 @@
           return;
         }
 
+        const goAway = response.goAway || response.go_away;
+        if (goAway) {
+          // Gemini Live announces its session deadline before it forcibly
+          // closes the socket. End cleanly now so the call is saved and the
+          // user never sees a misleading 1008 connection failure.
+          isGoAwayClosing = true;
+          updateCardStatus('connecting', '⌛ 通話時段結束，正在安全關閉…');
+          appendCardTranscript('system', '⌛ Gemini Live 通話時段已結束，已安全結束並保存本次通話。');
+          setTimeout(() => { endLiveSession(); }, 0);
+          return;
+        }
+
         // Setup Complete
         const isSetupDone = response.setupComplete || response.setup_complete;
         if (isSetupDone) {
           console.log('[Gemini Live] Setup complete, ready to talk!');
           isLiveSetupReady = true;
+          livePhase = LIVE_PHASE.LISTENING;
+          if (audioPlayer) audioPlayer.setCaptureEnabled(!isMuted);
           flushPreSetupAudio();
           updateCardStatus('listening', '🎙️ 可以開始說話');
       // Browser SpeechRecognition may emit periodic start/stop beeps on
@@ -2438,8 +2817,10 @@
           if (sc.interrupted) {
             console.log('[Gemini Live] Interrupted by user!');
             audioPlayer.stopAll();
+            audioPlayer.setCaptureEnabled(!isMuted);
             isAiResponding = false;
             isModelTurnComplete = true;
+            livePhase = LIVE_PHASE.LISTENING;
             hasSentFrameForCurrentTurn = false;
             updateDockControls();
             updateCameraBadge(false, '待命中 (說話時自動發送)');
@@ -2466,9 +2847,13 @@
           if (modelTurn && modelTurn.parts) {
             isAiResponding = true;
             isModelTurnComplete = false;
+            livePhase = LIVE_PHASE.SPEAKING;
+            if (audioPlayer) audioPlayer.setCaptureEnabled(canOwnerAutoInterrupt() && !isMuted);
             updateDockControls();
             updateCameraBadge(false, 'AI 說話中 (暫停傳圖)');
-            updateCardStatus('speaking', '🔊 Gemini 說話中 · 點擊按鈕可打斷');
+            updateCardStatus('speaking', canOwnerAutoInterrupt()
+              ? '🔊 Gemini 說話中 · 本人開口可打斷'
+              : '🔊 Gemini 說話中 · 點擊按鈕可打斷');
             let hasAudioChunk = false;
             for (const part of modelTurn.parts) {
               const inlineData = part.inlineData || part.inline_data;
@@ -2499,6 +2884,10 @@
           const isTurnDone = sc.turnComplete || sc.turn_complete;
           if (isTurnDone) {
             isModelTurnComplete = true;
+            if (audioPlayer) audioPlayer.markTurnComplete();
+            livePhase = audioPlayer && audioPlayer.activeSources.length > 0
+              ? LIVE_PHASE.DRAINING
+              : LIVE_PHASE.COOLDOWN;
             const userText = currentTurnUser || currentTurnInputTranscript.trim();
             const spokenText = currentTurnOutputTranscript.trim();
             const fallbackModelText = currentTurnModel && currentTurnModel !== '🎙️ (AI 即時語音回覆)'
@@ -2547,12 +2936,14 @@
         console.log('[Gemini Live] Closed code:', e.code, 'reason:', e.reason);
         isConnected = false;
         isLiveSetupReady = false;
+        livePhase = LIVE_PHASE.IDLE;
         preSetupAudioBuffer = [];
         isAiResponding = false;
         isModelTurnComplete = true;
         hasSentFrameForCurrentTurn = false;
+        stopCallProtection();
         stopSpeechRecognition();
-        if (e.code !== 1000) {
+        if (e.code !== 1000 && !isGoAwayClosing) {
           updateCardStatus('error', `⚠️ 連線中斷 (${e.code})`);
           let helpText = `連線中斷 (${e.code})`;
           if (e.reason) {
@@ -2566,37 +2957,124 @@
         }
       };
 
-      let bargeInSpeechCount = 0;
-      let voiceprintBargeInCount = 0;
       let recentSpeechRollingBuffer = [];
-      let lastEmbeddingCheckTime = 0;
-      let lastVoiceprintResultAt = 0;
-      let currentSpeechSimilarity = 0.5;
       let voiceprintDelayFrames = [];
       let voiceprintDelaySamples = 0;
+      let voiceprintGateState = userVoiceprintProfile ? 'pending' : 'open';
+      let voiceprintGateSegment = 0;
+      let voiceprintGateLastSpeechAt = 0;
+      let voiceprintGateRequestPending = false;
+      let bargeInBuffer = [];
+      let bargeInLastSpeechAt = 0;
+      let bargeInRequestPending = false;
+      let bargeInBlocked = false;
+      let bargeInAttempt = 0;
 
       // 5. Mic PCM Stream with 3D-Speaker Neural Voiceprint & Barge-In Interruption Detector
-      micProcessorNode.onaudioprocess = (e) => {
+      audioPlayer.setMicFrameHandler(({ samples: downsampled, rms }) => {
         if (isMuted || !audioContext) return;
 
-        const inputData = e.inputBuffer.getChannelData(0);
-
-        // Audio energy calculation
-        let sumSquares = 0;
-        for (let i = 0; i < inputData.length; i++) {
-          sumSquares += inputData[i] * inputData[i];
-        }
-        const rms = Math.sqrt(sumSquares / inputData.length);
-
-        const downsampled = downsampleBuffer(inputData, audioContext.sampleRate, 16000);
-
         // The microphone can become active before the Gemini setup response.
-        // Buffer those frames instead of silently dropping the user's opening words.
+        // Buffer only when no identity gate is configured. Sending setup-time
+        // audio around a saved voiceprint would be an authorization bypass.
         if (!isConnected || !ws || ws.readyState !== WebSocket.OPEN || !isLiveSetupReady) {
-          for (let i = 0; i < downsampled.length; i++) preSetupAudioBuffer.push(downsampled[i]);
-          if (preSetupAudioBuffer.length > PRE_SETUP_AUDIO_MAX_SAMPLES) {
-            preSetupAudioBuffer = preSetupAudioBuffer.slice(-PRE_SETUP_AUDIO_MAX_SAMPLES);
+          if (!userVoiceprintProfile) {
+            for (let i = 0; i < downsampled.length; i++) preSetupAudioBuffer.push(downsampled[i]);
+            if (preSetupAudioBuffer.length > PRE_SETUP_AUDIO_MAX_SAMPLES) {
+              preSetupAudioBuffer = preSetupAudioBuffer.slice(-PRE_SETUP_AUDIO_MAX_SAMPLES);
+            }
           }
+          return;
+        }
+
+        // While Gemini is speaking, capture only enough local audio to verify
+        // an owner barge-in. Nothing reaches Gemini until the Worker confirms
+        // the saved voiceprint; speaker echo and bystanders stay local.
+        const aiPlaybackActive = livePhase === LIVE_PHASE.SPEAKING
+          || livePhase === LIVE_PHASE.DRAINING
+          || isAiResponding
+          || (audioPlayer && audioPlayer.activeSources.length > 0);
+        const inAiCooldown = (Date.now() - lastAiSpokeTime) < AI_ECHO_GUARD_MS;
+        if (aiPlaybackActive) {
+          audioSendBuffer = [];
+          voiceprintDelayFrames = [];
+          voiceprintDelaySamples = 0;
+          recentSpeechRollingBuffer = [];
+
+          if (!canOwnerAutoInterrupt()) return;
+          const now = Date.now();
+          const activeSpeech = rms > TUNING_CONFIG.RMS_THRESHOLD;
+          if (activeSpeech) {
+            if (!bargeInLastSpeechAt || now - bargeInLastSpeechAt > 600) {
+              bargeInBuffer = [];
+              bargeInBlocked = false;
+              bargeInAttempt++;
+            }
+            bargeInLastSpeechAt = now;
+            for (let i = 0; i < downsampled.length; i++) bargeInBuffer.push(downsampled[i]);
+            if (bargeInBuffer.length > 16000) bargeInBuffer = bargeInBuffer.slice(-16000);
+
+            if (!bargeInBlocked && !bargeInRequestPending && bargeInBuffer.length >= 6400) {
+              bargeInRequestPending = true;
+              const attempt = bargeInAttempt;
+              computeSpeakerEmbedding(new Float32Array(bargeInBuffer.slice(-6400))).then(embedding => {
+                if (attempt !== bargeInAttempt) return;
+                const similarity = computeVoiceprintSimilarity(embedding, userVoiceprintProfile);
+                if (similarity < TUNING_CONFIG.SIMILARITY_THRESHOLD) {
+                  bargeInBlocked = true;
+                  bargeInBuffer = [];
+                  return;
+                }
+                const stillSpeaking = isAiResponding || (audioPlayer && audioPlayer.activeSources.length > 0);
+                if (!stillSpeaking || !ws || ws.readyState !== WebSocket.OPEN) return;
+
+                const authorizedAudio = new Float32Array(bargeInBuffer);
+                bargeInBuffer = [];
+                if (audioPlayer) {
+                  audioPlayer.stopAll();
+                  audioPlayer.setCaptureEnabled(!isMuted);
+                }
+                isAiResponding = false;
+                isModelTurnComplete = true;
+                livePhase = LIVE_PHASE.LISTENING;
+                lastAiSpokeTime = 0;
+                voiceprintGateSegment++;
+                voiceprintGateState = 'authorized';
+                voiceprintGateLastSpeechAt = Date.now();
+                voiceprintGateRequestPending = false;
+                hasSentFrameForCurrentTurn = false;
+
+                for (let i = 0; i < authorizedAudio.length; i++) audioSendBuffer.push(authorizedAudio[i]);
+                while (audioSendBuffer.length >= 640 && isLiveSetupReady && ws && ws.readyState === WebSocket.OPEN) {
+                  sendLiveAudioChunk(new Float32Array(audioSendBuffer.splice(0, 640)));
+                }
+                if (navigator.vibrate) navigator.vibrate(20);
+                updateDockControls();
+                updateCameraBadge(false, '待命中 (說話時自動發送)');
+                updateCardStatus('listening', '🎙️ 本人聲紋通過 · 已打斷');
+              }).catch(error => {
+                if (attempt === bargeInAttempt) {
+                  bargeInBlocked = true;
+                  bargeInBuffer = [];
+                  console.warn('[Voiceprint Barge-in]', error.message);
+                }
+              }).finally(() => {
+                if (attempt === bargeInAttempt) bargeInRequestPending = false;
+              });
+            }
+          } else if (bargeInLastSpeechAt && now - bargeInLastSpeechAt > 600) {
+            bargeInBuffer = [];
+            bargeInBlocked = false;
+            bargeInAttempt++;
+            bargeInRequestPending = false;
+          }
+          return;
+        }
+        if (inAiCooldown) {
+          audioSendBuffer = [];
+          voiceprintDelayFrames = [];
+          voiceprintDelaySamples = 0;
+          recentSpeechRollingBuffer = [];
           return;
         }
 
@@ -2625,7 +3103,7 @@
                   if (vpDot) vpDot.className = 'w-1.5 h-1.5 rounded-full bg-teal-400';
                   if (vpBtn) vpBtn.className = 'px-2 py-0.5 rounded-full bg-slate-800/90 hover:bg-slate-700 active:scale-95 border border-teal-500/50 text-teal-300 text-[10px] font-medium flex items-center gap-1 transition shadow-sm';
                   if (navigator.vibrate) navigator.vibrate([30, 50, 30]);
-                  appendCardTranscript('system', '✅ 3D-Speaker 192 維神經聲紋校準完成！已鎖定主講人生理聲帶共振特徵，100% 免疫旁人干擾！');
+                  appendCardTranscript('system', '✅ 3D-Speaker 192 維神經聲紋校準完成。後續語音會先在本機驗證，通過後才傳給 Gemini。');
                 } else {
                   const vpTextEl = document.getElementById('live-voiceprint-text');
                   if (vpTextEl) vpTextEl.textContent = '🧬 重新校準';
@@ -2641,6 +3119,30 @@
           }
         }
 
+        const now = Date.now();
+        // Use the same low activity floor as the speech buffer.  A quiet
+        // bystander must still start a new, unauthorized segment instead of
+        // inheriting a previous user's authorization.
+        const isVoiceActivity = rms > 0.015;
+
+        // Every new speech segment must earn a fresh authorization.  We keep
+        // recording locally while it is pending, rather than turning the mic
+        // off, so the verified user's opening words can be flushed intact.
+        if (userVoiceprintProfile && isVoiceActivity) {
+          if (!voiceprintGateLastSpeechAt || now - voiceprintGateLastSpeechAt > VOICEPRINT_SEGMENT_GAP_MS) {
+            voiceprintGateSegment++;
+            voiceprintGateState = 'pending';
+            livePhase = LIVE_PHASE.VERIFYING;
+            recentSpeechRollingBuffer = [];
+            // A rejected/pending previous segment must never be released with
+            // the next verified segment.
+            voiceprintDelayFrames = [];
+            voiceprintDelaySamples = 0;
+            voiceprintGateRequestPending = false;
+          }
+          voiceprintGateLastSpeechAt = now;
+        }
+
         // Maintain Rolling Speech Buffer for Neural Verification
         if (rms > 0.015) {
           for (let i = 0; i < downsampled.length; i++) {
@@ -2649,19 +3151,20 @@
           if (recentSpeechRollingBuffer.length > 6400) { // Keep last 400ms
             recentSpeechRollingBuffer = recentSpeechRollingBuffer.slice(recentSpeechRollingBuffer.length - 6400);
           }
-        } else {
+        } else if (!voiceprintGateLastSpeechAt || now - voiceprintGateLastSpeechAt > VOICEPRINT_SEGMENT_GAP_MS) {
           recentSpeechRollingBuffer = [];
         }
 
-        // 🎛️ Update Live Visual Tuning Meters & Continuous Voiceprint Verification
+        // 🎛️ One neural verification per speech segment (off the main thread)
         const tuningDrawer = document.getElementById('live-card-tuning-drawer');
-        if (!IS_ANDROID_DEVICE && userVoiceprintProfile && recentSpeechRollingBuffer.length >= 2400 && (Date.now() - lastEmbeddingCheckTime > 120)) {
-          lastEmbeddingCheckTime = Date.now();
+        if (userVoiceprintProfile && voiceprintGateState === 'pending' && !voiceprintGateRequestPending && recentSpeechRollingBuffer.length >= 6400) {
+          voiceprintGateRequestPending = true;
+          const embeddingSegment = voiceprintGateSegment;
           computeSpeakerEmbedding(new Float32Array(recentSpeechRollingBuffer)).then(emb => {
-            if (emb) {
+            if (emb && embeddingSegment === voiceprintGateSegment) {
               const curSim = computeVoiceprintSimilarity(emb, userVoiceprintProfile);
-              currentSpeechSimilarity = curSim;
-              lastVoiceprintResultAt = Date.now();
+              voiceprintGateState = curSim >= TUNING_CONFIG.SIMILARITY_THRESHOLD ? 'authorized' : 'blocked';
+              livePhase = LIVE_PHASE.LISTENING;
 
               if (tuningDrawer && !tuningDrawer.classList.contains('hidden')) {
                 const simVal = document.getElementById('live-meter-sim-val');
@@ -2678,26 +3181,16 @@
                 }
               }
 
-              // Barge-in Check (Interrupt AI only if verified speaker)
-              const isAiSpeaking = isAiResponding || (audioPlayer && audioPlayer.activeSources.length > 0);
-              if (isAiSpeaking && curSim >= TUNING_CONFIG.SIMILARITY_THRESHOLD && rms > TUNING_CONFIG.RMS_THRESHOLD) {
-                voiceprintBargeInCount++;
-                if (voiceprintBargeInCount >= TUNING_CONFIG.BARGEIN_FRAMES) {
-                  if (audioPlayer) audioPlayer.stopAll();
-                  isAiResponding = false;
-                  isModelTurnComplete = true;
-                  lastAiSpokeTime = 0;
-                  voiceprintBargeInCount = 0;
-                  if (navigator.vibrate) navigator.vibrate(20);
-                  updateDockControls();
-                  updateCameraBadge(false, '待命中 (說話時自動發送)');
-                  updateCardStatus('listening', '🎙️ 3D-Speaker 聲紋驗證通過 · 聆聽中');
-                }
-              } else {
-                voiceprintBargeInCount = 0;
-              }
             }
-          }).catch(() => {});
+          }).catch(error => {
+            if (embeddingSegment === voiceprintGateSegment) {
+              voiceprintGateState = 'blocked';
+              livePhase = LIVE_PHASE.LISTENING;
+              console.warn('[Voiceprint Gate]', error.message);
+            }
+          }).finally(() => {
+            if (embeddingSegment === voiceprintGateSegment) voiceprintGateRequestPending = false;
+          });
         }
 
         if (tuningDrawer && !tuningDrawer.classList.contains('hidden')) {
@@ -2705,37 +3198,6 @@
           const rmsBar = document.getElementById('live-meter-rms-bar');
           if (rmsVal) rmsVal.textContent = rms.toFixed(3);
           if (rmsBar) rmsBar.style.width = `${Math.min(100, Math.round((rms / 0.08) * 100))}%`;
-        }
-
-        const isAiSpeaking = isAiResponding || (audioPlayer && audioPlayer.activeSources.length > 0);
-        const inAiCooldown = (Date.now() - lastAiSpokeTime) < AI_ECHO_GUARD_MS;
-
-        // When AI is actively speaking and not yet barge-in verified, discard input to avoid self-echo
-        if (isAiSpeaking || inAiCooldown) {
-          if (!IS_ANDROID_DEVICE && !userVoiceprintProfile) {
-            // Near-field threshold fallback
-            if (rms > (TUNING_CONFIG.RMS_THRESHOLD * 2.2)) {
-              bargeInSpeechCount++;
-              if (bargeInSpeechCount >= (TUNING_CONFIG.BARGEIN_FRAMES + 2)) {
-                if (audioPlayer) audioPlayer.stopAll();
-                isAiResponding = false;
-                isModelTurnComplete = true;
-                lastAiSpokeTime = 0;
-                bargeInSpeechCount = 0;
-                if (navigator.vibrate) navigator.vibrate(20);
-                updateDockControls();
-                updateCameraBadge(false, '待命中 (說話時自動發送)');
-                updateCardStatus('listening', '🎙️ 已插話打斷 · 聆聽中');
-              }
-            } else {
-              // Only uninterrupted near-field speech may trigger barge-in.
-              bargeInSpeechCount = 0;
-            }
-          }
-          audioSendBuffer = [];
-          voiceprintDelayFrames = [];
-          voiceprintDelaySamples = 0;
-          return;
         }
 
         // Active user speech tracking
@@ -2748,7 +3210,8 @@
           lastUserSpokeTime = Date.now();
 
           // Require at least 2 consecutive speech frames (~120ms) before triggering camera snapshot
-          if (isCameraOn && !isAiResponding && !hasSentFrameForCurrentTurn && sustainedSpeechCount >= 2) {
+          const speakerAuthorized = !userVoiceprintProfile || voiceprintGateState === 'authorized';
+          if (speakerAuthorized && isCameraOn && !isAiResponding && !hasSentFrameForCurrentTurn && sustainedSpeechCount >= 2) {
             if (Date.now() - lastVideoFrameSentTime > 3000) {
               trySendVideoFrame();
             }
@@ -2760,29 +3223,31 @@
           }
         }
 
-        // Android uses the raw echo-controlled microphone stream. Running the
-        // desktop voiceprint gate without embeddings would otherwise clip the
-        // beginning of every utterance when a saved threshold exceeds 0.5.
-        if (IS_ANDROID_DEVICE || !userVoiceprintProfile) {
+        if (!userVoiceprintProfile) {
           voiceprintDelayFrames = [];
           voiceprintDelaySamples = 0;
           for (let i = 0; i < downsampled.length; i++) audioSendBuffer.push(downsampled[i]);
         } else {
-          // Hold 300ms so the neural embedding can validate the speaker before
-          // deciding whether to mute. If validation is not ready, fail open so
-          // short leading consonants are never discarded.
+          // Do not fail open. Hold all audio from a fresh speech segment until
+          // the local neural voiceprint check authorizes it, then flush the
+          // complete pre-roll. A bystander therefore cannot inject even the
+          // first 200–300ms of a command.
           voiceprintDelayFrames.push({ samples: downsampled, rms });
           voiceprintDelaySamples += downsampled.length;
-          while (voiceprintDelaySamples > VOICEPRINT_PREROLL_SAMPLES && voiceprintDelayFrames.length) {
+          if (voiceprintGateState === 'blocked') {
+            voiceprintDelayFrames = [];
+            voiceprintDelaySamples = 0;
+          } else if (voiceprintGateState === 'authorized') {
+            while (voiceprintDelayFrames.length) {
+              const frame = voiceprintDelayFrames.shift();
+              voiceprintDelaySamples -= frame.samples.length;
+              for (let i = 0; i < frame.samples.length; i++) audioSendBuffer.push(frame.samples[i]);
+            }
+          } else if (voiceprintDelaySamples > VOICEPRINT_PENDING_MAX_SAMPLES) {
+            // A failed/local-stalled verifier must never become a fail-open
+            // path. Keep the newest pending audio and wait for verification.
             const frame = voiceprintDelayFrames.shift();
             voiceprintDelaySamples -= frame.samples.length;
-            const hasFreshMatch = (Date.now() - lastVoiceprintResultAt) < 600;
-            const isBystander = hasFreshMatch
-              && frame.rms > TUNING_CONFIG.RMS_THRESHOLD
-              && currentSpeechSimilarity < TUNING_CONFIG.SIMILARITY_THRESHOLD;
-            for (let i = 0; i < frame.samples.length; i++) {
-              audioSendBuffer.push(isBystander ? 0 : frame.samples[i]);
-            }
           }
         }
 
@@ -2793,7 +3258,7 @@
             sendLiveAudioChunk(new Float32Array(audioSendBuffer.splice(0, 640)));
           }
         }
-      };
+      });
 
     } catch (err) {
       console.error('[Live Session Error]', err);
@@ -3015,9 +3480,11 @@
 
       isConnected = false;
       isLiveSetupReady = false;
+      livePhase = LIVE_PHASE.IDLE;
       preSetupAudioBuffer = [];
       isAiResponding = false;
       isModelTurnComplete = true;
+      stopCallProtection();
       stopVisualizer();
       stopSpeechRecognition();
 
@@ -3036,14 +3503,6 @@
         audioPlayer = null;
       }
 
-      if (micProcessorNode) {
-        try { micProcessorNode.disconnect(); } catch (e) {}
-        micProcessorNode = null;
-      }
-      if (silentGainNode) {
-        try { silentGainNode.disconnect(); } catch (e) {}
-        silentGainNode = null;
-      }
       if (micAudioSource) {
         try { micAudioSource.disconnect(); } catch (e) {}
         micAudioSource = null;
@@ -3086,6 +3545,7 @@
       try { setMediaSessionActive(false); } catch (e) {}
 
       // 🧹 1. Cleanly remove the in-call Live card from screen
+      clearPendingMainTask();
       removeInlineCard();
 
       // 🔒 Extract dialogue turns and full audio
@@ -3158,6 +3618,8 @@
     if (liveModelSelect) liveModelSelect.value = getSelectedModel();
     if (liveVoiceSelect) liveVoiceSelect.value = getSelectedVoice();
     if (livePromptInput) livePromptInput.value = getLivePrompt();
+    if (liveResponsePaceSelect) liveResponsePaceSelect.value = getResponsePace();
+    if (liveInterruptionSelect) liveInterruptionSelect.value = getInterruptionMode();
     liveKeyModal.classList.remove('hidden');
   }
 
@@ -3197,12 +3659,16 @@
       const model = liveModelSelect ? liveModelSelect.value : DEFAULT_MODEL;
       const voice = liveVoiceSelect ? liveVoiceSelect.value : DEFAULT_VOICE;
       const prompt = livePromptInput ? livePromptInput.value.trim() : '';
+      const pace = liveResponsePaceSelect ? liveResponsePaceSelect.value : 'normal';
+      const interruptionMode = liveInterruptionSelect ? liveInterruptionSelect.value : 'owner';
       if (key) {
         localStorage.setItem(STORAGE_KEY, key);
         localStorage.setItem(MODEL_KEY, model);
         localStorage.setItem(VOICE_KEY, voice);
         if (prompt) localStorage.setItem(PROMPT_KEY, prompt);
         else localStorage.removeItem(PROMPT_KEY);
+        localStorage.setItem(RESPONSE_PACE_KEY, pace);
+        localStorage.setItem(INTERRUPTION_MODE_KEY, interruptionMode);
         hideKeyModal();
         startLiveSession(liveSessionMode);
       } else {
