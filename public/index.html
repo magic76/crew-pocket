@@ -989,7 +989,8 @@
 
       <div class="space-y-1">
         <label class="text-[11px] text-slate-400 font-semibold">Google AI Studio API Key：</label>
-        <input id="live-api-key-input" type="password" placeholder="AIzaSy..." class="w-full bg-slate-950 border border-slate-700 focus:border-teal-500 rounded-xl px-3 py-2.5 text-xs text-slate-100 placeholder-slate-600 outline-none font-mono">
+        <input id="live-api-key-input" type="text" placeholder="AIzaSy..." autocomplete="off" autocapitalize="off" spellcheck="false" class="w-full bg-slate-950 border border-slate-700 focus:border-teal-500 rounded-xl px-3 py-2.5 text-xs text-slate-100 placeholder-slate-600 outline-none font-mono">
+        <div id="live-api-key-hint" class="text-[10px] text-slate-500 font-mono min-h-[1rem]"></div>
         <div class="text-[10px] text-slate-500 mt-1 flex justify-between">
           <a href="https://aistudio.google.com/apikey" target="_blank" class="text-teal-400 hover:underline">👉 免費申請 API Key</a>
           <span>安全儲存於手機本機</span>
@@ -1222,7 +1223,7 @@
   <script src="/js/tools.js?v=7.8"></script>
   <script src="/js/storage.js?v=4"></script>
   <script src="/js/chat.js?v=1787851401"></script>
-  <script src="/js/live.js?v=1787860500"></script>
+  <script src="/js/live.js?v=1787861000"></script>
   <script src="/js/phone_agent.js?v=1.1"></script>
   <script src="/js/app.js?v=1787851401"></script>
 </body>

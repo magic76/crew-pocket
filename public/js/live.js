@@ -109,6 +109,7 @@
   const liveSettingsBtn = document.getElementById('live-settings-btn');
   const liveKeyModal = document.getElementById('live-key-modal');
   const liveApiKeyInput = document.getElementById('live-api-key-input');
+  const liveApiKeyHint = document.getElementById('live-api-key-hint');
   const liveModelSelect = document.getElementById('live-model-select');
   const liveVoiceSelect = document.getElementById('live-voice-select');
   const liveVoicePreviewBtn = document.getElementById('live-voice-preview-btn');
@@ -2006,6 +2007,19 @@
     return (localStorage.getItem(STORAGE_KEY) || '').trim();
   }
 
+  function getMaskedApiKeyHint() {
+    const key = getApiKey();
+    if (!key) return '尚未設定 API Key';
+    return `目前使用：••••${key.slice(-4)}`;
+  }
+
+  function setApiKeyFieldForDisplay() {
+    if (!liveApiKeyInput) return;
+    const key = getApiKey();
+    liveApiKeyInput.value = key ? `••••${key.slice(-4)}` : '';
+    liveApiKeyInput.dataset.masked = key ? 'true' : 'false';
+  }
+
   function getSelectedVoice() {
     return localStorage.getItem(VOICE_KEY) || DEFAULT_VOICE;
   }
@@ -3614,7 +3628,8 @@
 
   // Key Modal Handlers
   function showKeyModal() {
-    if (liveApiKeyInput) liveApiKeyInput.value = getApiKey();
+    setApiKeyFieldForDisplay();
+    if (liveApiKeyHint) liveApiKeyHint.textContent = getMaskedApiKeyHint();
     if (liveModelSelect) liveModelSelect.value = getSelectedModel();
     if (liveVoiceSelect) liveVoiceSelect.value = getSelectedVoice();
     if (livePromptInput) livePromptInput.value = getLivePrompt();
@@ -3655,7 +3670,8 @@
 
   if (liveSaveKeyBtn) {
     liveSaveKeyBtn.addEventListener('click', () => {
-      const key = liveApiKeyInput ? liveApiKeyInput.value.trim() : '';
+      const enteredKey = liveApiKeyInput ? liveApiKeyInput.value.trim() : '';
+      const key = liveApiKeyInput?.dataset.masked === 'true' ? getApiKey() : enteredKey;
       const model = liveModelSelect ? liveModelSelect.value : DEFAULT_MODEL;
       const voice = liveVoiceSelect ? liveVoiceSelect.value : DEFAULT_VOICE;
       const prompt = livePromptInput ? livePromptInput.value.trim() : '';
@@ -3663,6 +3679,7 @@
       const interruptionMode = liveInterruptionSelect ? liveInterruptionSelect.value : 'owner';
       if (key) {
         localStorage.setItem(STORAGE_KEY, key);
+        if (liveApiKeyHint) liveApiKeyHint.textContent = `目前使用：••••${key.slice(-4)}`;
         localStorage.setItem(MODEL_KEY, model);
         localStorage.setItem(VOICE_KEY, voice);
         if (prompt) localStorage.setItem(PROMPT_KEY, prompt);
@@ -3673,8 +3690,17 @@
         startLiveSession(liveSessionMode);
       } else {
         localStorage.removeItem(STORAGE_KEY);
+        if (liveApiKeyHint) liveApiKeyHint.textContent = '尚未設定 API Key';
         hideKeyModal();
       }
+    });
+  }
+
+  if (liveApiKeyInput) {
+    liveApiKeyInput.addEventListener('beforeinput', () => {
+      if (liveApiKeyInput.dataset.masked !== 'true') return;
+      liveApiKeyInput.value = '';
+      liveApiKeyInput.dataset.masked = 'false';
     });
   }
 
