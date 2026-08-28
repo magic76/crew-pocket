@@ -153,34 +153,12 @@
         }
       };
 
-      // Route the rendered response through a real HTML5 audio element. On
-      // Android Chrome this keeps hardware volume keys on STREAM_MUSIC rather
-      // than the in-call stream. Do not also connect sources to destination:
-      // two output paths cause doubled audio and echo.
+      // Keep the proven AudioWorklet queue, but send it straight to the
+      // device output. CrewHelper remains responsible for media volume.
       this.outputGain = this.ctx.createGain();
       this.outputGain.gain.value = 1;
       this.node.connect(this.outputGain);
-      try {
-        this.mediaStreamDest = this.ctx.createMediaStreamDestination();
-        this.outputGain.connect(this.mediaStreamDest);
-        this.audioEl = document.createElement('audio');
-        this.audioEl.autoplay = true;
-        this.audioEl.playsInline = true;
-        this.audioEl.controls = false;
-        this.audioEl.volume = 1;
-        this.audioEl.style.cssText = 'position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;left:-10px;top:-10px;';
-        this.audioEl.srcObject = this.mediaStreamDest.stream;
-        document.body.appendChild(this.audioEl);
-        this.audioEl.play().catch(err => {
-          console.warn('[Live Audio] Initial HTML5 playback was blocked:', err.message);
-        });
-
-      } catch (e) {
-        this.mediaStreamDest = null;
-        this.audioEl = null;
-        try { this.outputGain.disconnect(); } catch (disconnectError) {}
-        this.outputGain.connect(this.ctx.destination);
-      }
+      this.outputGain.connect(this.ctx.destination);
     }
 
     get activeSources() {
@@ -219,8 +197,8 @@
     }
 
     stopAll() {
-      // Interrupt only the currently queued speech. Keep the HTML5 audio
-      // element and MediaStreamDestination alive for the next Gemini turn.
+      // Interrupt only the currently queued speech; keep direct device output
+      // and microphone capture alive for the next Gemini turn.
       this.stopped = false;
       this.isPlaying = false;
       if (this.node) this.node.port.postMessage({ type: 'clear-output' });
@@ -235,13 +213,9 @@
         try { this.node.disconnect(); } catch (e) {}
         this.node = null;
       }
-      if (this.audioEl) {
-        try {
-          this.audioEl.pause();
-          this.audioEl.srcObject = null;
-          this.audioEl.remove();
-        } catch (e) {}
-        this.audioEl = null;
+      if (this.outputGain) {
+        try { this.outputGain.disconnect(); } catch (e) {}
+        this.outputGain = null;
       }
     }
   }

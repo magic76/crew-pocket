@@ -4,6 +4,10 @@ const fsPromises = require('node:fs/promises');
 const path = require('node:path');
 const url = require('node:url');
 const crypto = require('node:crypto');
+const { execFile } = require('node:child_process');
+const { promisify } = require('node:util');
+
+const execFileAsync = promisify(execFile);
 
 const {
   PORT,
@@ -616,6 +620,33 @@ async function handleImageProxy(parsedUrl, res) {
 
     const ext = path.extname(resolvedPath).toLowerCase();
     const contentType = MIME_TYPES[ext] || 'application/octet-stream';
+
+    // History cards only need a lightweight preview.  The original is fetched
+    // on demand by the lightbox, so long photo-heavy conversations do not
+    // decode several full-resolution photos while scrolling.
+    const wantsThumbnail = parsedUrl.query.thumbnail === '1';
+    const thumbnailable = ['.png', '.jpg', '.jpeg', '.webp', '.heic', '.heif'].includes(ext);
+    if (wantsThumbnail && thumbnailable) {
+      try {
+        const { stdout } = await execFileAsync('magick', [
+          resolvedPath,
+          '-auto-orient',
+          '-thumbnail', '480x480>',
+          '-strip',
+          '-quality', '78',
+          'jpeg:-'
+        ], { encoding: 'buffer', maxBuffer: 2 * 1024 * 1024, timeout: 15000 });
+        res.writeHead(200, {
+          'Content-Type': 'image/jpeg',
+          'Cache-Control': 'public, max-age=86400'
+        });
+        return res.end(stdout);
+      } catch (err) {
+        // Keep every existing image viewable even if ImageMagick cannot decode
+        // a particular source format.
+        console.warn('[Image Thumbnail] Falling back to original:', err.message);
+      }
+    }
 
     const data = await fsPromises.readFile(resolvedPath);
     res.writeHead(200, {

@@ -95,6 +95,40 @@ function formatMessageContent(content) {
   return rawHtml;
 }
 
+function imageProxyUrl(imagePath, thumbnail = false) {
+  const url = new URL('/api/image', window.location.origin);
+  url.searchParams.set('path', imagePath);
+  if (thumbnail) url.searchParams.set('thumbnail', '1');
+  return `${url.pathname}${url.search}`;
+}
+
+function prepareDeferredImages(root) {
+  if (!root) return;
+  root.querySelectorAll('img').forEach(img => {
+    img.loading = 'lazy';
+    img.decoding = 'async';
+    img.fetchPriority = 'low';
+
+    const fullSrc = img.dataset.fullSrc || img.getAttribute('src') || '';
+    if (!img.dataset.fullSrc && fullSrc) {
+      try {
+        const sourceUrl = new URL(fullSrc, window.location.origin);
+        if (sourceUrl.pathname === '/api/image' && sourceUrl.searchParams.get('path')) {
+          sourceUrl.searchParams.set('thumbnail', '1');
+          img.dataset.fullSrc = fullSrc;
+          img.src = `${sourceUrl.pathname}${sourceUrl.search}`;
+        }
+      } catch (err) {
+        // External or malformed image URLs retain their original source.
+      }
+    }
+
+    if (img.dataset.lightboxBound) return;
+    img.dataset.lightboxBound = 'true';
+    img.addEventListener('click', () => showLightbox(img.dataset.fullSrc || img.currentSrc || img.src));
+  });
+}
+
 // Helper: format tool info with rich metadata, category badges & icons
 function getToolDetails(tool) {
   const name = tool.name || tool.tool_name || 'action';
@@ -546,7 +580,7 @@ function appendMessage(role, content, timestamp, tools = [], thinking = '', isBt
     const match = userText.match(/\[Uploaded Image:\s*([^\]]+)\]/);
     if (match) {
       const imgP = match[1].trim();
-      imgHtml = `<img src="/api/image?path=${encodeURIComponent(imgP)}" class="max-h-48 sm:max-h-56 max-w-full rounded-xl object-contain border border-indigo-400/40 cursor-pointer shadow-md mb-2 bg-black/20 block" alt="Uploaded Photo">`;
+      imgHtml = `<img src="${imageProxyUrl(imgP, true)}" data-full-src="${imageProxyUrl(imgP)}" loading="lazy" decoding="async" fetchpriority="low" class="max-h-48 sm:max-h-56 max-w-full rounded-xl object-contain border border-indigo-400/40 cursor-pointer shadow-md mb-2 bg-black/20 block" alt="Uploaded Photo">`;
       userText = userText.replace(/\[Uploaded Image:\s*([^\]]+)\]/, '').trim();
     }
     msgDiv.setAttribute('data-raw-text', userText);
@@ -692,9 +726,7 @@ function appendMessage(role, content, timestamp, tools = [], thinking = '', isBt
     });
   }
 
-  msgDiv.querySelectorAll('img').forEach(img => {
-    img.addEventListener('click', () => showLightbox(img.src));
-  });
+  prepareDeferredImages(msgDiv);
 
   const ttsBtn = msgDiv.querySelector('.tts-btn');
   if (ttsBtn) {
@@ -820,7 +852,7 @@ function hideHistoryLoadOverlay(overlay) {
   }));
 }
 
-const HISTORY_INITIAL_MESSAGES = 16;
+const HISTORY_INITIAL_MESSAGES = 12;
 
 function findHistoryPageStart(messages, endIndex, count = HISTORY_INITIAL_MESSAGES) {
   let startIndex = Math.max(0, endIndex - count);
@@ -1982,9 +2014,7 @@ async function sendMessage(queuedMessage = null) {
               }
 
               if (typeof enhanceCodeBlocks === 'function') enhanceCodeBlocks(assistantMsgDiv);
-              assistantMsgDiv.querySelectorAll('img').forEach(img => {
-                img.addEventListener('click', () => showLightbox(img.src));
-              });
+              prepareDeferredImages(assistantMsgDiv);
 
               if (document.hidden) {
                 triggerDoneNotification(accumulatedText);
