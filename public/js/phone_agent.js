@@ -75,7 +75,6 @@
       if (data && data.connected) {
         phoneConnBadge.textContent = `🟢 已連線 (${data.activeDevice?.id || "本機 ADB"})`;
         phoneConnBadge.className = "px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-950/80 border border-emerald-500/40 text-emerald-300";
-        takeScreenshot();
       } else {
         phoneConnBadge.textContent = "🔴 未連線 (請輸入 Port)";
         phoneConnBadge.className = "px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-rose-950/80 border border-rose-500/40 text-rose-300";
@@ -111,7 +110,7 @@
     }
   }
 
-  async function sendAction(actionObj, autoRefresh = true) {
+  async function sendAction(actionObj) {
     if (typeof window.haptic === "function") window.haptic("medium");
     try {
       const res = await fetch("/api/phone/action", {
@@ -124,9 +123,6 @@
         phoneActionLog.textContent = data?.success 
           ? `⚡ 執行成功: ${actionObj.action}`
           : `❌ 執行失敗: ${data?.error || "未知錯誤"}`;
-      }
-      if (autoRefresh) {
-        setTimeout(takeScreenshot, 400);
       }
     } catch (e) {
       if (phoneActionLog) phoneActionLog.textContent = `❌ 動作連線錯誤: ${e.message}`;

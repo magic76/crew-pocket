@@ -613,9 +613,6 @@ function initAppAndListeners() {
   })();
 
   // 🌐 Unified real-time intake from CrewHelper and Browser Extension.
-  const extensionReceiveBtn = document.getElementById('extension-receive-btn');
-  const extensionReceiveLabel = document.getElementById('extension-receive-label');
-  let extensionReceiveEnabled = localStorage.getItem('crew-pocket-extension-receive') === '1';
   const inboundQueue = [];
   const handledInboundIds = new Set();
   const handledInboundOrder = [];
@@ -676,7 +673,6 @@ function initAppAndListeners() {
 
   const enqueueInboundForChat = (msg) => {
     if (!msg || !msg.text || !rememberInboundId(msg.id)) return;
-    if (msg.source === 'BrowserExtension' && !extensionReceiveEnabled) return;
     inboundQueue.push(msg);
     processInboundQueue();
   };
@@ -693,16 +689,6 @@ function initAppAndListeners() {
     console.warn('Inbound event stream disconnected; browser will reconnect automatically.');
   });
 
-  const updateExtensionReceiveUi = () => {
-    if (extensionReceiveLabel) extensionReceiveLabel.textContent = `接收瀏覽器訊息：${extensionReceiveEnabled ? '開啟' : '關閉'}`;
-    if (extensionReceiveBtn) extensionReceiveBtn.classList.toggle('bg-cyan-950/40', extensionReceiveEnabled);
-  };
-  if (extensionReceiveBtn) extensionReceiveBtn.addEventListener('click', () => {
-    extensionReceiveEnabled = !extensionReceiveEnabled;
-    localStorage.setItem('crew-pocket-extension-receive', extensionReceiveEnabled ? '1' : '0');
-    updateExtensionReceiveUi();
-  });
-  updateExtensionReceiveUi();
 }
 
 if (document.readyState === 'loading') {
