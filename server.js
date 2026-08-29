@@ -27,7 +27,7 @@ const { getProvider, normalizeProviderId, listProviders, listProviderMetadata } 
 const { handleLiveSync, handleLiveTranscribe, handleQuickTranscribe } = require('./lib/history');
 const { handleRunCode } = require('./lib/sandbox');
 const { handleUsage } = require('./lib/usage');
-const { handleListFiles, handleReadFile, handleSaveFile } = require('./lib/files');
+const { handleListFiles, handleReadFile, handleSaveFile, handleDeleteFile } = require('./lib/files');
 const { handleGenerateTitle, getCachedTitle } = require('./lib/title');
 const { phoneAgent } = require('./lib/phone_agent');
 const { createExtensionBridge } = require('./lib/extension_bridge');
@@ -1348,6 +1348,8 @@ const server = http.createServer(async (req, res) => {
     return handleReadFile(parsedUrl, res);
   } else if (pathname === '/api/file/save' && req.method === 'POST') {
     return handleSaveFile(req, res);
+  } else if (pathname === '/api/file/delete' && req.method === 'POST') {
+    return handleDeleteFile(req, res);
   } else if (pathname === '/api/image' && req.method === 'GET') {
     return handleImageProxy(parsedUrl, res);
   } else if (pathname === '/api/export-extension' && req.method === 'POST') {

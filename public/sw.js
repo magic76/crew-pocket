@@ -1,31 +1,31 @@
 // Crew Pocket app-shell cache.  Every deploy changes this revision, so an
 // activated Service Worker can never serve JavaScript from a previous build.
-const BUILD_REVISION = '20260830-pwa5';
+const BUILD_REVISION = 'auto-b59e8d167e34';
 const APP_SHELL_CACHE = `crew-pocket-shell-${BUILD_REVISION}`;
 const RUNTIME_CACHE = `crew-pocket-runtime-${BUILD_REVISION}`;
 const APP_SHELL = [
-  '/',
-  '/manifest.json?v=4.4',
-  '/css/style.css?v=4.3',
-  '/dompurify.min.js',
-  '/heic2any.min.js',
-  '/icon-192.jpg',
-  '/icon-512.jpg',
-  '/icon.jpg',
-  '/js/i18n.js?v=6',
-  '/js/ui.js?v=1787740201',
-  '/js/tools.js?v=7.8',
-  '/js/storage.js?v=4',
-  '/js/chat.js?v=1787942400',
-  '/js/tasks.js?v=1',
-  '/js/live.js?v=1787957400',
-  '/js/phone_agent.js?v=1.3',
-  '/js/app.js?v=1787961602',
-  'https://cdn.tailwindcss.com',
-  'https://cdn.jsdelivr.net/npm/marked/marked.min.js',
-  'https://cdn.jsdelivr.net/npm/chart.js',
-  'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css',
-  'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js'
+  "/",
+  "/manifest.json?v=acd6c060c621",
+  "/css/style.css?v=b3d2fbdbe3c2",
+  "/js/i18n.js?v=4d69ace2d8cc",
+  "/js/ui.js?v=3d88bb2b7caf",
+  "/js/tools.js?v=a1e169518419",
+  "/js/storage.js?v=f7b2a617f59e",
+  "/js/chat.js?v=99bebd9ff9e8",
+  "/js/tasks.js?v=c39f9db32676",
+  "/js/live.js?v=da362f5ff68a",
+  "/js/phone_agent.js?v=7076bbb7fb66",
+  "/js/app.js?v=7322abe55b85",
+  "/dompurify.min.js",
+  "/heic2any.min.js",
+  "/icon-192.jpg",
+  "/icon-512.jpg",
+  "/icon.jpg",
+  "https://cdn.tailwindcss.com",
+  "https://cdn.jsdelivr.net/npm/marked/marked.min.js",
+  "https://cdn.jsdelivr.net/npm/chart.js",
+  "https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css",
+  "https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"
 ];
 const CDN_HOSTS = new Set(['cdn.tailwindcss.com', 'cdn.jsdelivr.net', 'cdnjs.cloudflare.com']);
 

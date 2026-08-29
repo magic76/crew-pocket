@@ -773,6 +773,7 @@ function updateNotifyBtnUI() {
 let currentExplorerPath = '';
 let currentPreviewFullPath = '';
 let currentPreviewFileName = '';
+const FILE_SWIPE_REVEAL_PX = 88;
 
 function toggleFilesModal(open) {
   if (!filesModal) return;
@@ -832,33 +833,42 @@ async function loadDirectory(relPath = '') {
     }
 
     data.entries.forEach(item => {
+      const safeRelPath = encodeURIComponent(item.relPath);
+      const safeName = encodeURIComponent(item.name);
+      const deleteAction = `<div class="absolute inset-0 bg-rose-600 text-white flex items-center justify-end pr-7"><button type="button" class="file-swipe-delete min-w-12 min-h-12 hover:bg-rose-500 active:bg-rose-700 rounded-xl text-[11px] font-bold flex flex-col items-center justify-center gap-1" data-file-path="${safeRelPath}" data-file-name="${safeName}" data-file-directory="${item.isDirectory}"><span class="text-base leading-none">🗑️</span><span>刪除</span></button></div>`;
       if (item.isDirectory) {
         itemsHtml += `
-          <div class="p-2 rounded-xl bg-slate-950/60 hover:bg-slate-800/80 border border-slate-800/80 transition flex items-center justify-between cursor-pointer group select-none" onclick="loadDirectory('${escapeHtml(item.relPath)}')">
-            <div class="flex items-center gap-2 min-w-0">
-              <span class="text-base shrink-0">${item.icon}</span>
-              <span class="font-bold text-slate-200 font-mono truncate">${escapeHtml(item.name)}/</span>
+          <div class="file-swipe-row relative overflow-hidden rounded-xl" data-file-path="${safeRelPath}">
+            ${deleteAction}
+            <div class="file-swipe-content relative p-2 rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-800/80 transition flex items-center justify-between cursor-pointer group select-none touch-pan-y" onclick="loadDirectory('${escapeHtml(item.relPath)}')">
+              <div class="flex items-center gap-2 min-w-0">
+                <span class="text-base shrink-0">${item.icon}</span>
+                <span class="font-bold text-slate-200 font-mono truncate">${escapeHtml(item.name)}/</span>
+              </div>
+              <span class="text-[10px] text-slate-500 font-mono group-hover:text-emerald-400 transition">進入 ▸</span>
             </div>
-            <span class="text-[10px] text-slate-500 font-mono group-hover:text-emerald-400 transition">進入 ▸</span>
           </div>
         `;
       } else {
         itemsHtml += `
-          <div class="p-2 rounded-xl bg-slate-950/40 hover:bg-slate-800/60 border border-slate-800/60 transition flex items-center justify-between gap-2 group select-none">
-            <div class="flex items-center gap-2 min-w-0 flex-1 cursor-pointer" onclick="previewFile('${escapeHtml(item.relPath)}')">
-              <span class="text-base shrink-0">${item.icon}</span>
-              <div class="min-w-0">
-                <div class="font-mono text-slate-200 truncate group-hover:text-emerald-300 transition">${escapeHtml(item.name)}</div>
-                <div class="text-[10px] text-slate-500 font-mono">${item.sizeFormatted}</div>
+          <div class="file-swipe-row relative overflow-hidden rounded-xl" data-file-path="${safeRelPath}">
+            ${deleteAction}
+            <div class="file-swipe-content relative p-2 rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-800/60 transition flex items-center justify-between gap-2 group select-none touch-pan-y">
+              <div class="flex items-center gap-2 min-w-0 flex-1 cursor-pointer" onclick="previewFile('${escapeHtml(item.relPath)}')">
+                <span class="text-base shrink-0">${item.icon}</span>
+                <div class="min-w-0">
+                  <div class="font-mono text-slate-200 truncate group-hover:text-emerald-300 transition">${escapeHtml(item.name)}</div>
+                  <div class="text-[10px] text-slate-500 font-mono">${item.sizeFormatted}</div>
+                </div>
               </div>
-            </div>
-            <div class="flex items-center gap-1 shrink-0">
-              <button type="button" class="px-2 py-1 rounded-lg bg-indigo-600/80 hover:bg-indigo-500 active:bg-indigo-700 text-white text-[10px] font-medium flex items-center gap-1 transition active:scale-95 shadow-sm" onclick="sendPathToAI('${escapeHtml(item.fullPath)}', '${escapeHtml(item.name)}')">
-                <span>💬 傳給 AI</span>
-              </button>
-              <button type="button" class="p-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 text-[10px] transition active:scale-95" title="預覽內容" onclick="previewFile('${escapeHtml(item.relPath)}')">
-                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
-              </button>
+              <div class="flex items-center gap-1 shrink-0">
+                <button type="button" class="px-2 py-1 rounded-lg bg-indigo-600/80 hover:bg-indigo-500 active:bg-indigo-700 text-white text-[10px] font-medium flex items-center gap-1 transition active:scale-95 shadow-sm" onclick="sendPathToAI('${escapeHtml(item.fullPath)}', '${escapeHtml(item.name)}')">
+                  <span>💬 傳給 AI</span>
+                </button>
+                <button type="button" class="p-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 text-[10px] transition active:scale-95" title="預覽內容" onclick="previewFile('${escapeHtml(item.relPath)}')">
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                </button>
+              </div>
             </div>
           </div>
         `;
@@ -866,9 +876,97 @@ async function loadDirectory(relPath = '') {
     });
 
     filesListContainer.innerHTML = itemsHtml;
+    bindExplorerSwipeDelete();
 
   } catch (err) {
     filesListContainer.innerHTML = `<div class="p-3 text-rose-400 text-xs">請求異常：${escapeHtml(err.message)}</div>`;
+  }
+}
+
+function bindExplorerSwipeDelete() {
+  if (!filesListContainer) return;
+  filesListContainer.querySelectorAll('.file-swipe-delete').forEach(button => {
+    button.addEventListener('click', async () => {
+      const relPath = decodeURIComponent(button.dataset.filePath || '');
+      const name = decodeURIComponent(button.dataset.fileName || '');
+      await confirmExplorerDelete(relPath, name, button.dataset.fileDirectory === 'true');
+    });
+  });
+
+  filesListContainer.querySelectorAll('.file-swipe-row').forEach(row => {
+    const content = row.querySelector('.file-swipe-content');
+    if (!content) return;
+    let startX = 0;
+    let offsetX = 0;
+    let dragging = false;
+    let suppressClick = false;
+    const setOffset = (value, animate = false) => {
+      content.style.transition = animate ? 'transform 160ms ease-out' : 'none';
+      content.style.transform = `translateX(${value}px)`;
+    };
+
+    content.addEventListener('pointerdown', event => {
+      startX = event.clientX;
+      offsetX = content.style.transform ? -FILE_SWIPE_REVEAL_PX : 0;
+      dragging = false;
+      content.setPointerCapture?.(event.pointerId);
+    });
+    content.addEventListener('pointermove', event => {
+      if (!startX) return;
+      const deltaX = event.clientX - startX;
+      if (Math.abs(deltaX) < 7 && !dragging) return;
+      if (Math.abs(deltaX) > 7) dragging = true;
+      const next = Math.max(-FILE_SWIPE_REVEAL_PX, Math.min(0, offsetX + deltaX));
+      setOffset(next);
+    });
+    const finish = event => {
+      if (!startX) return;
+      const deltaX = event.clientX - startX;
+      const draggedToEnd = dragging && (offsetX + deltaX) <= -(FILE_SWIPE_REVEAL_PX - 4);
+      suppressClick = dragging;
+      setOffset(draggedToEnd ? -FILE_SWIPE_REVEAL_PX : 0, true);
+      startX = 0;
+      if (draggedToEnd) {
+        const deleteButton = row.querySelector('.file-swipe-delete');
+        const relPath = decodeURIComponent(deleteButton?.dataset.filePath || '');
+        const name = decodeURIComponent(deleteButton?.dataset.fileName || '');
+        const isDirectory = deleteButton?.dataset.fileDirectory === 'true';
+        window.setTimeout(async () => {
+          await confirmExplorerDelete(relPath, name, isDirectory);
+          if (row.isConnected) setOffset(0, true);
+        }, 120);
+      }
+      window.setTimeout(() => { suppressClick = false; }, 0);
+    };
+    content.addEventListener('pointerup', finish);
+    content.addEventListener('pointercancel', () => { startX = 0; setOffset(0, true); });
+    content.addEventListener('click', event => {
+      if (!suppressClick) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    }, true);
+  });
+}
+
+async function confirmExplorerDelete(relPath, name, isDirectory) {
+  const noun = isDirectory ? '資料夾及其全部內容' : '檔案';
+  if (!window.confirm(`確定永久刪除${noun}「${name}」？\n此動作無法復原。`)) return false;
+
+  try {
+    const res = await fetch('/api/file/delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: relPath })
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) throw new Error(data.error || '刪除失敗');
+    if (filePreviewPane && currentPreviewFullPath.endsWith(`/${relPath}`)) filePreviewPane.classList.add('hidden');
+    if (navigator.vibrate) navigator.vibrate([25, 30, 25]);
+    await loadDirectory(currentExplorerPath);
+    return true;
+  } catch (err) {
+    window.alert(`刪除失敗：${err.message}`);
+    return false;
   }
 }
 
