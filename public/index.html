@@ -966,17 +966,18 @@
           </select>
         </div>
       </div>
-      <div class="text-[10px] text-slate-500">節奏在下一通 Live 套用；本人自動插話需已建立聲紋。</div>
+      <div class="text-[10px] text-slate-500">節奏在下一通 Live 套用；本人自動插話需建立聲紋且門檻大於 0。</div>
 
       <div class="space-y-1">
       <div class="flex items-center justify-between gap-3 p-2.5 rounded-xl bg-slate-950/70 border border-slate-800">
-        <div class="min-w-0">
-          <div class="text-[11px] text-slate-200 font-semibold">🧬 聲紋辨識</div>
-          <div class="text-[10px] text-slate-500">降低旁人聲音對通話的干擾</div>
+        <div class="min-w-0 flex-1">
+          <div class="flex items-center justify-between gap-2"><div class="text-[11px] text-slate-200 font-semibold">🧬 聲紋門檻</div><span id="live-voiceprint-threshold-label" class="text-[10px] font-mono text-teal-300">0.25 · 日常建議</span></div>
+          <input id="live-voiceprint-threshold" type="range" min="0" max="0.88" step="0.01" value="0.25" class="w-full h-8 accent-teal-400 cursor-pointer" aria-label="聲紋辨識門檻">
+          <div class="flex justify-between text-[9px] font-mono text-slate-500"><span>0 關閉</span><span>0.25 建議</span><span>0.50 嚴格</span><span>0.88 極嚴格</span></div>
         </div>
-        <button id="open-voiceprint-modal-btn" type="button" class="min-h-[40px] shrink-0 px-3 rounded-xl bg-teal-500/15 hover:bg-teal-500/25 active:scale-95 border border-teal-500/40 text-teal-300 text-[11px] font-semibold transition cursor-pointer">開啟工作室</button>
+        <button id="open-voiceprint-modal-btn" type="button" class="min-h-[40px] shrink-0 px-3 rounded-xl bg-teal-500/15 hover:bg-teal-500/25 active:scale-95 border border-teal-500/40 text-teal-300 text-[11px] font-semibold transition cursor-pointer">工作室</button>
       </div>
-      <div class="text-[10px] text-slate-500 font-mono text-center">🛡️ 語音資料 100% 本地處理</div>
+      <div id="live-voiceprint-threshold-hint" class="text-[10px] text-slate-500 font-mono text-center">🛡️ 門檻 0.25：聲紋資料 100% 本地處理</div>
       </div>
 
       <div class="space-y-1">
@@ -1215,7 +1216,7 @@
   <script src="/js/tools.js?v=7.8"></script>
   <script src="/js/storage.js?v=4"></script>
   <script src="/js/chat.js?v=1787942400"></script>
-  <script src="/js/live.js?v=1787946600"></script>
+  <script src="/js/live.js?v=1787957100"></script>
   <script src="/js/phone_agent.js?v=1.3"></script>
   <script src="/js/app.js?v=1787950200"></script>
 </body>
