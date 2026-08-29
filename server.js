@@ -1148,7 +1148,8 @@ async function handleProviderRename(req, res) {
 }
 
 // 🌐 Static Assets Serving
-async function handleStatic(pathname, res) {
+async function handleStatic(parsedUrl, res) {
+  const pathname = typeof parsedUrl === 'string' ? parsedUrl : parsedUrl.pathname;
   let filePath = path.join(PUBLIC_DIR, pathname === '/' ? 'index.html' : pathname);
 
   if (!filePath.startsWith(PUBLIC_DIR)) {
@@ -1165,12 +1166,17 @@ async function handleStatic(pathname, res) {
 
   try {
     const data = await fsPromises.readFile(filePath);
-    res.writeHead(200, {
-      'Content-Type': contentType,
-      'Cache-Control': 'no-cache, no-store, must-revalidate',
-      'Pragma': 'no-cache',
-      'Expires': '0'
-    });
+    const isVersionedAsset = typeof parsedUrl !== 'string' && parsedUrl.searchParams.has('v');
+    const headers = { 'Content-Type': contentType };
+    if (isVersionedAsset) {
+      // Versioned URLs are immutable. New HTML always points at a new URL.
+      headers['Cache-Control'] = 'public, max-age=31536000, immutable';
+    } else {
+      // HTML, manifest and unversioned resources must be revalidated so an
+      // update never leaves the PWA attached to an obsolete entrypoint.
+      headers['Cache-Control'] = 'no-cache, must-revalidate';
+    }
+    res.writeHead(200, headers);
     res.end(data);
   } catch (err) {
     res.writeHead(404, { 'Content-Type': 'text/plain' });
@@ -1377,7 +1383,7 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(404, { 'Content-Type': 'application/json' });
     return res.end(JSON.stringify({ error: 'Unknown API endpoint' }));
   } else {
-    return handleStatic(pathname, res);
+    return handleStatic(parsedUrl, res);
   }
 });
 

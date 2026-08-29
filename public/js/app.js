@@ -17,8 +17,24 @@ if (typeof marked !== 'undefined') {
 
 // 2. Service Worker Registration (Offline & Push Notifications)
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('/sw.js').then(reg => {
+  let reloadingForNewServiceWorker = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    // The new worker has already precached this build. Reload once so this tab
+    // cannot continue executing an old in-memory JS bundle after an update.
+    if (!reloadingForNewServiceWorker) {
+      reloadingForNewServiceWorker = true;
+      window.location.reload();
+    }
+  });
+
+  navigator.serviceWorker.register('/sw.js?v=20260829-pwa2', { updateViaCache: 'none' }).then(reg => {
     swRegistration = reg;
+    reg.update().catch(() => {});
+    // Pick up a deployment even when this PWA has remained open for hours.
+    setInterval(() => reg.update().catch(() => {}), 30 * 60 * 1000);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') reg.update().catch(() => {});
+    });
   }).catch(err => {
     console.warn('SW registration failed:', err);
   });
