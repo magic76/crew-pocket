@@ -25,6 +25,7 @@ const {
 const { sessionManager } = require('./lib/session');
 const { getProvider, normalizeProviderId, listProviders, listProviderMetadata } = require('./lib/providers');
 const { handleLiveSync, handleLiveTranscribe, handleQuickTranscribe } = require('./lib/history');
+const { generateCompactedSummary, buildCompactionSource } = require('./lib/compact');
 const { handleRunCode } = require('./lib/sandbox');
 const { handleUsage } = require('./lib/usage');
 const { handleListFiles, handleReadFile, handleSaveFile, handleDeleteFile } = require('./lib/files');
@@ -581,12 +582,40 @@ async function handleProviderCompact(req, res, forcedProviderId = null) {
       provider: providerId,
       conversation_id: result.conversationId || body.conversation_id,
       summary: result.summary,
-      message: result.message
+      message: result.message,
+      context_verification: result.contextVerification || null
     }));
   } catch (err) {
     console.error('[Provider Compact Error]', err);
     res.writeHead(err.statusCode || 500, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: err.message || '對話壓縮失敗' }));
+  }
+}
+
+// Create only the compact handoff needed for a fresh Codex thread. The source
+// thread is never changed or deleted, so its complete history stays available.
+async function handleCodexContinuationSummary(req, res) {
+  try {
+    const body = await parseJsonBody(req);
+    const conversationId = String(body.conversation_id || '');
+    if (!conversationId || !/^[a-zA-Z0-9_-]+$/.test(conversationId)) throw new Error('Invalid conversation_id');
+
+    const provider = getProvider('codex');
+    const history = await provider.getHistory(conversationId);
+    const segments = (history.messages || []).flatMap(message => {
+      const content = String(message.content || '').trim();
+      return content ? [`${message.role === 'user' ? 'User' : 'Assistant'}: ${content}`] : [];
+    });
+    if (segments.length < 2) throw new Error('尚無足夠對話可建立續接摘要');
+
+    const locale = body.locale === 'en' ? 'en' : 'zh-TW';
+    const source = buildCompactionSource(segments, 24000);
+    const summary = await generateCompactedSummary(source, String(body.focus || ''), locale, 'continue');
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: true, source_conversation_id: conversationId, source_title: history.title || '', summary }));
+  } catch (err) {
+    res.writeHead(500, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: false, error: err.message || '無法建立續接摘要' }));
   }
 }
 
@@ -1332,6 +1361,8 @@ const server = http.createServer(async (req, res) => {
     return handleProviderCompact(req, res);
   } else if (pathname === '/api/codex/compact' && req.method === 'POST') {
     return handleProviderCompact(req, res, 'codex');
+  } else if (pathname === '/api/codex/continuation-summary' && req.method === 'POST') {
+    return handleCodexContinuationSummary(req, res);
   } else if (pathname === '/api/live-sync' && req.method === 'POST') {
     return handleLiveSync(req, res);
   } else if (pathname === '/api/live-transcribe' && req.method === 'POST') {

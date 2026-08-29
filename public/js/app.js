@@ -215,7 +215,13 @@ function initAppAndListeners() {
   if (modalTriggerCompactBtn) {
     modalTriggerCompactBtn.addEventListener('click', () => runCompactFromContext('/compact'));
   }
-  if (modalTriggerCompactMaxBtn) modalTriggerCompactMaxBtn.addEventListener('click', () => runCompactFromContext('/compact-max'));
+  if (modalTriggerCompactMaxBtn) modalTriggerCompactMaxBtn.addEventListener('click', () => {
+    if (currentProvider === 'codex' && typeof window.startLowContextContinuation === 'function') {
+      window.startLowContextContinuation(modalTriggerCompactMaxBtn);
+    } else {
+      runCompactFromContext('/compact-max');
+    }
+  });
 
   // Model & Effort Selector listeners
   if (modelSelectorBtn) modelSelectorBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleModelModal(true); });

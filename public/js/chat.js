@@ -459,7 +459,24 @@ function showContextModal() {
   const totalTokensEl = document.getElementById('modal-context-total-tokens');
   const savedPercentEl = document.getElementById('modal-context-saved-percent');
   const compactBtn = document.getElementById('modal-trigger-compact-btn');
+  const compactMaxBtn = document.getElementById('modal-trigger-compact-max-btn');
+  const compactMaxHint = document.getElementById('modal-compact-max-hint');
   if (compactBtn) compactBtn.classList.toggle('hidden', !providerConfig().capabilities?.compact);
+  if (compactMaxBtn) {
+    const isCodexContinuation = currentProvider === 'codex' && Boolean(currentConversationId);
+    compactMaxBtn.innerHTML = `<span>${isCodexContinuation ? '✦ 建立低 Context 續接對話' : '🪶 極致壓縮 /compact-max'}</span>`;
+    compactMaxBtn.classList.toggle('from-emerald-700', isCodexContinuation);
+    compactMaxBtn.classList.toggle('to-teal-700', isCodexContinuation);
+    compactMaxBtn.classList.toggle('hover:from-emerald-600', isCodexContinuation);
+    compactMaxBtn.classList.toggle('hover:to-teal-600', isCodexContinuation);
+    compactMaxBtn.classList.toggle('from-violet-700', !isCodexContinuation);
+    compactMaxBtn.classList.toggle('to-fuchsia-700', !isCodexContinuation);
+    compactMaxBtn.classList.toggle('hover:from-violet-600', !isCodexContinuation);
+    compactMaxBtn.classList.toggle('hover:to-fuchsia-600', !isCodexContinuation);
+    if (compactMaxHint) compactMaxHint.textContent = isCodexContinuation
+      ? '舊對話完整保留；只帶關鍵交接摘要開啟新的 Codex 對話，確實降低 Context。'
+      : '任務接近完成時使用：只保留最終成果、待驗證事項與重要交接。';
+  }
 
   const stats = currentContextStats || {
     active_tokens: 0,
@@ -504,6 +521,58 @@ function hideContextModal() {
   if (modal) {
     modal.classList.remove('opacity-100');
     modal.classList.add('pointer-events-none');
+  }
+}
+
+// A deterministic escape hatch for very long Codex threads. It deliberately
+// creates a new thread with only a compact handoff; the original stays intact
+// in the drawer and can be reopened at any time.
+async function startLowContextContinuation(triggerButton = null) {
+  if (currentProvider !== 'codex' || !currentConversationId || isStreaming) return;
+  const sourceConversationId = currentConversationId;
+  const sourceTitle = headerTitle?.textContent?.trim() || '原對話';
+  const button = triggerButton || document.getElementById('modal-trigger-compact-max-btn');
+  const originalButtonText = button?.innerHTML;
+  if (button) {
+    button.disabled = true;
+    button.classList.add('opacity-60');
+    button.innerHTML = '<span>正在建立交接摘要…</span>';
+  }
+  hideContextModal();
+
+  try {
+    const response = await fetch('/api/codex/continuation-summary', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        conversation_id: sourceConversationId,
+        locale: typeof getCrewLocale === 'function' ? getCrewLocale() : 'zh-TW'
+      })
+    });
+    const data = await response.json();
+    if (!response.ok || !data.success || !data.summary) throw new Error(data.error || '建立交接摘要失敗');
+
+    if (newChatBtn) newChatBtn.click();
+    const handoffPrompt = `【前一段對話續接摘要】\n來源：${sourceTitle}\n\n${data.summary}\n\n【接續規則】以上是已封存對話的必要脈絡。請直接以此接續後續工作；不要重新摘要、不要假設舊對話仍在目前 Context。`;
+    promptInput.value = handoffPrompt;
+    promptInput.style.height = 'auto';
+    await sendMessage();
+
+    if (currentConversationId && typeof renameConversationDirect === 'function') {
+      await renameConversationDirect(currentConversationId, `續接 · ${sourceTitle}`);
+    }
+  } catch (error) {
+    if (currentConversationId === sourceConversationId) {
+      appendMessage('assistant', `⚠️ 無法建立低 Context 續接對話：${error.message}`);
+    } else {
+      alert(`⚠️ 無法建立低 Context 續接對話：${error.message}`);
+    }
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.classList.remove('opacity-60');
+      button.innerHTML = originalButtonText;
+    }
   }
 }
 
@@ -1575,6 +1644,12 @@ async function sendMessage(queuedMessage = null) {
     const targetConvId = currentConversationId;
     const compactMode = /^\/compact-max\b/i.test(text) ? 'max' : 'continue';
     const isMaxCompact = compactMode === 'max';
+    // Codex native compact keeps the same thread. Its max variant therefore
+    // deliberately starts a fresh thread with a compact handoff instead.
+    if (isMaxCompact && currentProvider === 'codex') {
+      await startLowContextContinuation();
+      return;
+    }
     const focusText = text.replace(/^\/compact(?:-max)?\s*/i, '').trim();
     const isEnglish = typeof getCrewLocale === 'function' && getCrewLocale() === 'en';
     appendMessage('user', text, undefined, [], '', false);
@@ -1620,6 +1695,11 @@ async function sendMessage(queuedMessage = null) {
           if (typeof enhanceCodeBlocks === 'function') enhanceCodeBlocks(divider);
           if (navigator.vibrate) navigator.vibrate([30, 50, 30]);
           scrollToBottom(true);
+          if (data.context_verification?.status === 'not_reduced') {
+            appendMessage('assistant', '⚠️ 原生 compact 已完成，但 Context 未明顯下降。請在 Context 視窗使用「建立低 Context 續接對話」，舊對話會完整保留。');
+          } else if (data.context_verification?.status === 'pending') {
+            appendMessage('assistant', 'ℹ️ 原生 compact 已完成；Codex 尚未回傳壓縮後 token，用下一次回覆的 Context 數字確認是否有效下降。');
+          }
         } else {
           appendMessage('assistant', `⚠️ 壓縮失敗：${data.error || '未知錯誤'}`);
         }
@@ -2234,3 +2314,4 @@ document.addEventListener('click', (e) => {
 window.showContextModal = showContextModal;
 window.hideContextModal = hideContextModal;
 window.updateContextPill = updateContextPill;
+window.startLowContextContinuation = startLowContextContinuation;
