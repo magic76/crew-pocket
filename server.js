@@ -28,6 +28,7 @@ const { handleLiveSync, handleLiveTranscribe, handleQuickTranscribe } = require(
 const { handleRunCode } = require('./lib/sandbox');
 const { handleUsage } = require('./lib/usage');
 const { handleListFiles, handleReadFile, handleSaveFile, handleDeleteFile } = require('./lib/files');
+const { handleListPublicAssets } = require('./lib/public-assets');
 const { handleGenerateTitle, getCachedTitle } = require('./lib/title');
 const { phoneAgent } = require('./lib/phone_agent');
 const { createExtensionBridge } = require('./lib/extension_bridge');
@@ -961,6 +962,7 @@ async function handleChat(req, res) {
     res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
   };
 
+  let stopCompanionHeartbeat = () => {};
   try {
     const provider = getProvider(providerId);
     const requestId = crypto.randomUUID();
@@ -969,6 +971,13 @@ async function handleChat(req, res) {
     let metricsLogged = false;
     let ended = false;
     let abortTurn = () => {};
+    // CrewHelper uses a 40s failsafe to avoid a stuck "AI 回覆中" status.
+    // A long SSE turn can legitimately be quiet for longer than that, so keep
+    // the companion state alive while this specific turn is still active.
+    const companionHeartbeat = setInterval(() => {
+      if (!ended) notifyCompanionService('THINKING');
+    }, 15000);
+    stopCompanionHeartbeat = () => clearInterval(companionHeartbeat);
     const getToolMetrics = () => {
       let executions = 0;
       let polls = 0;
@@ -1027,6 +1036,7 @@ async function handleChat(req, res) {
     const finish = (payload) => {
       if (ended) return;
       ended = true;
+      stopCompanionHeartbeat();
       const finalPayload = {
         ...(payload || {}),
         request_id: requestId,
@@ -1042,9 +1052,12 @@ async function handleChat(req, res) {
       res.end();
     };
 
-    req.on('close', () => {
-      if (!ended) {
+    // The request body can close normally as soon as the browser has sent it.
+    // Only the SSE response closing means the client is no longer watching.
+    res.on('close', () => {
+      if (!ended && !res.writableEnded) {
         ended = true;
+        stopCompanionHeartbeat();
         abortTurn();
         notifyCompanionService('IDLE');
         logToolMetrics('client_closed');
@@ -1107,6 +1120,7 @@ async function handleChat(req, res) {
 
   } catch (err) {
     console.error('[Chat Error]', err);
+    stopCompanionHeartbeat();
     notifyCompanionService('ERROR', err.message || '執行失敗');
     if (!res.writableEnded && !res.destroyed) {
       sendEvent('done', { error: err.message });
@@ -1344,6 +1358,8 @@ const server = http.createServer(async (req, res) => {
     return handleUsage(res);
   } else if (pathname === '/api/files' && req.method === 'GET') {
     return handleListFiles(parsedUrl, res);
+  } else if (pathname === '/api/public-assets' && req.method === 'GET') {
+    return handleListPublicAssets(PUBLIC_DIR, res);
   } else if (pathname === '/api/file/read' && req.method === 'GET') {
     return handleReadFile(parsedUrl, res);
   } else if (pathname === '/api/file/save' && req.method === 'POST') {

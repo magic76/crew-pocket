@@ -311,9 +311,12 @@ public class FloatingBubbleManager {
 
     // 🔔 Real-time Notify Dispatcher from Backend
     public void handleNotify(String state, String text) {
+        boolean wasBusy = "THINKING".equals(currentState) || "TOOL".equals(currentState);
         currentState = state == null ? "IDLE" : state.toUpperCase();
         if ("THINKING".equalsIgnoreCase(state)) {
-            vibrateShort();
+            // Server heartbeats refresh the 40s safety timer. They are not new
+            // tasks, so do not vibrate repeatedly while already busy.
+            if (!wasBusy) vibrateShort();
             setThinkingState(true);
             String thinkingStatus = text == null || text.isEmpty() ? "AI 回覆中" : "AI 回覆中 · " + text;
             updateDialogStatus(thinkingStatus);
