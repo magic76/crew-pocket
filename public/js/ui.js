@@ -153,6 +153,8 @@ const previewFileIcon = document.getElementById('preview-file-icon');
 const previewFileName = document.getElementById('preview-file-name');
 const previewFileSize = document.getElementById('preview-file-size');
 const previewFileContent = document.getElementById('preview-file-content');
+const previewFileImageWrap = document.getElementById('preview-file-image-wrap');
+const previewFileImage = document.getElementById('preview-file-image');
 const previewSendAiBtn = document.getElementById('preview-send-ai-btn');
 const previewCopyBtn = document.getElementById('preview-copy-btn');
 const closePreviewPaneBtn = document.getElementById('close-preview-pane-btn');
@@ -773,29 +775,41 @@ function updateNotifyBtnUI() {
 let currentExplorerPath = '';
 let currentPreviewFullPath = '';
 let currentPreviewFileName = '';
+let filesInitialLoadTimer = null;
 const FILE_SWIPE_REVEAL_PX = 88;
 
 function toggleFilesModal(open) {
   if (!filesModal) return;
+  if (filesInitialLoadTimer) window.clearTimeout(filesInitialLoadTimer);
   if (open) {
     filesModal.classList.remove('opacity-0', 'pointer-events-none');
-    loadDirectory(currentExplorerPath);
+    renderFilesLoading();
+    // Let the 200ms modal fade paint first. Directory parsing and DOM creation
+    // can otherwise starve the exact frame that is opening the dialog.
+    filesInitialLoadTimer = window.setTimeout(() => {
+      filesInitialLoadTimer = null;
+      if (!filesModal.classList.contains('opacity-0')) loadDirectory(currentExplorerPath, false);
+    }, 220);
   } else {
     filesModal.classList.add('opacity-0', 'pointer-events-none');
   }
 }
 
-async function loadDirectory(relPath = '') {
+function renderFilesLoading() {
   if (!filesListContainer) return;
-  currentExplorerPath = relPath;
-  if (filePreviewPane) filePreviewPane.classList.add('hidden');
-  
   filesListContainer.innerHTML = `
     <div class="text-center py-6 text-slate-400 text-xs flex flex-col items-center gap-2 font-sans">
       <span class="inline-block w-4 h-4 rounded-full border-2 border-emerald-400 border-t-transparent animate-spin"></span>
       <span>正在讀取目錄內容...</span>
     </div>
   `;
+}
+
+async function loadDirectory(relPath = '', showLoading = true) {
+  if (!filesListContainer) return;
+  currentExplorerPath = relPath;
+  if (filePreviewPane) filePreviewPane.classList.add('hidden');
+  if (showLoading) renderFilesLoading();
 
   try {
     const res = await fetch(`/api/files?path=${encodeURIComponent(relPath)}`);
@@ -896,8 +910,9 @@ function bindExplorerSwipeDelete() {
   filesListContainer.querySelectorAll('.file-swipe-row').forEach(row => {
     const content = row.querySelector('.file-swipe-content');
     if (!content) return;
-    let startX = 0;
+    let startX = null;
     let offsetX = 0;
+    let isRevealed = false;
     let dragging = false;
     let suppressClick = false;
     const setOffset = (value, animate = false) => {
@@ -907,12 +922,12 @@ function bindExplorerSwipeDelete() {
 
     content.addEventListener('pointerdown', event => {
       startX = event.clientX;
-      offsetX = content.style.transform ? -FILE_SWIPE_REVEAL_PX : 0;
+      offsetX = isRevealed ? -FILE_SWIPE_REVEAL_PX : 0;
       dragging = false;
       content.setPointerCapture?.(event.pointerId);
     });
     content.addEventListener('pointermove', event => {
-      if (!startX) return;
+      if (startX === null) return;
       const deltaX = event.clientX - startX;
       if (Math.abs(deltaX) < 7 && !dragging) return;
       if (Math.abs(deltaX) > 7) dragging = true;
@@ -920,12 +935,16 @@ function bindExplorerSwipeDelete() {
       setOffset(next);
     });
     const finish = event => {
-      if (!startX) return;
+      if (startX === null) return;
       const deltaX = event.clientX - startX;
+      startX = null;
+      // A normal tap (including opening the preview) must leave no swipe
+      // transform behind for the next gesture to misinterpret.
+      if (!dragging) return;
       const draggedToEnd = dragging && (offsetX + deltaX) <= -(FILE_SWIPE_REVEAL_PX - 4);
       suppressClick = dragging;
       setOffset(draggedToEnd ? -FILE_SWIPE_REVEAL_PX : 0, true);
-      startX = 0;
+      isRevealed = draggedToEnd;
       if (draggedToEnd) {
         const deleteButton = row.querySelector('.file-swipe-delete');
         const relPath = decodeURIComponent(deleteButton?.dataset.filePath || '');
@@ -933,13 +952,20 @@ function bindExplorerSwipeDelete() {
         const isDirectory = deleteButton?.dataset.fileDirectory === 'true';
         window.setTimeout(async () => {
           await confirmExplorerDelete(relPath, name, isDirectory);
-          if (row.isConnected) setOffset(0, true);
+          if (row.isConnected) {
+            isRevealed = false;
+            setOffset(0, true);
+          }
         }, 120);
       }
       window.setTimeout(() => { suppressClick = false; }, 0);
     };
     content.addEventListener('pointerup', finish);
-    content.addEventListener('pointercancel', () => { startX = 0; setOffset(0, true); });
+    content.addEventListener('pointercancel', () => {
+      startX = null;
+      isRevealed = false;
+      setOffset(0, true);
+    });
     content.addEventListener('click', event => {
       if (!suppressClick) return;
       event.preventDefault();
@@ -1015,7 +1041,25 @@ async function previewFile(relPath) {
     if (previewFileIcon) previewFileIcon.textContent = data.icon;
     if (previewFileName) previewFileName.textContent = data.name;
     if (previewFileSize) previewFileSize.textContent = data.sizeFormatted;
-    if (previewFileContent) previewFileContent.textContent = data.content;
+    const isImage = data.type === 'image';
+    if (previewFileContent) {
+      previewFileContent.textContent = isImage ? '' : data.content;
+      previewFileContent.classList.toggle('hidden', isImage);
+    }
+    if (previewFileImageWrap) previewFileImageWrap.classList.toggle('hidden', !isImage);
+    if (previewCopyBtn) previewCopyBtn.classList.toggle('hidden', isImage);
+    if (isImage && previewFileImage) {
+      const imagePath = encodeURIComponent(data.fullPath);
+      const version = encodeURIComponent(String(data.mtime || Date.now()));
+      const thumbnailUrl = `/api/image?path=${imagePath}&thumbnail=1&v=${version}`;
+      const fullUrl = `/api/image?path=${imagePath}&v=${version}`;
+      previewFileImage.src = thumbnailUrl;
+      previewFileImage.alt = data.name;
+      previewFileImage.onclick = () => showLightbox(fullUrl);
+    } else if (previewFileImage) {
+      previewFileImage.removeAttribute('src');
+      previewFileImage.onclick = null;
+    }
 
     filePreviewPane.classList.remove('hidden');
 

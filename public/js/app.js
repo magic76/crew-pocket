@@ -224,7 +224,15 @@ function initAppAndListeners() {
   if (modelModal) modelModal.addEventListener('click', (e) => { if (e.target === modelModal) toggleModelModal(false); });
 
   // Files Explorer Modal listeners
-  if (filesBtn) filesBtn.addEventListener('click', () => toggleFilesModal(true));
+  const openFilesExplorer = () => {
+    // This launcher lives inside the tools popover. Hide that z-50 layer
+    // before showing another z-50 modal, then wait one frame for mobile
+    // compositors to settle instead of flashing between the two surfaces.
+    if (toolsMenuDropdown) toolsMenuDropdown.classList.add('hidden');
+    if (drawer && !drawer.classList.contains('-translate-x-full')) toggleDrawer(false);
+    window.requestAnimationFrame(() => toggleFilesModal(true));
+  };
+  if (filesBtn) filesBtn.addEventListener('click', openFilesExplorer);
   if (openFilesChip) openFilesChip.addEventListener('click', () => toggleFilesModal(true));
   if (closeFilesBtn) closeFilesBtn.addEventListener('click', () => toggleFilesModal(false));
   if (refreshFilesBtn) refreshFilesBtn.addEventListener('click', () => loadDirectory(currentExplorerPath));

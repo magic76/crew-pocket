@@ -9,6 +9,7 @@ const storageSubtitle = document.getElementById('storage-subtitle');
 let storageReport = null;
 let storageTab = 'conversations';
 let storageSort = 'updated_desc';
+let storageInitialLoadTimer = null;
 
 function storageBytes(bytes) {
   if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
@@ -31,12 +32,24 @@ function sortStorageItems(items) {
 }
 function toggleStorageModal(show) {
   if (!storageModal) return;
+  if (storageInitialLoadTimer) window.clearTimeout(storageInitialLoadTimer);
   storageModal.classList.toggle('opacity-0', !show); storageModal.classList.toggle('pointer-events-none', !show);
-  if (show) loadStorageReport();
+  if (!show) return;
+  renderStorageLoading();
+  // Storage scanning can be expensive. Start it after the modal fade gets its
+  // first paint instead of blocking the opening animation every time.
+  storageInitialLoadTimer = window.setTimeout(() => {
+    storageInitialLoadTimer = null;
+    if (!storageModal.classList.contains('opacity-0')) loadStorageReport(false);
+  }, 220);
 }
-async function loadStorageReport() {
+function renderStorageLoading() {
   if (!storageList) return;
   storageList.innerHTML = '<div class="text-center text-slate-500 py-8">正在掃描本機資料…</div>';
+}
+async function loadStorageReport(showLoading = true) {
+  if (!storageList) return;
+  if (showLoading) renderStorageLoading();
   try {
     const res = await fetch('/api/storage'); const data = await res.json(); if (!res.ok) throw new Error(data.error || '掃描失敗');
     storageReport = data; renderStorageReport();
@@ -72,7 +85,14 @@ async function deleteStorageSelection() {
   } catch (err) { window.alert(`刪除失敗：${err.message}`); }
   finally { deleteStorageBtn.disabled = false; }
 }
-if (storagePageBtn) storagePageBtn.addEventListener('click', () => toggleStorageModal(true));
+function openStorageModalFromToolsMenu() {
+  const toolsMenuDropdown = document.getElementById('tools-menu-dropdown');
+  if (toolsMenuDropdown) toolsMenuDropdown.classList.add('hidden');
+  // The storage launcher shares the tools popover's stacking level. Waiting
+  // for the next paint prevents the two opacity layers from flashing.
+  window.requestAnimationFrame(() => toggleStorageModal(true));
+}
+if (storagePageBtn) storagePageBtn.addEventListener('click', openStorageModalFromToolsMenu);
 if (closeStorageBtn) closeStorageBtn.addEventListener('click', () => toggleStorageModal(false));
 if (refreshStorageBtn) refreshStorageBtn.addEventListener('click', loadStorageReport);
 if (deleteStorageBtn) deleteStorageBtn.addEventListener('click', deleteStorageSelection);
