@@ -228,9 +228,14 @@ if (guidelinesContentTextarea) {
 function toggleGuidelinesModal(open) {
   if (!guidelinesModal) return;
   if (typeof window.haptic === 'function') window.haptic('light');
+  cancelDeferredModalDataLoad(guidelinesModal);
   if (open) {
     guidelinesModal.classList.remove('opacity-0', 'pointer-events-none');
-    loadGuidelines();
+    if (guidelinesContentTextarea) {
+      guidelinesContentTextarea.value = '準備載入指引內容...';
+      guidelinesContentTextarea.disabled = true;
+    }
+    deferModalDataLoad(guidelinesModal, loadGuidelines);
   } else {
     guidelinesModal.classList.add('opacity-0', 'pointer-events-none');
   }
@@ -376,9 +381,12 @@ function toggleCheatSheet(open) {
 // Usage Quota Modal Handlers
 function toggleUsageModal(open) {
   if (!usageModal) return;
+  cancelDeferredModalDataLoad(usageModal);
   if (open) {
     usageModal.classList.remove('opacity-0', 'pointer-events-none');
-    loadUsageData();
+    if (usageModalSubtitle) usageModalSubtitle.textContent = '準備讀取模型配額...';
+    if (usageBarsContainer) usageBarsContainer.innerHTML = `<div class="text-center py-6 text-slate-400 text-xs flex flex-col items-center gap-2 font-sans"><span class="inline-block w-5 h-5 rounded-full border-2 border-indigo-400 border-t-transparent animate-spin"></span><span>正在準備用量資料...</span></div>`;
+    deferModalDataLoad(usageModal, loadUsageData);
   } else {
     usageModal.classList.add('opacity-0', 'pointer-events-none');
   }
@@ -775,21 +783,45 @@ function updateNotifyBtnUI() {
 let currentExplorerPath = '';
 let currentPreviewFullPath = '';
 let currentPreviewFileName = '';
-let filesInitialLoadTimer = null;
 const FILE_SWIPE_REVEAL_PX = 88;
+const modalDataLoadTimers = new WeakMap();
+
+// Shared loader for data-heavy dialogs. Render the lightweight loading state,
+// let the opening frame finish, then run scans/fetches without stuttering the
+// modal animation. Closing a dialog cancels work that has not started yet.
+function deferModalDataLoad(modal, loader, delay = 220) {
+  if (!modal || typeof loader !== 'function') return;
+  cancelDeferredModalDataLoad(modal);
+  const timer = window.setTimeout(async () => {
+    modalDataLoadTimers.delete(modal);
+    if (modal.classList.contains('opacity-0') || modal.classList.contains('hidden')) return;
+    try {
+      await loader();
+    } catch (err) {
+      console.error('[Modal data load] failed:', err);
+    }
+  }, delay);
+  modalDataLoadTimers.set(modal, timer);
+}
+
+function cancelDeferredModalDataLoad(modal) {
+  const timer = modal && modalDataLoadTimers.get(modal);
+  if (timer) window.clearTimeout(timer);
+  if (modal) modalDataLoadTimers.delete(modal);
+}
+
+window.deferModalDataLoad = deferModalDataLoad;
+window.cancelDeferredModalDataLoad = cancelDeferredModalDataLoad;
 
 function toggleFilesModal(open) {
   if (!filesModal) return;
-  if (filesInitialLoadTimer) window.clearTimeout(filesInitialLoadTimer);
+  cancelDeferredModalDataLoad(filesModal);
   if (open) {
     filesModal.classList.remove('opacity-0', 'pointer-events-none');
     renderFilesLoading();
     // Let the 200ms modal fade paint first. Directory parsing and DOM creation
     // can otherwise starve the exact frame that is opening the dialog.
-    filesInitialLoadTimer = window.setTimeout(() => {
-      filesInitialLoadTimer = null;
-      if (!filesModal.classList.contains('opacity-0')) loadDirectory(currentExplorerPath, false);
-    }, 220);
+    deferModalDataLoad(filesModal, () => loadDirectory(currentExplorerPath, false));
   } else {
     filesModal.classList.add('opacity-0', 'pointer-events-none');
   }

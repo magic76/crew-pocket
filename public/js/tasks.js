@@ -25,11 +25,17 @@
 
   function setModalVisible(visible) {
     if (!modal) return;
+    if (typeof window.cancelDeferredModalDataLoad === 'function') window.cancelDeferredModalDataLoad(modal);
     modal.classList.toggle('opacity-0', !visible);
     modal.classList.toggle('pointer-events-none', !visible);
     if (visible) {
-      loadTasks();
-      if (!pollTimer) pollTimer = setInterval(loadTasks, 1800);
+      if (list) list.innerHTML = '<div class="py-10 text-center text-xs text-slate-500">準備載入任務…</div>';
+      const beginLoading = async () => {
+        await loadTasks();
+        if (!modal.classList.contains('opacity-0') && !pollTimer) pollTimer = setInterval(loadTasks, 1800);
+      };
+      if (typeof window.deferModalDataLoad === 'function') window.deferModalDataLoad(modal, beginLoading);
+      else beginLoading();
     } else if (pollTimer) {
       clearInterval(pollTimer);
       pollTimer = null;

@@ -9,7 +9,6 @@ const storageSubtitle = document.getElementById('storage-subtitle');
 let storageReport = null;
 let storageTab = 'conversations';
 let storageSort = 'updated_desc';
-let storageInitialLoadTimer = null;
 
 function storageBytes(bytes) {
   if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
@@ -32,16 +31,17 @@ function sortStorageItems(items) {
 }
 function toggleStorageModal(show) {
   if (!storageModal) return;
-  if (storageInitialLoadTimer) window.clearTimeout(storageInitialLoadTimer);
+  if (typeof window.cancelDeferredModalDataLoad === 'function') window.cancelDeferredModalDataLoad(storageModal);
   storageModal.classList.toggle('opacity-0', !show); storageModal.classList.toggle('pointer-events-none', !show);
   if (!show) return;
   renderStorageLoading();
   // Storage scanning can be expensive. Start it after the modal fade gets its
   // first paint instead of blocking the opening animation every time.
-  storageInitialLoadTimer = window.setTimeout(() => {
-    storageInitialLoadTimer = null;
-    if (!storageModal.classList.contains('opacity-0')) loadStorageReport(false);
-  }, 220);
+  if (typeof window.deferModalDataLoad === 'function') {
+    window.deferModalDataLoad(storageModal, () => loadStorageReport(false));
+  } else {
+    loadStorageReport(false);
+  }
 }
 function renderStorageLoading() {
   if (!storageList) return;

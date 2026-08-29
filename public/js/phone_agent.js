@@ -55,9 +55,15 @@
   function togglePhoneModal(open) {
     if (!phoneModal) return;
     if (typeof window.haptic === "function") window.haptic("light");
+    if (typeof window.cancelDeferredModalDataLoad === "function") window.cancelDeferredModalDataLoad(phoneModal);
     if (open) {
       phoneModal.classList.remove("opacity-0", "pointer-events-none");
-      checkStatus();
+      if (phoneConnBadge) {
+        phoneConnBadge.textContent = "準備檢測...";
+        phoneConnBadge.className = "px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-amber-950/80 border border-amber-500/40 text-amber-400";
+      }
+      if (typeof window.deferModalDataLoad === "function") window.deferModalDataLoad(phoneModal, checkStatus);
+      else checkStatus();
     } else {
       phoneModal.classList.add("opacity-0", "pointer-events-none");
     }
