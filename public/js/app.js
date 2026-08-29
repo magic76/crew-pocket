@@ -182,6 +182,18 @@ function initAppAndListeners() {
   const contextModal = document.getElementById('context-modal');
   const closeContextBtn = document.getElementById('close-context-btn');
   const modalTriggerCompactBtn = document.getElementById('modal-trigger-compact-btn');
+  const modalTriggerCompactMaxBtn = document.getElementById('modal-trigger-compact-max-btn');
+
+  const runCompactFromContext = (command) => {
+    if (typeof window.hideContextModal === 'function') window.hideContextModal();
+    if (promptInput) {
+      promptInput.value = command;
+      promptInput.focus();
+      promptInput.style.height = 'auto';
+      promptInput.style.height = Math.min(promptInput.scrollHeight, 120) + 'px';
+    }
+    if (typeof handleSendClick === 'function') handleSendClick(new Event('click'));
+  };
 
   if (contextPill) {
     contextPill.addEventListener('click', () => {
@@ -201,19 +213,9 @@ function initAppAndListeners() {
     });
   }
   if (modalTriggerCompactBtn) {
-    modalTriggerCompactBtn.addEventListener('click', () => {
-      if (typeof window.hideContextModal === 'function') window.hideContextModal();
-      if (promptInput) {
-        promptInput.value = '/compact';
-        promptInput.focus();
-        promptInput.style.height = 'auto';
-        promptInput.style.height = Math.min(promptInput.scrollHeight, 120) + 'px';
-      }
-      if (typeof handleSendClick === 'function') {
-        handleSendClick(new Event('click'));
-      }
-    });
+    modalTriggerCompactBtn.addEventListener('click', () => runCompactFromContext('/compact'));
   }
+  if (modalTriggerCompactMaxBtn) modalTriggerCompactMaxBtn.addEventListener('click', () => runCompactFromContext('/compact-max'));
 
   // Model & Effort Selector listeners
   if (modelSelectorBtn) modelSelectorBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleModelModal(true); });

@@ -1554,7 +1554,7 @@ async function sendMessage(queuedMessage = null) {
     return;
   }
 
-  // 📦 /compact - Memory Compaction & Context Pruning
+  // 📦 /compact and /compact-max - Memory Compaction & Context Pruning
   if (/^\/compact\b/i.test(text)) {
     promptInput.value = '';
     promptInput.style.height = 'auto';
@@ -1573,7 +1573,10 @@ async function sendMessage(queuedMessage = null) {
     }
 
     const targetConvId = currentConversationId;
-    const focusText = text.replace(/^\/compact\s*/i, '').trim();
+    const compactMode = /^\/compact-max\b/i.test(text) ? 'max' : 'continue';
+    const isMaxCompact = compactMode === 'max';
+    const focusText = text.replace(/^\/compact(?:-max)?\s*/i, '').trim();
+    const isEnglish = typeof getCrewLocale === 'function' && getCrewLocale() === 'en';
     appendMessage('user', text, undefined, [], '', false);
 
     const compactingMsgDiv = document.createElement('div');
@@ -1583,10 +1586,10 @@ async function sendMessage(queuedMessage = null) {
       <div class="bg-slate-900/90 border border-cyan-500/50 text-slate-200 rounded-2xl rounded-tl-none p-3.5 text-xs sm:text-sm shadow-xl flex-1 min-w-0 prose thinking-active-glow">
         <div class="flex items-center gap-2 text-cyan-300 font-bold mb-1.5">
           <span class="w-2 h-2 rounded-full bg-cyan-400 animate-ping"></span>
-          <span>📦 正在深度提煉並精簡壓縮對話記憶...</span>
+          <span>📦 ${isMaxCompact ? (isEnglish ? 'Max-compacting conversation memory...' : '正在極致精簡對話記憶...') : (isEnglish ? 'Compacting continuation context...' : '正在提煉可接續的對話狀態...')}</span>
         </div>
         <p class="text-slate-400 text-xs leading-relaxed">
-          AI 正在梳理核心目標、已完成模組、關鍵檔案與當前脈絡，為您釋放 Token 並精簡上下文...
+          ${isMaxCompact ? (isEnglish ? 'Keeping only final outcome, remaining verification, and non-negotiable state to reduce context.' : '只保留最終成果、待驗證事項與不可遺失的關鍵狀態，盡量降低 Context。') : (isEnglish ? 'Keeping the active task, decisions, paths, values, and next action so work can continue smoothly.' : '保留目前任務、決策、路徑、數值與下一步，讓壓縮後能無縫繼續工作。')}
         </p>
       </div>
     `;
@@ -1600,6 +1603,7 @@ async function sendMessage(queuedMessage = null) {
         body: JSON.stringify({
           conversation_id: targetConvId,
           focus: focusText,
+          mode: compactMode,
           provider: currentProvider,
           locale: typeof getCrewLocale === 'function' ? getCrewLocale() : 'zh-TW'
         })

@@ -571,6 +571,7 @@ async function handleProviderCompact(req, res, forcedProviderId = null) {
     if (!provider.metadata.capabilities.compact || typeof provider.compactConversation !== 'function') throw new Error('Provider does not support conversation compaction');
     const result = await provider.compactConversation(body.conversation_id, {
       focus: body.focus,
+      mode: body.mode === 'max' ? 'max' : 'continue',
       locale: body.locale === 'en' ? 'en' : 'zh-TW'
     });
     res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -1166,7 +1167,7 @@ async function handleStatic(parsedUrl, res) {
 
   try {
     const data = await fsPromises.readFile(filePath);
-    const isVersionedAsset = typeof parsedUrl !== 'string' && parsedUrl.searchParams.has('v');
+    const isVersionedAsset = typeof parsedUrl !== 'string' && Object.prototype.hasOwnProperty.call(parsedUrl.query || {}, 'v');
     const headers = { 'Content-Type': contentType };
     if (isVersionedAsset) {
       // Versioned URLs are immutable. New HTML always points at a new URL.

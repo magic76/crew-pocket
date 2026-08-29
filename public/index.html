@@ -396,7 +396,11 @@
         </button>
         <button type="button" class="slash-item w-full text-left px-2.5 py-1.5 rounded-xl hover:bg-cyan-600/20 hover:text-cyan-300 flex items-center justify-between text-slate-300 transition" data-cmd="/compact">
           <span class="font-bold text-cyan-400">/compact</span>
-          <span class="text-[10px] text-slate-400 font-sans">精簡對話記憶 / 釋放 Token</span>
+          <span class="text-[10px] text-slate-400 font-sans">保留當前關鍵狀態並繼續工作</span>
+        </button>
+        <button type="button" class="slash-item w-full text-left px-2.5 py-1.5 rounded-xl hover:bg-violet-600/20 hover:text-violet-300 flex items-center justify-between text-slate-300 transition" data-cmd="/compact-max">
+          <span class="font-bold text-violet-400">/compact-max</span>
+          <span class="text-[10px] text-slate-400 font-sans">任務接近完成時，只保留重要交接</span>
         </button>
         <button type="button" class="slash-item w-full text-left px-2.5 py-1.5 rounded-xl hover:bg-rose-600/20 hover:text-rose-300 flex items-center justify-between text-slate-300 transition" data-action="clear" data-cmd="/clear">
           <span class="font-bold text-rose-400">/clear</span>
@@ -582,9 +586,33 @@
       
       <!-- Body (Scrollable List) -->
       <div class="p-4 space-y-3 overflow-y-auto text-xs text-slate-300 font-sans leading-relaxed">
+        <div class="p-2.5 rounded-xl bg-slate-950/80 border border-indigo-900/50 space-y-1">
+          <div class="font-bold text-indigo-400 flex items-center gap-1.5"><span>🎙️</span><span>1. Gemini Live 語音助理</span></div>
+          <p class="text-[11px] text-slate-400">即時雙向通話，支援音色、個人 Prompt、聲紋門檻、插話策略與通話保護；可視情況帶入最近主對話脈絡。</p>
+        </div>
+        <div class="p-2.5 rounded-xl bg-slate-950/80 border border-emerald-900/50 space-y-1">
+          <div class="font-bold text-emerald-400 flex items-center gap-1.5"><span>✓</span><span>2. Live 委派主對話</span></div>
+          <p class="text-[11px] text-slate-400">在通話中說明要做的事，確認後由主對話處理；任務中心會保留進度、結果、失敗原因，並可重試。</p>
+        </div>
+        <div class="p-2.5 rounded-xl bg-slate-950/80 border border-amber-900/50 space-y-1">
+          <div class="font-bold text-amber-400 flex items-center gap-1.5"><span>📷</span><span>3. 相機與手機感知</span></div>
+          <p class="text-[11px] text-slate-400">明確要求時才讀取目前螢幕或拍攝實體環境；Live 可擷取當下相機畫面交給主對話，避免誤用舊照片。</p>
+        </div>
+        <div class="p-2.5 rounded-xl bg-slate-950/80 border border-rose-900/50 space-y-1">
+          <div class="font-bold text-rose-400 flex items-center gap-1.5"><span>🧠</span><span>4. 對話保存與記憶整理</span></div>
+          <p class="text-[11px] text-slate-400">一般 <code class="text-cyan-300">/compact</code> 保留當前關鍵狀態以繼續工作；任務接近完成時可用 <code class="text-violet-300">/compact-max</code>，只留重要交接並降低 Context。</p>
+        </div>
+        <div class="p-2.5 rounded-xl bg-slate-950/80 border border-purple-900/50 space-y-1">
+          <div class="font-bold text-purple-400 flex items-center gap-1.5"><span>📲</span><span>5. 可安裝 PWA 與更新保護</span></div>
+          <p class="text-[11px] text-slate-400">可安裝為獨立 App；核心介面會在首次成功開啟後快取，版本更新會自動接管並重新載入，避免讀到舊程式。</p>
+        </div>
+        <div class="p-2.5 rounded-xl bg-slate-950/80 border border-cyan-900/50 space-y-1">
+          <div class="font-bold text-cyan-400 flex items-center gap-1.5"><span>🧰</span><span>6. 行動工作台</span></div>
+          <p class="text-[11px] text-slate-400">瀏覽 Termux 檔案、管理對話與媒體空間、執行程式碼，並可在對話中直接預覽 HTML、圖表與 Google 地圖導航。</p>
+        </div>
         
         <!-- Section 1 -->
-        <div class="p-2.5 rounded-xl bg-slate-950/80 border border-indigo-900/50 space-y-1">
+        <div class="hidden p-2.5 rounded-xl bg-slate-950/80 border border-indigo-900/50 space-y-1">
           <div class="font-bold text-indigo-400 flex items-center gap-1.5">
             <span>🌐</span><span>1. 原生無縫內嵌沙盒 2.0 (HTML / SVG / Chart.js / Web Audio)</span>
           </div>
@@ -594,7 +622,7 @@
         </div>
 
         <!-- Section 2 -->
-        <div class="p-2.5 rounded-xl bg-slate-950/80 border border-emerald-900/50 space-y-1">
+        <div class="hidden p-2.5 rounded-xl bg-slate-950/80 border border-emerald-900/50 space-y-1">
           <div class="font-bold text-emerald-400 flex items-center gap-1.5">
             <span>🐍</span><span>2. Python / Bash 後端即時直譯執行 (Termux 算力)</span>
           </div>
@@ -604,7 +632,7 @@
         </div>
 
         <!-- Section 3 -->
-        <div class="p-2.5 rounded-xl bg-slate-950/80 border border-amber-900/50 space-y-1">
+        <div class="hidden p-2.5 rounded-xl bg-slate-950/80 border border-amber-900/50 space-y-1">
           <div class="font-bold text-amber-400 flex items-center gap-1.5">
             <span>🗺️</span><span>3. Google 地圖導航與景點卡片</span>
           </div>
@@ -614,7 +642,7 @@
         </div>
 
         <!-- Section 4 -->
-        <div class="p-2.5 rounded-xl bg-slate-950/80 border border-rose-900/50 space-y-1">
+        <div class="hidden p-2.5 rounded-xl bg-slate-950/80 border border-rose-900/50 space-y-1">
           <div class="font-bold text-rose-400 flex items-center gap-1.5">
             <span>📱</span><span>4. 手機硬體原生整合 (GPS / 震動 / 雙向語音 / 相機)</span>
           </div>
@@ -624,7 +652,7 @@
         </div>
 
         <!-- Section 5 -->
-        <div class="p-2.5 rounded-xl bg-slate-950/80 border border-purple-900/50 space-y-1">
+        <div class="hidden p-2.5 rounded-xl bg-slate-950/80 border border-purple-900/50 space-y-1">
           <div class="font-bold text-purple-400 flex items-center gap-1.5">
             <span>⚡</span><span>5. 專業快捷指令 (/compact, /btw, /plan, /goal, /clear)</span>
           </div>
@@ -634,7 +662,7 @@
         </div>
 
         <!-- Section 6 -->
-        <div class="p-2.5 rounded-xl bg-slate-950/80 border border-cyan-900/50 space-y-1">
+        <div class="hidden p-2.5 rounded-xl bg-slate-950/80 border border-cyan-900/50 space-y-1">
           <div class="font-bold text-cyan-400 flex items-center gap-1.5">
             <span>📐</span><span>6. 滿版極致視野 ＆ 賽博朋克思考跑馬燈</span>
           </div>
@@ -703,6 +731,10 @@
           <button id="modal-trigger-compact-btn" class="w-full py-2 bg-gradient-to-r from-cyan-600 to-teal-600 hover:from-cyan-500 hover:to-teal-500 active:scale-95 text-white rounded-xl text-xs font-bold font-mono transition shadow-lg shadow-cyan-950/50 flex items-center justify-center gap-1.5 cursor-pointer">
             <span>📦 立即執行 /compact 提煉記憶</span>
           </button>
+          <button id="modal-trigger-compact-max-btn" class="w-full py-2 bg-gradient-to-r from-violet-700 to-fuchsia-700 hover:from-violet-600 hover:to-fuchsia-600 active:scale-95 text-white rounded-xl text-xs font-bold font-mono transition shadow-lg shadow-violet-950/50 flex items-center justify-center gap-1.5 cursor-pointer">
+            <span>🪶 極致壓縮 /compact-max</span>
+          </button>
+          <p class="text-[10px] text-violet-200/80 leading-relaxed">任務接近完成時使用：只保留最終成果、待驗證事項與重要交接。</p>
         </div>
       </div>
     </div>
@@ -1224,7 +1256,7 @@
   </div>
 
   <!-- Modular Scripts (Cache-busted v7.8) -->
-  <script src="/js/i18n.js?v=3"></script>
+  <script src="/js/i18n.js?v=6"></script>
   <script src="/js/ui.js?v=1787740201"></script>
   <script src="/js/tools.js?v=7.8"></script>
   <script src="/js/storage.js?v=4"></script>
@@ -1232,6 +1264,6 @@
   <script src="/js/tasks.js?v=1"></script>
   <script src="/js/live.js?v=1787957400"></script>
   <script src="/js/phone_agent.js?v=1.3"></script>
-  <script src="/js/app.js?v=1787961601"></script>
+  <script src="/js/app.js?v=1787961602"></script>
 </body>
 </html>
