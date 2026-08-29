@@ -57,6 +57,9 @@
   let lastVideoFrameSentTime = 0;
   let isCameraExpanded = false;
   let liveCallStartTs = 0;
+  // Video sessions have a shorter upstream limit. Start that clock only when
+  // the camera opens, never from the beginning of the audio call.
+  let cameraModeStartTs = 0;
   let isAiResponding = false;
   let isModelTurnComplete = true;
   let liveCardExpanded = false;
@@ -67,6 +70,7 @@
   let userSpeechActive = false;
   let cameraFrameSequence = 0;
   let sessionSnapshots = [];
+  let latestLiveCameraSnapshot = null;
   let sessionExecutedTools = [];
   let pendingMainTask = null;
   let pendingMainTaskTimer = null;
@@ -1286,7 +1290,7 @@
     const card = document.getElementById('live-main-task-card');
     if (!card) return;
     const task = pendingMainTask;
-    if (!task) {
+    if (!task || task.dismissed) {
       card.classList.add('hidden');
       return;
     }
@@ -1311,13 +1315,55 @@
   }
 
   function clearPendingMainTask(notice = '') {
+    const taskToClear = pendingMainTask;
     if (pendingMainTaskTimer) clearTimeout(pendingMainTaskTimer);
     if (mainTaskPollTimer) clearTimeout(mainTaskPollTimer);
     pendingMainTaskTimer = null;
     mainTaskPollTimer = null;
     pendingMainTask = null;
     renderPendingMainTask();
+    if (taskToClear?.centerTaskId && !taskToClear.dispatched && !taskToClear.completed) {
+      fetch('/api/tasks', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'cancel', task_id: taskToClear.centerTaskId })
+      }).then(() => window.refreshTaskCenter?.()).catch(() => {});
+    }
     if (notice) appendCardTranscript('system', notice);
+  }
+
+  async function persistPendingMainTask(task) {
+    try {
+      const response = await fetch('/api/tasks', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'create', source: 'live',
+          provider: typeof currentProvider !== 'undefined' ? currentProvider : 'antigravity',
+          conversation_id: currentConversationId,
+          model: typeof currentModel !== 'undefined' ? currentModel : undefined,
+          effort: typeof currentEffort !== 'undefined' ? currentEffort : 'low',
+          task: getMainTaskText(task)
+        })
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success || !data.task?.id) throw new Error(data.error || '任務草稿保存失敗');
+      task.centerTaskId = data.task.id;
+      if (pendingMainTask !== task) {
+        await fetch('/api/tasks', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'cancel', task_id: task.centerTaskId })
+        });
+      }
+      if (typeof window.refreshTaskCenter === 'function') window.refreshTaskCenter();
+      return task.centerTaskId;
+    } catch (error) {
+      console.warn('[Live Task Center] Draft persistence failed:', error.message);
+      return null;
+    }
+  }
+
+  function getMainTaskText(task) {
+    if (!task?.cameraSnapshot?.filePath) return task?.task || '';
+    return `${task.task}\n\n【最新 Live 相機畫面】請直接讀取並分析這張本機最新畫面：${task.cameraSnapshot.filePath}\n擷取時間：${task.cameraSnapshot.capturedAt}`;
   }
 
   function getPendingMainTask() {
@@ -1343,10 +1389,12 @@
     pendingMainTask = {
       id: `main-task-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       task,
+      cameraSnapshot: latestLiveCameraSnapshot,
       expiresAt: Date.now() + MAIN_TASK_CONFIRM_TTL_MS,
       executing: false,
       completed: false
     };
+    pendingMainTask.persistencePromise = persistPendingMainTask(pendingMainTask);
     pendingMainTaskTimer = setTimeout(() => {
       if (pendingMainTask && !pendingMainTask.executing && !pendingMainTask.dispatched && !pendingMainTask.completed) {
         clearPendingMainTask('待交辦任務已逾時，未送出。');
@@ -1390,6 +1438,7 @@
     renderPendingMainTask();
     appendCardTranscript('system', '⏳ 正在交辦給目前主對話…');
     try {
+      if (task.persistencePromise) await task.persistencePromise;
       const response = await fetch('/api/live-delegate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1398,7 +1447,8 @@
           conversation_id: currentConversationId,
           model: typeof currentModel !== 'undefined' ? currentModel : undefined,
           effort: typeof currentEffort !== 'undefined' ? currentEffort : 'low',
-          task: task.task
+          task: getMainTaskText(task),
+          task_id: task.centerTaskId
         })
       });
       const data = await response.json().catch(() => ({ success: false, error: '主對話回覆格式無法解析。' }));
@@ -1406,8 +1456,10 @@
       if (!data.accepted || !data.job_id) throw new Error(data.error || '主對話未接受背景任務。');
       task.executing = false;
       task.dispatched = true;
+      task.dismissed = true;
       task.jobId = data.job_id;
       if (pendingMainTaskTimer) clearTimeout(pendingMainTaskTimer);
+      if (typeof window.refreshTaskCenter === 'function') window.refreshTaskCenter();
       renderPendingMainTask();
       appendCardTranscript('system', '⏳ 主對話已在背景處理；您可繼續與 Live 對話。');
       pollMainTaskResult(task);
@@ -1430,6 +1482,7 @@
     task.dispatched = false;
     task.completed = true;
     task.reply = String(data.reply || '').slice(0, 5000);
+    if (typeof window.refreshTaskCenter === 'function') window.refreshTaskCenter();
     if (!task.renderedToMainChat && typeof appendMessage === 'function') {
       appendMessage('user', `[🎙️ Live 已確認委派]\n${task.task}`);
       appendMessage('assistant', task.reply || '主對話已完成任務，但未回傳文字內容。');
@@ -1462,6 +1515,7 @@
       } else if (data.status === 'failed') {
         task.dispatched = false;
         task.error = data.error || '主對話任務失敗。';
+        if (typeof window.refreshTaskCenter === 'function') window.refreshTaskCenter();
         renderPendingMainTask();
         appendCardTranscript('system', `⚠️ 主對話未完成：${task.error}`);
       } else if (pendingMainTask === task) {
@@ -1471,6 +1525,7 @@
       if (pendingMainTask === task) {
         task.dispatched = false;
         task.error = error.message;
+        if (typeof window.refreshTaskCenter === 'function') window.refreshTaskCenter();
         renderPendingMainTask();
         appendCardTranscript('system', `⚠️ 無法追蹤主對話：${error.message}`);
       }
@@ -1950,6 +2005,7 @@
           video.srcObject = cameraStream;
           video.play().catch(() => {});
         }
+        cameraModeStartTs = Date.now();
         if (audioContext && audioContext.state === 'suspended') {
           audioContext.resume().catch(() => {});
         }
@@ -1977,8 +2033,10 @@
       } catch (err) {
         alert('無法開啟相機：' + err.message);
         isCameraOn = false;
+        cameraModeStartTs = 0;
       }
     } else {
+      cameraModeStartTs = 0;
       if (cameraStream) {
         try { cameraStream.getTracks().forEach(t => t.stop()); } catch (e) {}
         cameraStream = null;
@@ -2025,7 +2083,7 @@
     }
   }
 
-  function captureCameraFrame({ reason = 'explicit_camera_tool', maxWidth = 1100, quality = 0.76 } = {}) {
+  async function captureCameraFrame({ reason = 'explicit_camera_tool', maxWidth = 1100, quality = 0.76 } = {}) {
     if (!isConnected || !ws || ws.readyState !== WebSocket.OPEN || !isCameraOn) {
       return { success: false, error: 'Live 相機尚未開啟或連線未就緒' };
     }
@@ -2060,6 +2118,24 @@
       if (sessionSnapshots.length < 6) {
         sessionSnapshots.push(jpegDataUrl);
       }
+      // Persist only explicitly requested frames. Gemini receives the same
+      // frame immediately; this copy lets a later delegated main-chat task
+      // inspect the authoritative current image too.
+      let localSnapshot = null;
+      try {
+        const response = await fetch('/api/live-camera-snapshot', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ imageBase64: jpegDataUrl, capturedAt })
+        });
+        const data = await response.json();
+        if (response.ok && data.success && data.file_path) {
+          localSnapshot = { filePath: data.file_path, capturedAt };
+          latestLiveCameraSnapshot = localSnapshot;
+        }
+      } catch (error) {
+        console.warn('[Live Camera Snapshot Save Failed]', error.message);
+      }
       updateCameraBadge(true, `📸 ${frameId} 已送出`);
       console.debug('[Gemini Live Camera Frame]', { frameId, capturedAt, reason });
       return {
@@ -2069,7 +2145,8 @@
         captured_at: capturedAt,
         width: tempCanvas.width,
         height: tempCanvas.height,
-        reason
+        reason,
+        local_snapshot: localSnapshot
       };
     } catch (e) {
       console.warn('[Video Frame Send Error]', e);
@@ -2185,14 +2262,16 @@
 
   function updateCallProtection() {
     if (!liveCallStartTs || !isConnected) return;
-    const limitMs = isCameraOn ? 105000 : 870000; // 1m45 with video / 14m30 audio
-    const remainingMs = Math.max(0, limitMs - (Date.now() - liveCallStartTs));
+    const cameraMode = isCameraOn && cameraModeStartTs > 0;
+    const limitMs = cameraMode ? 105000 : 870000; // 1m45 with video / 14m30 audio
+    const protectionStartTs = cameraMode ? cameraModeStartTs : liveCallStartTs;
+    const remainingMs = Math.max(0, limitMs - (Date.now() - protectionStartTs));
     const remainingSec = Math.ceil(remainingMs / 1000);
     const status = document.getElementById('live-call-protection-status');
     if (status) {
       const mins = Math.floor(remainingSec / 60);
       const secs = remainingSec % 60;
-      status.textContent = `🛡️ 長通話保護 · 約剩 ${mins}:${String(secs).padStart(2, '0')} ${isCameraOn ? '（相機模式）' : ''}`;
+      status.textContent = `🛡️ 長通話保護 · 約剩 ${mins}:${String(secs).padStart(2, '0')} ${cameraMode ? '（相機模式）' : ''}`;
       status.className = remainingSec <= 60
         ? 'rounded-lg border border-amber-500/50 bg-amber-950/35 px-2 py-1.5 text-[10px] font-mono text-amber-300'
         : 'rounded-lg border border-slate-800 bg-slate-950/70 px-2 py-1.5 text-[10px] font-mono text-slate-400';
@@ -2397,6 +2476,7 @@
     preSetupAudioBuffer = [];
     isLiveSetupReady = false;
     sessionSnapshots = [];
+    latestLiveCameraSnapshot = null;
     sessionExecutedTools = [];
     clearPendingMainTask();
     currentTurnInputTranscript = '';
@@ -2413,6 +2493,7 @@
     isModelTurnComplete = true;
     isMuted = false;
     isCameraOn = false;
+    cameraModeStartTs = 0;
     isGoAwayClosing = false;
     lastLiveHealthIssue = null;
     liveCallStartTs = Date.now();
@@ -2531,7 +2612,7 @@
 
         } else if (name === 'capture_camera_frame') {
           const highDetail = String(args.detail || '').toLowerCase() === 'high';
-          const frame = captureCameraFrame({
+          const frame = await captureCameraFrame({
             reason: 'explicit_camera_tool',
             maxWidth: highDetail ? 1600 : 1100,
             quality: highDetail ? 0.84 : 0.76
@@ -3622,6 +3703,7 @@
         cameraStream = null;
       }
       isCameraOn = false;
+      cameraModeStartTs = 0;
 
       if (audioPlayer) {
         try { audioPlayer.destroy(); } catch (e) {}
@@ -3678,6 +3760,7 @@
       sessionExecutedTools = [];
       sessionDialogueTurns = [];
       sessionSnapshots = [];
+      latestLiveCameraSnapshot = null;
       currentTurnUser = '';
       currentTurnInputTranscript = '';
       currentTurnOutputTranscript = '';

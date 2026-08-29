@@ -33,6 +33,7 @@ const { phoneAgent } = require('./lib/phone_agent');
 const { createExtensionBridge } = require('./lib/extension_bridge');
 const { getStorageReport, deleteMediaItems, getMediaThumbnail } = require('./lib/storage');
 const { getConversationSettings, saveConversationSettings, saveConversationTitle, deleteConversationSettings } = require('./lib/conversation-settings');
+const { createTask, getTask, listTasks, updateTask } = require('./lib/tasks');
 
 async function handleStorageReport(res) {
   try {
@@ -328,7 +329,7 @@ function liveDelegateError(message, statusCode = 500) {
   return error;
 }
 
-async function runLiveDelegatedTurn({ providerId, conversationId, model, effort, task }) {
+async function runLiveDelegatedTurn({ providerId, conversationId, model, effort, task, onAbortReady }) {
   const provider = getProvider(providerId);
   const status = provider.getStatus(conversationId);
   if (status && status.isBusy) {
@@ -357,7 +358,10 @@ async function runLiveDelegatedTurn({ providerId, conversationId, model, effort,
       model,
       effort: effort || 'low',
       prompt: delegationPrompt,
-      onAbort(handler) { abortTurn = typeof handler === 'function' ? handler : abortTurn; },
+      onAbort(handler) {
+        abortTurn = typeof handler === 'function' ? handler : abortTurn;
+        if (typeof onAbortReady === 'function') onAbortReady(abortTurn);
+      },
       onEvent(event) {
         if (settled || !event) return;
         if (event.type === 'text_delta') {
@@ -376,6 +380,55 @@ async function runLiveDelegatedTurn({ providerId, conversationId, model, effort,
   });
 }
 
+async function launchLiveDelegateJob(taskRecord) {
+  const existingJob = liveDelegateJobs.get(taskRecord.id);
+  if (existingJob && existingJob.status === 'running') return existingJob;
+  const providerId = normalizeProviderId(taskRecord.provider);
+  const status = getProvider(providerId).getStatus(taskRecord.conversationId);
+  if (status && status.isBusy) throw liveDelegateError('主對話正在處理另一個任務，請稍候再交辦。', 409);
+
+  const job = {
+    id: taskRecord.id,
+    status: 'running',
+    provider: providerId,
+    conversationId: taskRecord.conversationId,
+    createdAt: Date.now(),
+    abort: null
+  };
+  liveDelegateJobs.set(job.id, job);
+  await updateTask(job.id, { status: 'running', error: '', result: '' }, { type: 'running', message: '主對話正在背景處理。' });
+  runLiveDelegatedTurn({
+    providerId,
+    conversationId: taskRecord.conversationId,
+    model: taskRecord.model,
+    effort: taskRecord.effort,
+    task: taskRecord.task,
+    onAbortReady(abort) {
+      job.abort = abort;
+      if (job.cancelled) abort();
+    }
+  }).then(async result => {
+    const latest = await getTask(job.id);
+    if (latest?.status === 'cancelled') return;
+    job.status = 'completed';
+    job.conversationId = result.conversationId;
+    job.reply = result.response.slice(0, 7000);
+    await updateTask(job.id, {
+      status: 'completed',
+      conversationId: result.conversationId,
+      result: job.reply,
+      error: ''
+    }, { type: 'completed', message: '主對話已完成任務。' });
+  }).catch(async error => {
+    const latest = await getTask(job.id);
+    if (latest?.status === 'cancelled') return;
+    job.status = 'failed';
+    job.error = error.message || '主對話委派失敗';
+    await updateTask(job.id, { status: 'failed', error: job.error }, { type: 'failed', message: job.error });
+  }).finally(() => setTimeout(() => liveDelegateJobs.delete(job.id), LIVE_DELEGATE_JOB_TTL_MS));
+  return job;
+}
+
 async function handleLiveDelegate(req, res) {
   try {
     const body = await parseJsonBody(req);
@@ -389,29 +442,31 @@ async function handleLiveDelegate(req, res) {
       throw liveDelegateError('交辦內容不可為空，且最多 5000 字。', 400);
     }
 
-    const status = getProvider(providerId).getStatus(conversationId);
-    if (status && status.isBusy) throw liveDelegateError('主對話正在處理另一個任務，請稍候再交辦。', 409);
-
-    const jobId = crypto.randomUUID();
-    const job = { id: jobId, status: 'running', provider: providerId, conversationId, createdAt: Date.now() };
-    liveDelegateJobs.set(jobId, job);
-    runLiveDelegatedTurn({ providerId, conversationId, model: body.model, effort: body.effort, task })
-      .then(result => {
-        job.status = 'completed';
-        job.conversationId = result.conversationId;
-        job.reply = result.response.slice(0, 7000);
-      })
-      .catch(error => {
-        job.status = 'failed';
-        job.error = error.message || '主對話委派失敗';
-      })
-      .finally(() => setTimeout(() => liveDelegateJobs.delete(jobId), LIVE_DELEGATE_JOB_TTL_MS));
+    const requestedTaskId = String(body.task_id || '').trim();
+    let taskRecord = requestedTaskId ? await getTask(requestedTaskId) : null;
+    if (requestedTaskId && !taskRecord) throw liveDelegateError('找不到待交辦任務，請重新建立。', 404);
+    if (taskRecord && taskRecord.status === 'running') throw liveDelegateError('這個任務已在背景處理。', 409);
+    if (taskRecord && taskRecord.status === 'completed') throw liveDelegateError('這個任務已完成。', 409);
+    if (taskRecord && taskRecord.status === 'cancelled') throw liveDelegateError('這個任務已取消，請重新建立。', 409);
+    if (!taskRecord) {
+      taskRecord = await createTask({
+        source: 'live', provider: providerId, conversationId, model: body.model,
+        effort: body.effort, task, status: 'pending_confirmation',
+        event: 'Live 已確認交辦，等待主對話接手。'
+      });
+    }
+    taskRecord = await updateTask(taskRecord.id, {
+      provider: providerId, conversationId, model: body.model || taskRecord.model,
+      effort: body.effort || taskRecord.effort, status: 'pending_confirmation'
+    }) || taskRecord;
+    const job = await launchLiveDelegateJob(taskRecord);
 
     res.writeHead(202, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
       success: true,
       accepted: true,
-      job_id: jobId,
+      job_id: job.id,
+      task_id: taskRecord.id,
       provider: providerId,
       conversation_id: conversationId,
       status: 'running'
@@ -422,23 +477,72 @@ async function handleLiveDelegate(req, res) {
   }
 }
 
-function handleLiveDelegateStatus(parsedUrl, res) {
+async function handleLiveDelegateStatus(parsedUrl, res) {
   const jobId = String(parsedUrl.query.job_id || '').trim();
   const job = liveDelegateJobs.get(jobId);
-  if (!job) {
+  const task = await getTask(jobId);
+  if (!job && !task) {
     res.writeHead(404, { 'Content-Type': 'application/json' });
     return res.end(JSON.stringify({ success: false, error: '委派工作不存在或已過期。' }));
   }
   res.writeHead(200, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({
     success: true,
-    job_id: job.id,
-    status: job.status,
-    provider: job.provider,
-    conversation_id: job.conversationId,
-    reply: job.status === 'completed' ? job.reply : undefined,
-    error: job.status === 'failed' ? job.error : undefined
+    job_id: job?.id || task.id,
+    status: task?.status || job.status,
+    provider: task?.provider || job.provider,
+    conversation_id: task?.conversationId || job.conversationId,
+    reply: (task?.status || job.status) === 'completed' ? (task?.result || job.reply) : undefined,
+    error: (task?.status || job.status) === 'failed' ? (task?.error || job.error) : undefined
   }));
+}
+
+async function handleTasks(req, res, parsedUrl) {
+  try {
+    if (req.method === 'GET') {
+      const tasks = await listTasks(parsedUrl.query.limit);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({ success: true, tasks }));
+    }
+    const body = await parseJsonBody(req);
+    const action = String(body.action || '').trim();
+    const taskId = String(body.task_id || '').trim();
+    if (action === 'create') {
+      const task = String(body.task || '').trim();
+      const conversationId = String(body.conversation_id || '').trim();
+      if (!task || !conversationId) throw liveDelegateError('任務內容與主對話不可為空。', 400);
+      const record = await createTask({
+        source: body.source || 'main_chat', provider: normalizeProviderId(body.provider), conversationId,
+        model: body.model, effort: body.effort, task, status: 'pending_confirmation'
+      });
+      res.writeHead(201, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({ success: true, task: record }));
+    }
+    const record = await getTask(taskId);
+    if (!record) throw liveDelegateError('找不到任務。', 404);
+    if (action === 'cancel') {
+      const job = liveDelegateJobs.get(taskId);
+      if (job) {
+        job.cancelled = true;
+        job.status = 'cancelled';
+      }
+      if (job?.abort) job.abort();
+      const task = await updateTask(taskId, { status: 'cancelled' }, { type: 'cancelled', message: '使用者已取消任務。' });
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({ success: true, task }));
+    }
+    if (action === 'retry') {
+      if (!['failed', 'cancelled'].includes(record.status)) throw liveDelegateError('只有失敗或已取消的任務可以重試。', 409);
+      const prepared = await updateTask(taskId, { status: 'pending_confirmation', error: '', result: '' }, { type: 'retry', message: '正在重新交辦主對話。' });
+      const job = await launchLiveDelegateJob(prepared);
+      res.writeHead(202, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({ success: true, accepted: true, task_id: prepared.id, job_id: job.id }));
+    }
+    throw liveDelegateError('不支援的任務操作。', 400);
+  } catch (err) {
+    res.writeHead(err.statusCode || 500, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: false, error: err.message || '任務操作失敗。' }));
+  }
 }
 
 async function handleProviderConversations(parsedUrl, res) {
@@ -687,6 +791,34 @@ async function handleUpload(req, res) {
   } catch (err) {
     res.writeHead(500, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: err.message }));
+  }
+}
+
+// Live frames are normally sent browser -> Gemini only. Keep one explicit,
+// on-demand frame locally so a delegated main-chat task can inspect the same
+// current view without turning Live into a continuous recorder.
+async function handleLiveCameraSnapshot(req, res) {
+  try {
+    const body = await parseJsonBody(req);
+    const raw = String(body.imageBase64 || '');
+    if (!raw.startsWith('data:image/jpeg;base64,')) throw new Error('Live 相機影像格式無效');
+    const buffer = Buffer.from(raw.slice('data:image/jpeg;base64,'.length), 'base64');
+    if (!buffer.length || buffer.length > 3 * 1024 * 1024) throw new Error('Live 相機影像大小無效');
+    const targetPath = path.join(UPLOADS_DIR, 'live_camera_latest.jpg');
+    const tempPath = `${targetPath}.tmp`;
+    await fsPromises.writeFile(tempPath, buffer);
+    await fsPromises.rename(tempPath, targetPath);
+    const capturedAt = String(body.capturedAt || new Date().toISOString());
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      success: true,
+      captured_at: capturedAt,
+      file_path: targetPath,
+      url: `/api/image?path=${encodeURIComponent(targetPath)}&v=${Date.now()}`
+    }));
+  } catch (err) {
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: false, error: err.message }));
   }
 }
 
@@ -1163,10 +1295,14 @@ const server = http.createServer(async (req, res) => {
     return handleLiveDelegate(req, res);
   } else if (pathname === '/api/live-delegate' && req.method === 'GET') {
     return handleLiveDelegateStatus(parsedUrl, res);
+  } else if (pathname === '/api/tasks' && (req.method === 'GET' || req.method === 'POST')) {
+    return handleTasks(req, res, parsedUrl);
   } else if (pathname === '/api/stop' && req.method === 'POST') {
     return handleStop(req, res);
   } else if (pathname === '/api/upload' && req.method === 'POST') {
     return handleUpload(req, res);
+  } else if (pathname === '/api/live-camera-snapshot' && req.method === 'POST') {
+    return handleLiveCameraSnapshot(req, res);
   } else if (pathname === '/api/run-code' && req.method === 'POST') {
     return handleRunCode(req, res);
   } else if (pathname === '/api/generate-title' && req.method === 'POST') {

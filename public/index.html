@@ -285,11 +285,14 @@
           <h2 class="font-bold text-slate-200 text-sm sm:text-base">歷史對話紀錄</h2>
           <div class="text-[10px] text-slate-400 font-mono">‹ 由右往左滑動即可直接刪除</div>
         </div>
-        <button id="close-drawer-btn" class="p-1 text-slate-400 hover:text-white rounded-md">
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-          </svg>
-        </button>
+        <div class="flex items-center gap-1">
+          <button type="button" data-open-task-center class="min-h-[36px] px-2 rounded-lg border border-teal-500/35 bg-teal-500/10 text-[10px] font-semibold text-teal-300 active:scale-95">✓ 任務</button>
+          <button id="close-drawer-btn" class="p-1 text-slate-400 hover:text-white rounded-md">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
       </div>
 
       <!-- 🔍 Real-time History Search Input -->
@@ -314,6 +317,16 @@
         <div class="p-4 text-center text-xs text-slate-500">載入歷史紀錄中...</div>
       </div>
     </aside>
+
+    <div id="task-center-modal" class="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-end sm:items-center justify-center p-2 sm:p-4 opacity-0 pointer-events-none transition-opacity duration-200">
+      <section class="w-full max-w-lg max-h-[82vh] overflow-hidden rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl flex flex-col">
+        <div class="flex items-center justify-between gap-2 border-b border-slate-800 p-3">
+          <div><h2 class="text-sm font-bold text-slate-100">✓ 任務中心</h2><p class="text-[10px] text-slate-500">Live 與主對話交辦的可追蹤工作</p></div>
+          <div class="flex gap-1"><button id="refresh-task-center-btn" type="button" class="min-h-[36px] min-w-[36px] rounded-lg text-slate-300 active:scale-95" title="重新整理">↻</button><button id="close-task-center-btn" type="button" class="min-h-[36px] min-w-[36px] rounded-lg text-slate-300 active:scale-95" title="關閉">✕</button></div>
+        </div>
+        <div id="task-center-list" class="overflow-y-auto p-3 space-y-2"><div class="py-8 text-center text-xs text-slate-500">載入任務中…</div></div>
+      </section>
+    </div>
 
     <!-- MESSAGES SCROLL AREA -->
     <main id="messages-container" class="flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-4 space-y-3.5 select-text min-h-0 w-full max-w-full">
@@ -1216,7 +1229,8 @@
   <script src="/js/tools.js?v=7.8"></script>
   <script src="/js/storage.js?v=4"></script>
   <script src="/js/chat.js?v=1787942400"></script>
-  <script src="/js/live.js?v=1787957100"></script>
+  <script src="/js/tasks.js?v=1"></script>
+  <script src="/js/live.js?v=1787957400"></script>
   <script src="/js/phone_agent.js?v=1.3"></script>
   <script src="/js/app.js?v=1787950200"></script>
 </body>
