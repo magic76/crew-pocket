@@ -3641,6 +3641,70 @@
   // Expose globally for history rendering across sessions
   window.buildCallSummaryCardHtml = buildCallSummaryCardHtml;
 
+  // This must be safe to call more than once.  It is shared by the normal
+  // hangup path and the error fallback so a partially failed teardown can
+  // never leave audio capture, the Gemini socket, or health timers behind.
+  function releaseLiveRuntimeResources() {
+    const stopTracks = stream => {
+      try {
+        stream?.getTracks?.().forEach(track => {
+          try { track.stop(); } catch (_) {}
+        });
+      } catch (_) {}
+    };
+
+    isConnected = false;
+    isLiveSetupReady = false;
+    livePhase = LIVE_PHASE.IDLE;
+    preSetupAudioBuffer = [];
+    audioSendBuffer = [];
+    isAiResponding = false;
+    isModelTurnComplete = true;
+    isMuted = false;
+    hasSentFrameForCurrentTurn = false;
+    liveCallStartTs = 0;
+    cameraModeStartTs = 0;
+    stopCallProtection();
+    stopLiveHealthMonitor();
+    stopVisualizer();
+    stopSpeechRecognition();
+
+    if (cameraInterval) clearInterval(cameraInterval);
+    cameraInterval = null;
+    stopTracks(cameraStream);
+    cameraStream = null;
+    isCameraOn = false;
+
+    if (mediaVolumeUpdateTimer) clearTimeout(mediaVolumeUpdateTimer);
+    mediaVolumeUpdateTimer = null;
+    if (voicePreviewSource) {
+      try { voicePreviewSource.stop(); } catch (_) {}
+      try { voicePreviewSource.disconnect(); } catch (_) {}
+    }
+    voicePreviewSource = null;
+    if (audioPlayer) {
+      try { audioPlayer.destroy(); } catch (_) {}
+    }
+    audioPlayer = null;
+    if (micAudioSource) {
+      try { micAudioSource.disconnect(); } catch (_) {}
+    }
+    micAudioSource = null;
+    stopTracks(micMediaStream);
+    micMediaStream = null;
+    analyser = null;
+    if (audioContext) {
+      try { audioContext.close(); } catch (_) {}
+    }
+    audioContext = null;
+    releaseVoiceprintWorker();
+    if (ws) {
+      try { ws.close(1000, 'Live session ended'); } catch (_) {}
+    }
+    ws = null;
+    try { setMediaSessionActive(false); } catch (_) {}
+  }
+
   async function endLiveSession() {
     let turnsToSave = [];
     let toolsToSave = [];
@@ -3693,49 +3757,7 @@
         }
       }
 
-      isConnected = false;
-      isLiveSetupReady = false;
-      livePhase = LIVE_PHASE.IDLE;
-      preSetupAudioBuffer = [];
-      isAiResponding = false;
-      isModelTurnComplete = true;
-      stopCallProtection();
-      stopVisualizer();
-      stopSpeechRecognition();
-
-      if (cameraInterval) {
-        clearInterval(cameraInterval);
-        cameraInterval = null;
-      }
-      if (cameraStream) {
-        cameraStream.getTracks().forEach(t => t.stop());
-        cameraStream = null;
-      }
-      isCameraOn = false;
-      cameraModeStartTs = 0;
-
-      if (audioPlayer) {
-        try { audioPlayer.destroy(); } catch (e) {}
-        audioPlayer = null;
-      }
-
-      if (micAudioSource) {
-        try { micAudioSource.disconnect(); } catch (e) {}
-        micAudioSource = null;
-      }
-      if (micMediaStream) {
-        try { micMediaStream.getTracks().forEach(t => t.stop()); } catch (e) {}
-        micMediaStream = null;
-      }
-      if (audioContext) {
-        try { audioContext.close(); } catch (e) {}
-        audioContext = null;
-      }
-      releaseVoiceprintWorker();
-      if (ws) {
-        try { ws.close(); } catch (e) {}
-        ws = null;
-      }
+      releaseLiveRuntimeResources();
 
       if (typeof window.haptic === 'function') {
         try { window.haptic('heavy'); } catch (e) {}
@@ -3758,8 +3780,6 @@
         liveBottomDock.classList.remove('flex');
       }
       if (standardInputBar) standardInputBar.classList.remove('hidden');
-
-      try { setMediaSessionActive(false); } catch (e) {}
 
       // 🧹 1. Cleanly remove the in-call Live card from screen
       clearPendingMainTask();
@@ -3809,11 +3829,10 @@
       }).catch(e => console.warn('[Live Sync Fetch Failed]', e));
     } catch (fatalErr) {
       console.error('[Live endLiveSession Fatal Error]', fatalErr);
-      // Teardown fallback: even if one cleanup operation fails, restore the
-      // normal input UI and release the connection state.
-      isConnected = false;
-      isLiveSetupReady = false;
-      preSetupAudioBuffer = [];
+      // Teardown fallback: even if one cleanup operation fails, force-release
+      // every capture, socket, timer, and audio resource before restoring UI.
+      releaseLiveRuntimeResources();
+      try { clearPendingMainTask(); } catch (_) {}
       const fallbackDock = document.getElementById('live-bottom-dock');
       const fallbackInput = document.getElementById('standard-input-bar');
       if (fallbackDock) {
