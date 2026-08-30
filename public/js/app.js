@@ -173,6 +173,84 @@ function bindEdgeDrawerGesture() {
   document.addEventListener('touchcancel', () => clearGesture({ resetPreview: true }), { passive: true });
 }
 
+// Conversation rows own their left-swipe delete gesture. Everywhere else in
+// the open drawer (header, search padding, and list whitespace) can close it.
+function bindDrawerCloseGesture() {
+  if (!drawer || !drawerOverlay) return;
+
+  const CLOSE_DISTANCE_PX = 96;
+  const BLOCKED_TARGETS = 'input, textarea, select, button, a, [contenteditable="true"], .swipe-item-content';
+  let gesture = null;
+  const findTouch = (touches, identifier) => Array.from(touches).find(touch => touch.identifier === identifier);
+  const resetPreview = () => {
+    drawer.style.transition = 'transform 180ms ease-out';
+    drawer.style.transform = '';
+    drawerOverlay.style.transition = 'opacity 180ms ease-out';
+    drawerOverlay.style.opacity = '';
+    window.setTimeout(() => {
+      if (!drawer.classList.contains('-translate-x-full')) drawer.style.transition = '';
+      if (!drawerOverlay.classList.contains('opacity-0')) drawerOverlay.style.transition = '';
+    }, 190);
+  };
+  const clearGesture = ({ reset = false } = {}) => {
+    if (reset && gesture?.previewing) resetPreview();
+    gesture = null;
+  };
+  const closeDrawerFromSwipe = () => {
+    drawer.classList.add('-translate-x-full');
+    drawerOverlay.classList.add('opacity-0', 'pointer-events-none');
+    drawer.style.transition = 'none';
+    drawer.style.transform = 'translateX(-100%)';
+    drawerOverlay.style.transition = 'none';
+    drawerOverlay.style.opacity = '0';
+    if (typeof haptic === 'function') haptic('light');
+    requestAnimationFrame(() => {
+      drawer.style.transition = '';
+      drawer.style.transform = '';
+      drawerOverlay.style.transition = '';
+      drawerOverlay.style.opacity = '';
+    });
+  };
+
+  drawer.addEventListener('touchstart', event => {
+    if (drawer.classList.contains('-translate-x-full') || event.touches.length !== 1) return;
+    if (event.target instanceof Element && event.target.closest(BLOCKED_TARGETS)) return;
+    const touch = event.touches[0];
+    gesture = { touchId: touch.identifier, startX: touch.clientX, startY: touch.clientY, decided: false, previewing: false };
+  }, { passive: true });
+
+  drawer.addEventListener('touchmove', event => {
+    if (!gesture || gesture.decided) return;
+    const touch = findTouch(event.touches, gesture.touchId);
+    if (!touch) return;
+    const deltaX = touch.clientX - gesture.startX;
+    const deltaY = touch.clientY - gesture.startY;
+    if (Math.abs(deltaX) < 12 && Math.abs(deltaY) < 12) return;
+    if (deltaX >= 0 || Math.abs(deltaY) >= Math.abs(deltaX)) {
+      gesture.decided = true;
+      return;
+    }
+
+    event.preventDefault();
+    const progress = Math.min(1, -deltaX / CLOSE_DISTANCE_PX);
+    drawer.style.transition = 'none';
+    drawer.style.transform = `translateX(${-progress * 100}%)`;
+    drawerOverlay.style.transition = 'none';
+    drawerOverlay.style.opacity = String(1 - progress);
+    gesture.previewing = true;
+    if (-deltaX >= CLOSE_DISTANCE_PX) {
+      gesture.decided = true;
+      closeDrawerFromSwipe();
+      clearGesture();
+    }
+  }, { passive: false });
+
+  drawer.addEventListener('touchend', event => {
+    if (gesture && findTouch(event.changedTouches, gesture.touchId)) clearGesture({ reset: true });
+  }, { passive: true });
+  drawer.addEventListener('touchcancel', () => clearGesture({ reset: true }), { passive: true });
+}
+
 // 4. Bind Global UI Listeners
 function initAppAndListeners() {
   // 🚀 Holographic Quantum Splash Screen Dismissal (Option 1)
@@ -192,6 +270,7 @@ function initAppAndListeners() {
   if (closeDrawerBtn) closeDrawerBtn.addEventListener('click', () => toggleDrawer(false));
   if (drawerOverlay) drawerOverlay.addEventListener('click', () => toggleDrawer(false));
   bindEdgeDrawerGesture();
+  bindDrawerCloseGesture();
 
   // Lightbox listeners
   if (closeLightboxBtn) closeLightboxBtn.addEventListener('click', () => lightbox.classList.add('opacity-0', 'pointer-events-none'));
