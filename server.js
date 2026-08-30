@@ -894,13 +894,15 @@ function notifyCompanionService(state, rawText = '') {
   try {
     let clean = '';
     if (rawText) {
+      // The helper keeps the collapsed notification concise itself, while the
+      // expanded BigText notification shows this complete, readable response.
       clean = rawText
         .replace(/<[^>]+>/g, '')
-        .replace(/[#*`_\[\]()]/g, '')
-        .split('\n')
-        .map(l => l.trim())
-        .filter(l => l.length > 0)[0] || '';
-      if (clean.length > 48) clean = clean.slice(0, 45) + '...';
+        .replace(/[#*`_]/g, '')
+        .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
+      if (clean.length > 3500) clean = clean.slice(0, 3497) + '...';
     }
     const data = JSON.stringify({ state, text: clean });
     const req = http.request({

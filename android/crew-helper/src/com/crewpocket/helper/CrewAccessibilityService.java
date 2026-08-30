@@ -353,19 +353,10 @@ public class CrewAccessibilityService extends AccessibilityService {
                 String state = "DONE";
                 String text = "";
                 try {
-                    if (body.contains("\"state\":")) {
-                        state = body.substring(body.indexOf("\"state\":") + 8).split("[\",}]")[1].trim();
-                    }
-                    if (body.contains("\"text\":")) {
-                        int tStart = body.indexOf("\"text\":") + 7;
-                        int firstQuote = body.indexOf("\"", tStart);
-                        if (firstQuote != -1) {
-                            int secondQuote = body.indexOf("\"", firstQuote + 1);
-                            if (secondQuote != -1) {
-                                text = body.substring(firstQuote + 1, secondQuote);
-                            }
-                        }
-                    }
+                    String parsedState = getJsonString(body, "state");
+                    String parsedText = getJsonString(body, "text");
+                    if (parsedState != null && !parsedState.isEmpty()) state = parsedState;
+                    if (parsedText != null) text = parsedText;
                 } catch (Exception ignored) {}
 
                 final String fState = state;
@@ -470,6 +461,46 @@ public class CrewAccessibilityService extends AccessibilityService {
         } catch (Exception e) {
             try { socket.close(); } catch (Exception ignored) {}
         }
+    }
+
+    /** Minimal JSON string reader for the helper's tiny local-only API. */
+    private String getJsonString(String json, String key) {
+        String marker = "\"" + key + "\"";
+        int keyIndex = json.indexOf(marker);
+        if (keyIndex < 0) return null;
+        int colon = json.indexOf(':', keyIndex + marker.length());
+        if (colon < 0) return null;
+        int start = json.indexOf('"', colon + 1);
+        if (start < 0) return null;
+        StringBuilder value = new StringBuilder();
+        boolean escaped = false;
+        for (int i = start + 1; i < json.length(); i++) {
+            char ch = json.charAt(i);
+            if (escaped) {
+                switch (ch) {
+                    case 'n': value.append('\n'); break;
+                    case 'r': value.append('\r'); break;
+                    case 't': value.append('\t'); break;
+                    case 'b': value.append('\b'); break;
+                    case 'f': value.append('\f'); break;
+                    case 'u':
+                        if (i + 4 < json.length()) {
+                            try { value.append((char) Integer.parseInt(json.substring(i + 1, i + 5), 16)); i += 4; }
+                            catch (Exception ignored) { value.append('u'); }
+                        } else value.append('u');
+                        break;
+                    default: value.append(ch); break;
+                }
+                escaped = false;
+            } else if (ch == '\\') {
+                escaped = true;
+            } else if (ch == '"') {
+                return value.toString();
+            } else {
+                value.append(ch);
+            }
+        }
+        return null;
     }
 
     private void performTap(float x, float y) {

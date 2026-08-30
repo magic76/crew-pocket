@@ -239,6 +239,8 @@ public class FloatingBubbleManager {
                                 .invoke(notifications, channel);
                         } catch (Exception ignored) {}
                     }
+                    String fullStatus = status == null ? "待命" : status;
+                    String compactStatus = compactNotificationStatus(fullStatus);
 
                     Intent inputIntent = new Intent(context, CrewNotificationReceiver.class)
                         .setAction(CrewNotificationReceiver.ACTION_INPUT);
@@ -258,7 +260,8 @@ public class FloatingBubbleManager {
                     }
                     builder.setSmallIcon(android.R.drawable.ic_dialog_info)
                         .setContentTitle("Crew Pocket Helper")
-                        .setContentText(status == null ? "待命" : status)
+                        .setContentText(compactStatus)
+                        .setStyle(new Notification.BigTextStyle().bigText(fullStatus))
                         .setOngoing(true)
                         .setOnlyAlertOnce(true)
                         .setShowWhen(false)
@@ -269,6 +272,11 @@ public class FloatingBubbleManager {
                 } catch (Exception ignored) {}
             }
         });
+    }
+
+    private String compactNotificationStatus(String status) {
+        String oneLine = status.replaceAll("\\s+", " ").trim();
+        return oneLine.length() > 48 ? oneLine.substring(0, 45) + "..." : oneLine;
     }
 
     public void cancelNotification() {
