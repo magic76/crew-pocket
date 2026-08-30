@@ -1060,11 +1060,9 @@ async function loadConversationHistory(convId) {
   const renderVersion = ++historyRenderVersion;
   const loadOverlay = showHistoryLoadOverlay();
   historyPageState = null;
-  // 🛡️ Abort any ongoing stream from previous session to prevent cross-session state pollution
-  if (currentAbortController) {
-    try { currentAbortController.abort(); } catch(e) {}
-    currentAbortController = null;
-  }
+  // Do not abort another conversation's stream. Its detached DOM can finish
+  // safely in the background and its persisted history will be available when
+  // the user returns; the guards inside sendMessage prevent cross-rendering.
 
   currentConversationId = convId;
   localStorage.setItem(activeConversationStorageKey(), convId);
@@ -1372,6 +1370,14 @@ function renderConversationItems(conversations, filterQuery = '') {
       if (isDeleted || isVerticalScroll) return;
 
       if (currentDiffX < -75) {
+        const title = String(conv.title || conv.preview || '這個對話').trim();
+        const confirmed = window.confirm(`確定刪除「${title}」？\n\n此對話將永久移除，無法復原。`);
+        if (!confirmed) {
+          currentDiffX = 0;
+          contentEl.style.transition = 'transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1)';
+          contentEl.style.transform = 'translateX(0px)';
+          return;
+        }
         isDeleted = true;
         deleteConversationDirect(conv.id, wrapper, conversationProvider);
       } else {
@@ -1748,10 +1754,13 @@ async function sendMessage(queuedMessage = null) {
   }
 
   streamingStartedAt = Date.now();
-  currentAbortController = new AbortController();
+  const streamAbortController = new AbortController();
+  currentAbortController = streamAbortController;
   setStreamingState(true);
 
   const activeStreamConvId = currentConversationId;
+  let streamConversationId = activeStreamConvId;
+  const streamProvider = currentProvider;
   const isNewConversation = !activeStreamConvId;
   const isBtwQuery = /^\s*\/btw\b/i.test(text);
 
@@ -1843,6 +1852,8 @@ async function sendMessage(queuedMessage = null) {
   const liveTickerTextElem = assistantMsgDiv.querySelector('.live-ticker-text');
   const thinkingContainerElem = assistantMsgDiv.querySelector('.thinking-container');
   const toolsContainerElem = assistantMsgDiv.querySelector('.tools-container');
+  const isStreamVisible = () => assistantMsgDiv.isConnected
+    && (!streamConversationId ? currentConversationId === null : currentConversationId === streamConversationId);
 
   let toolRenderTimer = null;
   let toolRenderPending = false;
@@ -1932,14 +1943,14 @@ async function sendMessage(queuedMessage = null) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        provider: currentProvider,
+        provider: streamProvider,
         prompt: text,
         conversation_id: activeStreamConvId,
         image_path: imgPath,
         model: currentModel,
         effort: (typeof currentEffort !== 'undefined') ? currentEffort : 'low'
       }),
-      signal: currentAbortController.signal
+      signal: streamAbortController.signal
     });
 
     const reader = response.body.getReader();
@@ -1966,6 +1977,7 @@ async function sendMessage(queuedMessage = null) {
           try {
             const data = JSON.parse(rawData);
             if (currentEvent === 'init' && data.conversation_id) {
+              streamConversationId = data.conversation_id;
               // 🛡️ Only update global currentConversationId if user hasn't switched to another conversation
               if (currentConversationId === activeStreamConvId || currentConversationId === null) {
                 currentConversationId = data.conversation_id;
@@ -1985,9 +1997,9 @@ async function sendMessage(queuedMessage = null) {
                 const scrollBadge = document.getElementById('scroll-bottom-badge');
                 if (scrollBadge) scrollBadge.classList.remove('hidden');
               }
-              scrollToBottom();
+              if (isStreamVisible()) scrollToBottom();
             } else if (currentEvent === 'context') {
-              updateContextPill(data);
+              if (isStreamVisible()) updateContextPill(data);
             } else if (currentEvent === 'tool') {
               const initStep = pipelineSteps.get('init');
               if (initStep) initStep.status = 'done';
@@ -2025,7 +2037,7 @@ async function sendMessage(queuedMessage = null) {
                     const scrollBadge = document.getElementById('scroll-bottom-badge');
                     if (scrollBadge) scrollBadge.classList.remove('hidden');
                   }
-                  scrollToBottom();
+                  if (isStreamVisible()) scrollToBottom();
                 });
               }
 
@@ -2034,8 +2046,8 @@ async function sendMessage(queuedMessage = null) {
               clearInterval(liveTimerInterval);
               liveStatusElem.style.display = 'none';
 
-              const targetDoneConvId = data.conversation_id || activeStreamConvId;
-              if (targetDoneConvId && (currentConversationId === activeStreamConvId || currentConversationId === null)) {
+              const targetDoneConvId = data.conversation_id || streamConversationId;
+              if (targetDoneConvId && (currentConversationId === streamConversationId || currentConversationId === null)) {
                 currentConversationId = targetDoneConvId;
                 localStorage.setItem(activeConversationStorageKey(), currentConversationId);
               }
@@ -2049,8 +2061,8 @@ async function sendMessage(queuedMessage = null) {
 
               // 🧠 Refresh Context Usage Stats
               if (targetDoneConvId) {
-                fetch(`/api/history?id=${targetDoneConvId}&${providerQuery()}`).then(r => r.json()).then(hData => {
-                  if (hData.context_stats) updateContextPill(hData.context_stats);
+                fetch(`/api/history?id=${targetDoneConvId}&provider=${encodeURIComponent(streamProvider)}`).then(r => r.json()).then(hData => {
+                  if (hData.context_stats && currentConversationId === targetDoneConvId) updateContextPill(hData.context_stats);
                   loadConversations();
                 }).catch(() => {});
               }
@@ -2167,12 +2179,12 @@ async function sendMessage(queuedMessage = null) {
         `;
         assistantMsgDiv.querySelector('.bg-slate-900').appendChild(recoveryBadge);
 
-        if (currentConversationId) {
+        if (streamConversationId) {
           let attempts = 0;
           const checkHistory = async () => {
             attempts++;
             try {
-              const hRes = await fetch(`/api/history?id=${currentConversationId}&${providerQuery()}`);
+              const hRes = await fetch(`/api/history?id=${streamConversationId}&provider=${encodeURIComponent(streamProvider)}`);
               if (hRes.ok) {
                 const hData = await hRes.json();
                 if (hData.messages && hData.messages.length > 0) {
@@ -2207,7 +2219,7 @@ async function sendMessage(queuedMessage = null) {
                 <span class="flex items-center gap-1 text-slate-400">
                   <span>⚠️ 已保留現有回覆內容</span>
                 </span>
-                <button type="button" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-[10px]" onclick="loadConversationHistory('${currentConversationId}')">🔄 重整</button>
+                <button type="button" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-[10px]" onclick="loadConversationHistory('${streamConversationId}')">🔄 重整</button>
               `;
             }
           };
@@ -2228,9 +2240,11 @@ async function sendMessage(queuedMessage = null) {
     clearInterval(liveTimerInterval);
     queueLiveToolsRender(true);
     liveStatusElem.style.display = 'none';
-    setStreamingState(false);
-    currentAbortController = null;
-    scrollToBottom();
+    if (currentAbortController === streamAbortController) {
+      currentAbortController = null;
+      setStreamingState(false);
+    }
+    if (isStreamVisible()) scrollToBottom();
     setTimeout(flushQueuedBtwMessage, 0);
   }
 }

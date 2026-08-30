@@ -72,6 +72,107 @@ window.addEventListener('offline', () => {
 
 updateNetworkUI(navigator.onLine);
 
+// Open the conversation drawer with a deliberate swipe from the left side.
+// Keep the gesture narrowly scoped so it cannot steal range
+// sliders, typing, Live controls, or the drawer's own swipe-to-delete rows.
+function bindEdgeDrawerGesture() {
+  if (!drawer || !drawerOverlay) return;
+
+  const DRAWER_GESTURE_END_PX = 120;
+  const OPEN_DISTANCE_PX = 200;
+  const INTERACTIVE_TARGETS = [
+    'input', 'textarea', 'select', 'button', 'a', '[contenteditable="true"]',
+    '[data-drawer-swipe-ignore]', '#live-inline-card', '[role="dialog"]'
+  ].join(', ');
+  let gesture = null;
+
+  const resetDrawerPreview = () => {
+    drawer.style.transition = 'transform 180ms ease-out';
+    drawer.style.transform = '';
+    drawerOverlay.style.transition = 'opacity 180ms ease-out';
+    drawerOverlay.style.opacity = '';
+    window.setTimeout(() => {
+      if (drawer.classList.contains('-translate-x-full')) drawer.style.transition = '';
+      if (drawerOverlay.classList.contains('opacity-0')) drawerOverlay.style.transition = '';
+    }, 190);
+  };
+  const clearGesture = ({ resetPreview = false } = {}) => {
+    if (resetPreview && gesture?.previewing) resetDrawerPreview();
+    gesture = null;
+  };
+  const findTouch = (touches, identifier) => Array.from(touches).find(touch => touch.identifier === identifier);
+  const openDrawerFromSwipe = () => {
+    drawer.classList.remove('-translate-x-full');
+    drawerOverlay.classList.remove('opacity-0', 'pointer-events-none');
+    drawer.style.transition = 'none';
+    drawer.style.transform = 'translateX(0px)';
+    drawerOverlay.style.transition = 'none';
+    drawerOverlay.style.opacity = '1';
+    if (typeof haptic === 'function') haptic('light');
+    if (typeof loadConversations === 'function') loadConversations();
+    requestAnimationFrame(() => {
+      drawer.style.transition = '';
+      drawer.style.transform = '';
+      drawerOverlay.style.transition = '';
+      drawerOverlay.style.opacity = '';
+    });
+  };
+
+  document.addEventListener('touchstart', event => {
+    if (!drawer.classList.contains('-translate-x-full')) return;
+    if (event.touches.length !== 1) return;
+    const touch = event.touches[0];
+    if (touch.clientX > DRAWER_GESTURE_END_PX) return;
+    if (event.target instanceof Element && event.target.closest(INTERACTIVE_TARGETS)) return;
+
+    gesture = {
+      touchId: touch.identifier,
+      startX: touch.clientX,
+      startY: touch.clientY,
+      decided: false,
+      previewing: false
+    };
+  }, { passive: true });
+
+  document.addEventListener('touchmove', event => {
+    if (!gesture || gesture.decided) return;
+    const touch = findTouch(event.touches, gesture.touchId);
+    if (!touch) return;
+
+    const deltaX = touch.clientX - gesture.startX;
+    const deltaY = touch.clientY - gesture.startY;
+    if (Math.abs(deltaX) < 12 && Math.abs(deltaY) < 12) return;
+
+    // A scroll or a leftward gesture is never a drawer request.
+    if (deltaX <= 0 || Math.abs(deltaY) >= Math.abs(deltaX)) {
+      gesture.decided = true;
+      return;
+    }
+
+    event.preventDefault();
+    const drawerWidth = drawer.getBoundingClientRect().width || 288;
+    // The full 200px gesture maps to the drawer's full width. This avoids a
+    // final snap when the threshold is reached on narrow or wide screens.
+    const revealedPx = Math.min(drawerWidth, drawerWidth * (deltaX / OPEN_DISTANCE_PX));
+    drawer.style.transition = 'none';
+    drawer.style.transform = `translateX(${-drawerWidth + revealedPx}px)`;
+    drawerOverlay.style.transition = 'none';
+    drawerOverlay.style.opacity = String(Math.min(1, revealedPx / drawerWidth));
+    gesture.previewing = true;
+
+    if (deltaX >= OPEN_DISTANCE_PX) {
+      gesture.decided = true;
+      openDrawerFromSwipe();
+      clearGesture();
+    }
+  }, { passive: false });
+
+  document.addEventListener('touchend', event => {
+    if (gesture && findTouch(event.changedTouches, gesture.touchId)) clearGesture({ resetPreview: true });
+  }, { passive: true });
+  document.addEventListener('touchcancel', () => clearGesture({ resetPreview: true }), { passive: true });
+}
+
 // 4. Bind Global UI Listeners
 function initAppAndListeners() {
   // 🚀 Holographic Quantum Splash Screen Dismissal (Option 1)
@@ -90,6 +191,7 @@ function initAppAndListeners() {
   if (menuBtn) menuBtn.addEventListener('click', () => toggleDrawer(true));
   if (closeDrawerBtn) closeDrawerBtn.addEventListener('click', () => toggleDrawer(false));
   if (drawerOverlay) drawerOverlay.addEventListener('click', () => toggleDrawer(false));
+  bindEdgeDrawerGesture();
 
   // Lightbox listeners
   if (closeLightboxBtn) closeLightboxBtn.addEventListener('click', () => lightbox.classList.add('opacity-0', 'pointer-events-none'));
