@@ -125,6 +125,11 @@
   const livePromptInput = document.getElementById('live-prompt-input');
   const liveSaveKeyBtn = document.getElementById('live-save-key-btn');
   const liveCloseKeyBtn = document.getElementById('live-close-key-btn');
+  const liveSettingsSessionNote = document.getElementById('live-settings-session-note');
+  const liveSettingsSummaryVoice = document.getElementById('live-settings-summary-voice');
+  const liveSettingsSummaryPace = document.getElementById('live-settings-summary-pace');
+  const liveSettingsSummaryInterruption = document.getElementById('live-settings-summary-interruption');
+  const liveSettingsAdvanced = document.getElementById('live-settings-advanced');
   const messagesContainer = document.getElementById('messages-container');
 
   // ==========================================
@@ -954,10 +959,10 @@
     card.className = 'fixed left-2 right-2 top-[60px] z-40 flex justify-center transition-all duration-300 animate-fadeIn pointer-events-none';
     
     card.innerHTML = `
-      <div class="bg-gradient-to-b from-slate-900 via-slate-900 to-slate-950 border border-teal-500/50 rounded-2xl p-2.5 sm:p-3.5 text-xs sm:text-sm shadow-2xl shadow-teal-950/50 w-full max-w-2xl min-w-0 space-y-2.5 relative overflow-hidden pointer-events-auto">
+      <div class="bg-gradient-to-b from-slate-900 via-slate-900 to-slate-950 border border-teal-500/50 rounded-2xl p-2 sm:p-2.5 text-xs sm:text-sm shadow-2xl shadow-teal-950/50 w-full max-w-2xl min-w-0 space-y-1.5 relative max-h-[62dvh] overflow-y-auto overscroll-contain pointer-events-auto">
         
-        <!-- CARD TOP TOOLBAR: 狀態指示 (靠左) + 調音/音色膠囊 (靠右) -->
-        <div class="border-b border-slate-800/80 pb-2 flex items-center justify-between gap-1.5 min-w-0">
+        <!-- Compact call HUD: status and the latest line stay visible; details are opt-in. -->
+        <div class="flex items-center justify-between gap-1.5 min-w-0">
           <div class="flex items-center gap-1.5 min-w-0">
             ${liveSessionMode === 'discussion' ? '<span class="px-1.5 py-0.5 rounded-md bg-amber-500/15 border border-amber-500/40 text-amber-300 text-[10px] font-bold shrink-0">🗣️ 討論</span>' : ''}
             <span id="live-card-status-dot" class="w-2 h-2 rounded-full bg-amber-400 animate-pulse shrink-0"></span>
@@ -965,54 +970,17 @@
           </div>
           
           <div class="flex items-center gap-1.5 shrink-0">
-            <button id="live-card-health-toggle-btn" type="button" class="w-7 h-7 rounded-full bg-emerald-950/80 hover:bg-emerald-900 active:scale-95 border border-emerald-500/40 text-emerald-300 text-[11px] flex items-center justify-center transition shadow-sm cursor-pointer" title="開啟連線健康狀態">🩺</button>
-            <button id="live-card-expand-toggle-btn" type="button" class="w-7 h-7 rounded-full bg-indigo-950/80 hover:bg-indigo-900 active:scale-95 border border-indigo-500/40 text-indigo-300 text-[11px] flex items-center justify-center transition shadow-sm cursor-pointer" title="展開通話面板">↗</button>
-            <!-- 🎛️ Live Tuning Panel Toggle Button -->
-            <button id="live-card-tuning-toggle-btn" type="button" class="hidden w-6 h-6 rounded-full bg-slate-800/90 hover:bg-slate-700 active:scale-95 border border-slate-700 text-[11px] text-slate-300 flex items-center justify-center transition shadow-sm cursor-pointer" title="開啟/收合即時調音台">🎛️</button>
-
-            <!-- 🗣️ Voice Selector Pill (音色切換膠囊 · 靠右放置) -->
-            <div class="relative inline-flex items-center shrink-0">
-              <select id="live-card-voice-select" class="appearance-none bg-teal-950/80 hover:bg-teal-900 active:scale-95 border border-teal-500/50 text-teal-300 text-[11px] font-semibold rounded-full pl-2 pr-4 py-0.5 outline-none transition cursor-pointer shadow-sm" title="點擊切換音色">
-                ${renderVoiceOptions(selectedVoice)}
-              </select>
-              <span class="pointer-events-none absolute right-1 text-[8px] text-teal-400 font-mono">▾</span>
+            <div class="h-7 w-16 sm:w-24 rounded-lg border border-slate-800 bg-black/45 px-1" title="即時聲音波形">
+              <canvas id="live-card-canvas" width="120" height="28" class="w-full h-full"></canvas>
             </div>
+            <span id="live-card-camera-state" class="hidden rounded-full border border-indigo-500/40 bg-indigo-950/80 px-2 py-1 text-[10px] font-mono text-indigo-300">📷 相機</span>
+            <button id="live-card-expand-toggle-btn" type="button" class="min-w-[40px] min-h-[40px] rounded-xl bg-indigo-950/80 hover:bg-indigo-900 active:scale-95 border border-indigo-500/40 text-indigo-300 text-sm flex items-center justify-center transition shadow-sm cursor-pointer" title="展開通話資訊">⌃</button>
           </div>
         </div>
 
-        <!-- 🎙️ In-card call controls: keep the composer area unobstructed. -->
-        <div id="live-card-action-row" class="flex items-center gap-1.5 border-b border-slate-800/70 pb-2">
-          <button id="live-card-mute-btn" type="button" class="flex-1 min-h-[40px] px-2 rounded-lg bg-slate-800/90 hover:bg-slate-700 active:scale-95 border border-slate-700 text-slate-200 text-[11px] font-semibold flex items-center justify-center gap-1.5 transition" title="點擊切換靜音">
-            <span id="live-card-mute-icon">🎙️</span><span id="live-card-mute-label">靜音</span>
-          </button>
-          <button id="live-card-camera-btn" type="button" class="flex-1 min-h-[40px] px-2 rounded-lg bg-slate-800/90 hover:bg-slate-700 active:scale-95 border border-slate-700 text-slate-200 text-[11px] font-semibold flex items-center justify-center gap-1.5 transition" title="開啟/關閉相機">
-            <span>📷</span><span id="live-card-camera-label">相機</span>
-          </button>
-          <button id="live-card-hangup-btn" type="button" class="flex-1 min-h-[40px] px-2 rounded-lg bg-rose-600/90 hover:bg-rose-500 active:scale-95 border border-rose-500/60 text-white text-[11px] font-semibold flex items-center justify-center gap-1.5 transition" title="結束通話">
-            <span>⏹</span><span>掛斷</span>
-          </button>
-        </div>
-
-        <div class="flex items-center gap-2 px-1" title="調整 Android 系統媒體音量">
-          <span class="text-slate-400 text-xs shrink-0">🔈</span>
-          <input id="live-card-volume-slider" type="range" min="0" max="100" step="1" value="${selectedVolume}" class="flex-1 h-8 accent-teal-400 cursor-pointer">
-          <span id="live-card-volume-value" class="w-9 text-right text-[10px] font-mono text-teal-300 shrink-0">${selectedVolume}%</span>
-        </div>
-
-        <div id="live-call-protection-status" class="rounded-lg border border-slate-800 bg-slate-950/70 px-2 py-1.5 text-[10px] font-mono text-slate-400">🛡️ 長通話保護待命</div>
-
-        <div id="live-card-health-drawer" class="hidden rounded-xl border border-emerald-500/35 bg-slate-950/85 p-2.5 space-y-2 text-[10px] font-mono">
-          <div class="flex items-center justify-between gap-2">
-            <span class="font-bold text-emerald-300">🩺 Live 連線健康</span>
-            <span id="live-health-phase" class="text-slate-400">待初始化</span>
-          </div>
-          <div class="grid grid-cols-2 gap-1.5">
-            <div class="rounded-lg bg-slate-900/80 border border-slate-800 px-2 py-1.5"><span class="block text-slate-500">WebSocket</span><span id="live-health-connection" class="text-slate-300">未建立</span></div>
-            <div class="rounded-lg bg-slate-900/80 border border-slate-800 px-2 py-1.5"><span class="block text-slate-500">麥克風</span><span id="live-health-mic" class="text-slate-300">未開啟</span></div>
-            <div class="rounded-lg bg-slate-900/80 border border-slate-800 px-2 py-1.5"><span class="block text-slate-500">AI 音訊</span><span id="live-health-playback" class="text-slate-300">等待中</span></div>
-            <div class="rounded-lg bg-slate-900/80 border border-slate-800 px-2 py-1.5"><span class="block text-slate-500">聲紋</span><span id="live-health-voiceprint" class="text-slate-300">未啟用</span></div>
-          </div>
-          <div class="rounded-lg border border-slate-800 bg-black/35 px-2 py-1.5"><span class="text-slate-500">最近異常：</span><span id="live-health-issue" class="text-slate-400">尚無</span></div>
+        <div class="flex items-center gap-2 min-w-0">
+          <div id="live-card-latest-line" class="min-w-0 flex-1 rounded-xl border border-slate-800 bg-slate-950/65 px-2.5 py-2 text-[11px] text-slate-400 truncate">💬 請說話…</div>
+          <div id="live-call-protection-status" class="shrink-0 max-w-[42%] truncate rounded-xl border border-slate-800 bg-slate-950/70 px-2 py-2 text-[10px] font-mono text-slate-400" title="長通話保護">🛡️ 待命</div>
         </div>
 
         <div id="live-main-task-card" class="hidden rounded-xl border border-amber-500/45 bg-amber-950/25 p-2.5 space-y-2">
@@ -1027,7 +995,7 @@
           </div>
         </div>
 
-        <div id="live-card-details" class="hidden space-y-2.5">
+        <div id="live-card-details" class="hidden space-y-2">
 
         <!-- 📷 CAMERA EXPANSION VIEW (相機展開區) -->
         <div id="live-card-camera-box" class="hidden transition-all duration-300 overflow-hidden rounded-xl border border-indigo-500/40 bg-slate-950 relative">
@@ -1053,19 +1021,28 @@
           </div>
         </div>
 
-        <!-- Live Wave Spectrum Canvas -->
-        <div class="h-8 w-full flex items-center justify-center bg-black/50 rounded-xl px-2">
-          <canvas id="live-card-canvas" width="280" height="32" class="w-full h-full"></canvas>
-        </div>
+        <!-- Shared tab panel: only one diagnostic/control view is visible at a time. -->
+        <div id="live-card-tools-panel" class="rounded-xl bg-slate-950/90 border border-teal-500/40 overflow-hidden text-xs select-none">
+          <div class="grid grid-cols-2 gap-1 p-1 bg-slate-900/80 border-b border-slate-800">
+            <button id="live-tools-audio-tab" type="button" class="min-h-[40px] rounded-lg bg-teal-500/20 border border-teal-500/35 text-teal-200 text-[11px] font-bold active:scale-95 transition">🔊 音訊調整</button>
+            <button id="live-tools-health-tab" type="button" class="min-h-[40px] rounded-lg border border-transparent text-slate-400 hover:text-emerald-200 hover:bg-emerald-500/10 text-[11px] font-bold active:scale-95 transition">🩺 通話健康</button>
+          </div>
 
-        <!-- 🎛️ REAL-TIME VOICE TUNING CONSOLE (調音台抽屜) -->
-        <div id="live-card-tuning-drawer" class="hidden p-3 rounded-xl bg-slate-950/90 border border-teal-500/40 space-y-2.5 transition-all text-xs select-none">
-          <div class="flex items-center justify-between border-b border-slate-800 pb-1.5">
-            <div class="flex items-center gap-1.5 font-bold text-teal-300 text-[11px]">
-              <span>🎛️</span>
-              <span>口袋指揮調音台 (即時可視化反饋)</span>
+          <div id="live-card-health-drawer" class="hidden p-2.5 space-y-2 text-[10px] font-mono">
+            <div class="flex items-center justify-between gap-2"><span class="font-bold text-emerald-300">連線狀態</span><span id="live-health-phase" class="text-slate-400">待初始化</span></div>
+            <div class="grid grid-cols-2 gap-1.5">
+              <div class="rounded-lg bg-slate-900/80 border border-slate-800 px-2 py-1.5"><span class="block text-slate-500">WebSocket</span><span id="live-health-connection" class="text-slate-300">未建立</span></div>
+              <div class="rounded-lg bg-slate-900/80 border border-slate-800 px-2 py-1.5"><span class="block text-slate-500">麥克風</span><span id="live-health-mic" class="text-slate-300">未開啟</span></div>
+              <div class="rounded-lg bg-slate-900/80 border border-slate-800 px-2 py-1.5"><span class="block text-slate-500">AI 音訊</span><span id="live-health-playback" class="text-slate-300">等待中</span></div>
+              <div class="rounded-lg bg-slate-900/80 border border-slate-800 px-2 py-1.5"><span class="block text-slate-500">聲紋</span><span id="live-health-voiceprint" class="text-slate-300">未啟用</span></div>
             </div>
-            <button id="live-tuning-reset-btn" type="button" class="text-[10px] text-slate-400 hover:text-rose-300 px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 transition">重設預設</button>
+            <div class="rounded-lg border border-slate-800 bg-black/35 px-2 py-1.5"><span class="text-slate-500">最近異常：</span><span id="live-health-issue" class="text-slate-400">尚無</span></div>
+          </div>
+
+          <div id="live-card-tuning-drawer" class="p-2.5 space-y-2 transition-all">
+          <div class="rounded-xl border border-slate-800 bg-slate-900/70 px-2.5 py-2" title="調整 Android 系統媒體音量">
+            <div class="mb-1 flex items-center justify-between text-[10px]"><span class="text-slate-300">🔈 媒體音量</span><span id="live-card-volume-value" class="font-mono text-teal-300">${selectedVolume}%</span></div>
+            <input id="live-card-volume-slider" type="range" min="0" max="100" step="1" value="${selectedVolume}" class="w-full h-8 accent-teal-400 cursor-pointer" aria-label="媒體音量">
           </div>
 
           <!-- Real-time Live Meters -->
@@ -1101,7 +1078,7 @@
                 </span>
                 <span id="live-tuning-sim-label" class="font-mono text-teal-300 text-[10px] bg-slate-900 px-1.5 py-0.5 rounded border border-slate-800">${TUNING_CONFIG.SIMILARITY_THRESHOLD.toFixed(2)}</span>
               </div>
-              <input id="live-tuning-sim-slider" type="range" min="0" max="0.88" step="0.01" value="${TUNING_CONFIG.SIMILARITY_THRESHOLD}" class="w-full h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-teal-400">
+              <input id="live-tuning-sim-slider" type="range" min="0" max="0.88" step="0.01" value="${TUNING_CONFIG.SIMILARITY_THRESHOLD}" class="w-full h-8 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-teal-400" aria-label="聲紋匹配門檻">
               <div class="flex justify-between text-[9px] text-slate-500 font-mono mt-0.5">
                 <span>0 (關閉)</span>
                 <span>0.25 (建議)</span>
@@ -1118,7 +1095,7 @@
                 </span>
                 <span id="live-tuning-rms-label" class="font-mono text-teal-300 text-[10px] bg-slate-900 px-1.5 py-0.5 rounded border border-slate-800">${TUNING_CONFIG.RMS_THRESHOLD.toFixed(3)}</span>
               </div>
-              <input id="live-tuning-rms-slider" type="range" min="0.015" max="0.060" step="0.002" value="${TUNING_CONFIG.RMS_THRESHOLD}" class="w-full h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-teal-400">
+              <input id="live-tuning-rms-slider" type="range" min="0.015" max="0.060" step="0.002" value="${TUNING_CONFIG.RMS_THRESHOLD}" class="w-full h-8 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-teal-400" aria-label="插話音量門檻">
               <div class="flex justify-between text-[9px] text-slate-500 font-mono mt-0.5">
                 <span>0.015 (輕聲)</span>
                 <span>0.028 (建議)</span>
@@ -1128,11 +1105,10 @@
 
           </div>
         </div>
+        </div>
 
         <!-- Real-time Dialogue Subtitles (純 Live 對話區) -->
-        <div id="live-card-transcript" class="space-y-1.5 text-xs max-h-48 overflow-y-auto pr-1">
-          <div id="live-card-placeholder" class="text-slate-500 text-center text-[11px] font-mono py-1">💬 請說話...</div>
-        </div>
+        <div id="live-card-transcript" class="space-y-1.5 text-xs max-h-48 overflow-y-auto pr-1"></div>
 
         </div>
 
@@ -1158,48 +1134,54 @@
     const cardCameraBtn = card.querySelector('#live-card-camera-btn');
     const expandToggleBtn = card.querySelector('#live-card-expand-toggle-btn');
     const details = card.querySelector('#live-card-details');
-    const tuningToggleBtn = card.querySelector('#live-card-tuning-toggle-btn');
-    const canTune = liveSessionMode !== 'discussion';
     const setExpanded = (expanded) => {
       liveCardExpanded = expanded;
       if (details) details.classList.toggle('hidden', !expanded);
-      if (tuningToggleBtn) tuningToggleBtn.classList.toggle('hidden', !expanded || !canTune);
       if (expandToggleBtn) {
-        expandToggleBtn.textContent = expanded ? '↙' : '↗';
+        expandToggleBtn.textContent = expanded ? '⌄' : '⌃';
         expandToggleBtn.title = expanded ? '收合通話面板' : '展開通話面板';
       }
+      card.dataset.expanded = expanded ? 'true' : 'false';
+      updateDockControls();
     };
     if (expandToggleBtn) expandToggleBtn.addEventListener('click', () => setExpanded(!liveCardExpanded));
+    card.addEventListener('crew:toggle-expanded', () => setExpanded(!liveCardExpanded));
 
-    if (cardCameraBtn) cardCameraBtn.addEventListener('click', () => {
-      setExpanded(true);
-      toggleCamera();
-    });
+    if (cardCameraBtn) cardCameraBtn.addEventListener('click', () => { setExpanded(true); toggleCamera(); });
     const cardHangupBtn = card.querySelector('#live-card-hangup-btn');
     if (cardHangupBtn) cardHangupBtn.addEventListener('click', endLiveSession);
-    const healthToggleBtn = card.querySelector('#live-card-health-toggle-btn');
     const healthDrawer = card.querySelector('#live-card-health-drawer');
-    if (healthToggleBtn && healthDrawer) {
-      healthToggleBtn.addEventListener('click', () => {
-        const isHidden = healthDrawer.classList.toggle('hidden');
-        healthToggleBtn.classList.toggle('bg-emerald-500/25', !isHidden);
-        healthToggleBtn.title = isHidden ? '開啟連線健康狀態' : '收合連線健康狀態';
-        updateLiveHealthPanel();
-        if (navigator.vibrate) navigator.vibrate(12);
-      });
-    }
     updateCardCallControls();
     startLiveHealthMonitor();
 
     const tuningDrawer = card.querySelector('#live-card-tuning-drawer');
-    if (tuningToggleBtn && tuningDrawer) {
-      tuningToggleBtn.classList.add('hidden');
-      tuningToggleBtn.addEventListener('click', () => {
-        setExpanded(true);
-        tuningDrawer.classList.toggle('hidden');
-        if (navigator.vibrate) navigator.vibrate(15);
-      });
-    }
+    const audioTab = card.querySelector('#live-tools-audio-tab');
+    const healthTab = card.querySelector('#live-tools-health-tab');
+    let activeToolsTab = 'audio';
+    const setToolsTab = (tab) => {
+      const drawer = tab === 'audio' ? tuningDrawer : healthDrawer;
+      const isAlreadyVisible = activeToolsTab === tab && drawer && !drawer.classList.contains('hidden');
+      if (isAlreadyVisible) {
+        activeToolsTab = null;
+        if (tuningDrawer) tuningDrawer.classList.add('hidden');
+        if (healthDrawer) healthDrawer.classList.add('hidden');
+      } else {
+        activeToolsTab = tab;
+        if (tuningDrawer) tuningDrawer.classList.toggle('hidden', tab !== 'audio');
+        if (healthDrawer) healthDrawer.classList.toggle('hidden', tab !== 'health');
+      }
+      const showAudio = activeToolsTab === 'audio';
+      const showHealth = activeToolsTab === 'health';
+      if (audioTab) audioTab.className = showAudio
+        ? 'min-h-[40px] rounded-lg bg-teal-500/20 border border-teal-500/35 text-teal-200 text-[11px] font-bold active:scale-95 transition'
+        : 'min-h-[40px] rounded-lg border border-transparent text-slate-400 hover:text-teal-200 hover:bg-teal-500/10 text-[11px] font-bold active:scale-95 transition';
+      if (healthTab) healthTab.className = showHealth
+        ? 'min-h-[40px] rounded-lg bg-emerald-500/15 border border-emerald-500/35 text-emerald-200 text-[11px] font-bold active:scale-95 transition'
+        : 'min-h-[40px] rounded-lg border border-transparent text-slate-400 hover:text-emerald-200 hover:bg-emerald-500/10 text-[11px] font-bold active:scale-95 transition';
+      if (showHealth) updateLiveHealthPanel();
+    };
+    if (audioTab) audioTab.addEventListener('click', () => setToolsTab('audio'));
+    if (healthTab) healthTab.addEventListener('click', () => setToolsTab('health'));
 
     // Slider 1: Sim Slider
     const simSlider = card.querySelector('#live-tuning-sim-slider');
@@ -1543,6 +1525,17 @@
     if (typeof window.haptic === 'function') window.haptic('light');
   }
 
+  function toggleLiveCardExpanded() {
+    const card = document.getElementById('live-inline-card');
+    if (!card) return;
+    if (!liveCardVisible) {
+      liveCardVisible = true;
+      card.classList.remove('hidden');
+    }
+    card.dispatchEvent(new CustomEvent('crew:toggle-expanded'));
+    if (typeof window.haptic === 'function') window.haptic('light');
+  }
+
   function updateCardStatus(state, text) {
     const statusText = document.getElementById('live-card-status-text');
     const statusDot = document.getElementById('live-card-status-dot');
@@ -1629,6 +1622,17 @@
     p.innerHTML = (role === 'user' ? '🗣️ <b>我：</b> ' : role === 'system' ? '⚠️ ' : '✨ <b>Gemini：</b> ') + escapeHtml(text);
     drawer.appendChild(p);
     drawer.scrollTop = drawer.scrollHeight;
+
+    const latestLine = document.getElementById('live-card-latest-line');
+    if (latestLine) {
+      const label = role === 'user' ? '🗣️ 我：' : role === 'system' ? '⚠️ ' : '✨ Gemini：';
+      latestLine.textContent = `${label}${text}`;
+      latestLine.className = `rounded-xl border px-2.5 py-2 text-[11px] truncate ${
+        role === 'system' ? 'border-amber-500/30 bg-amber-950/35 text-amber-300' :
+        role === 'user' ? 'border-indigo-500/30 bg-indigo-950/35 text-indigo-200' :
+        'border-teal-500/30 bg-slate-950/65 text-slate-100'
+      }`;
+    }
 
     if (messagesContainer) {
       messagesContainer.scrollTop = messagesContainer.scrollHeight;
@@ -1847,12 +1851,19 @@
     const dockMuteBtn = document.getElementById('live-dock-mute-btn');
     const dockMuteContainer = document.getElementById('live-dock-mute-icon-container');
     const dockCameraBtn = document.getElementById('live-dock-camera-btn');
+    const dockExpandBtn = document.getElementById('live-dock-expand-btn');
+    const dockExpandIcon = document.getElementById('live-dock-expand-icon');
+    const cardCameraState = document.getElementById('live-card-camera-state');
+
+    if (dockExpandBtn) dockExpandBtn.title = liveCardExpanded ? '收合通話資訊' : '展開通話資訊';
+    if (dockExpandIcon) dockExpandIcon.textContent = liveCardExpanded ? '⌄' : '⌃';
+    if (cardCameraState) cardCameraState.classList.toggle('hidden', !isCameraOn);
 
     const isAiSpeaking = isAiResponding || (audioPlayer && audioPlayer.activeSources.length > 0);
 
     if (isAiSpeaking) {
       if (dockMuteBtn) {
-        dockMuteBtn.className = 'flex-1 h-[52px] px-4 rounded-2xl bg-gradient-to-r from-amber-500 to-rose-600 hover:from-amber-400 hover:to-rose-500 active:scale-95 text-white shadow-xl shadow-amber-500/40 flex items-center justify-center transition border border-amber-300/50';
+        dockMuteBtn.className = 'flex-1 h-12 px-4 rounded-2xl bg-gradient-to-r from-amber-500 to-rose-600 hover:from-amber-400 hover:to-rose-500 active:scale-95 text-white shadow-xl shadow-amber-500/40 flex items-center justify-center transition border border-amber-300/50';
         dockMuteBtn.title = isVoiceprintActive() ? 'AI 說話中 · 本人開口或點擊皆可打斷' : 'AI 說話中 · 點擊打斷';
       }
       if (dockMuteContainer) {
@@ -1864,7 +1875,7 @@
       }
     } else if (isMuted) {
       if (dockMuteBtn) {
-        dockMuteBtn.className = 'flex-1 h-[52px] px-4 rounded-2xl bg-rose-900/90 hover:bg-rose-800 active:scale-95 text-rose-200 shadow-xl shadow-rose-950/60 flex items-center justify-center transition border border-rose-500/60';
+        dockMuteBtn.className = 'flex-1 h-12 px-4 rounded-2xl bg-rose-900/90 hover:bg-rose-800 active:scale-95 text-rose-200 shadow-xl shadow-rose-950/60 flex items-center justify-center transition border border-rose-500/60';
         dockMuteBtn.title = '麥克風已靜音 · 點擊開啟';
       }
       if (dockMuteContainer) {
@@ -1876,7 +1887,7 @@
       }
     } else {
       if (dockMuteBtn) {
-        dockMuteBtn.className = 'flex-1 h-[52px] px-4 rounded-2xl bg-gradient-to-r from-teal-500 to-indigo-600 hover:from-teal-400 hover:to-indigo-500 active:scale-95 text-white shadow-xl shadow-teal-500/30 flex items-center justify-center transition border border-teal-400/50';
+        dockMuteBtn.className = 'flex-1 h-12 px-4 rounded-2xl bg-gradient-to-r from-teal-500 to-indigo-600 hover:from-teal-400 hover:to-indigo-500 active:scale-95 text-white shadow-xl shadow-teal-500/30 flex items-center justify-center transition border border-teal-400/50';
         dockMuteBtn.title = '通話收音中 · 點擊靜音';
       }
       if (dockMuteContainer) {
@@ -1890,7 +1901,7 @@
 
     if (isCameraOn) {
       if (dockCameraBtn) {
-        dockCameraBtn.className = 'flex-1 max-w-[76px] h-[52px] rounded-2xl bg-indigo-600 hover:bg-indigo-500 active:scale-95 border border-indigo-400 text-white flex items-center justify-center transition shadow-lg shrink-0';
+          dockCameraBtn.className = 'flex-1 max-w-[72px] h-12 rounded-2xl bg-indigo-600 hover:bg-indigo-500 active:scale-95 border border-indigo-400 text-white flex items-center justify-center transition shadow-lg shrink-0';
         dockCameraBtn.title = '關閉相機';
         dockCameraBtn.innerHTML = `
           <svg class="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
@@ -1900,7 +1911,7 @@
       }
     } else {
       if (dockCameraBtn) {
-        dockCameraBtn.className = 'flex-1 max-w-[76px] h-[52px] rounded-2xl bg-slate-800/90 hover:bg-slate-700 active:scale-95 border border-slate-700 text-slate-200 flex items-center justify-center transition shadow-lg shrink-0';
+          dockCameraBtn.className = 'flex-1 max-w-[72px] h-12 rounded-2xl bg-slate-800/90 hover:bg-slate-700 active:scale-95 border border-slate-700 text-slate-200 flex items-center justify-center transition shadow-lg shrink-0';
         dockCameraBtn.title = '開啟相機';
         dockCameraBtn.innerHTML = `
           <svg class="w-6 h-6 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2464,10 +2475,8 @@
     const liveBottomDock = document.getElementById('live-bottom-dock');
     if (standardInputBar) standardInputBar.classList.remove('hidden');
     if (liveBottomDock) {
-      // Controls now live inside the Live card so the composer can be shown
-      // later without a fixed bottom dock covering it.
-      liveBottomDock.classList.add('hidden');
-      liveBottomDock.classList.remove('flex');
+      liveBottomDock.classList.remove('hidden');
+      liveBottomDock.classList.add('flex');
     }
     updateDockControls();
     setMediaSessionActive(true);
@@ -3831,7 +3840,27 @@
     if (liveResponsePaceSelect) liveResponsePaceSelect.value = getResponsePace();
     if (liveInterruptionSelect) liveInterruptionSelect.value = getInterruptionMode();
     updateVoiceprintThresholdUI();
+    updateLiveSettingsSummary();
+    const sessionActive = Boolean(isConnected || (ws && ws.readyState !== WebSocket.CLOSED));
+    if (liveSettingsSessionNote) {
+      liveSettingsSessionNote.textContent = sessionActive
+        ? '通話中：變更將於下一通 Live 套用'
+        : '調整後按儲存即可套用';
+    }
+    if (liveSaveKeyBtn) liveSaveKeyBtn.textContent = sessionActive ? '儲存，下通套用' : '儲存並啟動通話';
+    if (liveSettingsAdvanced) liveSettingsAdvanced.open = !getApiKey();
     liveKeyModal.classList.remove('hidden');
+  }
+
+  function updateLiveSettingsSummary() {
+    if (liveSettingsSummaryVoice) liveSettingsSummaryVoice.textContent = liveVoiceSelect?.value || getSelectedVoice();
+    if (liveSettingsSummaryPace) {
+      const labels = { brief: '精簡', normal: '正常', calm: '從容' };
+      liveSettingsSummaryPace.textContent = labels[liveResponsePaceSelect?.value] || '正常';
+    }
+    if (liveSettingsSummaryInterruption) {
+      liveSettingsSummaryInterruption.textContent = liveInterruptionSelect?.value === 'button' ? '按鈕插話' : '本人插話';
+    }
   }
 
   function hideKeyModal() {
@@ -3871,7 +3900,7 @@
 
   if (liveSettingsBtn) {
     liveSettingsBtn.addEventListener('click', () => {
-      if (!isConnected) showKeyModal();
+      showKeyModal();
     });
   }
 
@@ -3894,8 +3923,9 @@
         localStorage.setItem(RESPONSE_PACE_KEY, pace);
         localStorage.setItem(INTERRUPTION_MODE_KEY, interruptionMode);
         updateVoiceprintThresholdUI();
+        const sessionActive = Boolean(isConnected || (ws && ws.readyState !== WebSocket.CLOSED));
         hideKeyModal();
-        startLiveSession(liveSessionMode);
+        if (!sessionActive) startLiveSession(liveSessionMode);
       } else {
         localStorage.removeItem(STORAGE_KEY);
         if (liveApiKeyHint) liveApiKeyHint.textContent = '尚未設定 API Key';
@@ -3916,9 +3946,12 @@
     populateVoiceSelect(liveVoiceSelect, getSelectedVoice());
     liveVoiceSelect.value = getSelectedVoice();
     liveVoiceSelect.addEventListener('change', () => {
-      localStorage.setItem(VOICE_KEY, liveVoiceSelect.value);
+      updateLiveSettingsSummary();
     });
   }
+
+  if (liveResponsePaceSelect) liveResponsePaceSelect.addEventListener('change', updateLiveSettingsSummary);
+  if (liveInterruptionSelect) liveInterruptionSelect.addEventListener('change', updateLiveSettingsSummary);
 
   if (liveVoicePreviewBtn) {
     liveVoicePreviewBtn.addEventListener('click', previewSelectedVoice);
@@ -3926,9 +3959,6 @@
 
   if (liveModelSelect) {
     liveModelSelect.value = getSelectedModel();
-    liveModelSelect.addEventListener('change', () => {
-      localStorage.setItem(MODEL_KEY, liveModelSelect.value);
-    });
   }
 
   // 📱 Option A: Bottom Voice Dock Event Listeners
@@ -3939,8 +3969,14 @@
 
   const dockCameraBtn = document.getElementById('live-dock-camera-btn');
   if (dockCameraBtn) {
-    dockCameraBtn.addEventListener('click', toggleCamera);
+    dockCameraBtn.addEventListener('click', () => {
+      if (!isCameraOn) toggleLiveCardExpanded();
+      toggleCamera();
+    });
   }
+
+  const dockExpandBtn = document.getElementById('live-dock-expand-btn');
+  if (dockExpandBtn) dockExpandBtn.addEventListener('click', toggleLiveCardExpanded);
 
   const dockHangupBtn = document.getElementById('live-dock-hangup-btn');
   if (dockHangupBtn) {

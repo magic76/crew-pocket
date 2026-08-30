@@ -129,11 +129,13 @@
         </svg>
       </button>
       <!-- 🧰 Unified Tools Dropdown Trigger Button -->
-      <button id="tools-menu-btn" class="p-1.5 sm:p-2 rounded-lg bg-slate-900/90 hover:bg-slate-800 text-slate-300 hover:text-white transition active:scale-95 shrink-0 border border-slate-700/80 flex items-center gap-1" title="🧰 工具與功能選單 (檔案 / 用量 / 錦囊 / 通知)">
-        <svg class="w-4 h-4 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/>
+      <button id="tools-menu-btn" class="w-8 h-8 p-1.5 rounded-full bg-slate-900/90 hover:bg-slate-800 text-slate-300 hover:text-white transition active:scale-95 shrink-0 border border-slate-700/80 flex items-center justify-center" title="🧰 工具與功能選單 (檔案 / 用量 / 錦囊 / 通知)">
+        <svg class="w-4 h-4 text-indigo-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 7h16M4 12h16M4 17h16"/>
+          <circle cx="8" cy="7" r="1.4" fill="currentColor" stroke="none"/>
+          <circle cx="15" cy="12" r="1.4" fill="currentColor" stroke="none"/>
+          <circle cx="10" cy="17" r="1.4" fill="currentColor" stroke="none"/>
         </svg>
-        <svg class="w-2.5 h-2.5 text-slate-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
       </button>
 
       <!-- 🧰 Tools Dropdown Popover Menu -->
@@ -549,17 +551,17 @@
         </div>
       </div>
 
-      <!-- 🎙️ Live Voice Call Bottom Ergonomic Dock (Option A: Pure Icon Action Dock) -->
-      <div id="live-bottom-dock" class="hidden w-full items-center justify-between gap-3 py-1 select-none animate-fadeIn" style="display:none !important">
+      <!-- 🎙️ Live Voice Call Bottom Ergonomic Dock -->
+      <div id="live-bottom-dock" class="hidden w-full items-center justify-between gap-2 py-1 select-none animate-fadeIn">
         <!-- 📷 Left: Camera Toggle -->
-        <button id="live-dock-camera-btn" type="button" class="flex-1 max-w-[76px] h-[52px] rounded-2xl bg-slate-800/90 hover:bg-slate-700 active:scale-95 border border-slate-700 text-slate-200 flex items-center justify-center transition shadow-lg shrink-0" title="開啟/關閉相機">
+        <button id="live-dock-camera-btn" type="button" class="flex-1 max-w-[72px] h-12 rounded-2xl bg-slate-800/90 hover:bg-slate-700 active:scale-95 border border-slate-700 text-slate-200 flex items-center justify-center transition shadow-lg shrink-0" title="開啟/關閉相機">
           <svg class="w-6 h-6 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
           </svg>
         </button>
 
         <!-- 🎙️ Center: Large Ergonomic Mic Mute/Unmute Action Button (Pure Icon) -->
-        <button id="live-dock-mute-btn" type="button" class="flex-1 h-[52px] px-4 rounded-2xl bg-gradient-to-r from-teal-500 to-indigo-600 hover:from-teal-400 hover:to-indigo-500 active:scale-95 text-white shadow-xl shadow-teal-500/30 flex items-center justify-center transition border border-teal-400/50" title="點擊切換靜音">
+        <button id="live-dock-mute-btn" type="button" class="flex-1 h-12 px-4 rounded-2xl bg-gradient-to-r from-teal-500 to-indigo-600 hover:from-teal-400 hover:to-indigo-500 active:scale-95 text-white shadow-xl shadow-teal-500/30 flex items-center justify-center transition border border-teal-400/50" title="點擊切換靜音">
           <span id="live-dock-mute-icon-container" class="flex items-center justify-center">
             <svg class="w-7 h-7 text-white animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/>
@@ -567,8 +569,13 @@
           </span>
         </button>
 
+        <!-- ⌃ Expand/collapse the detailed Live card without hiding the call. -->
+        <button id="live-dock-expand-btn" type="button" class="flex-1 max-w-[72px] h-12 rounded-2xl bg-indigo-950/80 hover:bg-indigo-900 active:scale-95 border border-indigo-500/40 text-indigo-300 flex items-center justify-center transition shadow-lg shrink-0" title="展開通話資訊">
+          <span id="live-dock-expand-icon" class="text-lg leading-none">⌃</span>
+        </button>
+
         <!-- 🛑 Right: Hangup Button -->
-        <button id="live-dock-hangup-btn" type="button" class="flex-1 max-w-[76px] h-[52px] rounded-2xl bg-rose-600 hover:bg-rose-500 active:scale-95 text-white shadow-lg shadow-rose-600/40 flex items-center justify-center transition shrink-0 border border-rose-500/50" title="結束通話">
+        <button id="live-dock-hangup-btn" type="button" class="flex-1 max-w-[72px] h-12 rounded-2xl bg-rose-600 hover:bg-rose-500 active:scale-95 text-white shadow-lg shadow-rose-600/40 flex items-center justify-center transition shrink-0 border border-rose-500/50" title="結束通話">
           <svg class="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
             <path d="M12 9c-1.6 0-3.15.25-4.6.72v3.1c0 .39-.23.74-.56.9-.98.49-1.87 1.12-2.66 1.85-.18.18-.43.28-.7.28-.28 0-.53-.11-.71-.29L.29 13.08a.996.996 0 010-1.41C3.12 8.91 7.33 7 12 7s8.88 1.91 11.71 4.67c.39.39.39 1.02 0 1.41l-2.48 2.48c-.18.18-.43.29-.71.29s-.52-.1-.7-.28c-.79-.74-1.69-1.36-2.67-1.85-.33-.16-.56-.5-.56-.9v-3.1C15.15 9.25 13.6 9 12 9z"/>
           </svg>
@@ -967,89 +974,95 @@
 
   <!-- 🔑 GEMINI API KEY & LIVE VOICE SETTINGS MODAL -->
   <div id="live-key-modal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 select-none animate-fadeIn">
-    <div class="bg-slate-900 border border-slate-800 rounded-3xl p-5 sm:p-6 w-full max-w-sm max-h-[80dvh] overflow-y-auto overscroll-contain shadow-2xl flex flex-col space-y-4">
-      <div class="flex items-center justify-between">
+    <div class="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-sm max-h-[80dvh] overflow-hidden overscroll-contain shadow-2xl flex flex-col">
+      <div class="px-5 pt-5 pb-3 sm:px-6 flex items-center justify-between shrink-0 border-b border-slate-800/80">
         <div class="flex items-center gap-2">
           <span class="text-xl">🎙️</span>
-          <h3 class="font-bold text-sm sm:text-base text-white">Gemini Live 語音設定</h3>
+          <div>
+            <h3 class="font-bold text-sm sm:text-base text-white">Gemini Live 語音設定</h3>
+            <p id="live-settings-session-note" class="text-[10px] text-slate-500 mt-0.5">調整後按儲存即可套用</p>
+          </div>
         </div>
-        <button id="live-close-key-btn" class="text-slate-400 hover:text-white p-1">✕</button>
+        <button id="live-close-key-btn" class="min-w-[40px] min-h-[40px] text-slate-400 hover:text-white rounded-xl hover:bg-slate-800">✕</button>
       </div>
 
-      <div class="text-xs text-slate-300 space-y-2 leading-relaxed">
-        <p>Gemini Live 原生雙向全雙工語音（對話流內嵌卡片 + 即時鏡頭視覺辨識）。</p>
-      </div>
-
-      <!-- Model Selection in Settings -->
-      <div class="space-y-1">
-        <label class="text-[11px] text-slate-400 font-semibold">選擇 Live 模型：</label>
-        <select id="live-model-select" class="w-full bg-slate-950 border border-slate-700 focus:border-teal-500 rounded-xl px-3 py-2 text-xs text-slate-100 outline-none font-mono">
-          <option value="models/gemini-3.1-flash-live-preview">gemini-3.1-flash-live-preview (推薦 · 官方原生)</option>
-        </select>
-      </div>
-
-      <!-- Voice Selection in Settings -->
-      <div class="space-y-1">
-        <div class="flex items-center justify-between gap-2">
-          <label for="live-voice-select" class="text-[11px] text-slate-400 font-semibold">選擇音色（30 種）：</label>
-          <button id="live-voice-preview-btn" type="button" class="min-h-[40px] px-3 rounded-xl bg-indigo-500/20 border border-indigo-500/40 text-indigo-300 hover:bg-indigo-500/30 active:scale-95 text-[11px] font-bold transition">🔊 試聽</button>
+      <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4 sm:px-6 space-y-3">
+        <div class="rounded-2xl border border-teal-500/20 bg-teal-500/5 p-3">
+          <div class="text-[10px] font-semibold tracking-wide text-teal-300/90">目前通話設定</div>
+          <div class="mt-2 flex flex-wrap gap-1.5 text-[10px]">
+            <span class="rounded-lg bg-slate-950/80 px-2 py-1 text-slate-300">🔊 <span id="live-settings-summary-voice">—</span></span>
+            <span class="rounded-lg bg-slate-950/80 px-2 py-1 text-slate-300">💬 <span id="live-settings-summary-pace">—</span></span>
+            <span class="rounded-lg bg-slate-950/80 px-2 py-1 text-slate-300">🛡️ <span id="live-settings-summary-interruption">—</span></span>
+          </div>
         </div>
-        <select id="live-voice-select" class="w-full bg-slate-950 border border-slate-700 focus:border-teal-500 rounded-xl px-3 py-2 text-xs text-slate-100 outline-none font-mono">
-        </select>
-        <div id="live-voice-preview-status" class="text-[10px] text-slate-500 min-h-3"></div>
-      </div>
 
-      <div class="space-y-1">
-        <label for="live-prompt-input" class="text-[11px] text-slate-400 font-semibold">語音模型 Prompt：</label>
-        <textarea id="live-prompt-input" rows="4" maxlength="4000" placeholder="例如：你是我的會議助理，只記錄雙方原話，不做重點整理。" class="w-full resize-y bg-slate-950 border border-slate-700 focus:border-teal-500 rounded-xl px-3 py-2.5 text-xs leading-relaxed text-slate-100 placeholder-slate-600 outline-none"></textarea>
-        <div class="text-[10px] text-slate-500">每次通話開始時套用；留白代表使用預設指令。</div>
-      </div>
-
-      <div class="grid grid-cols-2 gap-2">
-        <div class="space-y-1">
-          <label for="live-response-pace-select" class="text-[11px] text-slate-400 font-semibold">回覆節奏：</label>
-          <select id="live-response-pace-select" class="w-full bg-slate-950 border border-slate-700 focus:border-teal-500 rounded-xl px-2.5 py-2 text-xs text-slate-100 outline-none">
-            <option value="brief">精簡</option>
-            <option value="normal">正常</option>
-            <option value="calm">從容</option>
-          </select>
+        <div class="space-y-2">
+          <div class="flex items-center justify-between gap-2">
+            <label for="live-voice-select" class="text-[11px] text-slate-300 font-semibold">音色</label>
+            <button id="live-voice-preview-btn" type="button" class="min-h-[40px] px-3 rounded-xl bg-indigo-500/20 border border-indigo-500/40 text-indigo-300 hover:bg-indigo-500/30 active:scale-95 text-[11px] font-bold transition">🔊 試聽</button>
+          </div>
+          <select id="live-voice-select" class="w-full min-h-[40px] bg-slate-950 border border-slate-700 focus:border-teal-500 rounded-xl px-3 py-2 text-xs text-slate-100 outline-none font-mono"></select>
+          <div id="live-voice-preview-status" class="text-[10px] text-slate-500 min-h-3"></div>
         </div>
-        <div class="space-y-1">
-          <label for="live-interruption-select" class="text-[11px] text-slate-400 font-semibold">插話策略：</label>
-          <select id="live-interruption-select" class="w-full bg-slate-950 border border-slate-700 focus:border-teal-500 rounded-xl px-2.5 py-2 text-xs text-slate-100 outline-none">
-            <option value="owner">本人自動插話</option>
-            <option value="button">僅按按鈕打斷</option>
-          </select>
-        </div>
-      </div>
-      <div class="text-[10px] text-slate-500">節奏在下一通 Live 套用；本人自動插話需建立聲紋且門檻大於 0。</div>
 
-      <div class="space-y-1">
-      <div class="flex items-center justify-between gap-3 p-2.5 rounded-xl bg-slate-950/70 border border-slate-800">
-        <div class="min-w-0 flex-1">
-          <div class="flex items-center justify-between gap-2"><div class="text-[11px] text-slate-200 font-semibold">🧬 聲紋門檻</div><span id="live-voiceprint-threshold-label" class="text-[10px] font-mono text-teal-300">0.25 · 日常建議</span></div>
-          <input id="live-voiceprint-threshold" type="range" min="0" max="0.88" step="0.01" value="0.25" class="w-full h-8 accent-teal-400 cursor-pointer" aria-label="聲紋辨識門檻">
-          <div class="flex justify-between text-[9px] font-mono text-slate-500"><span>0 關閉</span><span>0.25 建議</span><span>0.50 嚴格</span><span>0.88 極嚴格</span></div>
+        <div class="grid grid-cols-2 gap-2">
+          <div class="space-y-1.5">
+            <label for="live-response-pace-select" class="text-[11px] text-slate-300 font-semibold">回覆節奏</label>
+            <select id="live-response-pace-select" class="w-full min-h-[40px] bg-slate-950 border border-slate-700 focus:border-teal-500 rounded-xl px-2.5 py-2 text-xs text-slate-100 outline-none">
+              <option value="brief">精簡</option>
+              <option value="normal">正常</option>
+              <option value="calm">從容</option>
+            </select>
+          </div>
+          <div class="space-y-1.5">
+            <label for="live-interruption-select" class="text-[11px] text-slate-300 font-semibold">插話策略</label>
+            <select id="live-interruption-select" class="w-full min-h-[40px] bg-slate-950 border border-slate-700 focus:border-teal-500 rounded-xl px-2.5 py-2 text-xs text-slate-100 outline-none">
+              <option value="owner">本人自動</option>
+              <option value="button">僅按按鈕</option>
+            </select>
+          </div>
         </div>
-        <button id="open-voiceprint-modal-btn" type="button" class="min-h-[40px] shrink-0 px-3 rounded-xl bg-teal-500/15 hover:bg-teal-500/25 active:scale-95 border border-teal-500/40 text-teal-300 text-[11px] font-semibold transition cursor-pointer">工作室</button>
-      </div>
-      <div id="live-voiceprint-threshold-hint" class="text-[10px] text-slate-500 font-mono text-center">🛡️ 門檻 0.25：聲紋資料 100% 本地處理</div>
+        <p class="text-[10px] text-slate-500">本人自動插話需建立聲紋且門檻大於 0。</p>
+
+        <details class="group rounded-2xl border border-slate-800 bg-slate-950/40 overflow-hidden">
+          <summary class="min-h-[48px] px-3 flex items-center justify-between cursor-pointer list-none text-[11px] font-semibold text-slate-200"><span>🧬 本人與環境</span><span class="text-slate-500 transition group-open:rotate-180">⌄</span></summary>
+          <div class="border-t border-slate-800 p-3 space-y-2.5">
+            <div class="flex items-center justify-between gap-3 p-2.5 rounded-xl bg-slate-950/70 border border-slate-800">
+              <div class="min-w-0 flex-1">
+                <div class="flex items-center justify-between gap-2"><div class="text-[11px] text-slate-200 font-semibold">聲紋門檻</div><span id="live-voiceprint-threshold-label" class="text-[10px] font-mono text-teal-300">0.25 · 日常建議</span></div>
+                <input id="live-voiceprint-threshold" type="range" min="0" max="0.88" step="0.01" value="0.25" class="w-full h-8 accent-teal-400 cursor-pointer" aria-label="聲紋辨識門檻">
+                <div class="flex justify-between text-[9px] font-mono text-slate-500"><span>0 關閉</span><span>0.25 建議</span><span>0.50 嚴格</span><span>0.88 極嚴格</span></div>
+              </div>
+              <button id="open-voiceprint-modal-btn" type="button" class="min-h-[40px] shrink-0 px-3 rounded-xl bg-teal-500/15 hover:bg-teal-500/25 active:scale-95 border border-teal-500/40 text-teal-300 text-[11px] font-semibold transition cursor-pointer">工作室</button>
+            </div>
+            <div id="live-voiceprint-threshold-hint" class="text-[10px] text-slate-500 font-mono text-center">🛡️ 門檻 0.25：聲紋資料 100% 本地處理</div>
+          </div>
+        </details>
+
+        <details id="live-settings-advanced" class="group rounded-2xl border border-slate-800 bg-slate-950/40 overflow-hidden">
+          <summary class="min-h-[48px] px-3 flex items-center justify-between cursor-pointer list-none text-[11px] font-semibold text-slate-200"><span>⚙️ 進階設定</span><span class="text-slate-500 transition group-open:rotate-180">⌄</span></summary>
+          <div class="border-t border-slate-800 p-3 space-y-3">
+            <div class="space-y-1.5">
+              <label for="live-prompt-input" class="text-[11px] text-slate-300 font-semibold">語音模型 Prompt</label>
+              <textarea id="live-prompt-input" rows="4" maxlength="4000" placeholder="例如：你是我的會議助理，只記錄雙方原話，不做重點整理。" class="w-full resize-y bg-slate-950 border border-slate-700 focus:border-teal-500 rounded-xl px-3 py-2.5 text-xs leading-relaxed text-slate-100 placeholder-slate-600 outline-none"></textarea>
+              <div class="text-[10px] text-slate-500">每次通話開始時套用；留白代表使用預設指令。</div>
+            </div>
+            <div class="space-y-1.5">
+              <label class="text-[11px] text-slate-300 font-semibold">Google AI Studio API Key</label>
+              <input id="live-api-key-input" type="text" placeholder="AIzaSy..." autocomplete="off" autocapitalize="off" spellcheck="false" class="w-full min-h-[40px] bg-slate-950 border border-slate-700 focus:border-teal-500 rounded-xl px-3 py-2.5 text-xs text-slate-100 placeholder-slate-600 outline-none font-mono">
+              <div id="live-api-key-hint" class="text-[10px] text-slate-500 font-mono min-h-[1rem]"></div>
+              <div class="text-[10px] text-slate-500 flex justify-between gap-2"><a href="https://aistudio.google.com/apikey" target="_blank" class="text-teal-400 hover:underline">👉 免費申請 API Key</a><span>安全儲存於手機本機</span></div>
+            </div>
+            <div class="space-y-1.5">
+              <label class="text-[11px] text-slate-300 font-semibold">Live 模型</label>
+              <select id="live-model-select" class="w-full min-h-[40px] bg-slate-950 border border-slate-700 focus:border-teal-500 rounded-xl px-3 py-2 text-xs text-slate-100 outline-none font-mono"><option value="models/gemini-3.1-flash-live-preview">gemini-3.1-flash-live-preview（官方原生）</option></select>
+            </div>
+          </div>
+        </details>
       </div>
 
-      <div class="space-y-1">
-        <label class="text-[11px] text-slate-400 font-semibold">Google AI Studio API Key：</label>
-        <input id="live-api-key-input" type="text" placeholder="AIzaSy..." autocomplete="off" autocapitalize="off" spellcheck="false" class="w-full bg-slate-950 border border-slate-700 focus:border-teal-500 rounded-xl px-3 py-2.5 text-xs text-slate-100 placeholder-slate-600 outline-none font-mono">
-        <div id="live-api-key-hint" class="text-[10px] text-slate-500 font-mono min-h-[1rem]"></div>
-        <div class="text-[10px] text-slate-500 mt-1 flex justify-between">
-          <a href="https://aistudio.google.com/apikey" target="_blank" class="text-teal-400 hover:underline">👉 免費申請 API Key</a>
-          <span>安全儲存於手機本機</span>
-        </div>
-      </div>
-
-      <div class="flex gap-2 pt-2">
-        <button id="live-save-key-btn" class="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-teal-500 to-indigo-600 hover:from-teal-400 hover:to-indigo-500 text-white font-bold text-xs shadow-lg shadow-teal-500/20 active:scale-95 transition">
-          儲存並啟動通話
-        </button>
+      <div class="shrink-0 px-5 py-3 sm:px-6 border-t border-slate-800 bg-slate-950/80">
+        <button id="live-save-key-btn" class="w-full min-h-[44px] rounded-xl bg-gradient-to-r from-teal-500 to-indigo-600 hover:from-teal-400 hover:to-indigo-500 text-white font-bold text-xs shadow-lg shadow-teal-500/20 active:scale-95 transition">儲存並啟動通話</button>
       </div>
     </div>
   </div>
@@ -1273,7 +1286,7 @@
   <script src="/js/storage.js?v=0e143c8da2fc"></script>
   <script src="/js/chat.js?v=001a238a3226"></script>
   <script src="/js/tasks.js?v=2e5e3f5e9e77"></script>
-  <script src="/js/live.js?v=da362f5ff68a"></script>
+  <script src="/js/live.js?v=496f1cb5022a"></script>
   <script src="/js/phone_agent.js?v=005eeb1d37d2"></script>
   <script src="/js/app.js?v=193609dfe965"></script>
 </body>
