@@ -727,14 +727,19 @@ window.selectEffort = function(effortId) {
 async function triggerDoneNotification(text) {
   if (!notificationsEnabled || !('Notification' in window) || Notification.permission !== 'granted') return;
 
-  const cleanSummary = (text || '回覆已完成')
+  // Android expands Web Notifications into a multi-line card. Keep the full
+  // readable reply here; the browser itself applies its platform safety limit.
+  const cleanReply = (text || '回覆已完成')
     .replace(/\p{Extended_Pictographic}/gu, '')
-    .replace(/[*#_~`<>]/g, '')
+    .replace(/[*#_~`]/g, '')
+    .replace(/<[^>]+>/g, '')
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+    .replace(/\n{3,}/g, '\n\n')
     .trim()
-    .slice(0, 70);
+    .slice(0, 3500);
 
   const notifOptions = {
-    body: `✨ ${cleanSummary || '回覆已生成完畢！'}`,
+    body: cleanReply || '回覆已生成完畢！',
     tag: 'agy-done',
     renotify: true,
     vibrate: [200, 100, 200]
