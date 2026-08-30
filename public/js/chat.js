@@ -558,8 +558,8 @@ async function startLowContextContinuation(triggerButton = null) {
     promptInput.style.height = 'auto';
     await sendMessage();
 
-    if (currentConversationId && typeof renameConversationDirect === 'function') {
-      await renameConversationDirect(currentConversationId, `續接 · ${sourceTitle}`);
+    if (currentConversationId && typeof renameConversationSilently === 'function') {
+      await renameConversationSilently(currentConversationId, `續接 · ${shortenConversationTitle(sourceTitle, 18)}`);
     }
   } catch (error) {
     if (currentConversationId === sourceConversationId) {
@@ -574,6 +574,15 @@ async function startLowContextContinuation(triggerButton = null) {
       button.innerHTML = originalButtonText;
     }
   }
+}
+
+function shortenConversationTitle(text, maxLength = 18) {
+  const firstLine = String(text || '')
+    .replace(/^【[^】]{1,30}】\s*/, '')
+    .split(/(?:\r?\n|[。！？!?])/)[0]
+    .trim();
+  if (!firstLine) return '新對話';
+  return firstLine.length > maxLength ? `${firstLine.slice(0, maxLength)}…` : firstLine;
 }
 
 // Append Message to UI
@@ -882,6 +891,22 @@ async function renameConversationDirect(convId, currentTitle, conversationProvid
   } catch (err) {
     alert('重新命名失敗：' + err.message);
   }
+}
+
+// Used by system-created conversations. Unlike manual rename it never opens a
+// prompt, and updates the visible title immediately after the server accepts it.
+async function renameConversationSilently(convId, title, conversationProvider = currentProvider) {
+  const cleanTitle = shortenConversationTitle(title, 24);
+  const res = await fetch('/api/rename-conversation', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ provider: conversationProvider, conversation_id: convId, title: cleanTitle })
+  });
+  const data = await res.json();
+  if (!data.success) throw new Error(data.error || '重新命名失敗');
+  if (currentConversationId === convId && headerTitle) headerTitle.textContent = cleanTitle;
+  if (typeof loadConversations === 'function') loadConversations();
+  return cleanTitle;
 }
 
 let historyRenderVersion = 0;
@@ -2239,7 +2264,11 @@ function handleSendClick(e) {
 // 🏷️ Auto-generate AI conversation title (fires in background, non-blocking)
 async function generateConversationTitle(convId, userMessage, assistantResponse) {
   if (providerConfig().capabilities?.autoTitle === false) {
-    if (headerTitle) headerTitle.textContent = userMessage.slice(0, 18) + (userMessage.length > 18 ? '...' : '');
+    const shortTitle = shortenConversationTitle(userMessage, 18);
+    if (headerTitle) headerTitle.textContent = shortTitle;
+    renameConversationSilently(convId, shortTitle).catch((error) => {
+      console.warn('[AutoTitle] Failed to persist short title:', error.message);
+    });
     return;
   }
   try {
