@@ -37,6 +37,8 @@
   let cameraFacingMode = 'environment';
   let cameraStream = null;
   let cameraInterval = null;
+  let visionDialogueEnabled = false;
+  let visionDialogueSending = false;
   let analyser = null;
   let animFrameId = null;
   let audioSendBuffer = [];
@@ -1015,6 +1017,9 @@
             <button id="live-card-snap-btn" type="button" class="px-2.5 py-1 rounded-lg bg-teal-950/90 hover:bg-teal-900 text-[10px] text-teal-300 border border-teal-500/50 font-mono flex items-center gap-1 shadow-md active:scale-95 transition" title="截圖儲存並發送高畫質畫面給 AI">
               📸 截圖存檔
             </button>
+            <button id="live-card-vision-btn" type="button" class="px-2.5 py-1 rounded-lg bg-slate-900/90 hover:bg-slate-800 text-[10px] text-slate-300 border border-slate-700 font-mono flex items-center gap-1 shadow-md active:scale-95 transition" title="只在您說話時，每秒最多傳送一張低解析畫面給 AI">
+              👁️ 視覺對話
+            </button>
             <button id="live-card-expand-btn" type="button" class="px-2.5 py-1 rounded-lg bg-indigo-950/90 hover:bg-indigo-900 text-[10px] text-indigo-300 border border-indigo-500/50 font-mono flex items-center gap-1 shadow-md active:scale-95 transition" title="放大 / 縮小鏡頭預覽">
               ⛶ 放大
             </button>
@@ -1255,6 +1260,8 @@
 
     const snapBtn = card.querySelector('#live-card-snap-btn');
     if (snapBtn) snapBtn.addEventListener('click', snapPhoto);
+    const visionBtn = card.querySelector('#live-card-vision-btn');
+    if (visionBtn) visionBtn.addEventListener('click', toggleVisionDialogue);
 
     const expandBtn = card.querySelector('#live-card-expand-btn');
     if (expandBtn) expandBtn.addEventListener('click', toggleCameraExpand);
@@ -2050,6 +2057,7 @@
         cameraModeStartTs = 0;
       }
     } else {
+      stopVisionDialogue();
       cameraModeStartTs = 0;
       if (cameraStream) {
         try { cameraStream.getTracks().forEach(t => t.stop()); } catch (e) {}
@@ -2077,6 +2085,52 @@
     startCallProtection();
   }
 
+  function updateVisionDialogueButton() {
+    const button = document.getElementById('live-card-vision-btn');
+    if (!button) return;
+    button.textContent = visionDialogueEnabled ? '👁️ 視覺傳送中' : '👁️ 視覺對話';
+    button.className = visionDialogueEnabled
+      ? 'px-2.5 py-1 rounded-lg bg-indigo-600/90 hover:bg-indigo-500 text-[10px] text-white border border-indigo-300 font-mono flex items-center gap-1 shadow-md active:scale-95 transition'
+      : 'px-2.5 py-1 rounded-lg bg-slate-900/90 hover:bg-slate-800 text-[10px] text-slate-300 border border-slate-700 font-mono flex items-center gap-1 shadow-md active:scale-95 transition';
+  }
+
+  function stopVisionDialogue() {
+    visionDialogueEnabled = false;
+    visionDialogueSending = false;
+    if (cameraInterval) clearInterval(cameraInterval);
+    cameraInterval = null;
+    updateVisionDialogueButton();
+  }
+
+  function toggleVisionDialogue() {
+    if (!isCameraOn) {
+      updateCameraBadge(false, '請先開啟相機');
+      return;
+    }
+    if (visionDialogueEnabled) {
+      stopVisionDialogue();
+      updateCameraBadge(false, '視覺對話已暫停（AI 需要時才擷取）');
+      return;
+    }
+    visionDialogueEnabled = true;
+    updateVisionDialogueButton();
+    updateCameraBadge(false, '👁️ 視覺對話待命：說話時最多 1 FPS');
+    cameraInterval = setInterval(async () => {
+      const aiSpeaking = isAiResponding || (audioPlayer && audioPlayer.activeSources.length > 0);
+      if (!visionDialogueEnabled || visionDialogueSending || !isCameraOn || isMuted || !userSpeechActive || aiSpeaking) return;
+      visionDialogueSending = true;
+      try {
+        await captureCameraFrame({
+          reason: 'vision_dialogue', maxWidth: 640, quality: 0.6,
+          persistLocally: false, recordSnapshot: false
+        });
+      } finally {
+        visionDialogueSending = false;
+      }
+    }, 1000);
+    if (typeof window.haptic === 'function') window.haptic(20);
+  }
+
   async function flipCamera() {
     cameraFacingMode = cameraFacingMode === 'environment' ? 'user' : 'environment';
     if (isCameraOn) {
@@ -2097,7 +2151,7 @@
     }
   }
 
-  async function captureCameraFrame({ reason = 'explicit_camera_tool', maxWidth = 1100, quality = 0.76 } = {}) {
+  async function captureCameraFrame({ reason = 'explicit_camera_tool', maxWidth = 1100, quality = 0.76, persistLocally = true, recordSnapshot = true } = {}) {
     if (!isConnected || !ws || ws.readyState !== WebSocket.OPEN || !isCameraOn) {
       return { success: false, error: 'Live 相機尚未開啟或連線未就緒' };
     }
@@ -2129,14 +2183,14 @@
       ws.send(JSON.stringify(videoMsg));
       hasSentFrameForCurrentTurn = true;
       lastVideoFrameSentTime = Date.now();
-      if (sessionSnapshots.length < 6) {
+      if (recordSnapshot && sessionSnapshots.length < 6) {
         sessionSnapshots.push(jpegDataUrl);
       }
       // Persist only explicitly requested frames. Gemini receives the same
       // frame immediately; this copy lets a later delegated main-chat task
       // inspect the authoritative current image too.
       let localSnapshot = null;
-      try {
+      if (persistLocally) try {
         const response = await fetch('/api/live-camera-snapshot', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -3713,6 +3767,8 @@
     stopTracks(cameraStream);
     cameraStream = null;
     isCameraOn = false;
+    visionDialogueEnabled = false;
+    visionDialogueSending = false;
 
     if (mediaVolumeUpdateTimer) clearTimeout(mediaVolumeUpdateTimer);
     mediaVolumeUpdateTimer = null;
