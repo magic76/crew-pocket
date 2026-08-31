@@ -60,7 +60,6 @@ public class FloatingBubbleManager {
     private Button voiceCameraButton = null;
     private Button voiceScreenButton = null;
     private Button voiceMuteButton = null;
-    private Button voicePreviewToggleButton = null;
     private View dialogView = null;
     private WindowManager.LayoutParams bubbleParams = null;
     private WindowManager.LayoutParams dialogParams = null;
@@ -479,15 +478,14 @@ public class FloatingBubbleManager {
                     headerRow.addView(close);
                     dock.addView(headerRow);
 
-                    // Action Buttons Row
+                    // 4 Clean Action Buttons
                     LinearLayout row = new LinearLayout(context);
                     row.setOrientation(LinearLayout.HORIZONTAL);
 
-                    voiceCallButton = makeVoiceButton(nativeLiveRequested ? "掛斷" : "開始通話");
+                    voiceCallButton = makeVoiceButton(nativeLiveRequested ? "🛑 掛斷" : "🎙️ 通話");
                     voiceCameraButton = makeVoiceButton("📷 相機");
                     voiceScreenButton = makeVoiceButton("🖥️ 螢幕");
                     voiceMuteButton = makeVoiceButton("🔇 靜音");
-                    voicePreviewToggleButton = makeVoiceButton("👁️ 畫面");
 
                     voiceCallButton.setOnClickListener(new View.OnClickListener() {
                         @Override public void onClick(View v) {
@@ -526,21 +524,13 @@ public class FloatingBubbleManager {
                         }
                     });
 
-                    voicePreviewToggleButton.setOnClickListener(new View.OnClickListener() {
-                        @Override public void onClick(View v) {
-                            CameraPreviewOverlay.getInstance(context).toggleVisibility();
-                            refreshVoiceControls();
-                        }
-                    });
-
                     LinearLayout.LayoutParams itemLp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
-                    itemLp.setMargins(dp(2), 0, dp(2), 0);
+                    itemLp.setMargins(dp(3), 0, dp(3), 0);
 
                     row.addView(voiceCallButton, itemLp);
                     row.addView(voiceCameraButton, itemLp);
                     row.addView(voiceScreenButton, itemLp);
                     row.addView(voiceMuteButton, itemLp);
-                    row.addView(voicePreviewToggleButton, itemLp);
 
                     dock.addView(row);
                     voiceControlView = dock;
@@ -567,7 +557,6 @@ public class FloatingBubbleManager {
                 voiceCameraButton = null;
                 voiceScreenButton = null;
                 voiceMuteButton = null;
-                voicePreviewToggleButton = null;
             }
         });
     }
@@ -585,11 +574,6 @@ public class FloatingBubbleManager {
         if (voiceMuteButton != null) {
             boolean isMuted = NativeLiveService.isAgentMuted();
             voiceMuteButton.setText(isMuted ? "🔊 開聲" : "🔇 靜音");
-        }
-        if (voicePreviewToggleButton != null) {
-            boolean isShowing = CameraPreviewOverlay.getInstance(context).isShowing();
-            boolean isVis = CameraPreviewOverlay.getInstance(context).isPreviewVisible();
-            voicePreviewToggleButton.setText(!isShowing ? "👁️ 畫面" : (isVis ? "👁️ 隱藏" : "👁️ 顯示"));
         }
     }
 

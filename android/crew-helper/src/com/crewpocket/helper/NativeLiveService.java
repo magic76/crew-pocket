@@ -140,18 +140,16 @@ public class NativeLiveService extends Service {
                 // into Gemini while it is still producing the current answer.
             } else if (sharingCamera) {
                 if (CameraPreviewOverlay.getInstance(NativeLiveService.this).isShowing()) {
-                    CameraPreviewOverlay.getInstance(NativeLiveService.this).takeSnapshot(new CameraPreviewOverlay.SnapshotCallback() {
-                        @Override public void onSuccess(String path) {
-                            if (active && sharingCamera && client != null) client.sendCameraFrame(path);
-                        }
-                        @Override public void onError(String error) {
-                            // Fallback to background capture if overlay not ready
-                            CameraCaptureManager.capturePhoto(NativeLiveService.this, false, new CameraCaptureManager.CaptureCallback() {
-                                @Override public void onSuccess(String path) { if (active && sharingCamera && client != null) client.sendCameraFrame(path); }
-                                @Override public void onError(String error) { updateStatus("相機影格失敗：" + error, true); }
-                            });
-                        }
-                    });
+                    byte[] liveFrame = CameraPreviewOverlay.getInstance(NativeLiveService.this).getLatestJpegFrame();
+                    if (liveFrame != null && liveFrame.length > 0) {
+                        if (active && sharingCamera && client != null) client.sendCameraBytes(liveFrame);
+                    } else {
+                        // If preview frame not ready yet, fallback to single frame capture
+                        CameraCaptureManager.capturePhoto(NativeLiveService.this, false, new CameraCaptureManager.CaptureCallback() {
+                            @Override public void onSuccess(String path) { if (active && sharingCamera && client != null) client.sendCameraFrame(path); }
+                            @Override public void onError(String error) { updateStatus("相機影格失敗：" + error, true); }
+                        });
+                    }
                 } else {
                     CameraCaptureManager.capturePhoto(NativeLiveService.this, false, new CameraCaptureManager.CaptureCallback() {
                         @Override public void onSuccess(String path) { if (active && sharingCamera && client != null) client.sendCameraFrame(path); }

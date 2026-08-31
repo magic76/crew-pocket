@@ -65,6 +65,19 @@ final class NativeGeminiLiveClient extends WebSocketListener {
         }
     }
 
+    void sendCameraBytes(final byte[] jpegBytes) {
+        if (jpegBytes == null || jpegBytes.length == 0) return;
+        new Thread(new Runnable() {
+            @Override public void run() {
+                try {
+                    JSONObject video = new JSONObject().put("mimeType", "image/jpeg").put("data", Base64.encodeToString(jpegBytes, Base64.NO_WRAP));
+                    boolean sent = webSocket != null && webSocket.send(new JSONObject().put("realtimeInput", new JSONObject().put("video", video)).toString());
+                    Log.d(TAG, sent ? "即時相機視訊影格已送達 Gemini" : "即時相機視訊影格未送達");
+                } catch (Exception error) { Log.w(TAG, "相機影格傳送失敗：" + error.getMessage()); }
+            }
+        }, "crew-native-live-camera").start();
+    }
+
     /** Sends a background visual frame while a native Live call is active. */
     void sendCameraFrame(final String path) {
         new Thread(new Runnable() {

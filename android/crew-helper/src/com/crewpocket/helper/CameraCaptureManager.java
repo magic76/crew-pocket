@@ -40,7 +40,9 @@ public class CameraCaptureManager {
                     }
 
                     camera = Camera.open(cameraId);
-                    SurfaceTexture st = new SurfaceTexture(10);
+                    int[] textures = new int[1];
+                    android.opengl.GLES20.glGenTextures(1, textures, 0);
+                    SurfaceTexture st = new SurfaceTexture(textures[0]);
                     camera.setPreviewTexture(st);
 
                     Camera.Parameters params = camera.getParameters();
