@@ -666,9 +666,26 @@ final class NativeGeminiLiveClient extends WebSocketListener {
     private void startAudio() {
         if (!running || recorder != null) return;
         int min = AudioRecord.getMinBufferSize(16000, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT);
-        recorder = new AudioRecord(MediaRecorder.AudioSource.VOICE_RECOGNITION, 16000, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, Math.max(min * 2, 4096));
+        recorder = new AudioRecord(MediaRecorder.AudioSource.VOICE_COMMUNICATION, 16000, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, Math.max(min * 4, 8192));
+        
+        // Attach hardware audio effects if supported by Samsung/Android
+        try {
+            if (android.media.audiofx.AcousticEchoCanceler.isAvailable()) {
+                android.media.audiofx.AcousticEchoCanceler aec = android.media.audiofx.AcousticEchoCanceler.create(recorder.getAudioSessionId());
+                if (aec != null) aec.setEnabled(true);
+            }
+            if (android.media.audiofx.AutomaticGainControl.isAvailable()) {
+                android.media.audiofx.AutomaticGainControl agc = android.media.audiofx.AutomaticGainControl.create(recorder.getAudioSessionId());
+                if (agc != null) agc.setEnabled(true);
+            }
+            if (android.media.audiofx.NoiseSuppressor.isAvailable()) {
+                android.media.audiofx.NoiseSuppressor ns = android.media.audiofx.NoiseSuppressor.create(recorder.getAudioSessionId());
+                if (ns != null) ns.setEnabled(true);
+            }
+        } catch (Exception ignored) {}
+
         int outMin = AudioTrack.getMinBufferSize(24000, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT);
-        player = new AudioTrack(android.media.AudioManager.STREAM_MUSIC, 24000, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT, Math.max(outMin * 3, 8192), AudioTrack.MODE_STREAM);
+        player = new AudioTrack(android.media.AudioManager.STREAM_VOICE_CALL, 24000, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT, Math.max(outMin * 4, 16384), AudioTrack.MODE_STREAM);
         player.play(); recorder.startRecording();
         new Thread(new Runnable() { @Override public void run() { sendMic(); } }, "crew-native-live-mic").start();
     }
@@ -699,9 +716,10 @@ final class NativeGeminiLiveClient extends WebSocketListener {
             // Check if voiceprint neural verification is actively configured
             boolean isVpActive = voiceprintEnabled && voiceprintThreshold > 0 && voiceprintEmbedding != null;
 
-            if (rms > 0.015) {
-                // If this is a new utterance segment (gap > 600ms), start a fresh verification cycle
-                if (now - lastActiveSpeech > 600) {
+            // Sensitive voice activity floor (0.008 vs old 0.015) to capture soft Mandarin consonants
+            if (rms > 0.008) {
+                // If this is a new utterance segment (gap > 800ms), start a fresh verification cycle
+                if (now - lastActiveSpeech > 800) {
                     voiceprintSegmentAuthorized = false;
                     voiceprintCheckPending = false;
                     rollingSpeechPcm.reset();
@@ -714,8 +732,8 @@ final class NativeGeminiLiveClient extends WebSocketListener {
                 if (isVpActive && !voiceprintSegmentAuthorized && !voiceprintCheckPending && rollingSpeechPcm.size() >= 12800) {
                     requestNeuralVoiceprintCheck(rollingSpeechPcm.toByteArray());
                 }
-            } else if (now - lastActiveSpeech > 600) {
-                // Silence gap: reset buffer
+            } else if (now - lastActiveSpeech > 800) {
+                // Extended silence gap: reset buffer
                 rollingSpeechPcm.reset();
                 delayedFrames.clear();
                 voiceprintSegmentAuthorized = false;
@@ -723,14 +741,14 @@ final class NativeGeminiLiveClient extends WebSocketListener {
 
             // Gating Decision:
             if (isVpActive) {
-                boolean withinSpeechWindow = (now - lastActiveSpeech) < 400;
+                boolean withinSpeechWindow = (now - lastActiveSpeech) < 600;
                 if (!withinSpeechWindow) {
                     continue; // silence
                 }
 
                 if (!voiceprintSegmentAuthorized) {
-                    // Buffer during neural analysis (up to ~600ms of audio delay)
-                    if (delayedFrames.size() < 15) {
+                    // Buffer during neural analysis (up to ~1.6s of audio delay buffer)
+                    if (delayedFrames.size() < 40) {
                         delayedFrames.add(chunk);
                     }
                     continue; // Hold audio until authorized
