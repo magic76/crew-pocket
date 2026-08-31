@@ -1534,6 +1534,21 @@
     if (typeof window.haptic === 'function') window.haptic('light');
   }
 
+  // Hands-free is the default Live experience: after the connection is ready,
+  // keep the assistant running but get the large overlay out of the way. The
+  // bottom dock remains available for mute, camera, screen sharing, details
+  // and hangup. We deliberately keep connection/error states visible until
+  // setup finishes so permission or network problems are still actionable.
+  function minimizeLiveCardForHandsFree() {
+    const card = document.getElementById('live-inline-card');
+    if (!card || !liveCardVisible) return;
+    liveCardVisible = false;
+    card.classList.add('hidden');
+    if (liveVoiceBtn) {
+      liveVoiceBtn.title = 'Gemini Live 通話中 · 點擊顯示控制面板';
+    }
+  }
+
   function toggleLiveCardExpanded() {
     const card = document.getElementById('live-inline-card');
     if (!card) return;
@@ -3180,6 +3195,9 @@
           if (audioPlayer) audioPlayer.setCaptureEnabled(!isMuted);
           flushPreSetupAudio();
           updateCardStatus('listening', '🎙️ 可以開始說話');
+          // The full card is useful while connecting, but should not obscure
+          // the app during an ordinary hands-free conversation.
+          setTimeout(minimizeLiveCardForHandsFree, 450);
       // Browser SpeechRecognition may emit periodic start/stop beeps on
       // mobile. Gemini Live audio remains fully functional without it.
       // Transcript capture is handled by the Live audio/session turns.
