@@ -494,16 +494,10 @@ public class CrewAccessibilityService extends AccessibilityService {
 
                 final float fx1 = x1, fy1 = y1, fx2 = x2, fy2 = y2;
                 final long fDur = duration;
-                final boolean isUp = fy2 < fy1;
                 mainHandler.post(new Runnable() {
                     @Override
                     public void run() {
-                        // First try accessibility native scroll action if scrollable container exists
-                        boolean scrolled = performScrollAction(isUp);
-                        if (!scrolled) {
-                            // Fallback to gesture drag/fling
-                            performSwipe(fx1, fy1, fx2, fy2, fDur);
-                        }
+                        performSwipe(fx1, fy1, fx2, fy2, fDur);
                     }
                 });
                 responseJson = "{\"success\":true,\"action\":\"SWIPE\"}";
@@ -708,20 +702,25 @@ public class CrewAccessibilityService extends AccessibilityService {
     private void performSwipe(float x1, float y1, float x2, float y2, long duration) {
         Path path = new Path();
         path.moveTo(x1, y1);
-        // Add a slight cubic curve or intermediate points to mimic human touch drag
-        float midX = (x1 + x2) / 2f;
-        float midY = (y1 + y2) / 2f;
-        path.quadTo(midX + 20f, midY, x2, y2);
+        
+        // Construct smooth, continuous multi-point natural finger curve (easing out)
+        int steps = 12;
+        float dx = x2 - x1;
+        float dy = y2 - y1;
+        
+        for (int i = 1; i <= steps; i++) {
+            float t = (float) i / steps;
+            // Quintic / Sine Ease-Out curve for silky smooth inertia
+            float progress = (float) Math.sin(t * (Math.PI / 2.0));
+            float currX = x1 + dx * progress;
+            float currY = y1 + dy * progress;
+            path.lineTo(currX, currY);
+        }
 
         GestureDescription.Builder builder = new GestureDescription.Builder();
-        long dur = Math.max(280, Math.min(600, duration));
+        long dur = Math.max(300, Math.min(650, duration));
         builder.addStroke(new GestureDescription.StrokeDescription(path, 0, dur));
-        dispatchGesture(builder.build(), new GestureResultCallback() {
-            @Override
-            public void onCompleted(GestureDescription gestureDescription) {}
-            @Override
-            public void onCancelled(GestureDescription gestureDescription) {}
-        }, null);
+        dispatchGesture(builder.build(), null, null);
     }
 
     private void dumpNodesJson(AccessibilityNodeInfo node, StringBuilder sb) {
