@@ -137,11 +137,16 @@ final class NativeGeminiLiveClient extends WebSocketListener {
             aiSpeaking = false;
             stopPlayback();
             listener.onSpeakingChanged(false);
-            // Send empty client content turn complete so Gemini stops generating further tokens
+            // Send zeroed silence frame to trigger Gemini server VAD turn completion instantly
             try {
                 if (webSocket != null) {
-                    webSocket.send(new JSONObject().put("clientContent", new JSONObject()
-                            .put("turns", new JSONArray()).put("turnComplete", true)).toString());
+                    byte[] silence = new byte[3200];
+                    JSONObject root = new JSONObject();
+                    JSONObject audio = new JSONObject();
+                    audio.put("mimeType", "audio/pcm;rate=16000");
+                    audio.put("data", Base64.encodeToString(silence, Base64.NO_WRAP));
+                    root.put("realtimeInput", new JSONObject().put("audio", audio));
+                    webSocket.send(root.toString());
                 }
             } catch (Exception ignored) {}
             return false; // remains unmuted, but interrupted
@@ -234,6 +239,15 @@ final class NativeGeminiLiveClient extends WebSocketListener {
         JSONObject server = response.optJSONObject("serverContent");
         if (server == null) server = response.optJSONObject("server_content");
         if (server == null) return;
+        if (server.optBoolean("interrupted", false)) {
+            stopPlayback();
+            interruptedCurrentTurn = true;
+            if (aiSpeaking) {
+                aiSpeaking = false;
+                listener.onSpeakingChanged(false);
+            }
+            return;
+        }
         JSONObject inputTranscript = server.optJSONObject("inputTranscription");
         if (inputTranscript == null) inputTranscript = server.optJSONObject("input_transcription");
         if (inputTranscript != null && !inputTranscript.optString("text").isEmpty()) listener.onTranscript("你", inputTranscript.optString("text"));
@@ -566,7 +580,7 @@ final class NativeGeminiLiveClient extends WebSocketListener {
         }
     }
     private void playAudio(byte[] pcm) {
-        if (agentMuted) return;
+        if (agentMuted || interruptedCurrentTurn) return;
         try { if (player != null && pcm.length > 0) player.write(pcm, 0, pcm.length); } catch (Exception ignored) {}
     }
     private void reportStage(String text) { stage = text; listener.onStatus(text); Log.d(TAG, text); }
