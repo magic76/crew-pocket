@@ -4,6 +4,7 @@ const fsPromises = require('node:fs/promises');
 const path = require('node:path');
 const url = require('node:url');
 const crypto = require('node:crypto');
+const os = require('node:os');
 const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
 
@@ -1308,8 +1309,9 @@ async function handleSyncGuidelines(req, res) {
   }
 }
 
-// 🧬 Voiceprint Profile & Threshold Sync Handlers
-const voiceprintFilePath = path.join(homeDir, '.gemini', 'voiceprint.json');
+// 🧬 Voiceprint Profile & Threshold Sync Handlers (Stored under ~/.crew-pocket/)
+const CREW_POCKET_DIR = path.join(os.homedir(), '.crew-pocket');
+const voiceprintFilePath = path.join(CREW_POCKET_DIR, 'voiceprint.json');
 
 async function handleGetVoiceprint(res) {
   try {
@@ -1329,8 +1331,7 @@ async function handleGetVoiceprint(res) {
 async function handleSaveVoiceprint(req, res) {
   try {
     const body = await parseJsonBody(req);
-    const geminiDir = path.join(homeDir, '.gemini');
-    if (!fs.existsSync(geminiDir)) fs.mkdirSync(geminiDir, { recursive: true });
+    if (!fs.existsSync(CREW_POCKET_DIR)) fs.mkdirSync(CREW_POCKET_DIR, { recursive: true });
     
     let current = { enabled: false, threshold: 0.25, embedding: null };
     if (fs.existsSync(voiceprintFilePath)) {

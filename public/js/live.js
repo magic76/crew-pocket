@@ -319,25 +319,36 @@
   async function loadUserVoiceprint() {
     try {
       const raw = localStorage.getItem(VOICEPRINT_KEY);
+      let localArr = null;
       if (raw) {
         const arr = JSON.parse(raw);
         if (Array.isArray(arr) && arr.length === 192) {
           userVoiceprintProfile = new Float32Array(arr);
+          localArr = arr;
         }
       }
-      // Also sync from local backend if available
+      // Sync with local backend
       fetch('/api/voiceprint').then(r => r.json()).then(data => {
         if (data && Array.isArray(data.embedding) && data.embedding.length === 192) {
           userVoiceprintProfile = new Float32Array(data.embedding);
           localStorage.setItem(VOICEPRINT_KEY, JSON.stringify(data.embedding));
+          if (typeof data.threshold === 'number') {
+            TUNING_CONFIG.SIMILARITY_THRESHOLD = data.threshold;
+            updateVoiceprintThresholdUI();
+          }
+        } else if (localArr) {
+          // If browser has profile but server is uninitialized, push browser state to server!
+          fetch('/api/voiceprint', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              embedding: localArr,
+              enabled: true,
+              threshold: TUNING_CONFIG.SIMILARITY_THRESHOLD
+            })
+          }).catch(() => {});
         }
-        if (data && typeof data.threshold === 'number') {
-          TUNING_CONFIG.SIMILARITY_THRESHOLD = data.threshold;
-          const slider = document.getElementById('live-voiceprint-threshold');
-          const label = document.getElementById('live-voiceprint-threshold-label');
-          if (slider) slider.value = data.threshold;
-          if (label) label.textContent = `${data.threshold.toFixed(2)} · ${data.threshold === 0 ? '已關閉' : data.threshold <= 0.3 ? '日常建議' : '嚴格'}`;
-        }
+        updateVoiceprintModalUI();
       }).catch(() => {});
     } catch (e) {}
   }
