@@ -264,7 +264,7 @@ final class NativeGeminiLiveClient extends WebSocketListener {
         tools.put(new JSONObject().put("name", "swipe_screen").put("description", "Scroll or swipe the phone screen only when explicitly requested.").put("parameters", new JSONObject().put("type", "OBJECT").put("properties", new JSONObject().put("direction", new JSONObject().put("type", "STRING").put("enum", new JSONArray().put("up").put("down").put("left").put("right"))).put("distance", new JSONObject().put("type", "STRING").put("enum", new JSONArray().put("short").put("normal").put("long")))).put("required", new JSONArray().put("direction"))));
         tools.put(new JSONObject().put("name", "tap_screen").put("description", "Tap on a button, app icon, or coordinate on the phone screen. Provide label (e.g. 'LINE', '設定', '確認') or x, y pixel coordinates.").put("parameters", new JSONObject().put("type", "OBJECT").put("properties", new JSONObject().put("label", new JSONObject().put("type", "STRING").put("description", "The button, app icon, or text label to tap")).put("x", new JSONObject().put("type", "NUMBER").put("description", "X coordinate")).put("y", new JSONObject().put("type", "NUMBER").put("description", "Y coordinate")))));
         tools.put(new JSONObject().put("name", "type_text").put("description", "REQUIRED whenever the user asks to type, search, or enter text into any input box, search bar, message field, or coordinate. Provide text and optionally target hint (e.g. '搜尋', '訊息') or x, y coordinates.").put("parameters", new JSONObject().put("type", "OBJECT").put("properties", new JSONObject().put("target", new JSONObject().put("type", "STRING").put("description", "Input field hint or label")).put("x", new JSONObject().put("type", "NUMBER").put("description", "Optional X coordinate")).put("y", new JSONObject().put("type", "NUMBER").put("description", "Optional Y coordinate")).put("text", new JSONObject().put("type", "STRING").put("description", "The text to type into the field"))).put("required", new JSONArray().put("text"))));
-        tools.put(new JSONObject().put("name", "highlight_area").put("description", "Draw a visual highlight box on screen. You MUST provide coordinates (left, top, right, bottom in 0-1000 scale) based on what you see in the current frame, along with the label name.").put("parameters", new JSONObject().put("type", "OBJECT").put("properties", new JSONObject().put("label", new JSONObject().put("type", "STRING").put("description", "Name of the element (e.g. 'Apple Music', '搜尋列')")).put("left", new JSONObject().put("type", "NUMBER").put("description", "Left X (0-1000 scale)")).put("top", new JSONObject().put("type", "NUMBER").put("description", "Top Y (0-1000 scale)")).put("right", new JSONObject().put("type", "NUMBER").put("description", "Right X (0-1000 scale)")).put("bottom", new JSONObject().put("type", "NUMBER").put("description", "Bottom Y (0-1000 scale)")).put("x", new JSONObject().put("type", "NUMBER").put("description", "Center X (0-1000 scale)")).put("y", new JSONObject().put("type", "NUMBER").put("description", "Center Y (0-1000 scale)"))).put("required", new JSONArray().put("label"))));
+        tools.put(new JSONObject().put("name", "highlight_area").put("description", "Draw a visual highlight box around an object on screen. You MUST provide tight bounding box coordinates (left, top, right, bottom in 0-1000 scale) enclosing the target so the target is centered inside the box, along with the label name.").put("parameters", new JSONObject().put("type", "OBJECT").put("properties", new JSONObject().put("label", new JSONObject().put("type", "STRING").put("description", "Name of the element (e.g. 'Apple Music', 'LINE', '搜尋列')")).put("left", new JSONObject().put("type", "NUMBER").put("description", "Left edge (0-1000 scale)")).put("top", new JSONObject().put("type", "NUMBER").put("description", "Top edge (0-1000 scale)")).put("right", new JSONObject().put("type", "NUMBER").put("description", "Right edge (0-1000 scale)")).put("bottom", new JSONObject().put("type", "NUMBER").put("description", "Bottom edge (0-1000 scale)")).put("x", new JSONObject().put("type", "NUMBER").put("description", "Center X (0-1000 scale)")).put("y", new JSONObject().put("type", "NUMBER").put("description", "Center Y (0-1000 scale)"))).put("required", new JSONArray().put("label"))));
         tools.put(new JSONObject().put("name", "press_key").put("description", "Press HOME, BACK, or RECENTS only when explicitly requested.").put("parameters", new JSONObject().put("type", "OBJECT").put("properties", new JSONObject().put("key", new JSONObject().put("type", "STRING").put("enum", new JSONArray().put("HOME").put("BACK").put("RECENTS")))).put("required", new JSONArray().put("key"))));
         tools.put(new JSONObject().put("name", "send_to_main_chat").put("description", "Send a clean message to the current or most recently active Crew Pocket main chat ONLY when the user explicitly asks to send, tell, or hand a message to the main chat.").put("parameters", new JSONObject().put("type", "OBJECT").put("properties", new JSONObject().put("message", new JSONObject().put("type", "STRING"))).put("required", new JSONArray().put("message"))));
         return tools;
@@ -449,10 +449,22 @@ final class NativeGeminiLiveClient extends WebSocketListener {
         if (left < 0 && args.has("x") && args.has("y")) {
             double cx = args.optDouble("x", 0);
             double cy = args.optDouble("y", 0);
-            left = cx - 120;
-            right = cx + 120;
-            top = cy - 80;
-            bottom = cy + 80;
+            left = cx - 50;
+            right = cx + 50;
+            top = cy - 50;
+            bottom = cy + 50;
+        }
+
+        // Gemini Vision standard bbox: if ymin/xmin/ymax/xmax or if top/left were swapped
+        if (args.has("box_2d") || args.has("bbox")) {
+            JSONArray b = args.optJSONArray("box_2d");
+            if (b == null) b = args.optJSONArray("bbox");
+            if (b != null && b.length() >= 4) {
+                top = b.optDouble(0, top);
+                left = b.optDouble(1, left);
+                bottom = b.optDouble(2, bottom);
+                right = b.optDouble(3, right);
+            }
         }
 
         // 3. Coordinate Normalization (0~1000 scale to 1440x3120)
