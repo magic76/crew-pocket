@@ -608,25 +608,51 @@ public class FloatingBubbleManager {
 
                 if (voiceCameraButton != null) {
                     boolean isCamActive = NativeLiveService.isCameraSharing();
-                    setVoiceButtonActive(voiceCameraButton, isCamActive);
+                    GradientDrawable camBg = new GradientDrawable();
+                    camBg.setCornerRadius(dp(16));
+                    if (isCamActive) {
+                        camBg.setColor(Color.parseColor("#4F46E5")); // Indigo 600
+                        camBg.setStroke(dp(1), Color.parseColor("#818CF8")); // Indigo 400
+                        voiceCameraButton.setTextColor(Color.WHITE);
+                    } else {
+                        camBg.setColor(Color.parseColor("#E61E293B")); // Slate 800/90
+                        camBg.setStroke(dp(1), Color.parseColor("#334155")); // Slate 700
+                        voiceCameraButton.setTextColor(Color.parseColor("#CBD5E1")); // Slate 300
+                    }
+                    voiceCameraButton.setBackground(camBg);
+                    voiceCameraButton.setText("📷");
                 }
                 if (voiceScreenButton != null) {
                     boolean isScreenActive = NativeLiveService.isScreenSharing();
-                    setVoiceButtonActive(voiceScreenButton, isScreenActive);
+                    GradientDrawable screenBg = new GradientDrawable();
+                    screenBg.setCornerRadius(dp(16));
+                    if (isScreenActive) {
+                        screenBg.setColor(Color.parseColor("#0891B2")); // Cyan 600
+                        screenBg.setStroke(dp(1), Color.parseColor("#67E8F9")); // Cyan 300
+                        voiceScreenButton.setTextColor(Color.WHITE);
+                    } else {
+                        screenBg.setColor(Color.parseColor("#E61E293B")); // Slate 800/90
+                        screenBg.setStroke(dp(1), Color.parseColor("#334155")); // Slate 700
+                        voiceScreenButton.setTextColor(Color.parseColor("#CBD5E1")); // Slate 300
+                    }
+                    voiceScreenButton.setBackground(screenBg);
+                    voiceScreenButton.setText("🖥️");
                 }
                 if (voiceCallButton != null) {
                     GradientDrawable callBg = new GradientDrawable();
-                    callBg.setCornerRadius(dp(14));
+                    callBg.setCornerRadius(dp(16));
                     if (isLiveActive) {
                         // 🛑 In Call -> Rose Red Hangup Button
                         callBg.setColor(Color.parseColor("#E11D48")); // Rose 600
                         callBg.setStroke(dp(1), Color.parseColor("#FDA4AF"));
                         voiceCallButton.setText("🛑");
+                        voiceCallButton.setTextColor(Color.WHITE);
                     } else {
-                        // 🎙️ Idle -> Indigo Start Call Button
-                        callBg.setColor(Color.parseColor("#4F46E5")); // Indigo 600
-                        callBg.setStroke(dp(1), Color.parseColor("#818CF8"));
+                        // 🎙️ Idle -> Slate 800 Start Call Button
+                        callBg.setColor(Color.parseColor("#E61E293B")); // Slate 800
+                        callBg.setStroke(dp(1), Color.parseColor("#4F46E5")); // Indigo border
                         voiceCallButton.setText("🎙️");
+                        voiceCallButton.setTextColor(Color.parseColor("#A5B4FC"));
                     }
                     voiceCallButton.setBackground(callBg);
                 }
@@ -636,22 +662,22 @@ public class FloatingBubbleManager {
                     muteBg.setCornerRadius(dp(16));
 
                     if (isAiSpeaking) {
-                        // 🔊 State 1: AI is speaking -> Amber 600 (Tap to interrupt)
+                        // 🔊 State 1: AI is speaking -> Amber 500/Rose (Tap to interrupt)
                         muteBg.setColor(Color.parseColor("#D97706")); // Amber 600
-                        muteBg.setStroke(dp(2), Color.parseColor("#FDE68A")); // Amber border
-                        voiceMuteButton.setText("🔊 AI 說話中 · 點擊打斷");
+                        muteBg.setStroke(dp(2), Color.parseColor("#FDE68A")); // Amber 300
+                        voiceMuteButton.setText("🔊  AI 說話中 · 點擊打斷");
                         voiceMuteButton.setTextColor(Color.WHITE);
                     } else if (isMuted) {
-                        // 🔇 State 2: Muted -> Deep Rose 900 (Tap to unmute)
+                        // 🔇 State 2: Muted -> Rose 900 (Tap to unmute)
                         muteBg.setColor(Color.parseColor("#881337")); // Rose 900
                         muteBg.setStroke(dp(2), Color.parseColor("#F43F5E")); // Rose 500
-                        voiceMuteButton.setText("🔇 靜音中 · 點擊開啟");
+                        voiceMuteButton.setText("🔇  麥克風已靜音 · 點擊開啟");
                         voiceMuteButton.setTextColor(Color.parseColor("#FECDD3"));
                     } else {
-                        // 🎙️ State 3: Listening / Active -> Teal 600 (Tap to mute)
+                        // 🎙️ State 3: Listening / Active -> Teal 500 / Indigo (Tap to mute)
                         muteBg.setColor(Color.parseColor("#0D9488")); // Teal 600
                         muteBg.setStroke(dp(2), Color.parseColor("#2DD4BF")); // Teal 400
-                        voiceMuteButton.setText("🎙️ 收音中 · 點擊靜音");
+                        voiceMuteButton.setText("🎙️  通話收音中 · 點擊靜音");
                         voiceMuteButton.setTextColor(Color.WHITE);
                     }
                     voiceMuteButton.setBackground(muteBg);
