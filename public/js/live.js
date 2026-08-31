@@ -1017,7 +1017,7 @@
             <button id="live-card-snap-btn" type="button" class="px-2.5 py-1 rounded-lg bg-teal-950/90 hover:bg-teal-900 text-[10px] text-teal-300 border border-teal-500/50 font-mono flex items-center gap-1 shadow-md active:scale-95 transition" title="截圖儲存並發送高畫質畫面給 AI">
               📸 截圖存檔
             </button>
-            <button id="live-card-vision-btn" type="button" class="px-2.5 py-1 rounded-lg bg-slate-900/90 hover:bg-slate-800 text-[10px] text-slate-300 border border-slate-700 font-mono flex items-center gap-1 shadow-md active:scale-95 transition" title="只在您說話時，每秒最多傳送一張低解析畫面給 AI">
+            <button id="live-card-vision-btn" type="button" class="px-2.5 py-1 rounded-lg bg-slate-900/90 hover:bg-slate-800 text-[10px] text-slate-300 border border-slate-700 font-mono flex items-center gap-1 shadow-md active:scale-95 transition" title="持續每秒最多傳送一張低解析畫面給 AI">
               👁️ 視覺對話
             </button>
             <button id="live-card-expand-btn" type="button" class="px-2.5 py-1 rounded-lg bg-indigo-950/90 hover:bg-indigo-900 text-[10px] text-indigo-300 border border-indigo-500/50 font-mono flex items-center gap-1 shadow-md active:scale-95 transition" title="放大 / 縮小鏡頭預覽">
@@ -2088,7 +2088,7 @@
   function updateVisionDialogueButton() {
     const button = document.getElementById('live-card-vision-btn');
     if (!button) return;
-    button.textContent = visionDialogueEnabled ? '👁️ 視覺傳送中' : '👁️ 視覺對話';
+    button.textContent = visionDialogueEnabled ? '👁️ 持續視覺中' : '👁️ 視覺對話';
     button.className = visionDialogueEnabled
       ? 'px-2.5 py-1 rounded-lg bg-indigo-600/90 hover:bg-indigo-500 text-[10px] text-white border border-indigo-300 font-mono flex items-center gap-1 shadow-md active:scale-95 transition'
       : 'px-2.5 py-1 rounded-lg bg-slate-900/90 hover:bg-slate-800 text-[10px] text-slate-300 border border-slate-700 font-mono flex items-center gap-1 shadow-md active:scale-95 transition';
@@ -2114,10 +2114,9 @@
     }
     visionDialogueEnabled = true;
     updateVisionDialogueButton();
-    updateCameraBadge(false, '👁️ 視覺對話待命：說話時最多 1 FPS');
+    updateCameraBadge(false, '👁️ 持續視覺對話：最多 1 FPS');
     cameraInterval = setInterval(async () => {
-      const aiSpeaking = isAiResponding || (audioPlayer && audioPlayer.activeSources.length > 0);
-      if (!visionDialogueEnabled || visionDialogueSending || !isCameraOn || isMuted || !userSpeechActive || aiSpeaking) return;
+      if (!visionDialogueEnabled || visionDialogueSending || !isCameraOn) return;
       visionDialogueSending = true;
       try {
         await captureCameraFrame({
@@ -2876,7 +2875,7 @@
 【Role】Be natural, accurate, and concise. Always give the final answer as AUDIO. Match the user's primary language naturally; Traditional Chinese is the default.
 【Conversation】Answer ordinary questions directly. If a name, number, command, or intent is unclear, inconsistent, or important, ask one short clarification instead of guessing. Do not treat a noisy transcript as fact.
 【Tool boundary】Use a tool only when it is necessary to fulfill an explicit request: phone UI/operation, live camera, workspace file, drafting into the main input, or delegating a task to the main chat. A screenshot, tap, swipe, or key press requires an explicit request in the user's latest utterance; past conversation, main-chat background, inference, or a normal question never authorizes it. Never call tools merely to verify a normal answer.
-【Vision】For the live camera, call capture_camera_frame and rely only on the newest returned frame. For phone apps, buttons, or on-screen content, use take_screenshot; never substitute one type of image for the other.
+【Vision】When continuous live-camera frames are arriving, answer from the newest frame without requesting or calling a normal camera capture. Call capture_camera_frame only when no current frame is available or high detail is needed. For phone apps, buttons, or on-screen content, use take_screenshot; never substitute one type of image for the other.
 【Main-chat delegation】Only when the user explicitly asks the main chat to handle a task: call prepare_main_task with a precise, clean task, then briefly read its summary. Wait for a clear semantic confirmation referring to that pending task (for example: 確認、好、可以、Sure, yes, confirmed) or the confirmation button. If the reply is ambiguous or unrelated, ask briefly instead. Then call confirm_main_task once; it confirms the single pending task automatically, so never invent an ID. After it returns, immediately speak the result and never confirm that task again.
 【Transcript】The client records transcripts. Never try to log the conversation yourself.`
           : `你是 Crew Pocket 的即時語音助理。
@@ -2884,7 +2883,7 @@
 【角色】自然、準確、簡潔地回應；最終回答一律以 AUDIO 語音說出。預設使用繁體中文，並依使用者主要語言自然切換。
 【對話】一般知識、時間、閒聊或解釋直接回答。姓名、數字、指令或意圖聽不清楚、前後矛盾或影響結果時，先用一句話確認，不要猜測或把雜訊轉錄當成事實。
 【工具邊界】只有為了完成使用者明確要求的手機畫面／操作、Live 相機、工作區檔案、填入主輸入框草稿，或交辦主對話時才使用工具。手機截圖、點擊、滑動或按鍵只能由使用者本輪最新一句明確口令授權；過去對話、主對話背景、推測或一般問題都不能授權。一般問題不可為了確認而隨意調工具。
-【視覺】詢問 Live 相機、眼前或周遭時，使用 capture_camera_frame，且只採信該次回傳的最新畫面；詢問手機 App、按鈕或螢幕內容時，使用 take_screenshot。兩者不可互相替代。
+【視覺】若持續 Live 相機影格正在輸入，直接依最新影格回答，不必再要求或呼叫一般相機截圖；只有需要新的高細節影格或目前沒有影格時才使用 capture_camera_frame。詢問手機 App、按鈕或螢幕內容時，使用 take_screenshot。兩者不可互相替代。
 【交辦主對話】只有使用者明確要求主對話處理任務時，先以 prepare_main_task 建立乾淨、精確的任務，再念出短摘要。等待使用者針對該待交辦任務作出明確語意確認，例如「確認」「好」「可以」「Sure」「yes」「confirmed」，或按下確認按鈕；若回覆不明確或無關則簡短追問。確認後只呼叫一次 confirm_main_task；它會確認目前唯一任務，絕不編造 ID。工具回傳後立刻口語報告結果，同一任務不可再次確認。
 【逐字稿】逐字稿由前端處理，不要自行記錄對話。`;
         const discussionPrompt = liveSessionMode === 'discussion'
@@ -3001,7 +3000,7 @@
                   },
                   {
                     name: "capture_camera_frame",
-                    description: "Capture a brand-new frame from the currently open Gemini Live camera. MANDATORY for questions about the camera, lens, surroundings, what is in front of the user, or what the user is pointing at. Each call sends a new authoritative frame: never rely on an older image. Use detail='high' for text, numbers, small objects, or fine visual details; otherwise use standard detail. Never substitute take_screenshot.",
+                    description: "Capture a brand-new high-detail frame from the currently open Gemini Live camera only when no current realtime camera frame is available or fine details, text, numbers, or small objects require it. If continuous camera frames are arriving, answer from the newest frame without this call. Never substitute take_screenshot.",
                     parameters: {
                       type: "OBJECT",
                       properties: {
