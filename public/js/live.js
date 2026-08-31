@@ -985,7 +985,7 @@
 
         <div class="flex items-center gap-2 min-w-0">
           <div id="live-card-latest-line" class="min-w-0 flex-1 rounded-xl border border-slate-800 bg-slate-950/65 px-2.5 py-2 text-[11px] text-slate-400 truncate">💬 請說話…</div>
-          <div id="live-call-protection-status" class="shrink-0 max-w-[42%] truncate rounded-xl border border-slate-800 bg-slate-950/70 px-2 py-2 text-[10px] font-mono text-slate-400" title="長通話保護">🛡️ 待命</div>
+          <div id="live-call-protection-status" class="shrink-0 max-w-[42%] truncate text-[10px] leading-none font-mono text-slate-400" title="長通話保護">🛡️ 待命</div>
         </div>
 
         <div id="live-main-task-card" class="hidden rounded-xl border border-amber-500/45 bg-amber-950/25 p-2.5 space-y-2">
@@ -1029,7 +1029,7 @@
         <!-- Shared tab panel: only one diagnostic/control view is visible at a time. -->
         <div id="live-card-tools-panel" class="rounded-xl bg-slate-950/90 border border-teal-500/40 overflow-hidden text-xs select-none">
           <div class="grid grid-cols-2 gap-1 p-1 bg-slate-900/80 border-b border-slate-800">
-            <button id="live-tools-audio-tab" type="button" class="min-h-[40px] rounded-lg bg-teal-500/20 border border-teal-500/35 text-teal-200 text-[11px] font-bold active:scale-95 transition">🔊 音訊調整</button>
+            <button id="live-tools-audio-tab" type="button" class="min-h-[40px] rounded-lg border border-transparent text-slate-400 hover:text-teal-200 hover:bg-teal-500/10 text-[11px] font-bold active:scale-95 transition">🔊 音訊調整</button>
             <button id="live-tools-health-tab" type="button" class="min-h-[40px] rounded-lg border border-transparent text-slate-400 hover:text-emerald-200 hover:bg-emerald-500/10 text-[11px] font-bold active:scale-95 transition">🩺 通話健康</button>
           </div>
 
@@ -1044,7 +1044,7 @@
             <div class="rounded-lg border border-slate-800 bg-black/35 px-2 py-1.5"><span class="text-slate-500">最近異常：</span><span id="live-health-issue" class="text-slate-400">尚無</span></div>
           </div>
 
-          <div id="live-card-tuning-drawer" class="p-2.5 space-y-2 transition-all">
+          <div id="live-card-tuning-drawer" class="hidden p-2.5 space-y-2 transition-all">
           <div class="rounded-xl border border-slate-800 bg-slate-900/70 px-2.5 py-2" title="調整 Android 系統媒體音量">
             <div class="mb-1 flex items-center justify-between text-[10px]"><span class="text-slate-300">🔈 媒體音量</span><span id="live-card-volume-value" class="font-mono text-teal-300">${selectedVolume}%</span></div>
             <input id="live-card-volume-slider" type="range" min="0" max="100" step="1" value="${selectedVolume}" class="w-full h-8 accent-teal-400 cursor-pointer" aria-label="媒體音量">
@@ -1162,7 +1162,7 @@
     const tuningDrawer = card.querySelector('#live-card-tuning-drawer');
     const audioTab = card.querySelector('#live-tools-audio-tab');
     const healthTab = card.querySelector('#live-tools-health-tab');
-    let activeToolsTab = 'audio';
+    let activeToolsTab = null;
     const setToolsTab = (tab) => {
       const drawer = tab === 'audio' ? tuningDrawer : healthDrawer;
       const isAlreadyVisible = activeToolsTab === tab && drawer && !drawer.classList.contains('hidden');
@@ -2309,7 +2309,7 @@
     const status = document.getElementById('live-call-protection-status');
     if (status) {
       status.textContent = `♾️ 長通話延續中 · ${mins}:${String(secs).padStart(2, '0')}`;
-      status.className = 'rounded-lg border border-teal-500/35 bg-teal-950/25 px-2 py-1.5 text-[10px] font-mono text-teal-300';
+      status.className = 'shrink-0 max-w-[42%] truncate text-[10px] leading-none font-mono text-teal-300';
     }
     callProtectionTimer = setTimeout(updateCallProtection, 1000);
   }
