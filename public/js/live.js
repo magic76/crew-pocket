@@ -2507,28 +2507,6 @@
     lastLiveHealthIssue = null;
     liveCallStartTs = Date.now();
 
-    // Gemini Live retains conversational context across the call. Phone actions
-    // are therefore authorized from the tail of this *current* raw input turn,
-    // never from a prior request or from the injected main-chat background.
-    function getRecentVoiceCommand() {
-      return String(currentTurnInputTranscript || '')
-        .replace(/\s+/g, ' ')
-        .trim()
-        .slice(-220);
-    }
-
-    function isCurrentPhoneActionAuthorized(name) {
-      const command = getRecentVoiceCommand();
-      if (!command) return false;
-      const patterns = {
-        take_screenshot: /(截[圖图]|[螢屏]幕截[圖图]|[畫画]面截[圖图]|看(?:一下)?(?:[螢屏]幕|[畫画]面)|screen\s*shot|screenshot)/i,
-        tap_screen: /(點(?:擊|一下)?|按(?:一下)?|tap|click)/i,
-        swipe_screen: /(滑(?:動|一下)?|往[上下左右]滑|swipe|scroll)/i,
-        press_key: /(回(?:到)?首頁|返回|回去|最近(?:使用)?|home|back|recents)/i
-      };
-      return Boolean(patterns[name] && patterns[name].test(command));
-    }
-
     // 🕹️ Phone Screen Automation Handler for Gemini Live Tools
     async function handleLiveToolCall(call) {
       if (!call || !call.name) return;
@@ -2544,9 +2522,6 @@
         if (liveSessionMode === 'discussion' && !discussionToolAllowed) {
           toolResult = { success: false, error: '目前是語音討論模式，此工具被停用；只允許在使用者明確要求時把草稿填入主輸入框。' };
           appendCardTranscript('system', `🛡️ 討論模式已阻擋：${name}`);
-        } else if (['take_screenshot', 'tap_screen', 'swipe_screen', 'press_key'].includes(name) && !isCurrentPhoneActionAuthorized(name)) {
-          toolResult = { success: false, error: '已阻擋：目前這一輪語音沒有明確要求此手機操作。舊對話背景不可授權截圖或控制手機。' };
-          appendCardTranscript('system', `🛡️ 已阻擋舊上下文觸發的手機操作：${name}`);
         } else if (name === 'swipe_screen') {
           const dir = (args.direction || 'up').toLowerCase();
           let x1 = 720, y1 = 1800, x2 = 720, y2 = 800, dur = 250;
