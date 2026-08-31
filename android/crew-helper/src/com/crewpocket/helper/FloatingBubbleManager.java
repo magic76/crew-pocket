@@ -456,11 +456,11 @@ public class FloatingBubbleManager {
                             PixelFormat.TRANSLUCENT
                     );
                     voiceControlParams.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
-                    voiceControlParams.y = dp(28);
+                    voiceControlParams.y = dp(42); // Elevated above navigation bar / gesture bar
 
                     LinearLayout dock = new LinearLayout(context);
                     dock.setOrientation(LinearLayout.VERTICAL);
-                    dock.setPadding(dp(12), dp(10), dp(12), dp(12));
+                    dock.setPadding(dp(14), dp(12), dp(14), dp(18)); // Generous bottom padding
 
                     GradientDrawable dockBg = new GradientDrawable();
                     dockBg.setColor(Color.parseColor("#E60F172A")); // Semi-transparent Slate 900
