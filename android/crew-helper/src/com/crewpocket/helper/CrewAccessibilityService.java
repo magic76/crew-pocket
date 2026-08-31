@@ -6,6 +6,8 @@ import android.accessibilityservice.GestureDescription;
 import android.content.Context;
 import android.graphics.Path;
 import android.graphics.Rect;
+import android.graphics.Bitmap;
+import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.media.AudioManager;
@@ -28,6 +30,10 @@ import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
+import java.util.concurrent.Executor;
+import java.lang.reflect.InvocationHandler;
+import java.lang.reflect.Method;
+import java.lang.reflect.Proxy;
 
 public class CrewAccessibilityService extends AccessibilityService {
     private static final String TAG = "CrewAccessibilityService";
@@ -150,6 +156,79 @@ public class CrewAccessibilityService extends AccessibilityService {
         out.close();
     }
 
+    /**
+     * Android 11+ accessibility screenshot API. Unlike GLOBAL_ACTION_TAKE_SCREENSHOT,
+     * it captures in the background and does not show the system screenshot flash.
+     * Reflection keeps this helper buildable with the local API-24 android.jar.
+     */
+    private boolean requestSilentScreenshot(final Object lock, final String[] result) {
+        if (Build.VERSION.SDK_INT < 30) return false;
+        try {
+            final Class<?> callbackClass = Class.forName("android.accessibilityservice.AccessibilityService$TakeScreenshotCallback");
+            final Method takeScreenshot = AccessibilityService.class.getMethod(
+                    "takeScreenshot", Integer.TYPE, Executor.class, callbackClass);
+            final Executor executor = new Executor() {
+                @Override public void execute(Runnable command) { mainHandler.post(command); }
+            };
+            final Object callback = Proxy.newProxyInstance(callbackClass.getClassLoader(),
+                    new Class<?>[]{callbackClass}, new InvocationHandler() {
+                        @Override public Object invoke(Object proxy, Method method, Object[] args) {
+                            try {
+                                if ("onSuccess".equals(method.getName()) && args != null && args.length > 0) {
+                                    File dir = new File("/sdcard/Pictures/CrewPocket");
+                                    dir.mkdirs();
+                                    File latest = new File(dir, "latest_screen_photo.png");
+                                    saveSilentScreenshotResult(args[0], latest);
+                                    result[0] = "{\"success\":true,\"path\":\"" + latest.getAbsolutePath()
+                                            + "\",\"latestPath\":\"" + latest.getAbsolutePath() + "\",\"silent\":true}";
+                                } else if ("onFailure".equals(method.getName())) {
+                                    result[0] = "{\"success\":false,\"error\":\"背景截圖失敗\"}";
+                                }
+                            } catch (Exception e) {
+                                result[0] = "{\"success\":false,\"error\":\"" + e.getMessage().replace("\"", "\\\"") + "\"}";
+                            } finally {
+                                synchronized (lock) { lock.notify(); }
+                            }
+                            return null;
+                        }
+                    });
+            mainHandler.post(new Runnable() {
+                @Override public void run() {
+                    try {
+                        // 0 is the default display ID.
+                        takeScreenshot.invoke(CrewAccessibilityService.this, 0, executor, callback);
+                    } catch (Exception e) {
+                        result[0] = "{\"success\":false,\"error\":\"" + e.getMessage().replace("\"", "\\\"") + "\"}";
+                        synchronized (lock) { lock.notify(); }
+                    }
+                }
+            });
+            return true;
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
+
+    private void saveSilentScreenshotResult(Object screenshotResult, File destination) throws Exception {
+        Method getHardwareBuffer = screenshotResult.getClass().getMethod("getHardwareBuffer");
+        Method getColorSpace = screenshotResult.getClass().getMethod("getColorSpace");
+        Object hardwareBuffer = getHardwareBuffer.invoke(screenshotResult);
+        Object colorSpace = getColorSpace.invoke(screenshotResult);
+        Class<?> hardwareBufferClass = Class.forName("android.hardware.HardwareBuffer");
+        Class<?> colorSpaceClass = Class.forName("android.graphics.ColorSpace");
+        Method wrapHardwareBuffer = Bitmap.class.getMethod("wrapHardwareBuffer", hardwareBufferClass, colorSpaceClass);
+        Bitmap bitmap = (Bitmap) wrapHardwareBuffer.invoke(null, hardwareBuffer, colorSpace);
+        if (bitmap == null) throw new Exception("背景截圖影像不可用");
+        FileOutputStream out = new FileOutputStream(destination);
+        try {
+            if (!bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)) throw new Exception("背景截圖儲存失敗");
+        } finally {
+            out.close();
+            bitmap.recycle();
+            try { hardwareBuffer.getClass().getMethod("close").invoke(hardwareBuffer); } catch (Exception ignored) {}
+        }
+    }
+
     private void handleSocketRequest(final Socket socket) {
         try {
             BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
@@ -214,6 +293,12 @@ public class CrewAccessibilityService extends AccessibilityService {
                 final String[] result = new String[]{"{\"success\":false,\"error\":\"Screenshot failed\"}"};
                 final long captureStartedAt = System.currentTimeMillis();
 
+                if (requestSilentScreenshot(lock, result)) {
+                    synchronized (lock) {
+                        try { lock.wait(3500); } catch (Exception ignored) {}
+                    }
+                    responseJson = result[0];
+                } else {
                 performGlobalAction(9);
                 new Thread(new Runnable() {
                     @Override
@@ -320,6 +405,7 @@ public class CrewAccessibilityService extends AccessibilityService {
                     } catch (Exception ignored) {}
                 }
                 responseJson = result[0];
+                }
             } else if (path.startsWith("/photo")) {
                 final boolean isFront = body.toLowerCase().contains("\"front\"") || body.toLowerCase().contains("\"camera\":\"front\"");
                 final Object lock = new Object();
