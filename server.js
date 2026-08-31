@@ -870,6 +870,7 @@ const CREW_POCKET_SYSTEM_GUIDE = `[Context: You are the core intelligence of "Cr
    - 🔄 When modifying or iterating on an interactive tool (e.g. "change color", "add button", "fix bug"):
      * Output the UPDATED COMPLETE \`\`\`html code block so the user can immediately click the new preview card to test the updated version with 0 manual copying.
      * Accompany the code with 1-2 concise bullet points highlighting the specific changes made.
+   - 📁 Persistent custom tool pages: when the user explicitly asks to create or maintain a reusable local HTML page, write it under \`/data/data/com.termux/files/home/agy-web/public/extra/<safe-name>.html\` (never the \`public/\` root). These local pages are listed from the upper-right 「HTML 頁面」 menu and open at \`/extra/<safe-name>.html\`. The directory is intentionally Git-ignored; do not use it for core app files.
 
 2. 📊 Charts & Data Visualization:
    - For data charts, output an HTML block containing Chart.js CDN (<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>) and a <canvas id="chart"></canvas>.
@@ -969,7 +970,7 @@ async function handleChat(req, res) {
   if (!conversation_id) {
     finalPrompt = `${CREW_POCKET_SYSTEM_GUIDE}\n\n[User Request]:\n${finalPrompt}`;
   } else {
-    finalPrompt = `[Context: Operating in Crew Pocket Mobile. Proactively provide complete \`\`\`html sandbox cards for interactive UI requests, Chart.js for data, and Google Maps links for locations.]\n\n${finalPrompt}`;
+    finalPrompt = `[Context: Operating in Crew Pocket Mobile. Proactively provide complete \`\`\`html sandbox cards for interactive UI requests, Chart.js for data, and Google Maps links for locations. For an explicitly requested reusable local custom HTML page, create or update /data/data/com.termux/files/home/agy-web/public/extra/<safe-name>.html; it appears under the HTML 頁面 menu at /extra/<safe-name>.html, is Git-ignored, and must not be used for core app files.]\n\n${finalPrompt}`;
   }
 
   if (image_path) {
