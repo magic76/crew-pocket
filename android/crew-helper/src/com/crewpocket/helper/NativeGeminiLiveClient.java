@@ -601,6 +601,8 @@ final class NativeGeminiLiveClient extends WebSocketListener {
         return Math.sqrt((double) sum / samples) / 32768.0;
     }
 
+    private volatile long lastPlaybackActiveAt = 0;
+
     private void sendMic() {
         byte[] pcm = new byte[1280]; // 40ms @ 16kHz 16-bit mono
 
@@ -608,15 +610,18 @@ final class NativeGeminiLiveClient extends WebSocketListener {
             int count = recorder.read(pcm, 0, pcm.length); if (count <= 0) continue;
             if (agentMuted) continue;
 
-            // 🛑 插話策略控制：若 AI 正在講話，且使用者「未開啟語音插話」，則暫停傳送麥克風（避免外放回授打斷 AI）
-            // 使用者依然可以隨時「點擊浮動按鈕」立即打斷 AI
-            if (aiSpeaking && !allowVoiceInterruption) {
+            long now = System.currentTimeMillis();
+
+            // 🛡️ Web 對齊的 AI 喇叭回音保護罩（Echo Guard）：
+            // 當 AI 正在發聲，或播完後的 500ms 殘響冷卻期內，麥克風自動靜音不傳送！
+            // 這徹底阻斷手機喇叭自說自話的無限迴圈。使用者想插話只需「點擊浮動按鈕」即可秒斷 AI 並開口。
+            if (aiSpeaking || (now - lastPlaybackActiveAt < 500)) {
                 continue;
             }
 
             byte[] chunk = (count == pcm.length) ? pcm.clone() : Arrays.copyOf(pcm, count);
 
-            // 🎙️ 連續無間斷即時串流給 Gemini Live（由 Gemini 伺服器端超強 VAD 自動處理斷句與理解）
+            // 🎙️ 連續即時串流給 Gemini Live
             try {
                 JSONObject root = new JSONObject(); JSONObject audio = new JSONObject();
                 audio.put("mimeType", "audio/pcm;rate=16000");
@@ -628,7 +633,12 @@ final class NativeGeminiLiveClient extends WebSocketListener {
     }
     private void playAudio(byte[] pcm) {
         if (agentMuted || interruptedCurrentTurn) return;
-        try { if (player != null && pcm.length > 0) player.write(pcm, 0, pcm.length); } catch (Exception ignored) {}
+        try {
+            if (player != null && pcm.length > 0) {
+                lastPlaybackActiveAt = System.currentTimeMillis() + (pcm.length * 1000L / (24000 * 2));
+                player.write(pcm, 0, pcm.length);
+            }
+        } catch (Exception ignored) {}
     }
     private void reportStage(String text) { stage = text; listener.onStatus(text); Log.d(TAG, text); }
     private synchronized void fail(String message, Throwable error) {
