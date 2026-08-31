@@ -304,7 +304,7 @@ final class NativeGeminiLiveClient extends WebSocketListener {
         // S24+ physical resolution: 1440 x 3120
         // Default normal: 2300 -> 700 (1600px span, fast fling)
         int x1 = 720, y1 = 2300, x2 = 720, y2 = 700;
-        int duration = 150; // fast stroke triggers natural Android fling physics
+        int duration = 320; // optimal drag duration for Android ViewPager / ScrollView recognition
 
         if ("down".equals(direction)) {
             y1 = 700; y2 = 2300;
@@ -315,13 +315,13 @@ final class NativeGeminiLiveClient extends WebSocketListener {
         }
 
         if ("long".equals(distance) || "page".equals(distance) || "fast".equals(distance)) {
-            duration = 120;
+            duration = 280;
             if ("up".equals(direction)) { y1 = 2700; y2 = 420; }
             else if ("down".equals(direction)) { y1 = 420; y2 = 2700; }
             else if ("left".equals(direction)) { x1 = 1350; x2 = 90; }
             else if ("right".equals(direction)) { x1 = 90; x2 = 1350; }
         } else if ("short".equals(distance) || "little".equals(distance)) {
-            duration = 200;
+            duration = 260;
             if ("up".equals(direction)) { y1 = 1800; y2 = 1200; }
             else if ("down".equals(direction)) { y1 = 1200; y2 = 1800; }
             else if ("left".equals(direction)) { x1 = 950; x2 = 490; }

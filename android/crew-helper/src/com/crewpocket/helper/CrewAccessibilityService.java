@@ -494,10 +494,16 @@ public class CrewAccessibilityService extends AccessibilityService {
 
                 final float fx1 = x1, fy1 = y1, fx2 = x2, fy2 = y2;
                 final long fDur = duration;
+                final boolean isUp = fy2 < fy1;
                 mainHandler.post(new Runnable() {
                     @Override
                     public void run() {
-                        performSwipe(fx1, fy1, fx2, fy2, fDur);
+                        // First try accessibility native scroll action if scrollable container exists
+                        boolean scrolled = performScrollAction(isUp);
+                        if (!scrolled) {
+                            // Fallback to gesture drag/fling
+                            performSwipe(fx1, fy1, fx2, fy2, fDur);
+                        }
                     }
                 });
                 responseJson = "{\"success\":true,\"action\":\"SWIPE\"}";
@@ -664,13 +670,58 @@ public class CrewAccessibilityService extends AccessibilityService {
         return null;
     }
 
+    private boolean performScrollAction(boolean forward) {
+        AccessibilityNodeInfo root = getRootInActiveWindow();
+        if (root == null) return false;
+        try {
+            AccessibilityNodeInfo scrollable = findScrollableNode(root);
+            if (scrollable != null) {
+                int action = forward ? AccessibilityNodeInfo.ACTION_SCROLL_FORWARD : AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD;
+                boolean success = scrollable.performAction(action);
+                scrollable.recycle();
+                return success;
+            }
+        } catch (Exception ignored) {}
+        finally {
+            root.recycle();
+        }
+        return false;
+    }
+
+    private AccessibilityNodeInfo findScrollableNode(AccessibilityNodeInfo node) {
+        if (node == null) return null;
+        if (node.isScrollable()) {
+            return AccessibilityNodeInfo.obtain(node);
+        }
+        int count = node.getChildCount();
+        for (int i = 0; i < count; i++) {
+            AccessibilityNodeInfo child = node.getChild(i);
+            if (child != null) {
+                AccessibilityNodeInfo res = findScrollableNode(child);
+                child.recycle();
+                if (res != null) return res;
+            }
+        }
+        return null;
+    }
+
     private void performSwipe(float x1, float y1, float x2, float y2, long duration) {
         Path path = new Path();
         path.moveTo(x1, y1);
-        path.lineTo(x2, y2);
+        // Add a slight cubic curve or intermediate points to mimic human touch drag
+        float midX = (x1 + x2) / 2f;
+        float midY = (y1 + y2) / 2f;
+        path.quadTo(midX + 20f, midY, x2, y2);
+
         GestureDescription.Builder builder = new GestureDescription.Builder();
-        builder.addStroke(new GestureDescription.StrokeDescription(path, 0, duration));
-        dispatchGesture(builder.build(), null, null);
+        long dur = Math.max(280, Math.min(600, duration));
+        builder.addStroke(new GestureDescription.StrokeDescription(path, 0, dur));
+        dispatchGesture(builder.build(), new GestureResultCallback() {
+            @Override
+            public void onCompleted(GestureDescription gestureDescription) {}
+            @Override
+            public void onCancelled(GestureDescription gestureDescription) {}
+        }, null);
     }
 
     private void dumpNodesJson(AccessibilityNodeInfo node, StringBuilder sb) {
