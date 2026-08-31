@@ -416,10 +416,23 @@ public class FloatingBubbleManager {
         Button button = new Button(context);
         button.setText(text); button.setTextSize(12); button.setAllCaps(false);
         button.setMinHeight(dp(48)); button.setPadding(dp(4), 0, dp(4), 0);
-        GradientDrawable bg = new GradientDrawable();
-        bg.setColor(Color.parseColor("#172033")); bg.setCornerRadius(dp(12)); bg.setStroke(1, Color.parseColor("#334155"));
-        button.setBackground(bg); button.setTextColor(Color.parseColor("#e2e8f0"));
+        setVoiceButtonActive(button, false);
+        button.setTextColor(Color.parseColor("#e2e8f0"));
         return button;
+    }
+
+    private void setVoiceButtonActive(Button button, boolean active) {
+        if (button == null) return;
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(Color.parseColor("#172033"));
+        bg.setCornerRadius(dp(12));
+        if (active) {
+            // 🟢 Green glowing border (2dp #22C55E) when sharing/active
+            bg.setStroke(dp(2), Color.parseColor("#22C55E"));
+        } else {
+            bg.setStroke(1, Color.parseColor("#334155"));
+        }
+        button.setBackground(bg);
     }
 
     private void showVoiceControls() {
@@ -564,16 +577,22 @@ public class FloatingBubbleManager {
     private void refreshVoiceControls() {
         if (voiceCallButton != null) {
             voiceCallButton.setText(nativeLiveRequested ? "🛑 掛斷" : "🎙️ 通話");
+            setVoiceButtonActive(voiceCallButton, nativeLiveRequested);
         }
         if (voiceCameraButton != null) {
-            voiceCameraButton.setText(NativeLiveService.isCameraSharing() ? "📷 相機✓" : "📷 相機");
+            boolean isCamActive = NativeLiveService.isCameraSharing();
+            voiceCameraButton.setText("📷 相機");
+            setVoiceButtonActive(voiceCameraButton, isCamActive);
         }
         if (voiceScreenButton != null) {
-            voiceScreenButton.setText(NativeLiveService.isScreenSharing() ? "🖥️ 螢幕✓" : "🖥️ 螢幕");
+            boolean isScreenActive = NativeLiveService.isScreenSharing();
+            voiceScreenButton.setText("🖥️ 螢幕");
+            setVoiceButtonActive(voiceScreenButton, isScreenActive);
         }
         if (voiceMuteButton != null) {
             boolean isMuted = NativeLiveService.isAgentMuted();
             voiceMuteButton.setText(isMuted ? "🔊 開聲" : "🔇 靜音");
+            setVoiceButtonActive(voiceMuteButton, isMuted);
         }
     }
 
