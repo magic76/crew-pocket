@@ -1017,9 +1017,6 @@
             <button id="live-card-snap-btn" type="button" class="px-2.5 py-1 rounded-lg bg-teal-950/90 hover:bg-teal-900 text-[10px] text-teal-300 border border-teal-500/50 font-mono flex items-center gap-1 shadow-md active:scale-95 transition" title="截圖儲存並發送高畫質畫面給 AI">
               📸 截圖存檔
             </button>
-            <button id="live-card-vision-btn" type="button" class="px-2.5 py-1 rounded-lg bg-slate-900/90 hover:bg-slate-800 text-[10px] text-slate-300 border border-slate-700 font-mono flex items-center gap-1 shadow-md active:scale-95 transition" title="持續每秒最多傳送一張低解析畫面給 AI">
-              👁️ 視覺對話
-            </button>
             <button id="live-card-expand-btn" type="button" class="px-2.5 py-1 rounded-lg bg-indigo-950/90 hover:bg-indigo-900 text-[10px] text-indigo-300 border border-indigo-500/50 font-mono flex items-center gap-1 shadow-md active:scale-95 transition" title="放大 / 縮小鏡頭預覽">
               ⛶ 放大
             </button>
@@ -1260,9 +1257,6 @@
 
     const snapBtn = card.querySelector('#live-card-snap-btn');
     if (snapBtn) snapBtn.addEventListener('click', snapPhoto);
-    const visionBtn = card.querySelector('#live-card-vision-btn');
-    if (visionBtn) visionBtn.addEventListener('click', toggleVisionDialogue);
-
     const expandBtn = card.querySelector('#live-card-expand-btn');
     if (expandBtn) expandBtn.addEventListener('click', toggleCameraExpand);
 
@@ -2049,7 +2043,7 @@
           }
         }, 120);
 
-        updateCameraBadge(false, '待命中（AI 需要時才擷取）');
+        startVisionDialogue();
 
       } catch (err) {
         alert('無法開啟相機：' + err.message);
@@ -2085,35 +2079,16 @@
     startCallProtection();
   }
 
-  function updateVisionDialogueButton() {
-    const button = document.getElementById('live-card-vision-btn');
-    if (!button) return;
-    button.textContent = visionDialogueEnabled ? '👁️ 持續視覺中' : '👁️ 視覺對話';
-    button.className = visionDialogueEnabled
-      ? 'px-2.5 py-1 rounded-lg bg-indigo-600/90 hover:bg-indigo-500 text-[10px] text-white border border-indigo-300 font-mono flex items-center gap-1 shadow-md active:scale-95 transition'
-      : 'px-2.5 py-1 rounded-lg bg-slate-900/90 hover:bg-slate-800 text-[10px] text-slate-300 border border-slate-700 font-mono flex items-center gap-1 shadow-md active:scale-95 transition';
-  }
-
   function stopVisionDialogue() {
     visionDialogueEnabled = false;
     visionDialogueSending = false;
     if (cameraInterval) clearInterval(cameraInterval);
     cameraInterval = null;
-    updateVisionDialogueButton();
   }
 
-  function toggleVisionDialogue() {
-    if (!isCameraOn) {
-      updateCameraBadge(false, '請先開啟相機');
-      return;
-    }
-    if (visionDialogueEnabled) {
-      stopVisionDialogue();
-      updateCameraBadge(false, '視覺對話已暫停（AI 需要時才擷取）');
-      return;
-    }
+  function startVisionDialogue() {
+    stopVisionDialogue();
     visionDialogueEnabled = true;
-    updateVisionDialogueButton();
     updateCameraBadge(false, '👁️ 持續視覺對話：最多 1 FPS');
     cameraInterval = setInterval(async () => {
       if (!visionDialogueEnabled || visionDialogueSending || !isCameraOn) return;
@@ -2127,7 +2102,6 @@
         visionDialogueSending = false;
       }
     }, 1000);
-    if (typeof window.haptic === 'function') window.haptic(20);
   }
 
   async function flipCamera() {
@@ -2142,7 +2116,7 @@
         if (video) {
           video.srcObject = cameraStream;
           video.play().catch(() => {});
-          updateCameraBadge(false, '鏡頭已切換（AI 需要時才擷取）');
+          updateCameraBadge(false, '👁️ 持續視覺對話：最多 1 FPS');
         }
       } catch (e) {
         console.warn('Flip Camera Failed', e);
