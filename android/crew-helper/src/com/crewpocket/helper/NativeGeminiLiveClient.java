@@ -262,7 +262,7 @@ final class NativeGeminiLiveClient extends WebSocketListener {
         JSONArray tools = new JSONArray();
         tools.put(new JSONObject().put("name", "take_screenshot").put("description", "Only when the user explicitly asks to see, capture, or inspect the current phone screen, app UI, button, or on-screen content. Captures the latest phone display without a screenshot flash."));
         tools.put(new JSONObject().put("name", "swipe_screen").put("description", "Scroll or swipe the phone screen only when explicitly requested.").put("parameters", new JSONObject().put("type", "OBJECT").put("properties", new JSONObject().put("direction", new JSONObject().put("type", "STRING").put("enum", new JSONArray().put("up").put("down").put("left").put("right"))).put("distance", new JSONObject().put("type", "STRING").put("enum", new JSONArray().put("short").put("normal").put("long")))).put("required", new JSONArray().put("direction"))));
-        tools.put(new JSONObject().put("name", "tap_screen").put("description", "Tap an exact screen coordinate only when explicitly requested. Use after inspecting a current screen if location matters.").put("parameters", new JSONObject().put("type", "OBJECT").put("properties", new JSONObject().put("x", new JSONObject().put("type", "NUMBER")).put("y", new JSONObject().put("type", "NUMBER"))).put("required", new JSONArray().put("x").put("y"))));
+        tools.put(new JSONObject().put("name", "tap_screen").put("description", "Tap on a button, app icon, or coordinate on the phone screen. Provide label (e.g. 'LINE', '設定', '確認') or x, y pixel coordinates.").put("parameters", new JSONObject().put("type", "OBJECT").put("properties", new JSONObject().put("label", new JSONObject().put("type", "STRING").put("description", "The button, app icon, or text label to tap")).put("x", new JSONObject().put("type", "NUMBER").put("description", "X coordinate")).put("y", new JSONObject().put("type", "NUMBER").put("description", "Y coordinate")))));
         tools.put(new JSONObject().put("name", "press_key").put("description", "Press HOME, BACK, or RECENTS only when explicitly requested.").put("parameters", new JSONObject().put("type", "OBJECT").put("properties", new JSONObject().put("key", new JSONObject().put("type", "STRING").put("enum", new JSONArray().put("HOME").put("BACK").put("RECENTS")))).put("required", new JSONArray().put("key"))));
         tools.put(new JSONObject().put("name", "send_to_main_chat").put("description", "Send a clean message to the current or most recently active Crew Pocket main chat ONLY when the user explicitly asks to send, tell, or hand a message to the main chat.").put("parameters", new JSONObject().put("type", "OBJECT").put("properties", new JSONObject().put("message", new JSONObject().put("type", "STRING"))).put("required", new JSONArray().put("message"))));
         return tools;
@@ -315,8 +315,68 @@ final class NativeGeminiLiveClient extends WebSocketListener {
     }
 
     private JSONObject tap(JSONObject args) throws Exception {
-        if (!args.has("x") || !args.has("y")) return new JSONObject().put("success", false).put("error", "點擊需要明確 x、y 座標");
-        return helperPost("/tap", new JSONObject().put("x", args.getDouble("x")).put("y", args.getDouble("y")));
+        double targetX = args.optDouble("x", -1);
+        double targetY = args.optDouble("y", -1);
+        String label = args.optString("label", args.optString("text", args.optString("name", ""))).trim();
+
+        // 🎯 1. If text label is provided, find exact element coordinates from Accessibility UI Node tree
+        if (!label.isEmpty()) {
+            try {
+                JSONObject nodesResp = helperGet("/nodes");
+                if (nodesResp.optBoolean("success")) {
+                    JSONArray nodes = nodesResp.optJSONArray("nodes");
+                    if (nodes != null) {
+                        for (int i = 0; i < nodes.length(); i++) {
+                            JSONObject node = nodes.getJSONObject(i);
+                            String text = node.optString("text", "");
+                            String desc = node.optString("desc", "");
+                            if (text.toLowerCase().contains(label.toLowerCase()) || desc.toLowerCase().contains(label.toLowerCase())) {
+                                JSONObject bounds = node.optJSONObject("bounds");
+                                if (bounds != null) {
+                                    targetX = (bounds.optDouble("left", 0) + bounds.optDouble("right", 0)) / 2.0;
+                                    targetY = (bounds.optDouble("top", 0) + bounds.optDouble("bottom", 0)) / 2.0;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (Exception ignored) {}
+        }
+
+        if (targetX < 0 || targetY < 0) {
+            return new JSONObject().put("success", false).put("error", "找不到指定點擊目標或座標");
+        }
+
+        // 📐 2. Coordinate System Normalization & Scaling
+        // Phone physical resolution is 1440 x 3120
+        // If model returns 0.0 ~ 1.0 (normalized percentage):
+        if (targetX <= 1.0 && targetY <= 1.0 && (targetX > 0 || targetY > 0)) {
+            targetX = targetX * 1440.0;
+            targetY = targetY * 3120.0;
+        }
+        // If model returns 0 ~ 1000 scale (standard Gemini Vision bounding box coordinates):
+        else if (targetX <= 1000.0 && targetY <= 1000.0 && targetX > 0 && targetY > 0 && targetY < 1200) {
+            targetX = (targetX / 1000.0) * 1440.0;
+            targetY = (targetY / 1000.0) * 3120.0;
+        }
+
+        return helperPost("/tap", new JSONObject().put("x", Math.round(targetX)).put("y", Math.round(targetY)));
+    }
+
+    private JSONObject helperGet(String endpoint) throws Exception {
+        HttpURLConnection connection = null;
+        try {
+            connection = (HttpURLConnection) new URL("http://127.0.0.1:8766" + endpoint).openConnection();
+            connection.setRequestMethod("GET");
+            connection.setConnectTimeout(3000); connection.setReadTimeout(5000);
+            int code = connection.getResponseCode();
+            BufferedReader reader = new BufferedReader(new InputStreamReader(code >= 200 && code < 300 ? connection.getInputStream() : connection.getErrorStream(), "UTF-8"));
+            StringBuilder text = new StringBuilder(); String line;
+            while ((line = reader.readLine()) != null) text.append(line);
+            reader.close();
+            return text.length() == 0 ? new JSONObject() : new JSONObject(text.toString());
+        } finally { if (connection != null) connection.disconnect(); }
     }
 
     private JSONObject pressKey(JSONObject args) throws Exception {
