@@ -414,8 +414,19 @@ public class FloatingBubbleManager {
 
     private Button makeVoiceButton(String text) {
         Button button = new Button(context);
-        button.setText(text); button.setTextSize(12); button.setAllCaps(false);
-        button.setMinHeight(dp(48)); button.setPadding(dp(4), 0, dp(4), 0);
+        button.setText(text);
+        button.setTextSize(12);
+        button.setAllCaps(false);
+        button.setIncludeFontPadding(false);
+        button.setGravity(Gravity.CENTER);
+        button.setPadding(0, 0, 0, 0);
+        button.setMinHeight(0);
+        button.setMinWidth(0);
+        button.setMinimumHeight(0);
+        button.setMinimumWidth(0);
+        if (Build.VERSION.SDK_INT >= 21) {
+            button.setStateListAnimator(null);
+        }
         setVoiceButtonActive(button, false);
         button.setTextColor(Color.parseColor("#e2e8f0"));
         return button;
