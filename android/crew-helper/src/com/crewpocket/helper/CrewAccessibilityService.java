@@ -633,9 +633,23 @@ public class CrewAccessibilityService extends AccessibilityService {
                 target = findEditableNode(root);
             }
             if (target != null) {
+                // Try direct ACTION_SET_TEXT
                 android.os.Bundle args = new android.os.Bundle();
                 args.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text);
                 boolean success = target.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args);
+                
+                // Fallback to Clipboard Paste if ACTION_SET_TEXT is not supported by custom app view
+                if (!success) {
+                    try {
+                        android.content.ClipboardManager clipboard = (android.content.ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+                        if (clipboard != null) {
+                            android.content.ClipData clip = android.content.ClipData.newPlainText("crew_input", text);
+                            clipboard.setPrimaryClip(clip);
+                            target.performAction(AccessibilityNodeInfo.ACTION_FOCUS);
+                            success = target.performAction(AccessibilityNodeInfo.ACTION_PASTE);
+                        }
+                    } catch (Exception ignored) {}
+                }
                 target.recycle();
                 return success;
             }
@@ -648,7 +662,9 @@ public class CrewAccessibilityService extends AccessibilityService {
 
     private AccessibilityNodeInfo findEditableNode(AccessibilityNodeInfo node) {
         if (node == null) return null;
-        if (node.isEditable()) return AccessibilityNodeInfo.obtain(node);
+        if (node.isEditable() || (node.getClassName() != null && node.getClassName().toString().contains("EditText"))) {
+            return AccessibilityNodeInfo.obtain(node);
+        }
         int count = node.getChildCount();
         for (int i = 0; i < count; i++) {
             AccessibilityNodeInfo child = node.getChild(i);

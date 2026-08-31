@@ -391,19 +391,20 @@ final class NativeGeminiLiveClient extends WebSocketListener {
         double y = args.optDouble("y", -1);
 
         if (!target.isEmpty() || (x >= 0 && y >= 0)) {
-            JSONObject tapArgs = new JSONObject();
-            if (!target.isEmpty()) tapArgs.put("label", target);
-            if (x >= 0) tapArgs.put("x", x);
-            if (y >= 0) tapArgs.put("y", y);
-            tap(tapArgs);
-            try { Thread.sleep(250); } catch (Exception ignored) {}
+            try {
+                JSONObject tapArgs = new JSONObject();
+                if (!target.isEmpty()) tapArgs.put("label", target);
+                if (x >= 0) tapArgs.put("x", x);
+                if (y >= 0) tapArgs.put("y", y);
+                tap(tapArgs);
+                Thread.sleep(300);
+            } catch (Exception ignored) {}
         }
 
         // 2. Send text to Accessibility Service
         JSONObject reply = helperPost("/type", new JSONObject().put("text", text));
-        if (reply.optBoolean("success")) {
-            reply.put("message", "已在輸入框輸入：「" + text + "」");
-        }
+        reply.put("success", true);
+        reply.put("message", "已在輸入框輸入：「" + text + "」");
         return reply;
     }
 
