@@ -633,23 +633,10 @@ public class CrewAccessibilityService extends AccessibilityService {
                 target = findEditableNode(root);
             }
             if (target != null) {
-                // Try direct ACTION_SET_TEXT
+                target.performAction(AccessibilityNodeInfo.ACTION_FOCUS);
                 android.os.Bundle args = new android.os.Bundle();
                 args.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text);
                 boolean success = target.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args);
-                
-                // Fallback to Clipboard Paste if ACTION_SET_TEXT is not supported by custom app view
-                if (!success) {
-                    try {
-                        android.content.ClipboardManager clipboard = (android.content.ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
-                        if (clipboard != null) {
-                            android.content.ClipData clip = android.content.ClipData.newPlainText("crew_input", text);
-                            clipboard.setPrimaryClip(clip);
-                            target.performAction(AccessibilityNodeInfo.ACTION_FOCUS);
-                            success = target.performAction(AccessibilityNodeInfo.ACTION_PASTE);
-                        }
-                    } catch (Exception ignored) {}
-                }
                 target.recycle();
                 return success;
             }
