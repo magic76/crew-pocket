@@ -985,8 +985,8 @@
 
         <div class="flex items-center gap-2 min-w-0">
           <div id="live-card-latest-line" class="min-w-0 flex-1 rounded-xl border border-slate-800 bg-slate-950/65 px-2.5 py-2 text-[11px] text-slate-400 truncate">💬 請說話…</div>
-          <div id="live-call-protection-status" class="shrink-0 max-w-[42%] truncate text-[10px] leading-none font-mono text-slate-400" title="長通話保護">🛡️ 待命</div>
         </div>
+        <div id="live-call-protection-status" class="truncate text-[9px] leading-none font-mono text-slate-500" title="長通話保護">🛡️ 待命</div>
 
         <div id="live-main-task-card" class="hidden rounded-xl border border-amber-500/45 bg-amber-950/25 p-2.5 space-y-2">
           <div class="flex items-center justify-between gap-2">
@@ -2309,7 +2309,7 @@
     const status = document.getElementById('live-call-protection-status');
     if (status) {
       status.textContent = `♾️ 長通話延續中 · ${mins}:${String(secs).padStart(2, '0')}`;
-      status.className = 'shrink-0 max-w-[42%] truncate text-[10px] leading-none font-mono text-teal-300';
+      status.className = 'truncate text-[9px] leading-none font-mono text-teal-300';
     }
     callProtectionTimer = setTimeout(updateCallProtection, 1000);
   }
