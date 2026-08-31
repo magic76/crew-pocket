@@ -526,29 +526,6 @@ public class CrewAccessibilityService extends AccessibilityService {
                     try { typeLock.wait(1500); } catch (Exception ignored) {}
                 }
                 responseJson = "{\"success\":" + typeSuccess[0] + ",\"action\":\"TYPE\",\"text\":\"" + fText.replace("\"", "\\\"") + "\"}";
-            } else if (path.startsWith("/highlight")) {
-                float left = 0, top = 0, right = 0, bottom = 0;
-                int duration = 3500;
-                String label = getJsonString(body, "label");
-                if (label == null) label = "";
-                try {
-                    if (body.contains("\"left\":")) left = Float.parseFloat(body.substring(body.indexOf("\"left\":") + 7).split("[,}]")[0].trim());
-                    if (body.contains("\"top\":")) top = Float.parseFloat(body.substring(body.indexOf("\"top\":") + 6).split("[,}]")[0].trim());
-                    if (body.contains("\"right\":")) right = Float.parseFloat(body.substring(body.indexOf("\"right\":") + 8).split("[,}]")[0].trim());
-                    if (body.contains("\"bottom\":")) bottom = Float.parseFloat(body.substring(body.indexOf("\"bottom\":") + 9).split("[,}]")[0].trim());
-                    if (body.contains("\"duration\":")) duration = Integer.parseInt(body.substring(body.indexOf("\"duration\":") + 11).split("[,}]")[0].trim());
-                } catch (Exception ignored) {}
-
-                final float fL = left, fT = top, fR = right, fB = bottom;
-                final String fLabel = label;
-                final int fDur = duration;
-                mainHandler.post(new Runnable() {
-                    @Override
-                    public void run() {
-                        HighlightOverlay.getInstance(CrewAccessibilityService.this).highlight(fL, fT, fR, fB, fLabel, fDur);
-                    }
-                });
-                responseJson = "{\"success\":true,\"action\":\"HIGHLIGHT\",\"left\":" + left + ",\"top\":" + top + ",\"right\":" + right + ",\"bottom\":" + bottom + "}";
             } else if (path.startsWith("/key")) {
                 String key = "HOME";
                 if (body.contains("\"HOME\"")) key = "HOME";

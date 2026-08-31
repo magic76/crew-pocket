@@ -264,7 +264,6 @@ final class NativeGeminiLiveClient extends WebSocketListener {
         tools.put(new JSONObject().put("name", "swipe_screen").put("description", "Scroll or swipe the phone screen only when explicitly requested.").put("parameters", new JSONObject().put("type", "OBJECT").put("properties", new JSONObject().put("direction", new JSONObject().put("type", "STRING").put("enum", new JSONArray().put("up").put("down").put("left").put("right"))).put("distance", new JSONObject().put("type", "STRING").put("enum", new JSONArray().put("short").put("normal").put("long")))).put("required", new JSONArray().put("direction"))));
         tools.put(new JSONObject().put("name", "tap_screen").put("description", "Tap on a button, app icon, or coordinate on the phone screen. Provide label (e.g. 'LINE', '設定', '確認') or x, y pixel coordinates.").put("parameters", new JSONObject().put("type", "OBJECT").put("properties", new JSONObject().put("label", new JSONObject().put("type", "STRING").put("description", "The button, app icon, or text label to tap")).put("x", new JSONObject().put("type", "NUMBER").put("description", "X coordinate")).put("y", new JSONObject().put("type", "NUMBER").put("description", "Y coordinate")))));
         tools.put(new JSONObject().put("name", "type_text").put("description", "REQUIRED whenever the user asks to type, search, or enter text into any input box, search bar, message field, or coordinate. Provide text and optionally target hint (e.g. '搜尋', '訊息') or x, y coordinates.").put("parameters", new JSONObject().put("type", "OBJECT").put("properties", new JSONObject().put("target", new JSONObject().put("type", "STRING").put("description", "Input field hint or label")).put("x", new JSONObject().put("type", "NUMBER").put("description", "Optional X coordinate")).put("y", new JSONObject().put("type", "NUMBER").put("description", "Optional Y coordinate")).put("text", new JSONObject().put("type", "STRING").put("description", "The text to type into the field"))).put("required", new JSONArray().put("text"))));
-        tools.put(new JSONObject().put("name", "highlight_area").put("description", "Draw a visual highlight box around an object on screen. You MUST provide tight bounding box coordinates (left, top, right, bottom in 0-1000 scale) enclosing the target so the target is centered inside the box, along with the label name.").put("parameters", new JSONObject().put("type", "OBJECT").put("properties", new JSONObject().put("label", new JSONObject().put("type", "STRING").put("description", "Name of the element (e.g. 'Apple Music', 'LINE', '搜尋列')")).put("left", new JSONObject().put("type", "NUMBER").put("description", "Left edge (0-1000 scale)")).put("top", new JSONObject().put("type", "NUMBER").put("description", "Top edge (0-1000 scale)")).put("right", new JSONObject().put("type", "NUMBER").put("description", "Right edge (0-1000 scale)")).put("bottom", new JSONObject().put("type", "NUMBER").put("description", "Bottom edge (0-1000 scale)")).put("x", new JSONObject().put("type", "NUMBER").put("description", "Center X (0-1000 scale)")).put("y", new JSONObject().put("type", "NUMBER").put("description", "Center Y (0-1000 scale)"))).put("required", new JSONArray().put("label"))));
         tools.put(new JSONObject().put("name", "press_key").put("description", "Press HOME, BACK, or RECENTS only when explicitly requested.").put("parameters", new JSONObject().put("type", "OBJECT").put("properties", new JSONObject().put("key", new JSONObject().put("type", "STRING").put("enum", new JSONArray().put("HOME").put("BACK").put("RECENTS")))).put("required", new JSONArray().put("key"))));
         tools.put(new JSONObject().put("name", "send_to_main_chat").put("description", "Send a clean message to the current or most recently active Crew Pocket main chat ONLY when the user explicitly asks to send, tell, or hand a message to the main chat.").put("parameters", new JSONObject().put("type", "OBJECT").put("properties", new JSONObject().put("message", new JSONObject().put("type", "STRING"))).put("required", new JSONArray().put("message"))));
         return tools;
@@ -284,7 +283,6 @@ final class NativeGeminiLiveClient extends WebSocketListener {
                     else if ("swipe_screen".equals(name)) result = swipe(args);
                     else if ("tap_screen".equals(name)) result = tap(args);
                     else if ("type_text".equals(name)) result = typeText(args);
-                    else if ("highlight_area".equals(name)) result = highlightArea(args);
                     else if ("press_key".equals(name)) result = pressKey(args);
                     else if ("send_to_main_chat".equals(name)) result = sendToMainChat(args);
                     else result.put("success", false).put("error", "不支援的原生工具：" + name);
@@ -407,110 +405,6 @@ final class NativeGeminiLiveClient extends WebSocketListener {
         JSONObject reply = helperPost("/type", new JSONObject().put("text", text));
         reply.put("success", true);
         reply.put("message", "已在輸入框輸入：「" + text + "」");
-        return reply;
-    }
-
-    private JSONObject highlightArea(JSONObject args) throws Exception {
-        String label = args.optString("label", args.optString("text", args.optString("name", ""))).trim();
-        double left = args.optDouble("left", -1);
-        double top = args.optDouble("top", -1);
-        double right = args.optDouble("right", -1);
-        double bottom = args.optDouble("bottom", -1);
-        int duration = args.optInt("duration", 3500);
-
-        // 1. Look up exact UI Node bounds if label given
-        if (!label.isEmpty()) {
-            try {
-                JSONObject nodesResp = helperGet("/nodes");
-                if (nodesResp.optBoolean("success")) {
-                    JSONArray nodes = nodesResp.optJSONArray("nodes");
-                    if (nodes != null) {
-                        for (int i = 0; i < nodes.length(); i++) {
-                            JSONObject node = nodes.getJSONObject(i);
-                            String text = node.optString("text", "");
-                            String desc = node.optString("desc", "");
-                            if (text.toLowerCase().contains(label.toLowerCase()) || desc.toLowerCase().contains(label.toLowerCase())) {
-                                JSONObject bounds = node.optJSONObject("bounds");
-                                if (bounds != null) {
-                                    left = bounds.optDouble("left", 0);
-                                    top = bounds.optDouble("top", 0);
-                                    right = bounds.optDouble("right", 0);
-                                    bottom = bounds.optDouble("bottom", 0);
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                }
-            } catch (Exception ignored) {}
-        }
-
-        // 2. Fallback to center point (x, y) if given
-        if (left < 0 && args.has("x") && args.has("y")) {
-            double cx = args.optDouble("x", 0);
-            double cy = args.optDouble("y", 0);
-            left = cx - 50;
-            right = cx + 50;
-            top = cy - 50;
-            bottom = cy + 50;
-        }
-
-        // Gemini Vision standard bbox: if ymin/xmin/ymax/xmax or if top/left were swapped
-        if (args.has("box_2d") || args.has("bbox")) {
-            JSONArray b = args.optJSONArray("box_2d");
-            if (b == null) b = args.optJSONArray("bbox");
-            if (b != null && b.length() >= 4) {
-                top = b.optDouble(0, top);
-                left = b.optDouble(1, left);
-                bottom = b.optDouble(2, bottom);
-                right = b.optDouble(3, right);
-            }
-        }
-
-        // 3. Coordinate Normalization
-        // When sending visual frames, the 1440x3120 screen is scaled to maxEdge 1280:
-        // Width: 1440 * (1280/3120) = 591 px. Height: 3120 * (1280/3120) = 1280 px.
-        // Gemini Vision receives an image with aspect ratio 591:1280.
-        // In Gemini Vision standard normalized coordinates (0 ~ 1000):
-        // X maps directly to 1440 (0~1000 -> 0~1440)
-        // Y maps directly to 3120 (0~1000 -> 0~3120)
-        if (left >= 0 && right <= 1000 && bottom <= 1000 && bottom > 0) {
-            double rawL = (left / 1000.0) * 1440.0;
-            double rawR = (right / 1000.0) * 1440.0;
-            double rawT = (top / 1000.0) * 3120.0;
-            double rawB = (bottom / 1000.0) * 3120.0;
-
-            // Compute center point & square bounding size for app icon (app icons are ~220px on 1440p)
-            double width = rawR - rawL;
-            double height = rawB - rawT;
-
-            // If box is stretched vertically (height > width * 1.3), center it tightly on the actual icon
-            if (height > width * 1.35) {
-                // Focus on top part where the icon actually sits
-                rawB = rawT + width * 1.08;
-            }
-
-            left = rawL;
-            right = rawR;
-            top = rawT;
-            bottom = rawB;
-        }
-
-        if (left < 0 || top < 0 || right <= left || bottom <= top) {
-            return new JSONObject().put("success", false).put("error", "找不到指定高亮目標或區域");
-        }
-
-        JSONObject postData = new JSONObject()
-                .put("left", Math.round(left))
-                .put("top", Math.round(top))
-                .put("right", Math.round(right))
-                .put("bottom", Math.round(bottom))
-                .put("label", label)
-                .put("duration", duration);
-
-        JSONObject reply = helperPost("/highlight", postData);
-        reply.put("success", true);
-        reply.put("message", "已在畫面上框選標示目標區域" + (label.isEmpty() ? "" : "「" + label + "」"));
         return reply;
     }
 
