@@ -59,6 +59,8 @@ public class FloatingBubbleManager {
     private Button voiceCallButton = null;
     private Button voiceCameraButton = null;
     private Button voiceScreenButton = null;
+    private Button voiceMuteButton = null;
+    private Button voicePreviewToggleButton = null;
     private View dialogView = null;
     private WindowManager.LayoutParams bubbleParams = null;
     private WindowManager.LayoutParams dialogParams = null;
@@ -428,72 +430,167 @@ public class FloatingBubbleManager {
             @Override public void run() {
                 if (!voiceControlsOpening) return;
                 try {
-                    // There must be only one compact control surface. Remove
-                    // any legacy panel left by an older Helper process first.
                     if (dialogView != null) hideDialog();
                     int overlayType = Build.VERSION.SDK_INT >= 26 ? 2038 : WindowManager.LayoutParams.TYPE_PHONE;
                     int screenWidth = windowManager.getDefaultDisplay().getWidth();
-                    int bubbleX = bubbleParams == null ? dp(20) : bubbleParams.x;
-                    int bubbleY = bubbleParams == null ? dp(400) : bubbleParams.y;
-                    int bubbleSize = bubbleParams == null ? dp(48) : bubbleParams.width;
-                    int panelWidth = Math.min(dp(304), screenWidth - dp(24));
 
-                    voiceControlParams = new WindowManager.LayoutParams(panelWidth, WindowManager.LayoutParams.WRAP_CONTENT, overlayType,
-                            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL, PixelFormat.TRANSLUCENT);
-                    voiceControlParams.gravity = Gravity.TOP | Gravity.START;
+                    // 📱 Ergonomic Bottom Dock (matching Web UI style)
+                    int dockWidth = Math.min(dp(360), screenWidth - dp(24));
+                    voiceControlParams = new WindowManager.LayoutParams(
+                            dockWidth,
+                            WindowManager.LayoutParams.WRAP_CONTENT,
+                            overlayType,
+                            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+                            PixelFormat.TRANSLUCENT
+                    );
+                    voiceControlParams.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
+                    voiceControlParams.y = dp(28);
 
-                    // 🧭 Positioning: If bubble is on left half -> place on the right of bubble.
-                    // If bubble is on right half -> place on the left of bubble.
-                    int gap = dp(8);
-                    if (bubbleX < screenWidth / 2) {
-                        // Floating on Left -> place panel to the right of bubble
-                        voiceControlParams.x = Math.min(screenWidth - panelWidth - dp(8), bubbleX + bubbleSize + gap);
-                    } else {
-                        // Floating on Right -> place panel to the left of bubble
-                        voiceControlParams.x = Math.max(dp(8), bubbleX - panelWidth - gap);
-                    }
+                    LinearLayout dock = new LinearLayout(context);
+                    dock.setOrientation(LinearLayout.VERTICAL);
+                    dock.setPadding(dp(12), dp(10), dp(12), dp(12));
 
-                    // 🔝 Top alignment: Align top with the floating bubble's top Y coordinate
-                    voiceControlParams.y = Math.max(dp(24), bubbleY);
-                    LinearLayout card = new LinearLayout(context); card.setOrientation(LinearLayout.VERTICAL); card.setPadding(dp(10), dp(10), dp(10), dp(10));
-                    GradientDrawable cardBg = new GradientDrawable(); cardBg.setColor(Color.parseColor("#0f172a")); cardBg.setCornerRadius(dp(18)); cardBg.setStroke(2, Color.parseColor("#334155")); card.setBackground(cardBg);
-                    TextView title = new TextView(context); title.setText("🎙️ Crew Pocket Live"); title.setTextSize(13); title.setTextColor(Color.parseColor("#e2e8f0")); title.setPadding(dp(4), 0, dp(4), dp(7)); card.addView(title);
-                    LinearLayout row = new LinearLayout(context); row.setOrientation(LinearLayout.HORIZONTAL);
-                    voiceCallButton = makeVoiceButton("開始通話");
-                    voiceCameraButton = makeVoiceButton("相機");
-                    voiceScreenButton = makeVoiceButton("螢幕分享");
-                    Button close = makeVoiceButton("收起");
-                    voiceCallButton.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { toggleNativeLive(); hideVoiceControls(); } });
-                    voiceCameraButton.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) {
-                        if (!NativeLiveService.isActive()) { Toast.makeText(context, "請先開始通話並等待連線", Toast.LENGTH_SHORT).show(); return; }
-                        NativeLiveService.toggleCameraSharing(); hideVoiceControls();
-                    }});
-                    voiceScreenButton.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) {
-                        if (!NativeLiveService.isActive()) { Toast.makeText(context, "請先開始通話並等待連線", Toast.LENGTH_SHORT).show(); return; }
-                        NativeLiveService.toggleScreenSharing(); hideVoiceControls();
-                    }});
-                    close.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { hideVoiceControls(); } });
-                    LinearLayout.LayoutParams item = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f); item.setMargins(dp(2), 0, dp(2), 0);
-                    row.addView(voiceCallButton, item); row.addView(voiceCameraButton, item); row.addView(voiceScreenButton, item); row.addView(close, item); card.addView(row);
-                    voiceControlView = card; windowManager.addView(card, voiceControlParams); refreshVoiceControls();
-                } catch (Exception error) { voiceControlView = null; }
-                finally { voiceControlsOpening = false; }
+                    GradientDrawable dockBg = new GradientDrawable();
+                    dockBg.setColor(Color.parseColor("#E60F172A")); // Semi-transparent Slate 900
+                    dockBg.setCornerRadius(dp(22));
+                    dockBg.setStroke(2, Color.parseColor("#334155"));
+                    dock.setBackground(dockBg);
+
+                    // Title / Status header
+                    LinearLayout headerRow = new LinearLayout(context);
+                    headerRow.setOrientation(LinearLayout.HORIZONTAL);
+                    headerRow.setGravity(Gravity.CENTER_VERTICAL);
+                    headerRow.setPadding(dp(4), 0, dp(4), dp(8));
+
+                    TextView title = new TextView(context);
+                    title.setText("🎙️ Crew Pocket Live 控制台");
+                    title.setTextSize(13);
+                    title.setTextColor(Color.parseColor("#38BDF8"));
+                    headerRow.addView(title, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+
+                    TextView close = new TextView(context);
+                    close.setText("✕");
+                    close.setTextSize(18);
+                    close.setTextColor(Color.parseColor("#94A3B8"));
+                    close.setPadding(dp(12), 0, dp(4), 0);
+                    close.setOnClickListener(new View.OnClickListener() {
+                        @Override public void onClick(View v) { hideVoiceControls(); }
+                    });
+                    headerRow.addView(close);
+                    dock.addView(headerRow);
+
+                    // Action Buttons Row
+                    LinearLayout row = new LinearLayout(context);
+                    row.setOrientation(LinearLayout.HORIZONTAL);
+
+                    voiceCallButton = makeVoiceButton(nativeLiveRequested ? "掛斷" : "開始通話");
+                    voiceCameraButton = makeVoiceButton("📷 相機");
+                    voiceScreenButton = makeVoiceButton("🖥️ 螢幕");
+                    voiceMuteButton = makeVoiceButton("🔇 靜音");
+                    voicePreviewToggleButton = makeVoiceButton("👁️ 畫面");
+
+                    voiceCallButton.setOnClickListener(new View.OnClickListener() {
+                        @Override public void onClick(View v) {
+                            toggleNativeLive();
+                            refreshVoiceControls();
+                        }
+                    });
+
+                    voiceCameraButton.setOnClickListener(new View.OnClickListener() {
+                        @Override public void onClick(View v) {
+                            if (!NativeLiveService.isActive()) {
+                                Toast.makeText(context, "請先開始通話並等待連線", Toast.LENGTH_SHORT).show();
+                                return;
+                            }
+                            NativeLiveService.toggleCameraSharing();
+                            refreshVoiceControls();
+                        }
+                    });
+
+                    voiceScreenButton.setOnClickListener(new View.OnClickListener() {
+                        @Override public void onClick(View v) {
+                            if (!NativeLiveService.isActive()) {
+                                Toast.makeText(context, "請先開始通話並等待連線", Toast.LENGTH_SHORT).show();
+                                return;
+                            }
+                            NativeLiveService.toggleScreenSharing();
+                            refreshVoiceControls();
+                        }
+                    });
+
+                    voiceMuteButton.setOnClickListener(new View.OnClickListener() {
+                        @Override public void onClick(View v) {
+                            if (!NativeLiveService.isActive()) return;
+                            NativeLiveService.toggleAgentMute();
+                            refreshVoiceControls();
+                        }
+                    });
+
+                    voicePreviewToggleButton.setOnClickListener(new View.OnClickListener() {
+                        @Override public void onClick(View v) {
+                            CameraPreviewOverlay.getInstance(context).toggleVisibility();
+                            refreshVoiceControls();
+                        }
+                    });
+
+                    LinearLayout.LayoutParams itemLp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+                    itemLp.setMargins(dp(2), 0, dp(2), 0);
+
+                    row.addView(voiceCallButton, itemLp);
+                    row.addView(voiceCameraButton, itemLp);
+                    row.addView(voiceScreenButton, itemLp);
+                    row.addView(voiceMuteButton, itemLp);
+                    row.addView(voicePreviewToggleButton, itemLp);
+
+                    dock.addView(row);
+                    voiceControlView = dock;
+                    windowManager.addView(dock, voiceControlParams);
+                    refreshVoiceControls();
+                } catch (Exception error) {
+                    voiceControlView = null;
+                } finally {
+                    voiceControlsOpening = false;
+                }
             }
         });
     }
 
     private void hideVoiceControls() {
         voiceControlsOpening = false;
-        mainHandler.post(new Runnable() { @Override public void run() {
-            try { if (voiceControlView != null) windowManager.removeViewImmediate(voiceControlView); } catch (Exception ignored) {}
-            voiceControlView = null; voiceCallButton = null; voiceCameraButton = null; voiceScreenButton = null;
-        }});
+        mainHandler.post(new Runnable() {
+            @Override public void run() {
+                try {
+                    if (voiceControlView != null) windowManager.removeViewImmediate(voiceControlView);
+                } catch (Exception ignored) {}
+                voiceControlView = null;
+                voiceCallButton = null;
+                voiceCameraButton = null;
+                voiceScreenButton = null;
+                voiceMuteButton = null;
+                voicePreviewToggleButton = null;
+            }
+        });
     }
 
     private void refreshVoiceControls() {
-        if (voiceCallButton != null) voiceCallButton.setText(nativeLiveRequested ? "掛斷" : "開始通話");
-        if (voiceCameraButton != null) voiceCameraButton.setText(NativeLiveService.isCameraSharing() ? "相機 ✓" : "相機");
-        if (voiceScreenButton != null) voiceScreenButton.setText(NativeLiveService.isScreenSharing() ? "螢幕 ✓" : "螢幕分享");
+        if (voiceCallButton != null) {
+            voiceCallButton.setText(nativeLiveRequested ? "🛑 掛斷" : "🎙️ 通話");
+        }
+        if (voiceCameraButton != null) {
+            voiceCameraButton.setText(NativeLiveService.isCameraSharing() ? "📷 相機✓" : "📷 相機");
+        }
+        if (voiceScreenButton != null) {
+            voiceScreenButton.setText(NativeLiveService.isScreenSharing() ? "🖥️ 螢幕✓" : "🖥️ 螢幕");
+        }
+        if (voiceMuteButton != null) {
+            boolean isMuted = NativeLiveService.isAgentMuted();
+            voiceMuteButton.setText(isMuted ? "🔊 開聲" : "🔇 靜音");
+        }
+        if (voicePreviewToggleButton != null) {
+            boolean isShowing = CameraPreviewOverlay.getInstance(context).isShowing();
+            boolean isVis = CameraPreviewOverlay.getInstance(context).isPreviewVisible();
+            voicePreviewToggleButton.setText(!isShowing ? "👁️ 畫面" : (isVis ? "👁️ 隱藏" : "👁️ 顯示"));
+        }
     }
 
     public void showDialog() {

@@ -6,6 +6,7 @@ import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.provider.Settings;
+import android.net.Uri;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.Button;
@@ -26,7 +27,7 @@ public class MainActivity extends Activity {
         layout.setPadding(60, 60, 60, 60);
 
         TextView title = new TextView(this);
-        title.setText("🤖 Crew Pocket 輔助小幫手 v1.3.3");
+        title.setText("🤖 Crew Pocket 輔助小幫手 v1.6.0");
         title.setTextSize(20);
         title.setGravity(Gravity.CENTER);
         layout.addView(title);
@@ -62,6 +63,32 @@ public class MainActivity extends Activity {
         );
         overlayLp.setMargins(0, 20, 0, 0);
         layout.addView(btnNotification, overlayLp);
+
+        Button btnVoiceBubble = new Button(this);
+        btnVoiceBubble.setText("🎙️ 啟用浮動語音泡泡");
+        btnVoiceBubble.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                FloatingBubbleManager manager = FloatingBubbleManager.getInstance(MainActivity.this);
+                if (!manager.canDrawOverlays()) {
+                    Intent intent = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                            Uri.parse("package:" + getPackageName()));
+                    startActivity(intent);
+                    return;
+                }
+                manager.showBubble();
+                Toast.makeText(MainActivity.this, "短按泡泡開始／結束語音；長按開啟文字面板", Toast.LENGTH_LONG).show();
+            }
+        });
+        layout.addView(btnVoiceBubble, overlayLp);
+
+        Button btnVoice = new Button(this);
+        btnVoice.setText("🎙️ 開啟原生 Gemini Live 測試");
+        btnVoice.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                startActivity(new Intent(MainActivity.this, NativeLiveActivity.class));
+            }
+        });
+        layout.addView(btnVoice, overlayLp);
 
         Button btnCamera = new Button(this);
         btnCamera.setText("📸 開啟「相機拍照」權限");
@@ -112,7 +139,6 @@ public class MainActivity extends Activity {
             statusText.setText("🟢 無障礙服務已連線運行中！\n本地通訊 Port: 8766");
             statusText.setTextColor(0xFF22c55e);
             FloatingBubbleManager manager = FloatingBubbleManager.getInstance(this);
-            manager.hideBubble();
             manager.showNotification();
         } else {
             statusText.setText("🔴 無障礙服務未連線。\n請點擊上方按鈕前往開啟。");

@@ -21,10 +21,10 @@ echo "1. Generating R.java..."
 aapt package -f -m -J bin/gen -S res -M AndroidManifest.xml -I "$FRAMEWORK_RES"
 
 echo "2. Compiling Java classes..."
-javac -d bin/classes -cp "$ANDROID_JAR" bin/gen/com/crewpocket/helper/R.java src/com/crewpocket/helper/*.java
+javac -d bin/classes -cp "$ANDROID_JAR:$SCRIPT_DIR/libs/*" bin/gen/com/crewpocket/helper/R.java src/com/crewpocket/helper/*.java
 
 echo "3. Converting to DEX..."
-d8 --output bin/ bin/classes/com/crewpocket/helper/*.class
+d8 --output bin/ bin/classes/com/crewpocket/helper/*.class libs/*.jar
 
 echo "4. Packaging APK..."
 aapt package -f -M AndroidManifest.xml -S res -I "$FRAMEWORK_RES" -F bin/unsigned.apk
