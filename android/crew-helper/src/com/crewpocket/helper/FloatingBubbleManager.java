@@ -53,11 +53,18 @@ public class FloatingBubbleManager {
     private final Vibrator vibrator;
 
     private FluidBubbleView bubbleView = null;
+    private View voiceControlView = null;
+    private boolean voiceControlsOpening = false;
+    private WindowManager.LayoutParams voiceControlParams = null;
+    private Button voiceCallButton = null;
+    private Button voiceCameraButton = null;
+    private Button voiceScreenButton = null;
     private View dialogView = null;
     private WindowManager.LayoutParams bubbleParams = null;
     private WindowManager.LayoutParams dialogParams = null;
     private boolean isDialogShowing = false;
     private String currentState = "IDLE";
+    private boolean nativeLiveRequested = false;
     private TextView dialogStatusText = null;
     private Button dialogStopButton = null;
     private String pendingImagePath = null;
@@ -166,12 +173,9 @@ public class FloatingBubbleManager {
                                     float dx = Math.abs(event.getRawX() - initialTouchX);
                                     float dy = Math.abs(event.getRawY() - initialTouchY);
                                     long duration = System.currentTimeMillis() - touchStartTime;
-                                    if (dx < 15 && dy < 15 && duration < 350) {
+                                    if (dx < 15 && dy < 15 && duration < 700) {
                                         vibrateShort();
-                                        toggleDialog();
-                                    } else if (dx < 15 && dy < 15 && duration >= 350) {
-                                        vibrateShort();
-                                        toggleDialog();
+                                        toggleVoiceControls();
                                     }
                                     snapBubbleToEdge();
                                     return true;
@@ -207,15 +211,9 @@ public class FloatingBubbleManager {
         }
     }
 
-    /** Opens the compact command UI from the notification; falls back to the web app if overlays are disabled. */
+    /** The old overlay command panel is retired; notification entry opens Crew Pocket. */
     public void openInputUi() {
-        if (canDrawOverlays()) {
-            mainHandler.post(new Runnable() {
-                @Override public void run() { showDialog(); }
-            });
-        } else {
-            openCrewPocket();
-        }
+        openCrewPocket();
     }
 
     public void showNotification() {
@@ -375,6 +373,127 @@ public class FloatingBubbleManager {
         } else {
             showDialog();
         }
+    }
+
+    private void toggleNativeLive() {
+        try {
+            if (nativeLiveRequested || NativeLiveService.isActive()) {
+                nativeLiveRequested = false;
+                NativeLiveService.stop(context);
+                updateNativeLiveStatus("正在結束語音通話", false);
+            } else {
+                nativeLiveRequested = true;
+                NativeLiveService.start(context);
+                // Give immediate visual feedback; the service will replace it
+                // with its real connection status moments later.
+                updateNativeLiveStatus("正在連線 Gemini Live", true);
+            }
+        } catch (Exception error) {
+            updateNotification("🎙️ 無法啟動原生語音");
+        }
+    }
+
+    /** Called by the foreground voice service; intentionally does not open a panel. */
+    public void updateNativeLiveStatus(final String text, final boolean active) {
+        mainHandler.post(new Runnable() {
+            @Override public void run() {
+                nativeLiveRequested = active;
+                if (bubbleView != null) {
+                    bubbleView.setNativeVoiceState(active ? 1 : 0);
+                }
+                refreshVoiceControls();
+                updateNotification("🎙️ " + (text == null || text.isEmpty() ? (active ? "語音通話中" : "待命") : text));
+            }
+        });
+    }
+
+    private void toggleVoiceControls() {
+        if (voiceControlView != null || voiceControlsOpening) hideVoiceControls(); else showVoiceControls();
+    }
+
+    private Button makeVoiceButton(String text) {
+        Button button = new Button(context);
+        button.setText(text); button.setTextSize(12); button.setAllCaps(false);
+        button.setMinHeight(dp(48)); button.setPadding(dp(4), 0, dp(4), 0);
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(Color.parseColor("#172033")); bg.setCornerRadius(dp(12)); bg.setStroke(1, Color.parseColor("#334155"));
+        button.setBackground(bg); button.setTextColor(Color.parseColor("#e2e8f0"));
+        return button;
+    }
+
+    private void showVoiceControls() {
+        if (!canDrawOverlays() || voiceControlView != null || voiceControlsOpening) return;
+        voiceControlsOpening = true;
+        mainHandler.post(new Runnable() {
+            @Override public void run() {
+                if (!voiceControlsOpening) return;
+                try {
+                    // There must be only one compact control surface. Remove
+                    // any legacy panel left by an older Helper process first.
+                    if (dialogView != null) hideDialog();
+                    int overlayType = Build.VERSION.SDK_INT >= 26 ? 2038 : WindowManager.LayoutParams.TYPE_PHONE;
+                    int screenWidth = windowManager.getDefaultDisplay().getWidth();
+                    int bubbleX = bubbleParams == null ? dp(20) : bubbleParams.x;
+                    int bubbleY = bubbleParams == null ? dp(400) : bubbleParams.y;
+                    int bubbleSize = bubbleParams == null ? dp(48) : bubbleParams.width;
+                    int panelWidth = Math.min(dp(304), screenWidth - dp(24));
+
+                    voiceControlParams = new WindowManager.LayoutParams(panelWidth, WindowManager.LayoutParams.WRAP_CONTENT, overlayType,
+                            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL, PixelFormat.TRANSLUCENT);
+                    voiceControlParams.gravity = Gravity.TOP | Gravity.START;
+
+                    // 🧭 Positioning: If bubble is on left half -> place on the right of bubble.
+                    // If bubble is on right half -> place on the left of bubble.
+                    int gap = dp(8);
+                    if (bubbleX < screenWidth / 2) {
+                        // Floating on Left -> place panel to the right of bubble
+                        voiceControlParams.x = Math.min(screenWidth - panelWidth - dp(8), bubbleX + bubbleSize + gap);
+                    } else {
+                        // Floating on Right -> place panel to the left of bubble
+                        voiceControlParams.x = Math.max(dp(8), bubbleX - panelWidth - gap);
+                    }
+
+                    // 🔝 Top alignment: Align top with the floating bubble's top Y coordinate
+                    voiceControlParams.y = Math.max(dp(24), bubbleY);
+                    LinearLayout card = new LinearLayout(context); card.setOrientation(LinearLayout.VERTICAL); card.setPadding(dp(10), dp(10), dp(10), dp(10));
+                    GradientDrawable cardBg = new GradientDrawable(); cardBg.setColor(Color.parseColor("#0f172a")); cardBg.setCornerRadius(dp(18)); cardBg.setStroke(2, Color.parseColor("#334155")); card.setBackground(cardBg);
+                    TextView title = new TextView(context); title.setText("🎙️ Crew Pocket Live"); title.setTextSize(13); title.setTextColor(Color.parseColor("#e2e8f0")); title.setPadding(dp(4), 0, dp(4), dp(7)); card.addView(title);
+                    LinearLayout row = new LinearLayout(context); row.setOrientation(LinearLayout.HORIZONTAL);
+                    voiceCallButton = makeVoiceButton("開始通話");
+                    voiceCameraButton = makeVoiceButton("相機");
+                    voiceScreenButton = makeVoiceButton("螢幕分享");
+                    Button close = makeVoiceButton("收起");
+                    voiceCallButton.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { toggleNativeLive(); hideVoiceControls(); } });
+                    voiceCameraButton.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) {
+                        if (!NativeLiveService.isActive()) { Toast.makeText(context, "請先開始通話並等待連線", Toast.LENGTH_SHORT).show(); return; }
+                        NativeLiveService.toggleCameraSharing(); hideVoiceControls();
+                    }});
+                    voiceScreenButton.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) {
+                        if (!NativeLiveService.isActive()) { Toast.makeText(context, "請先開始通話並等待連線", Toast.LENGTH_SHORT).show(); return; }
+                        NativeLiveService.toggleScreenSharing(); hideVoiceControls();
+                    }});
+                    close.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { hideVoiceControls(); } });
+                    LinearLayout.LayoutParams item = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f); item.setMargins(dp(2), 0, dp(2), 0);
+                    row.addView(voiceCallButton, item); row.addView(voiceCameraButton, item); row.addView(voiceScreenButton, item); row.addView(close, item); card.addView(row);
+                    voiceControlView = card; windowManager.addView(card, voiceControlParams); refreshVoiceControls();
+                } catch (Exception error) { voiceControlView = null; }
+                finally { voiceControlsOpening = false; }
+            }
+        });
+    }
+
+    private void hideVoiceControls() {
+        voiceControlsOpening = false;
+        mainHandler.post(new Runnable() { @Override public void run() {
+            try { if (voiceControlView != null) windowManager.removeViewImmediate(voiceControlView); } catch (Exception ignored) {}
+            voiceControlView = null; voiceCallButton = null; voiceCameraButton = null; voiceScreenButton = null;
+        }});
+    }
+
+    private void refreshVoiceControls() {
+        if (voiceCallButton != null) voiceCallButton.setText(nativeLiveRequested ? "掛斷" : "開始通話");
+        if (voiceCameraButton != null) voiceCameraButton.setText(NativeLiveService.isCameraSharing() ? "相機 ✓" : "相機");
+        if (voiceScreenButton != null) voiceScreenButton.setText(NativeLiveService.isScreenSharing() ? "螢幕 ✓" : "螢幕分享");
     }
 
     public void showDialog() {
@@ -821,6 +940,8 @@ public class FloatingBubbleManager {
         private float rotationAngle = 0f;
         private boolean isFlowing = false;
         private boolean isSuccessFlash = false;
+        // 0 idle (green microphone), 1 native voice service active (red microphone).
+        private int nativeVoiceState = 0;
         private ValueAnimator flowAnimator;
 
         public FluidBubbleView(Context context) {
@@ -904,6 +1025,12 @@ public class FloatingBubbleManager {
             }, 850);
         }
 
+        public void setNativeVoiceState(int state) {
+            nativeVoiceState = state;
+            if (state != 0 && flowAnimator != null) flowAnimator.cancel();
+            invalidate();
+        }
+
         @Override
         protected void onDraw(Canvas canvas) {
             super.onDraw(canvas);
@@ -915,7 +1042,12 @@ public class FloatingBubbleManager {
             canvas.drawCircle(cx, cy, radius, bgPaint);
 
             // 2. Draw Stream Ring
-            if (isFlowing && waterFlowGradient != null) {
+            if (nativeVoiceState == 1) {
+                ringPaint.setShader(null);
+                ringPaint.setStrokeWidth(7f);
+                ringPaint.setColor(Color.parseColor("#ef4444")); // red = voice running
+                canvas.drawOval(ringBounds, ringPaint);
+            } else if (isFlowing && waterFlowGradient != null) {
                 matrix.setRotate(rotationAngle, cx, cy);
                 waterFlowGradient.setLocalMatrix(matrix);
                 ringPaint.setShader(waterFlowGradient);
@@ -924,18 +1056,21 @@ public class FloatingBubbleManager {
             } else {
                 ringPaint.setShader(null);
                 ringPaint.setStrokeWidth(6f);
-                if (isSuccessFlash) {
-                    ringPaint.setColor(Color.parseColor("#34d399")); // Emerald Green on Finish
-                } else {
-                    ringPaint.setColor(Color.parseColor("#38bdf8")); // Quantum Cyan on Idle
-                }
+                ringPaint.setColor(Color.parseColor("#34d399")); // green = voice idle
                 canvas.drawOval(ringBounds, ringPaint);
             }
 
-            // 3. Draw compact Crew Pocket mark
-            Paint.FontMetrics fm = textPaint.getFontMetrics();
-            float textY = cy - (fm.descent + fm.ascent) / 2f;
-            canvas.drawText("CP", cx, textY, textPaint);
+            // 3. The Bubble is always a microphone: same circular Crew Pocket
+            // language, with green idle and red active states.
+            Paint mic = new Paint(Paint.ANTI_ALIAS_FLAG);
+            mic.setColor(nativeVoiceState == 1 ? Color.parseColor("#fecaca") : Color.parseColor("#d1fae5"));
+            mic.setStyle(Paint.Style.FILL);
+            float bodyW = radius * .34f, bodyH = radius * .58f;
+            canvas.drawRoundRect(cx - bodyW / 2f, cy - bodyH * .58f, cx + bodyW / 2f, cy + bodyH * .42f, bodyW / 2f, bodyW / 2f, mic);
+            mic.setStyle(Paint.Style.STROKE); mic.setStrokeWidth(5f); mic.setStrokeCap(Paint.Cap.ROUND);
+            canvas.drawArc(cx - radius * .38f, cy - bodyH * .15f, cx + radius * .38f, cy + radius * .48f, 0, 180, false, mic);
+            canvas.drawLine(cx, cy + radius * .43f, cx, cy + radius * .64f, mic);
+            canvas.drawLine(cx - radius * .22f, cy + radius * .64f, cx + radius * .22f, cy + radius * .64f, mic);
         }
     }
 }
