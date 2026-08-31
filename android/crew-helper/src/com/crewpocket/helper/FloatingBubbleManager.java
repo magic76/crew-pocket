@@ -56,10 +56,10 @@ public class FloatingBubbleManager {
     private View voiceControlView = null;
     private boolean voiceControlsOpening = false;
     private WindowManager.LayoutParams voiceControlParams = null;
-    private Button voiceCallButton = null;
-    private Button voiceCameraButton = null;
-    private Button voiceScreenButton = null;
-    private Button voiceMuteButton = null;
+    private TextView voiceCallButton = null;
+    private TextView voiceCameraButton = null;
+    private TextView voiceScreenButton = null;
+    private TextView voiceMuteButton = null;
     private View dialogView = null;
     private WindowManager.LayoutParams bubbleParams = null;
     private WindowManager.LayoutParams dialogParams = null;
@@ -412,27 +412,19 @@ public class FloatingBubbleManager {
         if (voiceControlView != null || voiceControlsOpening) hideVoiceControls(); else showVoiceControls();
     }
 
-    private Button makeVoiceButton(String text) {
-        Button button = new Button(context);
+    private TextView makeVoiceButton(String text) {
+        TextView button = new TextView(context);
         button.setText(text);
         button.setTextSize(12);
-        button.setAllCaps(false);
         button.setIncludeFontPadding(false);
         button.setGravity(Gravity.CENTER);
         button.setPadding(0, 0, 0, 0);
-        button.setMinHeight(0);
-        button.setMinWidth(0);
-        button.setMinimumHeight(0);
-        button.setMinimumWidth(0);
-        if (Build.VERSION.SDK_INT >= 21) {
-            button.setStateListAnimator(null);
-        }
         setVoiceButtonActive(button, false);
         button.setTextColor(Color.parseColor("#e2e8f0"));
         return button;
     }
 
-    private void setVoiceButtonActive(Button button, boolean active) {
+    private void setVoiceButtonActive(TextView button, boolean active) {
         if (button == null) return;
         GradientDrawable bg = new GradientDrawable();
         bg.setColor(Color.parseColor("#172033"));
@@ -471,7 +463,9 @@ public class FloatingBubbleManager {
 
                     LinearLayout dock = new LinearLayout(context);
                     dock.setOrientation(LinearLayout.VERTICAL);
-                    dock.setPadding(dp(14), dp(12), dp(14), dp(18)); // Generous bottom padding
+                    dock.setPadding(dp(14), dp(12), dp(14), dp(22)); // Extra generous bottom padding
+                    dock.setClipToPadding(false);
+                    dock.setClipChildren(false);
 
                     GradientDrawable dockBg = new GradientDrawable();
                     dockBg.setColor(Color.parseColor("#E60F172A")); // Semi-transparent Slate 900
@@ -506,6 +500,9 @@ public class FloatingBubbleManager {
                     // Layout: [📷 相機] [🖥️ 螢幕] [🎙️ 核心靜音/打斷大按鈕] [🛑 掛斷]
                     LinearLayout row = new LinearLayout(context);
                     row.setOrientation(LinearLayout.HORIZONTAL);
+                    row.setClipToPadding(false);
+                    row.setClipChildren(false);
+                    row.setPadding(0, dp(4), 0, dp(6));
 
                     voiceCameraButton = makeVoiceButton("📷");
                     voiceScreenButton = makeVoiceButton("🖥️");
@@ -549,10 +546,10 @@ public class FloatingBubbleManager {
                         }
                     });
 
-                    LinearLayout.LayoutParams sideLp = new LinearLayout.LayoutParams(dp(54), dp(48));
+                    LinearLayout.LayoutParams sideLp = new LinearLayout.LayoutParams(dp(54), dp(44));
                     sideLp.setMargins(dp(3), 0, dp(3), 0);
 
-                    LinearLayout.LayoutParams centerLp = new LinearLayout.LayoutParams(0, dp(48), 1f);
+                    LinearLayout.LayoutParams centerLp = new LinearLayout.LayoutParams(0, dp(44), 1f);
                     centerLp.setMargins(dp(4), 0, dp(4), 0);
 
                     // 1. Camera (Left)
