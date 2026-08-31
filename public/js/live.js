@@ -996,7 +996,7 @@
           <p id="live-main-task-text" class="whitespace-pre-wrap break-words text-[11px] leading-relaxed text-slate-200"></p>
           <div class="flex gap-2">
             <button id="live-main-task-cancel-btn" type="button" class="flex-1 min-h-[40px] rounded-lg border border-slate-700 bg-slate-900 text-[11px] font-semibold text-slate-300 active:scale-95">取消</button>
-            <button id="live-main-task-confirm-btn" type="button" class="flex-1 min-h-[40px] rounded-lg border border-amber-400/60 bg-amber-500/20 text-[11px] font-bold text-amber-200 active:scale-95">Confirm</button>
+            <button id="live-main-task-confirm-btn" type="button" class="flex-1 min-h-[40px] rounded-lg border border-amber-400/60 bg-amber-500/20 text-[11px] font-bold text-amber-200 active:scale-95">確認</button>
           </div>
         </div>
 

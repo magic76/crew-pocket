@@ -7,6 +7,7 @@
   if (!['zh-TW', 'en'].includes(locale)) locale = 'zh-TW';
 
   const en = {
+    '確認': 'Confirm',
     '歷史對話選單': 'Conversation history menu',
     '網路連線正常 (可正常與 AI 對話)': 'Online — ready to chat with AI',
     '手機無網路連線 (請檢查 Wi-Fi/行動數據)': 'Offline — check Wi-Fi or mobile data',
