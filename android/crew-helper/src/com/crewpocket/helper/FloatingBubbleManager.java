@@ -89,6 +89,14 @@ public class FloatingBubbleManager {
         return instance;
     }
 
+    public static synchronized FloatingBubbleManager getInstance() {
+        return instance;
+    }
+
+    public Context getContext() {
+        return context;
+    }
+
     public boolean canDrawOverlays() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             return Settings.canDrawOverlays(context);

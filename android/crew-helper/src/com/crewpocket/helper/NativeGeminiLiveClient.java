@@ -21,6 +21,9 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import android.content.Context;
+import android.os.Handler;
+import android.os.Looper;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
@@ -128,10 +131,14 @@ final class NativeGeminiLiveClient extends WebSocketListener {
     private volatile boolean aiSpeaking = false;
     private volatile boolean interruptedCurrentTurn = false;
 
-    // 🧬 Voiceprint Profile Sync & Gating Settings
+    // 🧬 Voiceprint Profile Sync & Neural Gating Settings
     private volatile boolean voiceprintEnabled = false;
     private volatile double voiceprintThreshold = 0.25;
     private volatile float[] voiceprintEmbedding = null;
+    private android.webkit.WebView voiceprintWebView = null;
+    private volatile boolean voiceprintSegmentAuthorized = false;
+    private volatile boolean voiceprintCheckPending = false;
+    private final ByteArrayOutputStream rollingSpeechPcm = new ByteArrayOutputStream();
 
     boolean isAgentMuted() { return agentMuted; }
     boolean isAiSpeaking() { return aiSpeaking; }
@@ -161,6 +168,7 @@ final class NativeGeminiLiveClient extends WebSocketListener {
                             voiceprintEmbedding = null;
                         }
                         Log.d(TAG, "🧬 聲紋設定載入完成：enabled=" + voiceprintEnabled + ", threshold=" + voiceprintThreshold + ", hasEmbedding=" + (voiceprintEmbedding != null));
+                        initVoiceprintBridge();
                     }
                     conn.disconnect();
                 } catch (Exception e) {
@@ -168,6 +176,54 @@ final class NativeGeminiLiveClient extends WebSocketListener {
                 }
             }
         }, "crew-vp-load").start();
+    }
+
+    private void initVoiceprintBridge() {
+        if (!voiceprintEnabled || voiceprintEmbedding == null || voiceprintThreshold <= 0) return;
+        new Handler(Looper.getMainLooper()).post(new Runnable() {
+            @Override public void run() {
+                try {
+                    if (voiceprintWebView != null) return;
+                    Context appCtx = FloatingBubbleManager.getInstance().getContext();
+                    if (appCtx == null) return;
+                    voiceprintWebView = new android.webkit.WebView(appCtx);
+                    voiceprintWebView.getSettings().setJavaScriptEnabled(true);
+                    voiceprintWebView.getSettings().setAllowFileAccess(true);
+                    voiceprintWebView.getSettings().setDomStorageEnabled(true);
+                    voiceprintWebView.addJavascriptInterface(new Object() {
+                        @android.webkit.JavascriptInterface
+                        public void onVoiceprintResult(double similarity, boolean matched) {
+                            Log.d(TAG, "🧬 [Neural Voiceprint] Similarity: " + similarity + ", Threshold: " + voiceprintThreshold + " => Matched: " + matched);
+                            voiceprintSegmentAuthorized = matched;
+                            voiceprintCheckPending = false;
+                        }
+                    }, "AndroidBridge");
+                    voiceprintWebView.loadUrl("http://127.0.0.1:8000/extra/voiceprint_bridge.html");
+                } catch (Exception e) {
+                    Log.w(TAG, "🧬 [Neural Voiceprint] Bridge init error: " + e.getMessage());
+                }
+            }
+        });
+    }
+
+    private void requestNeuralVoiceprintCheck(byte[] pcmData) {
+        if (voiceprintWebView == null || voiceprintEmbedding == null || voiceprintCheckPending) return;
+        voiceprintCheckPending = true;
+        final String base64Pcm = Base64.encodeToString(pcmData, Base64.NO_WRAP);
+        final JSONArray profileArr = new JSONArray();
+        for (float v : voiceprintEmbedding) {
+            try { profileArr.put(v); } catch (Exception ignored) {}
+        }
+        new Handler(Looper.getMainLooper()).post(new Runnable() {
+            @Override public void run() {
+                try {
+                    String js = "window.verifyAudioPcm && window.verifyAudioPcm('" + base64Pcm + "', " + profileArr.toString() + ", " + voiceprintThreshold + ");";
+                    voiceprintWebView.evaluateJavascript(js, null);
+                } catch (Exception e) {
+                    voiceprintCheckPending = false;
+                }
+            }
+        });
     }
 
     boolean toggleAgentMute() {
@@ -620,29 +676,76 @@ final class NativeGeminiLiveClient extends WebSocketListener {
     private void sendMic() {
         byte[] pcm = new byte[1280];
         long lastActiveSpeech = 0;
+        final java.util.List<byte[]> delayedFrames = new java.util.ArrayList<byte[]>();
+
         while (running && recorder != null && webSocket != null) {
             int count = recorder.read(pcm, 0, pcm.length); if (count <= 0) continue;
             if (agentMuted) continue;
 
-            double rms = calculateRms(pcm, count);
+            byte[] chunk = (count == pcm.length) ? pcm.clone() : Arrays.copyOf(pcm, count);
+            double rms = calculateRms(chunk, count);
             long now = System.currentTimeMillis();
 
-            // 🧬 Energy & Voice Activity Detection Gate
+            // Check if voiceprint neural verification is actively configured
+            boolean isVpActive = voiceprintEnabled && voiceprintThreshold > 0 && voiceprintEmbedding != null;
+
             if (rms > 0.015) {
+                // If this is a new utterance segment (gap > 600ms), start a fresh verification cycle
+                if (now - lastActiveSpeech > 600) {
+                    voiceprintSegmentAuthorized = false;
+                    voiceprintCheckPending = false;
+                    rollingSpeechPcm.reset();
+                    delayedFrames.clear();
+                }
                 lastActiveSpeech = now;
+                rollingSpeechPcm.write(chunk, 0, chunk.length);
+
+                // Collect up to ~400ms (12,800 bytes @ 16kHz 16-bit mono) to perform CAM++ embedding check
+                if (isVpActive && !voiceprintSegmentAuthorized && !voiceprintCheckPending && rollingSpeechPcm.size() >= 12800) {
+                    requestNeuralVoiceprintCheck(rollingSpeechPcm.toByteArray());
+                }
+            } else if (now - lastActiveSpeech > 600) {
+                // Silence gap: reset buffer
+                rollingSpeechPcm.reset();
+                delayedFrames.clear();
+                voiceprintSegmentAuthorized = false;
             }
 
-            // If voiceprint gating is active with a non-zero threshold, skip silence to save bandwidth
-            // and keep speech clean (allowing 400ms trailing audio for natural endings)
-            boolean withinSpeechWindow = (now - lastActiveSpeech) < 400;
-            if (voiceprintEnabled && voiceprintThreshold > 0 && !withinSpeechWindow) {
-                continue;
+            // Gating Decision:
+            if (isVpActive) {
+                boolean withinSpeechWindow = (now - lastActiveSpeech) < 400;
+                if (!withinSpeechWindow) {
+                    continue; // silence
+                }
+
+                if (!voiceprintSegmentAuthorized) {
+                    // Buffer during neural analysis (up to ~600ms of audio delay)
+                    if (delayedFrames.size() < 15) {
+                        delayedFrames.add(chunk);
+                    }
+                    continue; // Hold audio until authorized
+                }
+
+                // If authorized, flush buffered opening speech frames first!
+                if (!delayedFrames.isEmpty()) {
+                    for (byte[] delayedChunk : delayedFrames) {
+                        try {
+                            JSONObject root = new JSONObject(); JSONObject audio = new JSONObject();
+                            audio.put("mimeType", "audio/pcm;rate=16000");
+                            audio.put("data", Base64.encodeToString(delayedChunk, Base64.NO_WRAP));
+                            root.put("realtimeInput", new JSONObject().put("audio", audio));
+                            webSocket.send(root.toString());
+                        } catch (Exception ignored) {}
+                    }
+                    delayedFrames.clear();
+                }
             }
 
+            // Send real-time audio chunk to Gemini
             try {
                 JSONObject root = new JSONObject(); JSONObject audio = new JSONObject();
                 audio.put("mimeType", "audio/pcm;rate=16000");
-                audio.put("data", Base64.encodeToString(count == pcm.length ? pcm : Arrays.copyOf(pcm, count), Base64.NO_WRAP));
+                audio.put("data", Base64.encodeToString(chunk, Base64.NO_WRAP));
                 root.put("realtimeInput", new JSONObject().put("audio", audio));
                 if (!webSocket.send(root.toString())) throw new Exception("audio send failed");
             } catch (Exception error) { fail("麥克風串流失敗：" + error.getMessage(), error); }
@@ -658,5 +761,20 @@ final class NativeGeminiLiveClient extends WebSocketListener {
         if (error != null) Log.e(TAG, message, error); else Log.e(TAG, message);
         running = false; stopAudio(); listener.onStopped(message);
     }
-    private void stopAudio() { try { if (recorder != null) { recorder.stop(); recorder.release(); recorder = null; } } catch (Exception ignored) {} try { if (player != null) { player.stop(); player.release(); player = null; } } catch (Exception ignored) {} }
+    private void stopAudio() {
+        try { if (recorder != null) { recorder.stop(); recorder.release(); recorder = null; } } catch (Exception ignored) {}
+        try { if (player != null) { player.stop(); player.release(); player = null; } } catch (Exception ignored) {}
+        if (voiceprintWebView != null) {
+            new Handler(Looper.getMainLooper()).post(new Runnable() {
+                @Override public void run() {
+                    try {
+                        if (voiceprintWebView != null) {
+                            voiceprintWebView.destroy();
+                            voiceprintWebView = null;
+                        }
+                    } catch (Exception ignored) {}
+                }
+            });
+        }
+    }
 }
