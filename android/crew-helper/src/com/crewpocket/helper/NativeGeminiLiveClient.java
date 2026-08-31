@@ -467,12 +467,33 @@ final class NativeGeminiLiveClient extends WebSocketListener {
             }
         }
 
-        // 3. Coordinate Normalization (0~1000 scale to 1440x3120)
+        // 3. Coordinate Normalization
+        // When sending visual frames, the 1440x3120 screen is scaled to maxEdge 1280:
+        // Width: 1440 * (1280/3120) = 591 px. Height: 3120 * (1280/3120) = 1280 px.
+        // Gemini Vision receives an image with aspect ratio 591:1280.
+        // In Gemini Vision standard normalized coordinates (0 ~ 1000):
+        // X maps directly to 1440 (0~1000 -> 0~1440)
+        // Y maps directly to 3120 (0~1000 -> 0~3120)
         if (left >= 0 && right <= 1000 && bottom <= 1000 && bottom > 0) {
-            left = (left / 1000.0) * 1440.0;
-            right = (right / 1000.0) * 1440.0;
-            top = (top / 1000.0) * 3120.0;
-            bottom = (bottom / 1000.0) * 3120.0;
+            double rawL = (left / 1000.0) * 1440.0;
+            double rawR = (right / 1000.0) * 1440.0;
+            double rawT = (top / 1000.0) * 3120.0;
+            double rawB = (bottom / 1000.0) * 3120.0;
+
+            // Compute center point & square bounding size for app icon (app icons are ~220px on 1440p)
+            double width = rawR - rawL;
+            double height = rawB - rawT;
+
+            // If box is stretched vertically (height > width * 1.3), center it tightly on the actual icon
+            if (height > width * 1.35) {
+                // Focus on top part where the icon actually sits
+                rawB = rawT + width * 1.08;
+            }
+
+            left = rawL;
+            right = rawR;
+            top = rawT;
+            bottom = rawB;
         }
 
         if (left < 0 || top < 0 || right <= left || bottom <= top) {

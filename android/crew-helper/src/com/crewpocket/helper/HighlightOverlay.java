@@ -145,9 +145,9 @@ public class HighlightOverlay {
         }
 
         public void setTarget(float l, float t, float r, float b, String lbl) {
-            // Expand bounds slightly for better visual padding
-            float padX = dp(8);
-            float padY = dp(6);
+            // Tight bounds for precise icon framing
+            float padX = dp(3);
+            float padY = dp(3);
             targetRect.set(l - padX, t - padY, r + padX, b + padY);
             this.label = lbl == null ? "" : lbl.trim();
             this.alpha = 255;
