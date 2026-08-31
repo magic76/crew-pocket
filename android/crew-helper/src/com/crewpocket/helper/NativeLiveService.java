@@ -57,6 +57,19 @@ public class NativeLiveService extends Service {
         return instance != null && instance.client != null && instance.client.toggleAgentMute();
     }
 
+    static boolean toggleVoiceInterruption() {
+        if (instance != null && instance.client != null) {
+            boolean current = instance.client.isVoiceInterruptionAllowed();
+            instance.client.setAllowVoiceInterruption(!current);
+            return !current;
+        }
+        return true;
+    }
+
+    static boolean isVoiceInterruptionAllowed() {
+        return instance != null && instance.client != null && instance.client.isVoiceInterruptionAllowed();
+    }
+
     static boolean isAgentMuted() {
         return instance != null && instance.client != null && instance.client.isAgentMuted();
     }

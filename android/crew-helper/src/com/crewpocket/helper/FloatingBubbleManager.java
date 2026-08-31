@@ -60,6 +60,7 @@ public class FloatingBubbleManager {
     private TextView voiceCameraButton = null;
     private TextView voiceScreenButton = null;
     private TextView voiceMuteButton = null;
+    private TextView voiceInterruptionButton = null;
     private View dialogView = null;
     private WindowManager.LayoutParams bubbleParams = null;
     private WindowManager.LayoutParams dialogParams = null;
@@ -488,10 +489,23 @@ public class FloatingBubbleManager {
                     headerRow.setPadding(dp(4), 0, dp(4), dp(8));
 
                     TextView title = new TextView(context);
-                    title.setText("🎙️ Crew Pocket Live 控制台");
+                    title.setText("🎙️ Live 控制台");
                     title.setTextSize(13);
                     title.setTextColor(Color.parseColor("#38BDF8"));
                     headerRow.addView(title, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+
+                    voiceInterruptionButton = new TextView(context);
+                    voiceInterruptionButton.setTextSize(11);
+                    voiceInterruptionButton.setPadding(dp(8), dp(3), dp(8), dp(3));
+                    voiceInterruptionButton.setOnClickListener(new View.OnClickListener() {
+                        @Override public void onClick(View v) {
+                            if (!NativeLiveService.isActive()) return;
+                            boolean enabled = NativeLiveService.toggleVoiceInterruption();
+                            Toast.makeText(context, enabled ? "🎙️ 已開啟自由說話打斷" : "🛡️ 已開啟防插話模式（避免喇叭打斷 AI）", Toast.LENGTH_SHORT).show();
+                            refreshVoiceControls();
+                        }
+                    });
+                    headerRow.addView(voiceInterruptionButton);
 
                     TextView close = new TextView(context);
                     close.setText("✕");
@@ -692,6 +706,24 @@ public class FloatingBubbleManager {
                         voiceMuteButton.setTextColor(Color.WHITE);
                     }
                     voiceMuteButton.setBackground(muteBg);
+                }
+
+                if (voiceInterruptionButton != null) {
+                    boolean allowInterruption = NativeLiveService.isVoiceInterruptionAllowed();
+                    GradientDrawable pillBg = new GradientDrawable();
+                    pillBg.setCornerRadius(dp(12));
+                    if (allowInterruption) {
+                        pillBg.setColor(Color.parseColor("#064E3B")); // Emerald 900
+                        pillBg.setStroke(dp(1), Color.parseColor("#10B981")); // Emerald 500
+                        voiceInterruptionButton.setText("🎙️ 允許插話");
+                        voiceInterruptionButton.setTextColor(Color.parseColor("#6EE7B7")); // Emerald 300
+                    } else {
+                        pillBg.setColor(Color.parseColor("#78350F")); // Amber 900
+                        pillBg.setStroke(dp(1), Color.parseColor("#F59E0B")); // Amber 500
+                        voiceInterruptionButton.setText("🛡️ 防插話");
+                        voiceInterruptionButton.setTextColor(Color.parseColor("#FCD34D")); // Amber 300
+                    }
+                    voiceInterruptionButton.setBackground(pillBg);
                 }
             }
         });

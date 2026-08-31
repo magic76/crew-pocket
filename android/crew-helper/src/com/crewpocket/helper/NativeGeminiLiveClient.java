@@ -130,7 +130,7 @@ final class NativeGeminiLiveClient extends WebSocketListener {
     private volatile boolean agentMuted = false;
     private volatile boolean aiSpeaking = false;
     private volatile boolean interruptedCurrentTurn = false;
-    private volatile boolean allowVoiceInterruption = false; // 🛑 插話開關：預設關閉（避免 AI 講話時被外放雜音打斷），需要插話時可點按按鈕或開啟此開關
+    private volatile boolean allowVoiceInterruption = true; // 🎙️ 語音插話：預設開啟（隨時自由說話打斷 AI；若關閉則為防插話保護模式）
 
     boolean isAgentMuted() { return agentMuted; }
     boolean isAiSpeaking() { return aiSpeaking; }
