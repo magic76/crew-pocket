@@ -501,6 +501,31 @@ public class CrewAccessibilityService extends AccessibilityService {
                     }
                 });
                 responseJson = "{\"success\":true,\"action\":\"SWIPE\"}";
+            } else if (path.startsWith("/type")) {
+                String textToType = getJsonString(body, "text");
+                if (textToType == null && body.contains("\"text\":")) {
+                    try {
+                        int sIdx = body.indexOf("\"text\":") + 7;
+                        textToType = body.substring(sIdx).split("[,}]")[0].replace("\"", "").trim();
+                    } catch (Exception ignored) {}
+                }
+                final String fText = textToType == null ? "" : textToType;
+                final boolean[] typeSuccess = new boolean[]{false};
+                final Object typeLock = new Object();
+                mainHandler.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        try {
+                            typeSuccess[0] = performSetText(fText);
+                        } finally {
+                            synchronized (typeLock) { typeLock.notify(); }
+                        }
+                    }
+                });
+                synchronized (typeLock) {
+                    try { typeLock.wait(1500); } catch (Exception ignored) {}
+                }
+                responseJson = "{\"success\":" + typeSuccess[0] + ",\"action\":\"TYPE\",\"text\":\"" + fText.replace("\"", "\\\"") + "\"}";
             } else if (path.startsWith("/key")) {
                 String key = "HOME";
                 if (body.contains("\"HOME\"")) key = "HOME";
@@ -595,6 +620,45 @@ public class CrewAccessibilityService extends AccessibilityService {
         GestureDescription.Builder builder = new GestureDescription.Builder();
         builder.addStroke(new GestureDescription.StrokeDescription(path, 0, 50));
         dispatchGesture(builder.build(), null, null);
+    }
+
+    private boolean performSetText(String text) {
+        if (text == null) return false;
+        AccessibilityNodeInfo root = getRootInActiveWindow();
+        if (root == null) return false;
+        try {
+            // First check input-focused node
+            AccessibilityNodeInfo target = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT);
+            if (target == null) {
+                target = findEditableNode(root);
+            }
+            if (target != null) {
+                android.os.Bundle args = new android.os.Bundle();
+                args.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text);
+                boolean success = target.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args);
+                target.recycle();
+                return success;
+            }
+        } catch (Exception ignored) {}
+        finally {
+            root.recycle();
+        }
+        return false;
+    }
+
+    private AccessibilityNodeInfo findEditableNode(AccessibilityNodeInfo node) {
+        if (node == null) return null;
+        if (node.isEditable()) return AccessibilityNodeInfo.obtain(node);
+        int count = node.getChildCount();
+        for (int i = 0; i < count; i++) {
+            AccessibilityNodeInfo child = node.getChild(i);
+            if (child != null) {
+                AccessibilityNodeInfo res = findEditableNode(child);
+                child.recycle();
+                if (res != null) return res;
+            }
+        }
+        return null;
     }
 
     private void performSwipe(float x1, float y1, float x2, float y2, long duration) {

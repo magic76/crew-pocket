@@ -263,6 +263,7 @@ final class NativeGeminiLiveClient extends WebSocketListener {
         tools.put(new JSONObject().put("name", "take_screenshot").put("description", "Only when the user explicitly asks to see, capture, or inspect the current phone screen, app UI, button, or on-screen content. Captures the latest phone display without a screenshot flash."));
         tools.put(new JSONObject().put("name", "swipe_screen").put("description", "Scroll or swipe the phone screen only when explicitly requested.").put("parameters", new JSONObject().put("type", "OBJECT").put("properties", new JSONObject().put("direction", new JSONObject().put("type", "STRING").put("enum", new JSONArray().put("up").put("down").put("left").put("right"))).put("distance", new JSONObject().put("type", "STRING").put("enum", new JSONArray().put("short").put("normal").put("long")))).put("required", new JSONArray().put("direction"))));
         tools.put(new JSONObject().put("name", "tap_screen").put("description", "Tap on a button, app icon, or coordinate on the phone screen. Provide label (e.g. 'LINE', '設定', '確認') or x, y pixel coordinates.").put("parameters", new JSONObject().put("type", "OBJECT").put("properties", new JSONObject().put("label", new JSONObject().put("type", "STRING").put("description", "The button, app icon, or text label to tap")).put("x", new JSONObject().put("type", "NUMBER").put("description", "X coordinate")).put("y", new JSONObject().put("type", "NUMBER").put("description", "Y coordinate")))));
+        tools.put(new JSONObject().put("name", "type_text").put("description", "Click on a specified text input field, search bar, or coordinate, and type text into it. Provide target hint/label (e.g. '搜尋', '訊息', '帳號') or x, y coordinates, and the text string to type.").put("parameters", new JSONObject().put("type", "OBJECT").put("properties", new JSONObject().put("target", new JSONObject().put("type", "STRING").put("description", "Input field hint or label")).put("x", new JSONObject().put("type", "NUMBER").put("description", "Optional X coordinate")).put("y", new JSONObject().put("type", "NUMBER").put("description", "Optional Y coordinate")).put("text", new JSONObject().put("type", "STRING").put("description", "Text to type into input"))).put("required", new JSONArray().put("text"))));
         tools.put(new JSONObject().put("name", "press_key").put("description", "Press HOME, BACK, or RECENTS only when explicitly requested.").put("parameters", new JSONObject().put("type", "OBJECT").put("properties", new JSONObject().put("key", new JSONObject().put("type", "STRING").put("enum", new JSONArray().put("HOME").put("BACK").put("RECENTS")))).put("required", new JSONArray().put("key"))));
         tools.put(new JSONObject().put("name", "send_to_main_chat").put("description", "Send a clean message to the current or most recently active Crew Pocket main chat ONLY when the user explicitly asks to send, tell, or hand a message to the main chat.").put("parameters", new JSONObject().put("type", "OBJECT").put("properties", new JSONObject().put("message", new JSONObject().put("type", "STRING"))).put("required", new JSONArray().put("message"))));
         return tools;
@@ -281,6 +282,7 @@ final class NativeGeminiLiveClient extends WebSocketListener {
                     if ("take_screenshot".equals(name)) result = captureAndSendScreen();
                     else if ("swipe_screen".equals(name)) result = swipe(args);
                     else if ("tap_screen".equals(name)) result = tap(args);
+                    else if ("type_text".equals(name)) result = typeText(args);
                     else if ("press_key".equals(name)) result = pressKey(args);
                     else if ("send_to_main_chat".equals(name)) result = sendToMainChat(args);
                     else result.put("success", false).put("error", "不支援的原生工具：" + name);
@@ -377,6 +379,32 @@ final class NativeGeminiLiveClient extends WebSocketListener {
             reader.close();
             return text.length() == 0 ? new JSONObject() : new JSONObject(text.toString());
         } finally { if (connection != null) connection.disconnect(); }
+    }
+
+    private JSONObject typeText(JSONObject args) throws Exception {
+        String text = args.optString("text", "").trim();
+        if (text.isEmpty()) return new JSONObject().put("success", false).put("error", "輸入文字不可為空");
+
+        // 1. If target or coordinates provided, tap to focus first
+        String target = args.optString("target", args.optString("label", "")).trim();
+        double x = args.optDouble("x", -1);
+        double y = args.optDouble("y", -1);
+
+        if (!target.isEmpty() || (x >= 0 && y >= 0)) {
+            JSONObject tapArgs = new JSONObject();
+            if (!target.isEmpty()) tapArgs.put("label", target);
+            if (x >= 0) tapArgs.put("x", x);
+            if (y >= 0) tapArgs.put("y", y);
+            tap(tapArgs);
+            try { Thread.sleep(250); } catch (Exception ignored) {}
+        }
+
+        // 2. Send text to Accessibility Service
+        JSONObject reply = helperPost("/type", new JSONObject().put("text", text));
+        if (reply.optBoolean("success")) {
+            reply.put("message", "已在輸入框輸入：「" + text + "」");
+        }
+        return reply;
     }
 
     private JSONObject pressKey(JSONObject args) throws Exception {
