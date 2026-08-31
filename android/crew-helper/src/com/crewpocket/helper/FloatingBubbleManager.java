@@ -56,10 +56,148 @@ public class FloatingBubbleManager {
     private View voiceControlView = null;
     private boolean voiceControlsOpening = false;
     private WindowManager.LayoutParams voiceControlParams = null;
-    private TextView voiceCallButton = null;
-    private TextView voiceCameraButton = null;
-    private TextView voiceScreenButton = null;
-    private TextView voiceMuteButton = null;
+    private static class DockIconButton extends View {
+        public static final int ICON_CAMERA = 1;
+        public static final int ICON_SCREEN = 2;
+        public static final int ICON_MIC_ACTIVE = 3;
+        public static final int ICON_MIC_MUTED = 4;
+        public static final int ICON_SPEAKER = 5;
+        public static final int ICON_CALL_START = 6;
+        public static final int ICON_CALL_HANGUP = 7;
+
+        private int iconType = ICON_CAMERA;
+        private int primaryColor = Color.parseColor("#94A3B8");
+        private final Paint iconPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final RectF bounds = new RectF();
+
+        public DockIconButton(Context context) {
+            super(context);
+            iconPaint.setStyle(Paint.Style.STROKE);
+            iconPaint.setStrokeCap(Paint.Cap.ROUND);
+            iconPaint.setStrokeJoin(Paint.Join.ROUND);
+        }
+
+        public void setIcon(int type, int color) {
+            this.iconType = type;
+            this.primaryColor = color;
+            invalidate();
+        }
+
+        @Override
+        protected void onDraw(Canvas canvas) {
+            super.onDraw(canvas);
+            float w = getWidth();
+            float h = getHeight();
+            float cx = w / 2f;
+            float cy = h / 2f;
+
+            iconPaint.setColor(primaryColor);
+            float density = getResources().getDisplayMetrics().density;
+            iconPaint.setStrokeWidth(2f * density);
+
+            float sz = 11f * density;
+            bounds.set(cx - sz, cy - sz, cx + sz, cy + sz);
+
+            switch (iconType) {
+                case ICON_CAMERA:
+                    // Camera body
+                    iconPaint.setStyle(Paint.Style.STROKE);
+                    RectF camBody = new RectF(cx - 10 * density, cy - 6 * density, cx + 5 * density, cy + 8 * density);
+                    canvas.drawRoundRect(camBody, 2.5f * density, 2.5f * density, iconPaint);
+                    // Lens triangle
+                    android.graphics.Path camLens = new android.graphics.Path();
+                    camLens.moveTo(cx + 5 * density, cy - 2 * density);
+                    camLens.lineTo(cx + 11 * density, cy - 6 * density);
+                    camLens.lineTo(cx + 11 * density, cy + 8 * density);
+                    camLens.lineTo(cx + 5 * density, cy + 4 * density);
+                    camLens.close();
+                    iconPaint.setStyle(Paint.Style.FILL);
+                    canvas.drawPath(camLens, iconPaint);
+                    break;
+
+                case ICON_SCREEN:
+                    // Monitor screen
+                    iconPaint.setStyle(Paint.Style.STROKE);
+                    RectF screenBox = new RectF(cx - 10 * density, cy - 7 * density, cx + 10 * density, cy + 4 * density);
+                    canvas.drawRoundRect(screenBox, 2f * density, 2f * density, iconPaint);
+                    // Stand base
+                    canvas.drawLine(cx, cy + 4 * density, cx, cy + 8 * density, iconPaint);
+                    canvas.drawLine(cx - 5 * density, cy + 8 * density, cx + 5 * density, cy + 8 * density, iconPaint);
+                    break;
+
+                case ICON_MIC_ACTIVE:
+                    // Microphone capsule
+                    iconPaint.setStyle(Paint.Style.STROKE);
+                    RectF micCap = new RectF(cx - 3.5f * density, cy - 8 * density, cx + 3.5f * density, cy + 1 * density);
+                    canvas.drawRoundRect(micCap, 3.5f * density, 3.5f * density, iconPaint);
+                    // Mic cradle
+                    RectF micCradle = new RectF(cx - 6.5f * density, cy - 4 * density, cx + 6.5f * density, cy + 3 * density);
+                    canvas.drawArc(micCradle, 0, 180, false, iconPaint);
+                    // Stem & base
+                    canvas.drawLine(cx, cy + 3 * density, cx, cy + 7 * density, iconPaint);
+                    canvas.drawLine(cx - 4 * density, cy + 7 * density, cx + 4 * density, cy + 7 * density, iconPaint);
+                    break;
+
+                case ICON_MIC_MUTED:
+                    // Muted mic with diagonal slash
+                    iconPaint.setStyle(Paint.Style.STROKE);
+                    RectF micMutedCap = new RectF(cx - 3.5f * density, cy - 8 * density, cx + 3.5f * density, cy + 1 * density);
+                    canvas.drawRoundRect(micMutedCap, 3.5f * density, 3.5f * density, iconPaint);
+                    RectF micMutedCradle = new RectF(cx - 6.5f * density, cy - 4 * density, cx + 6.5f * density, cy + 3 * density);
+                    canvas.drawArc(micMutedCradle, 0, 180, false, iconPaint);
+                    canvas.drawLine(cx, cy + 3 * density, cx, cy + 7 * density, iconPaint);
+                    // Slash
+                    iconPaint.setColor(Color.parseColor("#F43F5E"));
+                    canvas.drawLine(cx - 9 * density, cy + 8 * density, cx + 9 * density, cy - 8 * density, iconPaint);
+                    break;
+
+                case ICON_SPEAKER:
+                    // AI speaking wave / speaker
+                    iconPaint.setStyle(Paint.Style.STROKE);
+                    android.graphics.Path spk = new android.graphics.Path();
+                    spk.moveTo(cx - 7 * density, cy - 3 * density);
+                    spk.lineTo(cx - 4 * density, cy - 3 * density);
+                    spk.lineTo(cx + 1 * density, cy - 7 * density);
+                    spk.lineTo(cx + 1 * density, cy + 7 * density);
+                    spk.lineTo(cx - 4 * density, cy + 3 * density);
+                    spk.lineTo(cx - 7 * density, cy + 3 * density);
+                    spk.close();
+                    iconPaint.setStyle(Paint.Style.FILL);
+                    canvas.drawPath(spk, iconPaint);
+                    // Sound waves
+                    iconPaint.setStyle(Paint.Style.STROKE);
+                    RectF wave1 = new RectF(cx - 2 * density, cy - 4 * density, cx + 6 * density, cy + 4 * density);
+                    canvas.drawArc(wave1, -45, 90, false, iconPaint);
+                    RectF wave2 = new RectF(cx - 2 * density, cy - 8 * density, cx + 10 * density, cy + 8 * density);
+                    canvas.drawArc(wave2, -45, 90, false, iconPaint);
+                    break;
+
+                case ICON_CALL_START:
+                    // Start call (Phone handset / mic trigger)
+                    iconPaint.setStyle(Paint.Style.STROKE);
+                    RectF startCap = new RectF(cx - 3.5f * density, cy - 7 * density, cx + 3.5f * density, cy + 1 * density);
+                    canvas.drawRoundRect(startCap, 3.5f * density, 3.5f * density, iconPaint);
+                    RectF startCradle = new RectF(cx - 6f * density, cy - 3 * density, cx + 6f * density, cy + 3 * density);
+                    canvas.drawArc(startCradle, 0, 180, false, iconPaint);
+                    canvas.drawLine(cx, cy + 3 * density, cx, cy + 7 * density, iconPaint);
+                    canvas.drawLine(cx - 4 * density, cy + 7 * density, cx + 4 * density, cy + 7 * density, iconPaint);
+                    break;
+
+                case ICON_CALL_HANGUP:
+                    // Hangup X / Stop octagon
+                    iconPaint.setStyle(Paint.Style.STROKE);
+                    iconPaint.setStrokeWidth(2.5f * density);
+                    canvas.drawLine(cx - 5.5f * density, cy - 5.5f * density, cx + 5.5f * density, cy + 5.5f * density, iconPaint);
+                    canvas.drawLine(cx + 5.5f * density, cy - 5.5f * density, cx - 5.5f * density, cy + 5.5f * density, iconPaint);
+                    break;
+            }
+        }
+    }
+
+    private DockIconButton voiceCallButton = null;
+    private DockIconButton voiceCameraButton = null;
+    private DockIconButton voiceScreenButton = null;
+    private DockIconButton voiceMuteButton = null;
     private TextView voiceInterruptionButton = null;
     private View dialogView = null;
     private WindowManager.LayoutParams bubbleParams = null;
@@ -421,30 +559,11 @@ public class FloatingBubbleManager {
         if (voiceControlView != null || voiceControlsOpening) hideVoiceControls(); else showVoiceControls();
     }
 
-    private TextView makeVoiceButton(String text) {
-        TextView button = new TextView(context);
-        button.setText(text);
-        button.setTextSize(12);
-        button.setIncludeFontPadding(false);
-        button.setGravity(Gravity.CENTER);
-        button.setPadding(0, 0, 0, 0);
-        setVoiceButtonActive(button, false);
-        button.setTextColor(Color.parseColor("#e2e8f0"));
+    private DockIconButton makeDockIconButton() {
+        DockIconButton button = new DockIconButton(context);
+        button.setClickable(true);
+        button.setFocusable(true);
         return button;
-    }
-
-    private void setVoiceButtonActive(TextView button, boolean active) {
-        if (button == null) return;
-        GradientDrawable bg = new GradientDrawable();
-        bg.setColor(Color.parseColor("#172033"));
-        bg.setCornerRadius(dp(12));
-        if (active) {
-            // 🟢 Green glowing border (2dp #22C55E) when sharing/active
-            bg.setStroke(dp(2), Color.parseColor("#22C55E"));
-        } else {
-            bg.setStroke(1, Color.parseColor("#334155"));
-        }
-        button.setBackground(bg);
     }
 
     private void showVoiceControls() {
@@ -489,7 +608,7 @@ public class FloatingBubbleManager {
                     headerRow.setPadding(dp(4), 0, dp(4), dp(8));
 
                     TextView title = new TextView(context);
-                    title.setText("🎙️ Live 控制台");
+                    title.setText("Live 控制台");
                     title.setTextSize(13);
                     title.setTextColor(Color.parseColor("#38BDF8"));
                     headerRow.addView(title, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
@@ -501,7 +620,7 @@ public class FloatingBubbleManager {
                         @Override public void onClick(View v) {
                             if (!NativeLiveService.isActive()) return;
                             boolean enabled = NativeLiveService.toggleVoiceInterruption();
-                            Toast.makeText(context, enabled ? "🎙️ 已開啟自由說話打斷" : "🛡️ 已開啟防插話模式（避免喇叭打斷 AI）", Toast.LENGTH_SHORT).show();
+                            Toast.makeText(context, enabled ? "已開啟自由說話打斷" : "已開啟防插話模式（避免喇叭打斷 AI）", Toast.LENGTH_SHORT).show();
                             refreshVoiceControls();
                         }
                     });
@@ -519,17 +638,17 @@ public class FloatingBubbleManager {
                     dock.addView(headerRow);
 
                     // 📱 Ergonomic Bottom Dock matching Web UI:
-                    // Layout: [📷 相機] [🖥️ 螢幕] [🎙️ 核心靜音/打斷大按鈕] [🛑 掛斷]
+                    // Layout: [Camera Icon] [Screen Icon] [Center Large Mute/Interrupt Icon] [Hangup/Call Icon]
                     LinearLayout row = new LinearLayout(context);
                     row.setOrientation(LinearLayout.HORIZONTAL);
                     row.setClipToPadding(false);
                     row.setClipChildren(false);
                     row.setPadding(0, dp(4), 0, dp(6));
 
-                    voiceCameraButton = makeVoiceButton("📷");
-                    voiceScreenButton = makeVoiceButton("🖥️");
-                    voiceMuteButton = makeVoiceButton("🎙️ 語音");
-                    voiceCallButton = makeVoiceButton("🛑");
+                    voiceCameraButton = makeDockIconButton();
+                    voiceScreenButton = makeDockIconButton();
+                    voiceMuteButton = makeDockIconButton();
+                    voiceCallButton = makeDockIconButton();
 
                     voiceCameraButton.setOnClickListener(new View.OnClickListener() {
                         @Override public void onClick(View v) {
@@ -635,14 +754,13 @@ public class FloatingBubbleManager {
                     if (isCamActive) {
                         camBg.setColor(Color.parseColor("#4F46E5")); // Indigo 600
                         camBg.setStroke(dp(1), Color.parseColor("#818CF8")); // Indigo 400
-                        voiceCameraButton.setTextColor(Color.WHITE);
+                        voiceCameraButton.setIcon(DockIconButton.ICON_CAMERA, Color.WHITE);
                     } else {
                         camBg.setColor(Color.parseColor("#E61E293B")); // Slate 800/90
                         camBg.setStroke(dp(1), Color.parseColor("#334155")); // Slate 700
-                        voiceCameraButton.setTextColor(Color.parseColor("#CBD5E1")); // Slate 300
+                        voiceCameraButton.setIcon(DockIconButton.ICON_CAMERA, Color.parseColor("#94A3B8"));
                     }
                     voiceCameraButton.setBackground(camBg);
-                    voiceCameraButton.setText("📷");
                 }
                 if (voiceScreenButton != null) {
                     boolean isScreenActive = NativeLiveService.isScreenSharing();
@@ -651,14 +769,13 @@ public class FloatingBubbleManager {
                     if (isScreenActive) {
                         screenBg.setColor(Color.parseColor("#0891B2")); // Cyan 600
                         screenBg.setStroke(dp(1), Color.parseColor("#67E8F9")); // Cyan 300
-                        voiceScreenButton.setTextColor(Color.WHITE);
+                        voiceScreenButton.setIcon(DockIconButton.ICON_SCREEN, Color.WHITE);
                     } else {
                         screenBg.setColor(Color.parseColor("#E61E293B")); // Slate 800/90
                         screenBg.setStroke(dp(1), Color.parseColor("#334155")); // Slate 700
-                        voiceScreenButton.setTextColor(Color.parseColor("#CBD5E1")); // Slate 300
+                        voiceScreenButton.setIcon(DockIconButton.ICON_SCREEN, Color.parseColor("#94A3B8"));
                     }
                     voiceScreenButton.setBackground(screenBg);
-                    voiceScreenButton.setText("🖥️");
                 }
                 if (voiceCallButton != null) {
                     GradientDrawable callBg = new GradientDrawable();
@@ -667,14 +784,12 @@ public class FloatingBubbleManager {
                         // 🛑 In Call -> Rose Red Hangup Button
                         callBg.setColor(Color.parseColor("#E11D48")); // Rose 600
                         callBg.setStroke(dp(1), Color.parseColor("#FDA4AF"));
-                        voiceCallButton.setText("🛑");
-                        voiceCallButton.setTextColor(Color.WHITE);
+                        voiceCallButton.setIcon(DockIconButton.ICON_CALL_HANGUP, Color.WHITE);
                     } else {
                         // 🎙️ Idle -> Slate 800 Start Call Button
                         callBg.setColor(Color.parseColor("#E61E293B")); // Slate 800
                         callBg.setStroke(dp(1), Color.parseColor("#4F46E5")); // Indigo border
-                        voiceCallButton.setText("🎙️");
-                        voiceCallButton.setTextColor(Color.parseColor("#A5B4FC"));
+                        voiceCallButton.setIcon(DockIconButton.ICON_CALL_START, Color.parseColor("#A5B4FC"));
                     }
                     voiceCallButton.setBackground(callBg);
                 }
@@ -683,27 +798,26 @@ public class FloatingBubbleManager {
                     GradientDrawable muteBg = new GradientDrawable();
                     muteBg.setCornerRadius(dp(16));
 
-                    if (isAiSpeaking) {
-                        // 🔊 State 1: AI is speaking -> Amber 500/Rose (Tap to interrupt)
+                    if (!isLiveActive) {
+                        // 📴 State 0: Call Inactive / Idle -> Slate 800 Standby (Mute button disabled/idle)
+                        muteBg.setColor(Color.parseColor("#E61E293B")); // Slate 800
+                        muteBg.setStroke(dp(1), Color.parseColor("#334155")); // Slate 700
+                        voiceMuteButton.setIcon(DockIconButton.ICON_MIC_ACTIVE, Color.parseColor("#64748B")); // Dim Slate
+                    } else if (isAiSpeaking) {
+                        // 🔊 State 1: AI is speaking -> Amber 600 Hero (Tap to interrupt)
                         muteBg.setColor(Color.parseColor("#D97706")); // Amber 600
                         muteBg.setStroke(dp(2), Color.parseColor("#FDE68A")); // Amber 300
-                        voiceMuteButton.setText("🔊 打斷");
-                        voiceMuteButton.setTextSize(13);
-                        voiceMuteButton.setTextColor(Color.WHITE);
+                        voiceMuteButton.setIcon(DockIconButton.ICON_SPEAKER, Color.WHITE);
                     } else if (isMuted) {
                         // 🔇 State 2: Muted -> Rose 900 (Tap to unmute)
                         muteBg.setColor(Color.parseColor("#881337")); // Rose 900
                         muteBg.setStroke(dp(2), Color.parseColor("#F43F5E")); // Rose 500
-                        voiceMuteButton.setText("🔇 靜音");
-                        voiceMuteButton.setTextSize(13);
-                        voiceMuteButton.setTextColor(Color.parseColor("#FECDD3"));
+                        voiceMuteButton.setIcon(DockIconButton.ICON_MIC_MUTED, Color.parseColor("#FECDD3"));
                     } else {
-                        // 🎙️ State 3: Listening / Active -> Teal 500 / Indigo (Tap to mute)
+                        // 🎙️ State 3: Listening / Active -> Teal 600 (Tap to mute)
                         muteBg.setColor(Color.parseColor("#0D9488")); // Teal 600
                         muteBg.setStroke(dp(2), Color.parseColor("#2DD4BF")); // Teal 400
-                        voiceMuteButton.setText("🎙️ 收音中");
-                        voiceMuteButton.setTextSize(13);
-                        voiceMuteButton.setTextColor(Color.WHITE);
+                        voiceMuteButton.setIcon(DockIconButton.ICON_MIC_ACTIVE, Color.WHITE);
                     }
                     voiceMuteButton.setBackground(muteBg);
                 }
