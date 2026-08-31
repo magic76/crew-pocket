@@ -31,7 +31,12 @@ import okio.ByteString;
 /** Gemini Live backed by OkHttp's production WebSocket implementation. */
 final class NativeGeminiLiveClient extends WebSocketListener {
     private static final String TAG = "CrewNativeLive";
-    interface Listener { void onStatus(String text); void onStopped(String reason); void onTranscript(String role, String text); }
+    interface Listener {
+        void onStatus(String text);
+        void onStopped(String reason);
+        void onTranscript(String role, String text);
+        void onSpeakingChanged(boolean speaking);
+    }
     private final String apiKey;
     private final Listener listener;
     private volatile boolean running;
@@ -119,22 +124,33 @@ final class NativeGeminiLiveClient extends WebSocketListener {
     }
 
     private volatile boolean agentMuted = false;
+    private volatile boolean aiSpeaking = false;
 
     boolean isAgentMuted() { return agentMuted; }
+    boolean isAiSpeaking() { return aiSpeaking; }
 
     boolean toggleAgentMute() {
+        // 🛑 Tap-to-Interrupt: If AI is speaking, clicking center button instantly interrupts the AI
+        if (aiSpeaking) {
+            stopPlayback();
+            aiSpeaking = false;
+            return false; // remains unmuted, but interrupted
+        }
         agentMuted = !agentMuted;
         if (agentMuted) {
-            // Cut off any currently playing audio immediately
-            try {
-                if (player != null) {
-                    player.pause();
-                    player.flush();
-                    player.play();
-                }
-            } catch (Exception ignored) {}
+            stopPlayback();
         }
         return agentMuted;
+    }
+
+    void stopPlayback() {
+        try {
+            if (player != null) {
+                player.pause();
+                player.flush();
+                player.play();
+            }
+        } catch (Exception ignored) {}
     }
 
     void stop() {
@@ -220,6 +236,10 @@ final class NativeGeminiLiveClient extends WebSocketListener {
             // Continuous camera/screen frames must not arrive while Gemini is
             // producing this answer, otherwise they can trigger a duplicate turn.
             visualHoldUntil = System.currentTimeMillis() + 1800;
+            if (!aiSpeaking) {
+                aiSpeaking = true;
+                listener.onSpeakingChanged(true);
+            }
             JSONArray parts = turn.optJSONArray("parts");
             if (parts != null) for (int i = 0; i < parts.length(); i++) {
                 JSONObject part = parts.getJSONObject(i);
@@ -229,7 +249,13 @@ final class NativeGeminiLiveClient extends WebSocketListener {
                 if (part.optString("text").length() > 0) listener.onTranscript("Gemini", part.optString("text"));
             }
         }
-        if (server.optBoolean("turnComplete", server.optBoolean("turn_complete", false))) visualHoldUntil = System.currentTimeMillis() + 1000;
+        if (server.optBoolean("turnComplete", server.optBoolean("turn_complete", false))) {
+            visualHoldUntil = System.currentTimeMillis() + 1000;
+            if (aiSpeaking) {
+                aiSpeaking = false;
+                listener.onSpeakingChanged(false);
+            }
+        }
     }
 
     private String buildSetup() throws Exception {

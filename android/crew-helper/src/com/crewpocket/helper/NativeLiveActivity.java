@@ -158,6 +158,7 @@ public class NativeLiveActivity extends Activity {
             @Override public void onTranscript(final String role, final String text) {
                 runOnUiThread(new Runnable() { @Override public void run() { appendTranscript(role, text); } });
             }
+            @Override public void onSpeakingChanged(final boolean speaking) {}
         });
         client.start();
         handler.removeCallbacks(connectionWatchdog);

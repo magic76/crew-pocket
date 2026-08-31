@@ -61,6 +61,10 @@ public class NativeLiveService extends Service {
         return instance != null && instance.client != null && instance.client.isAgentMuted();
     }
 
+    static boolean isAiSpeaking() {
+        return instance != null && instance.client != null && instance.client.isAiSpeaking();
+    }
+
     static boolean isCameraSharing() { return instance != null && instance.sharingCamera; }
     static boolean isScreenSharing() { return instance != null && instance.sharingScreen; }
 
@@ -98,6 +102,9 @@ public class NativeLiveService extends Service {
             @Override public void onTranscript(String role, String text) {
                 // The foreground service deliberately stays visually quiet.
                 // Full transcript remains available from the native test page.
+            }
+            @Override public void onSpeakingChanged(boolean speaking) {
+                FloatingBubbleManager.getInstance(NativeLiveService.this).refreshVoiceControls();
             }
         });
         client.start();

@@ -491,21 +491,15 @@ public class FloatingBubbleManager {
                     headerRow.addView(close);
                     dock.addView(headerRow);
 
-                    // 4 Clean Action Buttons
+                    // 📱 Ergonomic Bottom Dock matching Web UI:
+                    // Layout: [📷 相機] [🖥️ 螢幕] [🎙️ 核心靜音/打斷大按鈕] [🛑 掛斷]
                     LinearLayout row = new LinearLayout(context);
                     row.setOrientation(LinearLayout.HORIZONTAL);
 
-                    voiceCallButton = makeVoiceButton(nativeLiveRequested ? "🛑 掛斷" : "🎙️ 通話");
-                    voiceCameraButton = makeVoiceButton("📷 相機");
-                    voiceScreenButton = makeVoiceButton("🖥️ 螢幕");
-                    voiceMuteButton = makeVoiceButton("🔇 靜音");
-
-                    voiceCallButton.setOnClickListener(new View.OnClickListener() {
-                        @Override public void onClick(View v) {
-                            toggleNativeLive();
-                            refreshVoiceControls();
-                        }
-                    });
+                    voiceCameraButton = makeVoiceButton("📷");
+                    voiceScreenButton = makeVoiceButton("🖥️");
+                    voiceMuteButton = makeVoiceButton("🎙️ 語音");
+                    voiceCallButton = makeVoiceButton("🛑");
 
                     voiceCameraButton.setOnClickListener(new View.OnClickListener() {
                         @Override public void onClick(View v) {
@@ -537,13 +531,27 @@ public class FloatingBubbleManager {
                         }
                     });
 
-                    LinearLayout.LayoutParams itemLp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
-                    itemLp.setMargins(dp(3), 0, dp(3), 0);
+                    voiceCallButton.setOnClickListener(new View.OnClickListener() {
+                        @Override public void onClick(View v) {
+                            toggleNativeLive();
+                            refreshVoiceControls();
+                        }
+                    });
 
-                    row.addView(voiceCallButton, itemLp);
-                    row.addView(voiceCameraButton, itemLp);
-                    row.addView(voiceScreenButton, itemLp);
-                    row.addView(voiceMuteButton, itemLp);
+                    LinearLayout.LayoutParams sideLp = new LinearLayout.LayoutParams(dp(54), dp(48));
+                    sideLp.setMargins(dp(3), 0, dp(3), 0);
+
+                    LinearLayout.LayoutParams centerLp = new LinearLayout.LayoutParams(0, dp(48), 1f);
+                    centerLp.setMargins(dp(4), 0, dp(4), 0);
+
+                    // 1. Camera (Left)
+                    row.addView(voiceCameraButton, sideLp);
+                    // 2. Screen (Left-Center)
+                    row.addView(voiceScreenButton, sideLp);
+                    // 3. Main Center Mute/Interrupt (Large Hero Pill)
+                    row.addView(voiceMuteButton, centerLp);
+                    // 4. Hangup (Right)
+                    row.addView(voiceCallButton, sideLp);
 
                     dock.addView(row);
                     voiceControlView = dock;
@@ -574,26 +582,54 @@ public class FloatingBubbleManager {
         });
     }
 
-    private void refreshVoiceControls() {
-        if (voiceCallButton != null) {
-            voiceCallButton.setText(nativeLiveRequested ? "🛑 掛斷" : "🎙️ 通話");
-            setVoiceButtonActive(voiceCallButton, nativeLiveRequested);
-        }
-        if (voiceCameraButton != null) {
-            boolean isCamActive = NativeLiveService.isCameraSharing();
-            voiceCameraButton.setText("📷 相機");
-            setVoiceButtonActive(voiceCameraButton, isCamActive);
-        }
-        if (voiceScreenButton != null) {
-            boolean isScreenActive = NativeLiveService.isScreenSharing();
-            voiceScreenButton.setText("🖥️ 螢幕");
-            setVoiceButtonActive(voiceScreenButton, isScreenActive);
-        }
-        if (voiceMuteButton != null) {
-            boolean isMuted = NativeLiveService.isAgentMuted();
-            voiceMuteButton.setText(isMuted ? "🔊 開聲" : "🔇 靜音");
-            setVoiceButtonActive(voiceMuteButton, isMuted);
-        }
+    public void refreshVoiceControls() {
+        mainHandler.post(new Runnable() {
+            @Override public void run() {
+                if (voiceCameraButton != null) {
+                    boolean isCamActive = NativeLiveService.isCameraSharing();
+                    setVoiceButtonActive(voiceCameraButton, isCamActive);
+                }
+                if (voiceScreenButton != null) {
+                    boolean isScreenActive = NativeLiveService.isScreenSharing();
+                    setVoiceButtonActive(voiceScreenButton, isScreenActive);
+                }
+                if (voiceCallButton != null) {
+                    GradientDrawable hangupBg = new GradientDrawable();
+                    hangupBg.setColor(Color.parseColor("#E11D48")); // Rose 600
+                    hangupBg.setCornerRadius(dp(14));
+                    hangupBg.setStroke(dp(1), Color.parseColor("#FDA4AF"));
+                    voiceCallButton.setBackground(hangupBg);
+                    voiceCallButton.setText("🛑");
+                }
+                if (voiceMuteButton != null) {
+                    boolean isAiSpeaking = NativeLiveService.isAiSpeaking();
+                    boolean isMuted = NativeLiveService.isAgentMuted();
+                    GradientDrawable muteBg = new GradientDrawable();
+                    muteBg.setCornerRadius(dp(16));
+
+                    if (isAiSpeaking) {
+                        // 🔊 State 1: AI is speaking -> Amber 600 (Tap to interrupt)
+                        muteBg.setColor(Color.parseColor("#D97706")); // Amber 600
+                        muteBg.setStroke(dp(2), Color.parseColor("#FDE68A")); // Amber border
+                        voiceMuteButton.setText("🔊 AI 說話中 · 點擊打斷");
+                        voiceMuteButton.setTextColor(Color.WHITE);
+                    } else if (isMuted) {
+                        // 🔇 State 2: Muted -> Deep Rose 900 (Tap to unmute)
+                        muteBg.setColor(Color.parseColor("#881337")); // Rose 900
+                        muteBg.setStroke(dp(2), Color.parseColor("#F43F5E")); // Rose 500
+                        voiceMuteButton.setText("🔇 靜音中 · 點擊開啟");
+                        voiceMuteButton.setTextColor(Color.parseColor("#FECDD3"));
+                    } else {
+                        // 🎙️ State 3: Listening / Active -> Teal 600 (Tap to mute)
+                        muteBg.setColor(Color.parseColor("#0D9488")); // Teal 600
+                        muteBg.setStroke(dp(2), Color.parseColor("#2DD4BF")); // Teal 400
+                        voiceMuteButton.setText("🎙️ 收音中 · 點擊靜音");
+                        voiceMuteButton.setTextColor(Color.WHITE);
+                    }
+                    voiceMuteButton.setBackground(muteBg);
+                }
+            }
+        });
     }
 
     public void showDialog() {
