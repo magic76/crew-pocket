@@ -585,6 +585,19 @@ public class FloatingBubbleManager {
     public void refreshVoiceControls() {
         mainHandler.post(new Runnable() {
             @Override public void run() {
+                boolean isLiveActive = nativeLiveRequested || NativeLiveService.isActive();
+                boolean isAiSpeaking = NativeLiveService.isAiSpeaking();
+                
+                if (bubbleView != null) {
+                    if (isAiSpeaking) {
+                        bubbleView.setNativeVoiceState(2); // Amber = AI speaking
+                    } else if (isLiveActive) {
+                        bubbleView.setNativeVoiceState(1); // Red = Live call active
+                    } else {
+                        bubbleView.setNativeVoiceState(0); // Green = Idle
+                    }
+                }
+
                 if (voiceCameraButton != null) {
                     boolean isCamActive = NativeLiveService.isCameraSharing();
                     setVoiceButtonActive(voiceCameraButton, isCamActive);
@@ -594,15 +607,22 @@ public class FloatingBubbleManager {
                     setVoiceButtonActive(voiceScreenButton, isScreenActive);
                 }
                 if (voiceCallButton != null) {
-                    GradientDrawable hangupBg = new GradientDrawable();
-                    hangupBg.setColor(Color.parseColor("#E11D48")); // Rose 600
-                    hangupBg.setCornerRadius(dp(14));
-                    hangupBg.setStroke(dp(1), Color.parseColor("#FDA4AF"));
-                    voiceCallButton.setBackground(hangupBg);
-                    voiceCallButton.setText("🛑");
+                    GradientDrawable callBg = new GradientDrawable();
+                    callBg.setCornerRadius(dp(14));
+                    if (isLiveActive) {
+                        // 🛑 In Call -> Rose Red Hangup Button
+                        callBg.setColor(Color.parseColor("#E11D48")); // Rose 600
+                        callBg.setStroke(dp(1), Color.parseColor("#FDA4AF"));
+                        voiceCallButton.setText("🛑");
+                    } else {
+                        // 🎙️ Idle -> Indigo Start Call Button
+                        callBg.setColor(Color.parseColor("#4F46E5")); // Indigo 600
+                        callBg.setStroke(dp(1), Color.parseColor("#818CF8"));
+                        voiceCallButton.setText("🎙️");
+                    }
+                    voiceCallButton.setBackground(callBg);
                 }
                 if (voiceMuteButton != null) {
-                    boolean isAiSpeaking = NativeLiveService.isAiSpeaking();
                     boolean isMuted = NativeLiveService.isAgentMuted();
                     GradientDrawable muteBg = new GradientDrawable();
                     muteBg.setCornerRadius(dp(16));
@@ -1178,10 +1198,17 @@ public class FloatingBubbleManager {
             canvas.drawCircle(cx, cy, radius, bgPaint);
 
             // 2. Draw Stream Ring
-            if (nativeVoiceState == 1) {
+            if (nativeVoiceState == 2) {
+                // Amber = AI is speaking
                 ringPaint.setShader(null);
                 ringPaint.setStrokeWidth(7f);
-                ringPaint.setColor(Color.parseColor("#ef4444")); // red = voice running
+                ringPaint.setColor(Color.parseColor("#f59e0b")); // amber
+                canvas.drawOval(ringBounds, ringPaint);
+            } else if (nativeVoiceState == 1) {
+                // Red = Live call active / listening
+                ringPaint.setShader(null);
+                ringPaint.setStrokeWidth(7f);
+                ringPaint.setColor(Color.parseColor("#ef4444")); // red
                 canvas.drawOval(ringBounds, ringPaint);
             } else if (isFlowing && waterFlowGradient != null) {
                 matrix.setRotate(rotationAngle, cx, cy);
@@ -1192,14 +1219,20 @@ public class FloatingBubbleManager {
             } else {
                 ringPaint.setShader(null);
                 ringPaint.setStrokeWidth(6f);
-                ringPaint.setColor(Color.parseColor("#34d399")); // green = voice idle
+                ringPaint.setColor(Color.parseColor("#34d399")); // green = idle
                 canvas.drawOval(ringBounds, ringPaint);
             }
 
             // 3. The Bubble is always a microphone: same circular Crew Pocket
-            // language, with green idle and red active states.
+            // language, with green idle, amber speaking, and red active states.
             Paint mic = new Paint(Paint.ANTI_ALIAS_FLAG);
-            mic.setColor(nativeVoiceState == 1 ? Color.parseColor("#fecaca") : Color.parseColor("#d1fae5"));
+            if (nativeVoiceState == 2) {
+                mic.setColor(Color.parseColor("#fef3c7")); // amber light
+            } else if (nativeVoiceState == 1) {
+                mic.setColor(Color.parseColor("#fecaca")); // red light
+            } else {
+                mic.setColor(Color.parseColor("#d1fae5")); // green light
+            }
             mic.setStyle(Paint.Style.FILL);
             float bodyW = radius * .34f, bodyH = radius * .58f;
             canvas.drawRoundRect(cx - bodyW / 2f, cy - bodyH * .58f, cx + bodyW / 2f, cy + bodyH * .42f, bodyW / 2f, bodyW / 2f, mic);
