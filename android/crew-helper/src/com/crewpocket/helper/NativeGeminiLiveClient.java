@@ -261,7 +261,7 @@ final class NativeGeminiLiveClient extends WebSocketListener {
     private JSONArray buildToolDeclarations() throws Exception {
         JSONArray tools = new JSONArray();
         tools.put(new JSONObject().put("name", "take_screenshot").put("description", "Only when the user explicitly asks to see, capture, or inspect the current phone screen, app UI, button, or on-screen content. Captures the latest phone display without a screenshot flash."));
-        tools.put(new JSONObject().put("name", "swipe_screen").put("description", "Scroll or swipe the phone screen only when explicitly requested.").put("parameters", new JSONObject().put("type", "OBJECT").put("properties", new JSONObject().put("direction", new JSONObject().put("type", "STRING").put("enum", new JSONArray().put("up").put("down").put("left").put("right"))).put("distance", new JSONObject().put("type", "STRING").put("enum", new JSONArray().put("short").put("normal").put("long")))).put("required", new JSONArray().put("direction"))));
+        tools.put(new JSONObject().put("name", "swipe_screen").put("description", "Scroll or swipe the phone screen. Use distance='long' (or 'page') for full page scroll, 'normal' for standard scroll, or 'short' for small adjustment.").put("parameters", new JSONObject().put("type", "OBJECT").put("properties", new JSONObject().put("direction", new JSONObject().put("type", "STRING").put("enum", new JSONArray().put("up").put("down").put("left").put("right"))).put("distance", new JSONObject().put("type", "STRING").put("enum", new JSONArray().put("short").put("normal").put("long").put("page")))).put("required", new JSONArray().put("direction"))));
         tools.put(new JSONObject().put("name", "tap_screen").put("description", "Tap on a button, app icon, or coordinate on the phone screen. Provide label (e.g. 'LINE', '設定', '確認') or x, y pixel coordinates.").put("parameters", new JSONObject().put("type", "OBJECT").put("properties", new JSONObject().put("label", new JSONObject().put("type", "STRING").put("description", "The button, app icon, or text label to tap")).put("x", new JSONObject().put("type", "NUMBER").put("description", "X coordinate")).put("y", new JSONObject().put("type", "NUMBER").put("description", "Y coordinate")))));
         tools.put(new JSONObject().put("name", "type_text").put("description", "REQUIRED whenever the user asks to type, search, or enter text into any input box, search bar, message field, or coordinate. Provide text and optionally target hint (e.g. '搜尋', '訊息') or x, y coordinates.").put("parameters", new JSONObject().put("type", "OBJECT").put("properties", new JSONObject().put("target", new JSONObject().put("type", "STRING").put("description", "Input field hint or label")).put("x", new JSONObject().put("type", "NUMBER").put("description", "Optional X coordinate")).put("y", new JSONObject().put("type", "NUMBER").put("description", "Optional Y coordinate")).put("text", new JSONObject().put("type", "STRING").put("description", "The text to type into the field"))).put("required", new JSONArray().put("text"))));
         tools.put(new JSONObject().put("name", "press_key").put("description", "Press HOME, BACK, or RECENTS only when explicitly requested.").put("parameters", new JSONObject().put("type", "OBJECT").put("properties", new JSONObject().put("key", new JSONObject().put("type", "STRING").put("enum", new JSONArray().put("HOME").put("BACK").put("RECENTS")))).put("required", new JSONArray().put("key"))));
@@ -300,19 +300,37 @@ final class NativeGeminiLiveClient extends WebSocketListener {
     private JSONObject swipe(JSONObject args) throws Exception {
         String direction = args.optString("direction", "up").toLowerCase();
         String distance = args.optString("distance", "normal").toLowerCase();
-        int x1 = 720, y1 = 1800, x2 = 720, y2 = 800;
-        if ("down".equals(direction)) { y1 = 800; y2 = 1800; }
-        else if ("left".equals(direction)) { x1 = 1100; y1 = 1500; x2 = 300; y2 = 1500; }
-        else if ("right".equals(direction)) { x1 = 300; y1 = 1500; x2 = 1100; y2 = 1500; }
-        if ("long".equals(distance)) {
-            if ("up".equals(direction)) { y1 = 2200; y2 = 400; }
-            else if ("down".equals(direction)) { y1 = 400; y2 = 2200; }
-        } else if ("short".equals(distance)) {
-            if ("up".equals(direction)) { y1 = 1600; y2 = 1200; }
-            else if ("down".equals(direction)) { y1 = 1200; y2 = 1600; }
+        
+        // S24+ physical resolution: 1440 x 3120
+        // Default normal: 2300 -> 700 (1600px span, fast fling)
+        int x1 = 720, y1 = 2300, x2 = 720, y2 = 700;
+        int duration = 150; // fast stroke triggers natural Android fling physics
+
+        if ("down".equals(direction)) {
+            y1 = 700; y2 = 2300;
+        } else if ("left".equals(direction)) {
+            x1 = 1250; y1 = 1560; x2 = 190; y2 = 1560;
+        } else if ("right".equals(direction)) {
+            x1 = 190; y1 = 1560; x2 = 1250; y2 = 1560;
         }
-        JSONObject reply = helperPost("/swipe", new JSONObject().put("x1", x1).put("y1", y1).put("x2", x2).put("y2", y2).put("duration", 250));
+
+        if ("long".equals(distance) || "page".equals(distance) || "fast".equals(distance)) {
+            duration = 120;
+            if ("up".equals(direction)) { y1 = 2700; y2 = 420; }
+            else if ("down".equals(direction)) { y1 = 420; y2 = 2700; }
+            else if ("left".equals(direction)) { x1 = 1350; x2 = 90; }
+            else if ("right".equals(direction)) { x1 = 90; x2 = 1350; }
+        } else if ("short".equals(distance) || "little".equals(distance)) {
+            duration = 200;
+            if ("up".equals(direction)) { y1 = 1800; y2 = 1200; }
+            else if ("down".equals(direction)) { y1 = 1200; y2 = 1800; }
+            else if ("left".equals(direction)) { x1 = 950; x2 = 490; }
+            else if ("right".equals(direction)) { x1 = 490; x2 = 950; }
+        }
+
+        JSONObject reply = helperPost("/swipe", new JSONObject().put("x1", x1).put("y1", y1).put("x2", x2).put("y2", y2).put("duration", duration));
         reply.put("direction", direction);
+        reply.put("distance", distance);
         return reply;
     }
 
