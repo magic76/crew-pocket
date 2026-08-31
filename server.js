@@ -1308,6 +1308,56 @@ async function handleSyncGuidelines(req, res) {
   }
 }
 
+// 🧬 Voiceprint Profile & Threshold Sync Handlers
+const voiceprintFilePath = path.join(homeDir, '.gemini', 'voiceprint.json');
+
+async function handleGetVoiceprint(res) {
+  try {
+    if (fs.existsSync(voiceprintFilePath)) {
+      const data = await fsPromises.readFile(voiceprintFilePath, 'utf8');
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      return res.end(data);
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ enabled: false, threshold: 0.25, embedding: null }));
+  } catch (err) {
+    res.writeHead(500, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: err.message, threshold: 0.25, embedding: null }));
+  }
+}
+
+async function handleSaveVoiceprint(req, res) {
+  try {
+    const body = await parseJsonBody(req);
+    const geminiDir = path.join(homeDir, '.gemini');
+    if (!fs.existsSync(geminiDir)) fs.mkdirSync(geminiDir, { recursive: true });
+    
+    let current = { enabled: false, threshold: 0.25, embedding: null };
+    if (fs.existsSync(voiceprintFilePath)) {
+      try { current = JSON.parse(await fsPromises.readFile(voiceprintFilePath, 'utf8')); } catch (e) {}
+    }
+    
+    if (typeof body.threshold === 'number') current.threshold = Math.max(0, Math.min(1.0, body.threshold));
+    if (body.embedding !== undefined) {
+      if (Array.isArray(body.embedding) && body.embedding.length === 192) {
+        current.embedding = body.embedding;
+        current.enabled = true;
+      } else if (body.embedding === null) {
+        current.embedding = null;
+        current.enabled = false;
+      }
+    }
+    if (typeof body.enabled === 'boolean') current.enabled = body.enabled;
+    
+    await fsPromises.writeFile(voiceprintFilePath, JSON.stringify(current, null, 2), 'utf8');
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: true, voiceprint: current }));
+  } catch (err) {
+    res.writeHead(500, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: false, error: err.message }));
+  }
+}
+
 // 🌐 HTTP Server Request Dispatcher
 const server = http.createServer(async (req, res) => {
   const origin = req.headers.origin;
@@ -1432,6 +1482,10 @@ const server = http.createServer(async (req, res) => {
     return handleGetGuidelines(res);
   } else if (pathname === '/api/guidelines/sync' && req.method === 'POST') {
     return handleSyncGuidelines(req, res);
+  } else if (pathname === '/api/voiceprint' && req.method === 'GET') {
+    return handleGetVoiceprint(res);
+  } else if (pathname === '/api/voiceprint' && req.method === 'POST') {
+    return handleSaveVoiceprint(req, res);
   } else if (pathname.startsWith('/api/')) {
     res.writeHead(404, { 'Content-Type': 'application/json' });
     return res.end(JSON.stringify({ error: 'Unknown API endpoint' }));

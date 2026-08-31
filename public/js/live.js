@@ -316,7 +316,7 @@
   let voiceprintRequestSequence = 0;
   const voiceprintRequests = new Map();
 
-  function loadUserVoiceprint() {
+  async function loadUserVoiceprint() {
     try {
       const raw = localStorage.getItem(VOICEPRINT_KEY);
       if (raw) {
@@ -325,18 +325,43 @@
           userVoiceprintProfile = new Float32Array(arr);
         }
       }
+      // Also sync from local backend if available
+      fetch('/api/voiceprint').then(r => r.json()).then(data => {
+        if (data && Array.isArray(data.embedding) && data.embedding.length === 192) {
+          userVoiceprintProfile = new Float32Array(data.embedding);
+          localStorage.setItem(VOICEPRINT_KEY, JSON.stringify(data.embedding));
+        }
+        if (data && typeof data.threshold === 'number') {
+          TUNING_CONFIG.SIMILARITY_THRESHOLD = data.threshold;
+          const slider = document.getElementById('live-voiceprint-threshold');
+          const label = document.getElementById('live-voiceprint-threshold-label');
+          if (slider) slider.value = data.threshold;
+          if (label) label.textContent = `${data.threshold.toFixed(2)} · ${data.threshold === 0 ? '已關閉' : data.threshold <= 0.3 ? '日常建議' : '嚴格'}`;
+        }
+      }).catch(() => {});
     } catch (e) {}
   }
   loadUserVoiceprint();
 
   function saveUserVoiceprint(profile) {
     userVoiceprintProfile = profile;
-    localStorage.setItem(VOICEPRINT_KEY, JSON.stringify(Array.from(profile)));
+    const arr = Array.from(profile);
+    localStorage.setItem(VOICEPRINT_KEY, JSON.stringify(arr));
+    fetch('/api/voiceprint', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ embedding: arr, enabled: true, threshold: TUNING_CONFIG.SIMILARITY_THRESHOLD })
+    }).catch(() => {});
   }
 
   function clearUserVoiceprint() {
     userVoiceprintProfile = null;
     localStorage.removeItem(VOICEPRINT_KEY);
+    fetch('/api/voiceprint', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ embedding: null, enabled: false })
+    }).catch(() => {});
   }
 
   function isVoiceprintActive() {
@@ -4101,11 +4126,17 @@
   const liveVoiceprintThreshold = document.getElementById('live-voiceprint-threshold');
   if (liveVoiceprintThreshold) {
     liveVoiceprintThreshold.addEventListener('input', () => {
-      TUNING_CONFIG.SIMILARITY_THRESHOLD = Number.parseFloat(liveVoiceprintThreshold.value) || 0;
+      const val = Number.parseFloat(liveVoiceprintThreshold.value) || 0;
+      TUNING_CONFIG.SIMILARITY_THRESHOLD = val;
       TUNING_CONFIG.save();
       updateVoiceprintThresholdUI();
       updateVoiceprintModalUI();
       updateLiveHealthPanel();
+      fetch('/api/voiceprint', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ threshold: val })
+      }).catch(() => {});
     });
   }
 
