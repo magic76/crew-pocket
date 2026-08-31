@@ -190,6 +190,16 @@ final class NativeGeminiLiveClient extends WebSocketListener {
                     voiceprintWebView.getSettings().setJavaScriptEnabled(true);
                     voiceprintWebView.getSettings().setAllowFileAccess(true);
                     voiceprintWebView.getSettings().setDomStorageEnabled(true);
+                    if (android.os.Build.VERSION.SDK_INT >= 21) {
+                        voiceprintWebView.getSettings().setMixedContentMode(android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+                    }
+                    voiceprintWebView.setWebChromeClient(new android.webkit.WebChromeClient() {
+                        @Override public boolean onConsoleMessage(android.webkit.ConsoleMessage consoleMessage) {
+                            Log.d(TAG, "🧬 [WebView Console] " + consoleMessage.message() + " -- From line " + consoleMessage.lineNumber() + " of " + consoleMessage.sourceId());
+                            return true;
+                        }
+                    });
+                    voiceprintWebView.setWebViewClient(new android.webkit.WebViewClient());
                     voiceprintWebView.addJavascriptInterface(new Object() {
                         @android.webkit.JavascriptInterface
                         public void onVoiceprintResult(double similarity, boolean matched) {
