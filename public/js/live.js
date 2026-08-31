@@ -39,6 +39,10 @@
   let cameraInterval = null;
   let visionDialogueEnabled = false;
   let visionDialogueSending = false;
+  let screenShareInterval = null;
+  let isScreenSharing = false;
+  let screenShareSending = false;
+  let screenFrameSequence = 0;
   let analyser = null;
   let animFrameId = null;
   let audioSendBuffer = [];
@@ -979,6 +983,7 @@
               <canvas id="live-card-canvas" width="120" height="28" class="w-full h-full"></canvas>
             </div>
             <span id="live-card-camera-state" class="hidden rounded-full border border-indigo-500/40 bg-indigo-950/80 px-2 py-1 text-[10px] font-mono text-indigo-300">📷 相機</span>
+            <span id="live-card-screen-state" class="hidden rounded-full border border-cyan-500/40 bg-cyan-950/80 px-2 py-1 text-[10px] font-mono text-cyan-300">🖥️ 螢幕</span>
             <button id="live-card-expand-toggle-btn" type="button" class="min-w-[40px] min-h-[40px] rounded-xl bg-indigo-950/80 hover:bg-indigo-900 active:scale-95 border border-indigo-500/40 text-indigo-300 text-sm flex items-center justify-center transition shadow-sm cursor-pointer" title="展開通話資訊">⌃</button>
           </div>
         </div>
@@ -1855,13 +1860,16 @@
     const dockMuteBtn = document.getElementById('live-dock-mute-btn');
     const dockMuteContainer = document.getElementById('live-dock-mute-icon-container');
     const dockCameraBtn = document.getElementById('live-dock-camera-btn');
+    const dockScreenBtn = document.getElementById('live-dock-screen-btn');
     const dockExpandBtn = document.getElementById('live-dock-expand-btn');
     const dockExpandIcon = document.getElementById('live-dock-expand-icon');
     const cardCameraState = document.getElementById('live-card-camera-state');
+    const cardScreenState = document.getElementById('live-card-screen-state');
 
     if (dockExpandBtn) dockExpandBtn.title = liveCardExpanded ? '收合通話資訊' : '展開通話資訊';
     if (dockExpandIcon) dockExpandIcon.textContent = liveCardExpanded ? '⌄' : '⌃';
     if (cardCameraState) cardCameraState.classList.toggle('hidden', !isCameraOn);
+    if (cardScreenState) cardScreenState.classList.toggle('hidden', !isScreenSharing);
 
     const isAiSpeaking = isAiResponding || (audioPlayer && audioPlayer.activeSources.length > 0);
 
@@ -1905,7 +1913,7 @@
 
     if (isCameraOn) {
       if (dockCameraBtn) {
-          dockCameraBtn.className = 'flex-1 max-w-[72px] h-12 rounded-2xl bg-indigo-600 hover:bg-indigo-500 active:scale-95 border border-indigo-400 text-white flex items-center justify-center transition shadow-lg shrink-0';
+          dockCameraBtn.className = 'flex-1 max-w-[56px] h-12 rounded-2xl bg-indigo-600 hover:bg-indigo-500 active:scale-95 border border-indigo-400 text-white flex items-center justify-center transition shadow-lg shrink-0';
         dockCameraBtn.title = '關閉相機';
         dockCameraBtn.innerHTML = `
           <svg class="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
@@ -1915,7 +1923,7 @@
       }
     } else {
       if (dockCameraBtn) {
-          dockCameraBtn.className = 'flex-1 max-w-[72px] h-12 rounded-2xl bg-slate-800/90 hover:bg-slate-700 active:scale-95 border border-slate-700 text-slate-200 flex items-center justify-center transition shadow-lg shrink-0';
+          dockCameraBtn.className = 'flex-1 max-w-[56px] h-12 rounded-2xl bg-slate-800/90 hover:bg-slate-700 active:scale-95 border border-slate-700 text-slate-200 flex items-center justify-center transition shadow-lg shrink-0';
         dockCameraBtn.title = '開啟相機';
         dockCameraBtn.innerHTML = `
           <svg class="w-6 h-6 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1923,6 +1931,16 @@
           </svg>
         `;
       }
+    }
+
+    if (dockScreenBtn) {
+      dockScreenBtn.className = isScreenSharing
+        ? 'flex-1 max-w-[56px] h-12 rounded-2xl bg-cyan-600 hover:bg-cyan-500 active:scale-95 border border-cyan-300 text-white flex items-center justify-center transition shadow-lg shadow-cyan-950/60 shrink-0'
+        : 'flex-1 max-w-[56px] h-12 rounded-2xl bg-slate-800/90 hover:bg-slate-700 active:scale-95 border border-slate-700 text-slate-200 flex items-center justify-center transition shadow-lg shrink-0';
+      dockScreenBtn.title = isScreenSharing ? '停止分享螢幕' : '開始分享螢幕（每 2 秒）';
+      dockScreenBtn.innerHTML = isScreenSharing
+        ? '<svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="13" rx="2" stroke-width="2"/><path d="M8 21h8m-4-4v4" stroke-width="2" stroke-linecap="round"/><circle cx="18" cy="7" r="1.5" fill="currentColor" stroke="none"/></svg>'
+        : '<svg class="w-6 h-6 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="13" rx="2" stroke-width="2"/><path d="M8 21h8m-4-4v4" stroke-width="2" stroke-linecap="round"/></svg>';
     }
   }
 
@@ -2091,7 +2109,7 @@
     visionDialogueEnabled = true;
     updateCameraBadge(false, '👁️ 持續視覺對話：最多 1 FPS');
     cameraInterval = setInterval(async () => {
-      if (!visionDialogueEnabled || visionDialogueSending || !isCameraOn) return;
+      if (!visionDialogueEnabled || visionDialogueSending || !isCameraOn || isScreenSharing) return;
       visionDialogueSending = true;
       try {
         await captureCameraFrame({
@@ -2102,6 +2120,82 @@
         visionDialogueSending = false;
       }
     }, 1000);
+  }
+
+  function stopScreenShare({ notice = false } = {}) {
+    if (screenShareInterval) clearInterval(screenShareInterval);
+    screenShareInterval = null;
+    const wasSharing = isScreenSharing;
+    isScreenSharing = false;
+    screenShareSending = false;
+    updateDockControls();
+    if (isCameraOn) updateCameraBadge(false, '👁️ 持續視覺對話：最多 1 FPS');
+    if (notice && wasSharing) appendCardTranscript('system', '🖥️ 已停止分享螢幕；相機視覺串流恢復。');
+  }
+
+  function imageDataUrlToJpeg(dataUrl, quality = 0.72) {
+    return new Promise((resolve, reject) => {
+      const image = new Image();
+      image.onload = () => {
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = image.naturalWidth || image.width;
+          canvas.height = image.naturalHeight || image.height;
+          const context = canvas.getContext('2d');
+          context.drawImage(image, 0, 0, canvas.width, canvas.height);
+          resolve(canvas.toDataURL('image/jpeg', quality));
+        } catch (error) { reject(error); }
+      };
+      image.onerror = () => reject(new Error('螢幕畫面轉碼失敗'));
+      image.src = dataUrl;
+    });
+  }
+
+  async function sendScreenShareFrame() {
+    if (!isScreenSharing || screenShareSending || !isConnected || !ws || ws.readyState !== WebSocket.OPEN) return false;
+    screenShareSending = true;
+    try {
+      const response = await fetch('/api/phone/screenshot', { method: 'POST' });
+      const shot = await response.json().catch(() => ({ success: false, error: '截圖失敗' }));
+      if (!shot?.success || !shot.base64) throw new Error(shot?.error || '無法取得目前螢幕');
+      const jpegDataUrl = await imageDataUrlToJpeg(shot.base64, 0.72);
+      ws.send(JSON.stringify({
+        realtimeInput: {
+          video: {
+            mimeType: 'image/jpeg',
+            data: jpegDataUrl.replace(/^data:image\/\w+;base64,/, '')
+          }
+        }
+      }));
+      const frameId = `screen_frame_${++screenFrameSequence}`;
+      console.debug('[Gemini Live Screen Frame]', { frameId, capturedAt: new Date().toISOString() });
+      return true;
+    } catch (error) {
+      console.warn('[Live Screen Share Error]', error.message);
+      appendCardTranscript('system', `⚠️ 螢幕分享失敗：${error.message}`);
+      stopScreenShare();
+      return false;
+    } finally {
+      screenShareSending = false;
+    }
+  }
+
+  async function toggleScreenShare() {
+    if (isScreenSharing) {
+      stopScreenShare({ notice: true });
+      return;
+    }
+    if (!isConnected || !ws || ws.readyState !== WebSocket.OPEN) {
+      appendCardTranscript('system', '⚠️ Live 連線未就緒，無法分享螢幕。');
+      return;
+    }
+    isScreenSharing = true;
+    updateDockControls();
+    if (isCameraOn) updateCameraBadge(false, '🖥️ 螢幕分享中（相機串流暫停）');
+    appendCardTranscript('system', '🖥️ 開始分享手機螢幕：每 2 秒更新一次。');
+    await sendScreenShareFrame();
+    if (isScreenSharing) screenShareInterval = setInterval(sendScreenShareFrame, 2000);
+    if (typeof window.haptic === 'function') window.haptic('medium');
   }
 
   async function flipCamera() {
@@ -2540,6 +2634,10 @@
     isModelTurnComplete = true;
     isMuted = false;
     isCameraOn = false;
+    stopScreenShare();
+    isScreenSharing = false;
+    screenShareSending = false;
+    screenFrameSequence = 0;
     cameraModeStartTs = 0;
     isGoAwayClosing = false;
     isLiveResuming = isResuming;
@@ -2682,7 +2780,8 @@
           const shotData = await res.json().catch(() => ({ success: false, error: '截圖失敗' }));
           if (shotData && shotData.success && shotData.base64) {
             // 📸 Inject screenshot frame directly into Gemini Live's realtime multimodal vision pipeline!
-            const cleanBase64 = shotData.base64.replace(/^data:image\/\w+;base64,/, '');
+            const jpegDataUrl = await imageDataUrlToJpeg(shotData.base64, 0.76);
+            const cleanBase64 = jpegDataUrl.replace(/^data:image\/\w+;base64,/, '');
             const imageMsg = {
               realtimeInput: {
                 video: {
@@ -2849,7 +2948,7 @@
 【Role】Be natural, accurate, and concise. Always give the final answer as AUDIO. Match the user's primary language naturally; Traditional Chinese is the default.
 【Conversation】Answer ordinary questions directly. If a name, number, command, or intent is unclear, inconsistent, or important, ask one short clarification instead of guessing. Do not treat a noisy transcript as fact.
 【Tool boundary】Use a tool only when it is necessary to fulfill an explicit request: phone UI/operation, live camera, workspace file, drafting into the main input, or delegating a task to the main chat. A screenshot, tap, swipe, or key press requires an explicit request in the user's latest utterance; past conversation, main-chat background, inference, or a normal question never authorizes it. Never call tools merely to verify a normal answer.
-【Vision】When continuous live-camera frames are arriving, answer from the newest frame without requesting or calling a normal camera capture. Call capture_camera_frame only when no current frame is available or high detail is needed. For phone apps, buttons, or on-screen content, use take_screenshot; never substitute one type of image for the other.
+【Vision】When continuous live-camera or live-screen-share frames are arriving, answer from the newest frame without requesting another capture. Call capture_camera_frame only when no current camera frame is available or high detail is needed. Call take_screenshot only when no current screen-share frame is available or a fresh high-detail phone screen is needed. Never substitute camera and phone-screen images for one another.
 【Main-chat delegation】Only when the user explicitly asks the main chat to handle a task: call prepare_main_task with a precise, clean task, then briefly read its summary. Wait for a clear semantic confirmation referring to that pending task (for example: 確認、好、可以、Sure, yes, confirmed) or the confirmation button. If the reply is ambiguous or unrelated, ask briefly instead. Then call confirm_main_task once; it confirms the single pending task automatically, so never invent an ID. After it returns, immediately speak the result and never confirm that task again.
 【Transcript】The client records transcripts. Never try to log the conversation yourself.`
           : `你是 Crew Pocket 的即時語音助理。
@@ -2857,7 +2956,7 @@
 【角色】自然、準確、簡潔地回應；最終回答一律以 AUDIO 語音說出。預設使用繁體中文，並依使用者主要語言自然切換。
 【對話】一般知識、時間、閒聊或解釋直接回答。姓名、數字、指令或意圖聽不清楚、前後矛盾或影響結果時，先用一句話確認，不要猜測或把雜訊轉錄當成事實。
 【工具邊界】只有為了完成使用者明確要求的手機畫面／操作、Live 相機、工作區檔案、填入主輸入框草稿，或交辦主對話時才使用工具。手機截圖、點擊、滑動或按鍵只能由使用者本輪最新一句明確口令授權；過去對話、主對話背景、推測或一般問題都不能授權。一般問題不可為了確認而隨意調工具。
-【視覺】若持續 Live 相機影格正在輸入，直接依最新影格回答，不必再要求或呼叫一般相機截圖；只有需要新的高細節影格或目前沒有影格時才使用 capture_camera_frame。詢問手機 App、按鈕或螢幕內容時，使用 take_screenshot。兩者不可互相替代。
+【視覺】若持續 Live 相機或螢幕分享影格正在輸入，直接依最新影格回答，不必再要求或呼叫額外擷取；只有需要新的高細節相機影格或目前沒有相機影格時才使用 capture_camera_frame。只有目前沒有螢幕分享影格、或需要新的高細節手機畫面時才使用 take_screenshot。相機與手機螢幕不可互相替代。
 【交辦主對話】只有使用者明確要求主對話處理任務時，先以 prepare_main_task 建立乾淨、精確的任務，再念出短摘要。等待使用者針對該待交辦任務作出明確語意確認，例如「確認」「好」「可以」「Sure」「yes」「confirmed」，或按下確認按鈕；若回覆不明確或無關則簡短追問。確認後只呼叫一次 confirm_main_task；它會確認目前唯一任務，絕不編造 ID。工具回傳後立刻口語報告結果，同一任務不可再次確認。
 【逐字稿】逐字稿由前端處理，不要自行記錄對話。`;
         const discussionPrompt = liveSessionMode === 'discussion'
@@ -2984,7 +3083,7 @@
                   },
                   {
                     name: "take_screenshot",
-                    description: "Capture the current PHONE DISPLAY only when the user's latest utterance explicitly asks to see, capture, or inspect the current screen, app UI, button, or on-screen content. Past conversation and general questions never authorize it. Never use this for the Live camera, lens, surroundings, or what is physically in front of the user."
+                    description: "Capture the current PHONE DISPLAY only when the user's latest utterance explicitly asks to see, capture, or inspect the current screen, app UI, button, or on-screen content, and no current continuous screen-share frame is available or high detail is needed. Past conversation and general questions never authorize it. Never use this for the Live camera, lens, surroundings, or what is physically in front of the user."
                   },
                   {
                     name: "write_file",
@@ -3737,6 +3836,7 @@
 
     if (cameraInterval) clearInterval(cameraInterval);
     cameraInterval = null;
+    stopScreenShare();
     stopTracks(cameraStream);
     cameraStream = null;
     isCameraOn = false;
@@ -4065,6 +4165,14 @@
     dockCameraBtn.addEventListener('click', () => {
       if (!isCameraOn) toggleLiveCardExpanded();
       toggleCamera();
+    });
+  }
+
+  const dockScreenBtn = document.getElementById('live-dock-screen-btn');
+  if (dockScreenBtn) {
+    dockScreenBtn.addEventListener('click', () => {
+      if (!isScreenSharing) toggleLiveCardExpanded();
+      toggleScreenShare();
     });
   }
 
