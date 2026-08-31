@@ -573,6 +573,11 @@ final class NativeGeminiLiveClient extends WebSocketListener {
         
         // Attach hardware audio effects if supported by Samsung/Android
         try {
+            // 🛡️ AcousticEchoCanceler (AEC): Essential to prevent AI hearing its own voice from loudspeaker!
+            if (android.media.audiofx.AcousticEchoCanceler.isAvailable()) {
+                android.media.audiofx.AcousticEchoCanceler aec = android.media.audiofx.AcousticEchoCanceler.create(recorder.getAudioSessionId());
+                if (aec != null) aec.setEnabled(true);
+            }
             // Keep NoiseSuppressor to clean air conditioner / ambient hiss
             if (android.media.audiofx.NoiseSuppressor.isAvailable()) {
                 android.media.audiofx.NoiseSuppressor ns = android.media.audiofx.NoiseSuppressor.create(recorder.getAudioSessionId());
