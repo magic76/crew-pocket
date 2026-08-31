@@ -573,10 +573,7 @@ final class NativeGeminiLiveClient extends WebSocketListener {
         
         // Attach hardware audio effects if supported by Samsung/Android
         try {
-            if (android.media.audiofx.AutomaticGainControl.isAvailable()) {
-                android.media.audiofx.AutomaticGainControl agc = android.media.audiofx.AutomaticGainControl.create(recorder.getAudioSessionId());
-                if (agc != null) agc.setEnabled(true);
-            }
+            // Keep NoiseSuppressor to clean air conditioner / ambient hiss
             if (android.media.audiofx.NoiseSuppressor.isAvailable()) {
                 android.media.audiofx.NoiseSuppressor ns = android.media.audiofx.NoiseSuppressor.create(recorder.getAudioSessionId());
                 if (ns != null) ns.setEnabled(true);
@@ -600,7 +597,9 @@ final class NativeGeminiLiveClient extends WebSocketListener {
     }
 
     private void sendMic() {
-        byte[] pcm = new byte[1280];
+        byte[] pcm = new byte[1280]; // 40ms @ 16kHz 16-bit mono
+        long lastActiveSpeech = 0;
+        final java.util.List<byte[]> preRollBuffer = new java.util.ArrayList<byte[]>();
 
         while (running && recorder != null && webSocket != null) {
             int count = recorder.read(pcm, 0, pcm.length); if (count <= 0) continue;
@@ -609,12 +608,45 @@ final class NativeGeminiLiveClient extends WebSocketListener {
             // 🛑 插話策略控制：若 AI 正在講話，且使用者「未開啟語音插話」，則暫停傳送麥克風（避免外放回授打斷 AI）
             // 使用者依然可以隨時「點擊浮動按鈕」立即打斷 AI
             if (aiSpeaking && !allowVoiceInterruption) {
+                preRollBuffer.clear();
                 continue;
             }
 
             byte[] chunk = (count == pcm.length) ? pcm.clone() : Arrays.copyOf(pcm, count);
+            double rms = calculateRms(chunk, count);
+            long now = System.currentTimeMillis();
 
-            // 直接即時串流給 Gemini Live
+            // 🎯 Web 對齊的舒適收音 VAD 門檻（RMS > 0.012 判定為有人聲）
+            if (rms > 0.012) {
+                lastActiveSpeech = now;
+            }
+
+            boolean isSpeakingOrTrailing = (now - lastActiveSpeech) < 500; // 說話結束後保留 500ms 自然尾音
+
+            if (!isSpeakingOrTrailing) {
+                // 靜音環境：維持最多 3 個 Frame（約 120ms）的前置緩衝區，捕捉開口第一聲
+                if (preRollBuffer.size() >= 3) {
+                    preRollBuffer.remove(0);
+                }
+                preRollBuffer.add(chunk);
+                continue; // 阻擋環境底噪，不向 Gemini 發送無意義的雜音
+            }
+
+            // 當檢測到說話時，先沖刷開頭的 120ms 前置緩衝區，確保第一個字不被吞掉
+            if (!preRollBuffer.isEmpty()) {
+                for (byte[] preChunk : preRollBuffer) {
+                    try {
+                        JSONObject root = new JSONObject(); JSONObject audio = new JSONObject();
+                        audio.put("mimeType", "audio/pcm;rate=16000");
+                        audio.put("data", Base64.encodeToString(preChunk, Base64.NO_WRAP));
+                        root.put("realtimeInput", new JSONObject().put("audio", audio));
+                        webSocket.send(root.toString());
+                    } catch (Exception ignored) {}
+                }
+                preRollBuffer.clear();
+            }
+
+            // 即時串流語音給 Gemini Live
             try {
                 JSONObject root = new JSONObject(); JSONObject audio = new JSONObject();
                 audio.put("mimeType", "audio/pcm;rate=16000");
