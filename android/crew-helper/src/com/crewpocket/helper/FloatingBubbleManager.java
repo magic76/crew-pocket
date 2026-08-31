@@ -665,19 +665,22 @@ public class FloatingBubbleManager {
                         // 🔊 State 1: AI is speaking -> Amber 500/Rose (Tap to interrupt)
                         muteBg.setColor(Color.parseColor("#D97706")); // Amber 600
                         muteBg.setStroke(dp(2), Color.parseColor("#FDE68A")); // Amber 300
-                        voiceMuteButton.setText("🔊  AI 說話中 · 點擊打斷");
+                        voiceMuteButton.setText("🔊 打斷");
+                        voiceMuteButton.setTextSize(13);
                         voiceMuteButton.setTextColor(Color.WHITE);
                     } else if (isMuted) {
                         // 🔇 State 2: Muted -> Rose 900 (Tap to unmute)
                         muteBg.setColor(Color.parseColor("#881337")); // Rose 900
                         muteBg.setStroke(dp(2), Color.parseColor("#F43F5E")); // Rose 500
-                        voiceMuteButton.setText("🔇  麥克風已靜音 · 點擊開啟");
+                        voiceMuteButton.setText("🔇 靜音");
+                        voiceMuteButton.setTextSize(13);
                         voiceMuteButton.setTextColor(Color.parseColor("#FECDD3"));
                     } else {
                         // 🎙️ State 3: Listening / Active -> Teal 500 / Indigo (Tap to mute)
                         muteBg.setColor(Color.parseColor("#0D9488")); // Teal 600
                         muteBg.setStroke(dp(2), Color.parseColor("#2DD4BF")); // Teal 400
-                        voiceMuteButton.setText("🎙️  通話收音中 · 點擊靜音");
+                        voiceMuteButton.setText("🎙️ 收音中");
+                        voiceMuteButton.setTextSize(13);
                         voiceMuteButton.setTextColor(Color.WHITE);
                     }
                     voiceMuteButton.setBackground(muteBg);

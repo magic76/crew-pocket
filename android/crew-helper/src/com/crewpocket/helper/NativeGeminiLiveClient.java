@@ -125,6 +125,7 @@ final class NativeGeminiLiveClient extends WebSocketListener {
 
     private volatile boolean agentMuted = false;
     private volatile boolean aiSpeaking = false;
+    private volatile boolean interruptedCurrentTurn = false;
 
     boolean isAgentMuted() { return agentMuted; }
     boolean isAiSpeaking() { return aiSpeaking; }
@@ -132,8 +133,17 @@ final class NativeGeminiLiveClient extends WebSocketListener {
     boolean toggleAgentMute() {
         // 🛑 Tap-to-Interrupt: If AI is speaking, clicking center button instantly interrupts the AI
         if (aiSpeaking) {
-            stopPlayback();
+            interruptedCurrentTurn = true;
             aiSpeaking = false;
+            stopPlayback();
+            listener.onSpeakingChanged(false);
+            // Send empty client content turn complete so Gemini stops generating further tokens
+            try {
+                if (webSocket != null) {
+                    webSocket.send(new JSONObject().put("clientContent", new JSONObject()
+                            .put("turns", new JSONArray()).put("turnComplete", true)).toString());
+                }
+            } catch (Exception ignored) {}
             return false; // remains unmuted, but interrupted
         }
         agentMuted = !agentMuted;
@@ -236,21 +246,24 @@ final class NativeGeminiLiveClient extends WebSocketListener {
             // Continuous camera/screen frames must not arrive while Gemini is
             // producing this answer, otherwise they can trigger a duplicate turn.
             visualHoldUntil = System.currentTimeMillis() + 1800;
-            if (!aiSpeaking) {
-                aiSpeaking = true;
-                listener.onSpeakingChanged(true);
-            }
-            JSONArray parts = turn.optJSONArray("parts");
-            if (parts != null) for (int i = 0; i < parts.length(); i++) {
-                JSONObject part = parts.getJSONObject(i);
-                JSONObject inline = part.optJSONObject("inlineData");
-                if (inline == null) inline = part.optJSONObject("inline_data");
-                if (inline != null && inline.optString("data").length() > 0) playAudio(Base64.decode(inline.getString("data"), Base64.DEFAULT));
-                if (part.optString("text").length() > 0) listener.onTranscript("Gemini", part.optString("text"));
+            if (!interruptedCurrentTurn) {
+                if (!aiSpeaking) {
+                    aiSpeaking = true;
+                    listener.onSpeakingChanged(true);
+                }
+                JSONArray parts = turn.optJSONArray("parts");
+                if (parts != null) for (int i = 0; i < parts.length(); i++) {
+                    JSONObject part = parts.getJSONObject(i);
+                    JSONObject inline = part.optJSONObject("inlineData");
+                    if (inline == null) inline = part.optJSONObject("inline_data");
+                    if (inline != null && inline.optString("data").length() > 0) playAudio(Base64.decode(inline.getString("data"), Base64.DEFAULT));
+                    if (part.optString("text").length() > 0) listener.onTranscript("Gemini", part.optString("text"));
+                }
             }
         }
         if (server.optBoolean("turnComplete", server.optBoolean("turn_complete", false))) {
             visualHoldUntil = System.currentTimeMillis() + 1000;
+            interruptedCurrentTurn = false;
             if (aiSpeaking) {
                 aiSpeaking = false;
                 listener.onSpeakingChanged(false);
