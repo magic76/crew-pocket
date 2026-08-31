@@ -77,6 +77,9 @@
   let mainTaskPollTimer = null;
   const MAIN_TASK_CONFIRM_TTL_MS = 60000;
   let isGoAwayClosing = false;
+  let isLiveResuming = false;
+  let liveSessionResumptionHandle = null;
+  let liveContinuationStartedAt = 0;
   let callProtectionTimer = null;
   let callProtectionWarned = false;
   // Live API can surface the same function call in both toolCall and
@@ -2273,28 +2276,13 @@
 
   function updateCallProtection() {
     if (!liveCallStartTs || !isConnected) return;
-    const cameraMode = isCameraOn && cameraModeStartTs > 0;
-    const limitMs = cameraMode ? 105000 : 870000; // 1m45 with video / 14m30 audio
-    const protectionStartTs = cameraMode ? cameraModeStartTs : liveCallStartTs;
-    const remainingMs = Math.max(0, limitMs - (Date.now() - protectionStartTs));
-    const remainingSec = Math.ceil(remainingMs / 1000);
+    const elapsedSec = Math.max(0, Math.floor((Date.now() - liveCallStartTs) / 1000));
+    const mins = Math.floor(elapsedSec / 60);
+    const secs = elapsedSec % 60;
     const status = document.getElementById('live-call-protection-status');
     if (status) {
-      const mins = Math.floor(remainingSec / 60);
-      const secs = remainingSec % 60;
-      status.textContent = `🛡️ 長通話保護 · 約剩 ${mins}:${String(secs).padStart(2, '0')} ${cameraMode ? '（相機模式）' : ''}`;
-      status.className = remainingSec <= 60
-        ? 'rounded-lg border border-amber-500/50 bg-amber-950/35 px-2 py-1.5 text-[10px] font-mono text-amber-300'
-        : 'rounded-lg border border-slate-800 bg-slate-950/70 px-2 py-1.5 text-[10px] font-mono text-slate-400';
-    }
-    if (remainingSec <= 0) {
-      appendCardTranscript('system', '🛡️ 已在 Gemini 強制斷線前安全結束並保存通話。');
-      endLiveSession();
-      return;
-    }
-    if (remainingSec <= 60 && !callProtectionWarned) {
-      callProtectionWarned = true;
-      appendCardTranscript('system', '🛡️ 通話時段即將結束，系統會先保存，避免 GoAway 強制中斷。');
+      status.textContent = `♾️ 長通話延續中 · ${mins}:${String(secs).padStart(2, '0')}`;
+      status.className = 'rounded-lg border border-teal-500/35 bg-teal-950/25 px-2 py-1.5 text-[10px] font-mono text-teal-300';
     }
     callProtectionTimer = setTimeout(updateCallProtection, 1000);
   }
@@ -2448,9 +2436,21 @@
     }
   }
 
-  async function startLiveSession(mode = 'operation') {
+  async function startLiveSession(mode = 'operation', continuation = null) {
+    const resumeHandle = String(continuation?.handle || '');
+    const isResuming = Boolean(resumeHandle);
     // Prevent duplicate sessions
-    if (isConnected || ws) {
+    if (isResuming) {
+      // Preserve the dialogue, task state and Gemini context handle. The new
+      // socket needs fresh media tracks, but it is the same logical Live call.
+      const oldSocket = ws;
+      const originalStartedAt = liveContinuationStartedAt || liveCallStartTs || Date.now();
+      ws = null;
+      try { oldSocket?.close(1000, 'Resuming Live session'); } catch (_) {}
+      releaseLiveRuntimeResources();
+      liveCallStartTs = originalStartedAt;
+      removeInlineCard();
+    } else if (isConnected || ws) {
       console.warn('[Live] Session already active, resetting...');
       await endLiveSession();
       await new Promise(r => setTimeout(r, 200));
@@ -2491,10 +2491,14 @@
     audioSendBuffer = [];
     preSetupAudioBuffer = [];
     isLiveSetupReady = false;
-    sessionSnapshots = [];
-    latestLiveCameraSnapshot = null;
-    sessionExecutedTools = [];
-    clearPendingMainTask();
+    if (!isResuming) {
+      sessionSnapshots = [];
+      latestLiveCameraSnapshot = null;
+      sessionExecutedTools = [];
+      clearPendingMainTask();
+      liveSessionResumptionHandle = null;
+      liveContinuationStartedAt = Date.now();
+    }
     currentTurnInputTranscript = '';
     currentTurnOutputTranscript = '';
     currentTurnHadAudio = false;
@@ -2511,8 +2515,9 @@
     isCameraOn = false;
     cameraModeStartTs = 0;
     isGoAwayClosing = false;
+    isLiveResuming = isResuming;
     lastLiveHealthIssue = null;
-    liveCallStartTs = Date.now();
+    if (!isResuming) liveCallStartTs = liveContinuationStartedAt;
 
     // 🕹️ Phone Screen Automation Handler for Gemini Live Tools
     async function handleLiveToolCall(call) {
@@ -2849,6 +2854,12 @@
                 }
               }
             },
+            // Keep native-audio sessions alive beyond Gemini's default 15 min
+            // (audio) / 2 min (audio-video) context lifetime.
+            contextWindowCompression: { slidingWindow: {} },
+            // The server sends a renewable handle; pass it back after GoAway
+            // so a new WebSocket continues the same logical conversation.
+            sessionResumption: resumeHandle ? { handle: resumeHandle } : {},
             // Request Gemini Live's native microphone transcription so the
             // memo does not depend on model-generated user_text.
             inputAudioTranscription: {},
@@ -3000,16 +3011,36 @@
           return;
         }
 
+        const resumptionUpdate = response.sessionResumptionUpdate || response.session_resumption_update;
+        if (resumptionUpdate) {
+          const handle = resumptionUpdate.newHandle || resumptionUpdate.new_handle;
+          if (resumptionUpdate.resumable && handle) {
+            liveSessionResumptionHandle = handle;
+            console.debug('[Gemini Live] Stored session resumption handle');
+          }
+        }
+
         const goAway = response.goAway || response.go_away;
         if (goAway) {
-          // Gemini Live announces its session deadline before it forcibly
-          // closes the socket. End cleanly now so the call is saved and the
-          // user never sees a misleading 1008 connection failure.
-          isGoAwayClosing = true;
-          recordLiveHealthIssue('Gemini 發出 GoAway，正在安全結束通話', 'warning');
-          updateCardStatus('connecting', '⌛ 通話時段結束，正在安全關閉…');
-          appendCardTranscript('system', '⌛ Gemini Live 通話時段已結束，已安全結束並保存本次通話。');
-          setTimeout(() => { endLiveSession(); }, 0);
+          if (!liveSessionResumptionHandle || isLiveResuming) {
+            isGoAwayClosing = true;
+            recordLiveHealthIssue('Gemini 發出 GoAway，但未取得可續接 handle', 'warning');
+            updateCardStatus('connecting', '⌛ 通話即將結束，正在安全保存…');
+            appendCardTranscript('system', '⌛ Gemini 未提供可續接 handle，通話已安全結束並保存。');
+            setTimeout(() => { endLiveSession(); }, 0);
+            return;
+          }
+          isLiveResuming = true;
+          recordLiveHealthIssue('Gemini 發出 GoAway，正在無縫續接通話', 'warning');
+          updateCardStatus('connecting', '🔄 正在延續長通話…');
+          appendCardTranscript('system', '🔄 Gemini 正在更新連線，通話與上下文會自動延續。');
+          setTimeout(() => {
+            startLiveSession(liveSessionMode, { handle: liveSessionResumptionHandle }).catch(error => {
+              console.error('[Live Resumption Failed]', error);
+              isLiveResuming = false;
+              endLiveSession();
+            });
+          }, 120);
           return;
         }
 
@@ -3017,6 +3048,7 @@
         const isSetupDone = response.setupComplete || response.setup_complete;
         if (isSetupDone) {
           console.log('[Gemini Live] Setup complete, ready to talk!');
+          isLiveResuming = false;
           isLiveSetupReady = true;
           livePhase = LIVE_PHASE.LISTENING;
           if (audioPlayer) audioPlayer.setCaptureEnabled(!isMuted);
@@ -3170,7 +3202,7 @@
         hasSentFrameForCurrentTurn = false;
         stopCallProtection();
         stopSpeechRecognition();
-        if (e.code !== 1000 && !isGoAwayClosing) {
+        if (e.code !== 1000 && !isGoAwayClosing && !isLiveResuming) {
           recordLiveHealthIssue(`連線中斷（${e.code}${e.reason ? `：${e.reason}` : ''}）`, 'error');
           updateCardStatus('error', `⚠️ 連線中斷 (${e.code})`);
           let helpText = `連線中斷 (${e.code})`;
@@ -3791,6 +3823,9 @@
       // 🧹 1. Cleanly remove the in-call Live card from screen
       clearPendingMainTask();
       removeInlineCard();
+      isLiveResuming = false;
+      liveSessionResumptionHandle = null;
+      liveContinuationStartedAt = 0;
 
       // 🔒 Extract dialogue turns and full audio
       sessionExecutedTools = [];
@@ -3839,6 +3874,9 @@
       // Teardown fallback: even if one cleanup operation fails, force-release
       // every capture, socket, timer, and audio resource before restoring UI.
       releaseLiveRuntimeResources();
+      isLiveResuming = false;
+      liveSessionResumptionHandle = null;
+      liveContinuationStartedAt = 0;
       try { clearPendingMainTask(); } catch (_) {}
       const fallbackDock = document.getElementById('live-bottom-dock');
       const fallbackInput = document.getElementById('standard-input-bar');
