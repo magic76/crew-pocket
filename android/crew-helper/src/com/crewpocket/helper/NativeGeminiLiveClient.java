@@ -109,6 +109,7 @@ final class NativeGeminiLiveClient extends WebSocketListener {
     void start() {
         if (running) return;
         running = true;
+        loadVoiceprintProfile();
         reportStage("建立 Gemini WebSocket…");
         httpClient = new OkHttpClient.Builder().readTimeout(0, TimeUnit.MILLISECONDS).build();
         connect();
@@ -127,8 +128,47 @@ final class NativeGeminiLiveClient extends WebSocketListener {
     private volatile boolean aiSpeaking = false;
     private volatile boolean interruptedCurrentTurn = false;
 
+    // 🧬 Voiceprint Profile Sync & Gating Settings
+    private volatile boolean voiceprintEnabled = false;
+    private volatile double voiceprintThreshold = 0.25;
+    private volatile float[] voiceprintEmbedding = null;
+
     boolean isAgentMuted() { return agentMuted; }
     boolean isAiSpeaking() { return aiSpeaking; }
+
+    void loadVoiceprintProfile() {
+        new Thread(new Runnable() {
+            @Override public void run() {
+                try {
+                    HttpURLConnection conn = (HttpURLConnection) new URL("http://127.0.0.1:8000/api/voiceprint").openConnection();
+                    conn.setRequestMethod("GET");
+                    conn.setConnectTimeout(2000);
+                    conn.setReadTimeout(3000);
+                    if (conn.getResponseCode() == 200) {
+                        BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream(), "UTF-8"));
+                        StringBuilder sb = new StringBuilder(); String line;
+                        while ((line = reader.readLine()) != null) sb.append(line);
+                        reader.close();
+                        JSONObject json = new JSONObject(sb.toString());
+                        voiceprintEnabled = json.optBoolean("enabled", false);
+                        voiceprintThreshold = json.optDouble("threshold", 0.25);
+                        JSONArray embArr = json.optJSONArray("embedding");
+                        if (embArr != null && embArr.length() == 192) {
+                            float[] emb = new float[192];
+                            for (int i = 0; i < 192; i++) emb[i] = (float) embArr.getDouble(i);
+                            voiceprintEmbedding = emb;
+                        } else {
+                            voiceprintEmbedding = null;
+                        }
+                        Log.d(TAG, "🧬 聲紋設定載入完成：enabled=" + voiceprintEnabled + ", threshold=" + voiceprintThreshold + ", hasEmbedding=" + (voiceprintEmbedding != null));
+                    }
+                    conn.disconnect();
+                } catch (Exception e) {
+                    Log.d(TAG, "🧬 聲紋設定載入略過：" + e.getMessage());
+                }
+            }
+        }, "crew-vp-load").start();
+    }
 
     boolean toggleAgentMute() {
         // 🛑 Tap-to-Interrupt: If AI is speaking, clicking center button instantly interrupts the AI
@@ -566,10 +606,39 @@ final class NativeGeminiLiveClient extends WebSocketListener {
         player.play(); recorder.startRecording();
         new Thread(new Runnable() { @Override public void run() { sendMic(); } }, "crew-native-live-mic").start();
     }
+    private double calculateRms(byte[] pcm, int count) {
+        if (count < 2) return 0;
+        long sum = 0;
+        int samples = count / 2;
+        for (int i = 0; i < count - 1; i += 2) {
+            short val = (short) ((pcm[i] & 0xFF) | (pcm[i + 1] << 8));
+            sum += (long) val * val;
+        }
+        return Math.sqrt((double) sum / samples) / 32768.0;
+    }
+
     private void sendMic() {
         byte[] pcm = new byte[1280];
+        long lastActiveSpeech = 0;
         while (running && recorder != null && webSocket != null) {
             int count = recorder.read(pcm, 0, pcm.length); if (count <= 0) continue;
+            if (agentMuted) continue;
+
+            double rms = calculateRms(pcm, count);
+            long now = System.currentTimeMillis();
+
+            // 🧬 Energy & Voice Activity Detection Gate
+            if (rms > 0.015) {
+                lastActiveSpeech = now;
+            }
+
+            // If voiceprint gating is active with a non-zero threshold, skip silence to save bandwidth
+            // and keep speech clean (allowing 400ms trailing audio for natural endings)
+            boolean withinSpeechWindow = (now - lastActiveSpeech) < 400;
+            if (voiceprintEnabled && voiceprintThreshold > 0 && !withinSpeechWindow) {
+                continue;
+            }
+
             try {
                 JSONObject root = new JSONObject(); JSONObject audio = new JSONObject();
                 audio.put("mimeType", "audio/pcm;rate=16000");
