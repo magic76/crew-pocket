@@ -3644,18 +3644,20 @@
               livePhase = LIVE_PHASE.LISTENING;
 
               if (tuningDrawer && !tuningDrawer.classList.contains('hidden')) {
-                const simVal = document.getElementById('live-meter-sim-val');
-                const simBar = document.getElementById('live-meter-sim-bar');
-                if (simVal) {
-                  const isMatch = curSim >= TUNING_CONFIG.SIMILARITY_THRESHOLD;
-                  simVal.textContent = `${curSim.toFixed(2)} ${isMatch ? '✅' : '❌'}`;
-                  simVal.className = isMatch ? 'text-teal-300 font-bold' : 'text-rose-300';
-                }
-                if (simBar) {
-                  const pct = Math.min(100, Math.max(0, Math.round(((curSim - 0.2) / 0.7) * 100)));
-                  simBar.style.width = `${pct}%`;
-                  simBar.className = curSim >= TUNING_CONFIG.SIMILARITY_THRESHOLD ? 'bg-teal-400 h-full will-change-transform' : 'bg-rose-500 h-full will-change-transform';
-                }
+                requestAnimationFrame(() => {
+                  const simVal = document.getElementById('live-meter-sim-val');
+                  const simBar = document.getElementById('live-meter-sim-bar');
+                  if (simVal) {
+                    const isMatch = curSim >= TUNING_CONFIG.SIMILARITY_THRESHOLD;
+                    simVal.textContent = `${curSim.toFixed(2)} ${isMatch ? '✅' : '❌'}`;
+                    simVal.style.color = isMatch ? '#5eead4' : '#fda4af';
+                  }
+                  if (simBar) {
+                    const pct = Math.min(100, Math.max(0, Math.round(((curSim - 0.2) / 0.7) * 100)));
+                    simBar.style.width = `${pct}%`;
+                    simBar.style.backgroundColor = curSim >= TUNING_CONFIG.SIMILARITY_THRESHOLD ? '#2dd4bf' : '#f43f5e';
+                  }
+                });
               }
 
             }
