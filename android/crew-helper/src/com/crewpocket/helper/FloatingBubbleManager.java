@@ -286,12 +286,15 @@ public class FloatingBubbleManager {
                     bubbleParams = new WindowManager.LayoutParams(
                         size, size,
                         overlayType,
-                        WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                        WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
                         PixelFormat.TRANSLUCENT
                     );
                     bubbleParams.gravity = Gravity.TOP | Gravity.START;
-                    bubbleParams.x = 20;
-                    bubbleParams.y = 400;
+                    int screenW = windowManager.getDefaultDisplay().getWidth();
+                    int screenH = windowManager.getDefaultDisplay().getHeight();
+                    int safeTop = getStatusBarHeight() + dp(12);
+                    bubbleParams.x = dp(10);
+                    bubbleParams.y = Math.max(safeTop, screenH / 3);
 
                     bubbleView = new FluidBubbleView(context);
                     bubbleView.setElevation(16f);
@@ -303,6 +306,13 @@ public class FloatingBubbleManager {
 
                         @Override
                         public boolean onTouch(View v, MotionEvent event) {
+                            int screenWidth = windowManager.getDefaultDisplay().getWidth();
+                            int screenHeight = windowManager.getDefaultDisplay().getHeight();
+                            int topLimit = getStatusBarHeight() + dp(4);
+                            int bottomLimit = screenHeight - dp(64);
+                            int leftLimit = dp(2);
+                            int rightLimit = screenWidth - size - dp(2);
+
                             switch (event.getAction()) {
                                 case MotionEvent.ACTION_DOWN:
                                     initialX = bubbleParams.x;
@@ -313,8 +323,10 @@ public class FloatingBubbleManager {
                                     return true;
 
                                 case MotionEvent.ACTION_MOVE:
-                                    bubbleParams.x = initialX + (int) (event.getRawX() - initialTouchX);
-                                    bubbleParams.y = initialY + (int) (event.getRawY() - initialTouchY);
+                                    int targetX = initialX + (int) (event.getRawX() - initialTouchX);
+                                    int targetY = initialY + (int) (event.getRawY() - initialTouchY);
+                                    bubbleParams.x = Math.max(leftLimit, Math.min(rightLimit, targetX));
+                                    bubbleParams.y = Math.max(topLimit, Math.min(bottomLimit, targetY));
                                     windowManager.updateViewLayout(bubbleView, bubbleParams);
                                     return true;
 
@@ -341,11 +353,27 @@ public class FloatingBubbleManager {
         });
     }
 
+    private int getStatusBarHeight() {
+        try {
+            int resId = context.getResources().getIdentifier("status_bar_height", "dimen", "android");
+            if (resId > 0) return context.getResources().getDimensionPixelSize(resId);
+        } catch (Exception ignored) {}
+        return dp(32);
+    }
+
     private void snapBubbleToEdge() {
         if (bubbleView == null || bubbleParams == null) return;
         try {
             int screenWidth = windowManager.getDefaultDisplay().getWidth();
-            bubbleParams.x = bubbleParams.x < screenWidth / 2 ? 0 : Math.max(0, screenWidth - 112);
+            int screenHeight = windowManager.getDefaultDisplay().getHeight();
+            int bSize = bubbleParams.width > 0 ? bubbleParams.width : dp(52);
+            int topLimit = getStatusBarHeight() + dp(4);
+            int bottomLimit = screenHeight - dp(64);
+
+            // Snap X to left or right margin
+            bubbleParams.x = (bubbleParams.x < screenWidth / 2) ? dp(4) : (screenWidth - bSize - dp(4));
+            // Clamp Y inside safe screen area
+            bubbleParams.y = Math.max(topLimit, Math.min(bottomLimit, bubbleParams.y));
             windowManager.updateViewLayout(bubbleView, bubbleParams);
         } catch (Exception ignored) {}
     }
