@@ -591,15 +591,16 @@ public class FloatingBubbleManager {
 
                     LinearLayout dock = new LinearLayout(context);
                     dock.setOrientation(LinearLayout.VERTICAL);
-                    dock.setPadding(dp(14), dp(12), dp(14), dp(22)); // Extra generous bottom padding
+                    dock.setPadding(dp(16), dp(14), dp(16), dp(20));
                     dock.setClipToPadding(false);
                     dock.setClipChildren(false);
 
                     GradientDrawable dockBg = new GradientDrawable();
-                    dockBg.setColor(Color.parseColor("#E60F172A")); // Semi-transparent Slate 900
-                    dockBg.setCornerRadius(dp(22));
-                    dockBg.setStroke(2, Color.parseColor("#334155"));
+                    dockBg.setColor(Color.parseColor("#F50F172A")); // Luxury Slate 900
+                    dockBg.setCornerRadius(dp(24));
+                    dockBg.setStroke(dp(1.5f), Color.parseColor("#33818CF8")); // Indigo 400 @ 20%
                     dock.setBackground(dockBg);
+                    dock.setElevation(dp(16));
 
                     // Title / Status header
                     LinearLayout headerRow = new LinearLayout(context);

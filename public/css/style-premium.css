@@ -1,0 +1,426 @@
+/* 
+ * Premium UI/UX Effects Overlay 
+ * Theme: Dark Cyberpunk (Crew Pocket)
+ * Base: Tailwind CSS slate-950/900 dark theme with indigo/teal accents
+ */
+
+/* =========================================
+   1. Ambient Particle Starfield Background
+   ========================================= */
+@keyframes starfield-drift {
+  0% { background-position: 0% 0%, 50% 50%, 100% 100%; }
+  100% { background-position: 100% 100%, 0% 0%, 50% 50%; }
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(1.5px 1.5px at 20% 30%, rgba(99,102,241,0.4) 50%, transparent 50%),
+    radial-gradient(1px 1px at 60% 70%, rgba(6,182,212,0.35) 50%, transparent 50%),
+    radial-gradient(1.2px 1.2px at 80% 20%, rgba(168,85,247,0.3) 50%, transparent 50%);
+  background-size: 200px 200px, 150px 150px, 180px 180px;
+  animation: starfield-drift 60s linear infinite;
+  opacity: 0.6;
+}
+
+/* =========================================
+   2. Multi-Layer Frosted Glass (noise grain texture)
+   ========================================= */
+/* Apply to: header, footer, drawer, modals */
+header,
+footer {
+  background: linear-gradient(
+    135deg,
+    rgba(15, 23, 42, 0.88) 0%,
+    rgba(30, 41, 59, 0.65) 50%,
+    rgba(15, 23, 42, 0.88) 100%
+  ) !important;
+  backdrop-filter: blur(28px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(28px) saturate(180%) !important;
+  border-color: rgba(148, 163, 184, 0.1) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.05),
+    0 8px 32px rgba(0,0,0,0.4) !important;
+}
+
+header::after,
+footer::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.3;
+  background: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+}
+
+header, footer { position: relative; }
+
+/* =========================================
+   3. Animated Gradient Border Glow (for key interactive elements)
+   ========================================= */
+@property --border-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@keyframes rotate-border {
+  to { --border-angle: 360deg; }
+}
+
+/* Send button premium glow */
+#send-btn {
+  background: linear-gradient(135deg, #4f46e5, #6366f1, #818cf8) !important;
+  background-size: 200% 200% !important;
+  animation: send-shimmer 3s ease infinite !important;
+  box-shadow:
+    0 4px 15px rgba(79, 70, 229, 0.4),
+    0 0 30px rgba(99, 102, 241, 0.15) !important;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+#send-btn:hover {
+  box-shadow:
+    0 6px 25px rgba(79, 70, 229, 0.55),
+    0 0 40px rgba(99, 102, 241, 0.25) !important;
+  transform: scale(1.05) !important;
+}
+
+@keyframes send-shimmer {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+/* Live voice button glow */
+#live-voice-btn {
+  --border-angle: 0deg;
+  border: 1.5px solid transparent !important;
+  background:
+    linear-gradient(rgba(15,23,42,0.9), rgba(15,23,42,0.9)) padding-box,
+    conic-gradient(
+      from var(--border-angle),
+      #14b8a6 0%,
+      #06b6d4 33%,
+      #6366f1 66%,
+      #14b8a6 100%
+    ) border-box !important;
+  animation: rotate-border 4s linear infinite !important;
+  box-shadow: 0 0 18px rgba(20, 184, 166, 0.2) !important;
+}
+
+#live-voice-btn:hover {
+  box-shadow: 0 0 25px rgba(20, 184, 166, 0.35) !important;
+}
+
+/* =========================================
+   4. Premium Message Bubbles (AI and User)
+   ========================================= */
+/* AI Response Bubble — left gradient accent bar + entrance animation */
+@keyframes bubble-enter {
+  0% { opacity: 0; transform: translateY(12px) scale(0.97); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Target AI bubbles: direct children of #messages-container that are justify-start */
+#messages-container > div.justify-start > div {
+  position: relative;
+  background: linear-gradient(135deg, rgba(15,23,42,0.95), rgba(30,41,59,0.7)) !important;
+  border: 1px solid rgba(99,102,241,0.15) !important;
+  border-radius: 1rem !important;
+  box-shadow:
+    0 4px 24px rgba(0,0,0,0.3),
+    inset 0 1px 0 rgba(255,255,255,0.04) !important;
+  animation: bubble-enter 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+  overflow: hidden;
+}
+
+/* Gradient left accent bar via pseudo-element (preserves border-radius) */
+#messages-container > div.justify-start > div::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: linear-gradient(180deg, #6366f1, #06b6d4, #a855f7);
+  border-radius: 1rem 0 0 1rem;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* User bubbles — subtle indigo gradient */
+#messages-container > div.justify-end > div {
+  background: linear-gradient(135deg, rgba(79,70,229,0.35), rgba(99,102,241,0.18)) !important;
+  border: 1px solid rgba(99,102,241,0.3) !important;
+  border-radius: 1rem !important;
+  box-shadow: 0 4px 16px rgba(79,70,229,0.2) !important;
+  animation: bubble-enter 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+}
+
+/* BTW cards keep their existing gradient but get the entrance animation */
+.btw-card {
+  border-radius: 1rem !important;
+  animation: bubble-enter 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+}
+
+/* =========================================
+   5. Premium Input Field
+   ========================================= */
+#prompt-input {
+  background: rgba(15, 23, 42, 0.85) !important;
+  border: 1.5px solid rgba(71, 85, 105, 0.5) !important;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+#prompt-input:focus {
+  border-color: rgba(99, 102, 241, 0.55) !important;
+  box-shadow:
+    0 0 0 3px rgba(99, 102, 241, 0.1),
+    0 0 20px rgba(99, 102, 241, 0.12),
+    inset 0 0 12px rgba(99, 102, 241, 0.04) !important;
+  background: rgba(15, 23, 42, 0.97) !important;
+}
+
+/* =========================================
+   6. Premium Drawer (History Sidebar)
+   ========================================= */
+#drawer {
+  background: linear-gradient(180deg, rgba(15,23,42,0.98), rgba(2,6,23,0.96)) !important;
+  backdrop-filter: blur(32px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(32px) saturate(180%) !important;
+  border-right: 1px solid rgba(99,102,241,0.1) !important;
+  box-shadow: 4px 0 40px rgba(0,0,0,0.5) !important;
+}
+
+/* History items hover glow line */
+#conv-list > * {
+  transition: all 0.2s ease !important;
+  border-left: 2px solid transparent;
+}
+
+#conv-list > *:hover {
+  background: linear-gradient(90deg, rgba(99,102,241,0.08), transparent) !important;
+  border-left-color: #6366f1 !important;
+  transform: translateX(2px);
+}
+
+#conv-list > *.active,
+#conv-list > *[data-active="true"] {
+  border-left-color: #818cf8 !important;
+  background: linear-gradient(90deg, rgba(99,102,241,0.12), transparent) !important;
+}
+
+/* =========================================
+   7. Live Voice Call — Full-screen Breathing Border
+   ========================================= */
+/* When body has .live-active class, show breathing border glow */
+body.live-active::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 55;
+  pointer-events: none;
+  border: 2px solid rgba(20, 184, 166, 0.4);
+  border-radius: 0;
+  animation: live-border-breathe 2.5s ease-in-out infinite;
+}
+
+@keyframes live-border-breathe {
+  0%, 100% {
+    border-color: rgba(20, 184, 166, 0.3);
+    box-shadow: inset 0 0 30px rgba(20, 184, 166, 0.05);
+  }
+  50% {
+    border-color: rgba(99, 102, 241, 0.4);
+    box-shadow: inset 0 0 60px rgba(99, 102, 241, 0.08);
+  }
+}
+
+/* Dock buttons liquid metal */
+#live-bottom-dock button {
+  backdrop-filter: blur(12px) !important;
+  border: 1px solid rgba(255,255,255,0.08) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.06),
+    0 4px 16px rgba(0,0,0,0.3) !important;
+}
+
+/* =========================================
+   8. Premium Modals (Floating + Entrance Animation)
+   ========================================= */
+@keyframes modal-enter {
+  0% { opacity: 0; transform: scale(0.93) translateY(20px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+/* All modal inner containers */
+#cheat-sheet-modal > div,
+#context-modal > div,
+#usage-modal > div,
+#model-modal > div,
+#files-modal > div,
+#storage-modal > div,
+#voiceprint-modal > div,
+#live-key-modal > div,
+#guidelines-modal > div,
+#task-center-modal > section {
+  background: linear-gradient(180deg, rgba(15,23,42,0.98), rgba(2,6,23,0.97)) !important;
+  border: 1px solid rgba(99,102,241,0.15) !important;
+  box-shadow:
+    0 25px 50px -12px rgba(0,0,0,0.65),
+    0 0 60px rgba(99,102,241,0.08),
+    inset 0 1px 0 rgba(255,255,255,0.04) !important;
+  animation: modal-enter 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+}
+
+/* =========================================
+   9. Premium Slash Menu (Neon Frame)
+   ========================================= */
+#slash-menu {
+  background: linear-gradient(180deg, rgba(15,23,42,0.97), rgba(2,6,23,0.95)) !important;
+  border: 1.5px solid rgba(99,102,241,0.2) !important;
+  box-shadow:
+    0 20px 60px rgba(0,0,0,0.5),
+    0 0 30px rgba(99,102,241,0.1) !important;
+}
+
+#slash-menu .slash-item {
+  border-left: 2px solid transparent;
+  transition: all 0.15s ease !important;
+}
+
+#slash-menu .slash-item:hover {
+  background: linear-gradient(90deg, rgba(99,102,241,0.1), transparent) !important;
+  border-left-color: #6366f1;
+}
+
+/* =========================================
+   10. Premium Thinking & Tool Scanner
+   ========================================= */
+@keyframes scanner-sweep-premium {
+  0% { background-position: -200% 0; filter: hue-rotate(0deg); }
+  50% { filter: hue-rotate(25deg); }
+  100% { background-position: 200% 0; filter: hue-rotate(0deg); }
+}
+
+.shimmer-bar {
+  background: linear-gradient(
+    90deg,
+    #6366f1 0%,
+    #38bdf8 15%,
+    #a855f7 30%,
+    #ec4899 45%,
+    #f97316 55%,
+    #38bdf8 75%,
+    #6366f1 100%
+  ) !important;
+  background-size: 300% 100% !important;
+  animation: scanner-sweep-premium 2s linear infinite !important;
+  box-shadow: 0 0 12px rgba(99,102,241,0.35) !important;
+  height: 3px !important;
+}
+
+.shimmer-bar-teal {
+  background: linear-gradient(
+    90deg,
+    #14b8a6 0%,
+    #06b6d4 15%,
+    #2dd4bf 30%,
+    #38bdf8 50%,
+    #06b6d4 70%,
+    #14b8a6 100%
+  ) !important;
+  background-size: 300% 100% !important;
+  animation: scanner-sweep-premium 2s linear infinite !important;
+  box-shadow: 0 0 12px rgba(20, 184, 166, 0.35) !important;
+  height: 3px !important;
+}
+
+/* =========================================
+   11. Additional Polish
+   ========================================= */
+/* Scroll-to-bottom FAB glow */
+#scroll-bottom-btn.visible {
+  box-shadow:
+    0 4px 20px rgba(99, 102, 241, 0.25),
+    0 0 15px rgba(99, 102, 241, 0.1) !important;
+}
+
+/* Attach menu dropdown premium */
+#attach-menu-dropdown {
+  background: linear-gradient(180deg, rgba(15,23,42,0.97), rgba(2,6,23,0.95)) !important;
+  border: 1px solid rgba(99,102,241,0.15) !important;
+  box-shadow:
+    0 20px 50px rgba(0,0,0,0.5),
+    0 0 25px rgba(99,102,241,0.08) !important;
+  animation: modal-enter 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+}
+
+/* Tools menu dropdown premium */
+#tools-menu-dropdown {
+  background: linear-gradient(180deg, rgba(15,23,42,0.97), rgba(2,6,23,0.95)) !important;
+  border: 1px solid rgba(99,102,241,0.15) !important;
+  box-shadow:
+    0 20px 50px rgba(0,0,0,0.5),
+    0 0 25px rgba(99,102,241,0.08) !important;
+  animation: modal-enter 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+}
+
+/* Clipboard capsule premium */
+#clipboard-smart-capsule {
+  box-shadow:
+    0 8px 24px rgba(0,0,0,0.3),
+    0 0 20px rgba(99, 102, 241, 0.1) !important;
+}
+
+/* Splash screen extra glow */
+.splash-icon-glow {
+  box-shadow:
+    0 0 40px rgba(99, 102, 241, 0.6),
+    0 0 80px rgba(6, 182, 212, 0.4),
+    0 0 120px rgba(168, 85, 247, 0.2) !important;
+}
+
+/* Image preview in footer - refined */
+#image-preview-container {
+  background: rgba(15, 23, 42, 0.9) !important;
+  border: 1px solid rgba(99, 102, 241, 0.2) !important;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.3) !important;
+}
+
+/* Inline code premium styling */
+.prose code:not(pre code) {
+  background-color: rgba(30, 41, 59, 0.8) !important;
+  box-shadow: 0 0 6px rgba(56, 189, 248, 0.08) !important;
+}
+
+/* Pre code blocks subtle glow */
+.prose pre {
+  box-shadow:
+    0 4px 16px rgba(0,0,0,0.3),
+    inset 0 1px 0 rgba(255,255,255,0.03) !important;
+}
+
+/* Welcome message in main area also gets premium treatment */
+#messages-container > div:first-child > div:last-child {
+  animation: bubble-enter 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+}
+
+/* Context pill glow on hover */
+#context-pill:hover {
+  box-shadow: 0 0 12px rgba(52, 211, 153, 0.15) !important;
+}
+
+/* Model selector button glow on hover */
+#model-selector-btn:hover {
+  box-shadow: 0 0 12px rgba(99, 102, 241, 0.15) !important;
+}
+
+/* Network dot enhanced pulse */
+#network-dot {
+  box-shadow: 0 0 8px rgba(52, 211, 153, 0.5) !important;
+}

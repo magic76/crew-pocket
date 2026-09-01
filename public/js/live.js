@@ -2684,6 +2684,7 @@
       liveBottomDock.classList.remove('hidden');
       liveBottomDock.classList.add('flex');
     }
+    document.body.classList.add('live-active');
     updateDockControls();
     setMediaSessionActive(true);
     
@@ -4033,6 +4034,7 @@
         liveBottomDock.classList.add('hidden');
         liveBottomDock.classList.remove('flex');
       }
+      document.body.classList.remove('live-active');
       if (standardInputBar) standardInputBar.classList.remove('hidden');
 
       // 🧹 1. Cleanly remove the in-call Live card from screen
