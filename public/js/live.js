@@ -1025,7 +1025,11 @@
             </div>
             <span id="live-card-camera-state" class="hidden rounded-full border border-indigo-500/40 bg-indigo-950/80 px-2 py-1 text-[10px] font-mono text-indigo-300">📷 相機</span>
             <span id="live-card-screen-state" class="hidden rounded-full border border-cyan-500/40 bg-cyan-950/80 px-2 py-1 text-[10px] font-mono text-cyan-300">🖥️ 螢幕</span>
-            <button id="live-card-expand-toggle-btn" type="button" class="min-w-[40px] min-h-[40px] rounded-xl bg-indigo-950/80 hover:bg-indigo-900 active:scale-95 border border-indigo-500/40 text-indigo-300 text-sm flex items-center justify-center transition shadow-sm cursor-pointer" title="展開通話資訊">⌃</button>
+            <button id="live-card-expand-toggle-btn" type="button" class="min-w-[40px] min-h-[40px] rounded-xl bg-indigo-950/80 hover:bg-indigo-900 active:scale-95 border border-indigo-500/40 text-indigo-300 flex items-center justify-center transition shadow-sm cursor-pointer" title="展開 / 收合通話控制面板">
+              <svg class="w-4 h-4 text-current" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/>
+              </svg>
+            </button>
           </div>
         </div>
 
@@ -1191,8 +1195,12 @@
       liveCardExpanded = expanded;
       if (details) details.classList.toggle('hidden', !expanded);
       if (expandToggleBtn) {
-        expandToggleBtn.textContent = expanded ? '⌄' : '⌃';
         expandToggleBtn.title = expanded ? '收合通話面板' : '展開通話面板';
+        if (expanded) {
+          expandToggleBtn.className = 'min-w-[40px] min-h-[40px] rounded-xl bg-teal-500/20 hover:bg-teal-500/30 active:scale-95 border border-teal-400/60 text-teal-200 flex items-center justify-center transition shadow-sm cursor-pointer';
+        } else {
+          expandToggleBtn.className = 'min-w-[40px] min-h-[40px] rounded-xl bg-indigo-950/80 hover:bg-indigo-900 active:scale-95 border border-indigo-500/40 text-indigo-300 flex items-center justify-center transition shadow-sm cursor-pointer';
+        }
       }
       card.dataset.expanded = expanded ? 'true' : 'false';
       updateDockControls();
