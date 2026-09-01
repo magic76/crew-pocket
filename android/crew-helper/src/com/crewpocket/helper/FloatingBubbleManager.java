@@ -1,5 +1,7 @@
 package com.crewpocket.helper;
 
+import android.animation.Animator;
+import android.animation.AnimatorListenerAdapter;
 import android.animation.ValueAnimator;
 import android.app.Notification;
 import android.app.NotificationManager;
@@ -25,6 +27,7 @@ import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.WindowManager;
+import android.view.animation.DecelerateInterpolator;
 import android.view.animation.LinearInterpolator;
 import android.widget.Button;
 import android.widget.EditText;
@@ -268,8 +271,89 @@ public class FloatingBubbleManager {
         } catch (Exception ignored) {}
     }
 
-    // 🌟 Show Floating Ball
-    public void hideBubble() { if (bubbleView != null) { try { windowManager.removeView(bubbleView); } catch(Exception e){} bubbleView = null; } }
+    private boolean isDocked = false;
+    private ValueAnimator dockAnimator = null;
+    private final Handler autoDockHandler = new Handler(Looper.getMainLooper());
+    private final Runnable autoDockRunnable = new Runnable() {
+        @Override
+        public void run() {
+            autoDockBubble();
+        }
+    };
+
+    // 🌟 Show Floating Ball with Smart Auto-Dock & Ghost Opacity
+    public void hideBubble() {
+        autoDockHandler.removeCallbacks(autoDockRunnable);
+        if (dockAnimator != null) {
+            dockAnimator.cancel();
+            dockAnimator = null;
+        }
+        if (bubbleView != null) {
+            try { windowManager.removeView(bubbleView); } catch(Exception e){}
+            bubbleView = null;
+        }
+    }
+
+    public void scheduleAutoDock() {
+        autoDockHandler.removeCallbacks(autoDockRunnable);
+        if (bubbleView != null && !isDocked) {
+            autoDockHandler.postDelayed(autoDockRunnable, 3000);
+        }
+    }
+
+    public void wakeBubbleFromDock() {
+        autoDockHandler.removeCallbacks(autoDockRunnable);
+        if (bubbleView == null || bubbleParams == null) return;
+        if (dockAnimator != null && dockAnimator.isRunning()) {
+            dockAnimator.cancel();
+        }
+        int screenWidth = windowManager.getDefaultDisplay().getWidth();
+        int bSize = bubbleParams.width > 0 ? bubbleParams.width : dp(52);
+        int targetX = (bubbleParams.x < screenWidth / 2) ? dp(4) : (screenWidth - bSize - dp(4));
+
+        bubbleParams.x = targetX;
+        bubbleView.setAlpha(1.0f);
+        try { windowManager.updateViewLayout(bubbleView, bubbleParams); } catch (Exception ignored) {}
+        isDocked = false;
+    }
+
+    public void autoDockBubble() {
+        if (bubbleView == null || bubbleParams == null || isDocked) return;
+        if (NativeLiveService.isActive() || nativeLiveRequested) return;
+
+        int screenWidth = windowManager.getDefaultDisplay().getWidth();
+        int bSize = bubbleParams.width > 0 ? bubbleParams.width : dp(52);
+
+        final int startX = bubbleParams.x;
+        // Slide 58% off-screen, leaving 42% (approx 22dp) as a sleek glowing edge tab
+        final int endX = (startX < screenWidth / 2) ? - (bSize * 58 / 100) : (screenWidth - (bSize * 42 / 100));
+
+        if (dockAnimator != null && dockAnimator.isRunning()) {
+            dockAnimator.cancel();
+        }
+
+        dockAnimator = ValueAnimator.ofFloat(0f, 1f);
+        dockAnimator.setDuration(350);
+        dockAnimator.setInterpolator(new DecelerateInterpolator());
+        dockAnimator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
+            @Override
+            public void onAnimationUpdate(ValueAnimator animation) {
+                float frac = (float) animation.getAnimatedValue();
+                if (bubbleView == null || bubbleParams == null) return;
+                bubbleParams.x = (int) (startX + (endX - startX) * frac);
+                bubbleView.setAlpha(1.0f - 0.65f * frac); // Smoothly fades from 1.0 to 0.35 (Ghost Mode)
+                try { windowManager.updateViewLayout(bubbleView, bubbleParams); } catch (Exception ignored) {}
+            }
+        });
+        dockAnimator.addListener(new AnimatorListenerAdapter() {
+            @Override
+            public void onAnimationEnd(Animator animation) {
+                isDocked = true;
+            }
+        });
+        dockAnimator.start();
+    }
+
     public void showBubble() {
         if (!canDrawOverlays()) return;
         if (bubbleView != null) return;
@@ -293,7 +377,7 @@ public class FloatingBubbleManager {
                     int screenW = windowManager.getDefaultDisplay().getWidth();
                     int screenH = windowManager.getDefaultDisplay().getHeight();
                     int safeTop = getStatusBarHeight() + dp(12);
-                    bubbleParams.x = dp(10);
+                    bubbleParams.x = dp(4);
                     bubbleParams.y = Math.max(safeTop, screenH / 3);
 
                     bubbleView = new FluidBubbleView(context);
@@ -320,6 +404,11 @@ public class FloatingBubbleManager {
                                     initialTouchX = event.getRawX();
                                     initialTouchY = event.getRawY();
                                     touchStartTime = System.currentTimeMillis();
+                                    if (isDocked) {
+                                        wakeBubbleFromDock();
+                                    } else {
+                                        autoDockHandler.removeCallbacks(autoDockRunnable);
+                                    }
                                     return true;
 
                                 case MotionEvent.ACTION_MOVE:
@@ -327,6 +416,8 @@ public class FloatingBubbleManager {
                                     int targetY = initialY + (int) (event.getRawY() - initialTouchY);
                                     bubbleParams.x = Math.max(leftLimit, Math.min(rightLimit, targetX));
                                     bubbleParams.y = Math.max(topLimit, Math.min(bottomLimit, targetY));
+                                    bubbleView.setAlpha(1.0f);
+                                    isDocked = false;
                                     windowManager.updateViewLayout(bubbleView, bubbleParams);
                                     return true;
 
@@ -339,6 +430,7 @@ public class FloatingBubbleManager {
                                         toggleVoiceControls();
                                     }
                                     snapBubbleToEdge();
+                                    scheduleAutoDock();
                                     return true;
                             }
                             return false;
@@ -346,6 +438,8 @@ public class FloatingBubbleManager {
                     });
 
                     windowManager.addView(bubbleView, bubbleParams);
+                    isDocked = false;
+                    scheduleAutoDock();
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
@@ -769,11 +863,14 @@ public class FloatingBubbleManager {
                 
                 if (bubbleView != null) {
                     if (isAiSpeaking) {
+                        wakeBubbleFromDock();
                         bubbleView.setNativeVoiceState(2); // Amber = AI speaking
                     } else if (isLiveActive) {
+                        wakeBubbleFromDock();
                         bubbleView.setNativeVoiceState(1); // Red = Live call active
                     } else {
-                        bubbleView.setNativeVoiceState(0); // Green = Idle
+                        bubbleView.setNativeVoiceState(0); // Idle
+                        scheduleAutoDock();
                     }
                 }
 
