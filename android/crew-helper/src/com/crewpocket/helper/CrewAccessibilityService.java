@@ -4,6 +4,9 @@ import android.accessibilityservice.AccessibilityService;
 import android.accessibilityservice.AccessibilityServiceInfo;
 import android.accessibilityservice.GestureDescription;
 import android.content.Context;
+import android.content.Intent;
+import android.content.pm.ResolveInfo;
+import android.provider.Settings;
 import android.graphics.Path;
 import android.graphics.Rect;
 import android.graphics.Bitmap;
@@ -30,6 +33,7 @@ import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
+import java.util.List;
 import java.util.concurrent.Executor;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
@@ -156,6 +160,15 @@ public class CrewAccessibilityService extends AccessibilityService {
         out.close();
     }
 
+    // Keep AI-working captures inside this app's sandbox. Shared Pictures files
+    // can survive an uninstall while their MediaStore ownership does not, which
+    // leaves a reinstalled helper unable to read a stale "latest" screenshot.
+    private File getCaptureDirectory() throws Exception {
+        File dir = new File(getFilesDir(), "captures");
+        if (!dir.exists() && !dir.mkdirs()) throw new Exception("無法建立私有截圖目錄");
+        return dir;
+    }
+
     /**
      * Android 11+ accessibility screenshot API. Unlike GLOBAL_ACTION_TAKE_SCREENSHOT,
      * it captures in the background and does not show the system screenshot flash.
@@ -175,8 +188,7 @@ public class CrewAccessibilityService extends AccessibilityService {
                         @Override public Object invoke(Object proxy, Method method, Object[] args) {
                             try {
                                 if ("onSuccess".equals(method.getName()) && args != null && args.length > 0) {
-                                    File dir = new File("/sdcard/Pictures/CrewPocket");
-                                    dir.mkdirs();
+                                    File dir = getCaptureDirectory();
                                     File latest = new File(dir, "latest_screen_photo.png");
                                     saveSilentScreenshotResult(args[0], latest);
                                     result[0] = "{\"success\":true,\"path\":\"" + latest.getAbsolutePath()
@@ -269,7 +281,8 @@ public class CrewAccessibilityService extends AccessibilityService {
 
             String responseJson = "{\"status\":\"OK\"}";
             if (path.startsWith("/status")) {
-                responseJson = "{\"active\":true,\"service\":\"CrewAccessibilityService\",\"port\":8766}";
+                android.util.DisplayMetrics metrics = getResources().getDisplayMetrics();
+                responseJson = "{\"active\":true,\"service\":\"CrewAccessibilityService\",\"port\":8766,\"screenWidth\":" + metrics.widthPixels + ",\"screenHeight\":" + metrics.heightPixels + "}";
             } else if (path.startsWith("/volume")) {
                 try {
                     AudioManager audioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
@@ -305,8 +318,7 @@ public class CrewAccessibilityService extends AccessibilityService {
                     public void run() {
                         try {
                             Thread.sleep(700); // wait for Android system screenshot write
-                            File dir = new File("/sdcard/Pictures/CrewPocket");
-                            dir.mkdirs();
+                            File dir = getCaptureDirectory();
                             String timeStamp = new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(new Date());
                             String fileName = "SCREEN_" + timeStamp + ".png";
                             File destFile = new File(dir, fileName);
@@ -544,6 +556,52 @@ public class CrewAccessibilityService extends AccessibilityService {
                     }
                 });
                 responseJson = "{\"success\":true,\"action\":\"KEY\",\"key\":\"" + key + "\"}";
+            } else if (path.startsWith("/launch")) {
+                final String packageName = getJsonString(body, "package");
+                final String target = getJsonString(body, "target");
+                final boolean[] launchSuccess = new boolean[]{false};
+                final Object launchLock = new Object();
+                mainHandler.post(new Runnable() {
+                    @Override public void run() {
+                        try {
+                            Intent intent;
+                            if ("settings".equalsIgnoreCase(target)) {
+                                intent = new Intent(Settings.ACTION_SETTINGS);
+                            } else if (packageName != null && !packageName.trim().isEmpty()) {
+                                intent = getPackageManager().getLaunchIntentForPackage(packageName.trim());
+                                if (intent == null) throw new IllegalArgumentException("App 未安裝");
+                            } else {
+                                throw new IllegalArgumentException("缺少 App 套件名稱");
+                            }
+                            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                            startActivity(intent);
+                            launchSuccess[0] = true;
+                        } catch (Exception ignored) {}
+                        finally { synchronized (launchLock) { launchLock.notify(); } }
+                    }
+                });
+                synchronized (launchLock) { try { launchLock.wait(1500); } catch (Exception ignored) {} }
+                responseJson = "{\"success\":" + launchSuccess[0] + ",\"action\":\"LAUNCH\"}";
+            } else if (path.startsWith("/apps")) {
+                String query = getJsonString(body, "query");
+                String lowerQuery = query == null ? "" : query.trim().toLowerCase(Locale.ROOT);
+                StringBuilder apps = new StringBuilder("{\"success\":true,\"matches\":[");
+                try {
+                    Intent launcherIntent = new Intent(Intent.ACTION_MAIN, null);
+                    launcherIntent.addCategory(Intent.CATEGORY_LAUNCHER);
+                    List<ResolveInfo> results = getPackageManager().queryIntentActivities(launcherIntent, 0);
+                    int count = 0;
+                    for (ResolveInfo info : results) {
+                        String label = String.valueOf(info.loadLabel(getPackageManager()));
+                        String packageName = info.activityInfo.packageName;
+                        if (!matchesAppQuery(label, packageName, lowerQuery)) continue;
+                        if (count++ >= 8) break;
+                        if (count > 1) apps.append(',');
+                        apps.append("{\"label\":\"").append(jsonEscape(label)).append("\",\"package\":\"").append(jsonEscape(packageName)).append("\"}");
+                    }
+                } catch (Exception ignored) {}
+                apps.append("]}");
+                responseJson = apps.toString();
             } else if (path.startsWith("/nodes")) {
                 AccessibilityNodeInfo root = getRootInActiveWindow();
                 if (root != null) {
@@ -612,6 +670,24 @@ public class CrewAccessibilityService extends AccessibilityService {
             }
         }
         return null;
+    }
+
+    private String jsonEscape(String value) {
+        return value == null ? "" : value.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", " ").replace("\r", " ");
+    }
+
+    /** Matches localized labels and technical package names token by token.
+     * For example, spoken "Google Map" matches com.google.android.apps.maps
+     * even when the launcher label is the localized "地圖". */
+    private boolean matchesAppQuery(String label, String packageName, String query) {
+        if (query == null || query.trim().isEmpty()) return true;
+        String haystack = ((label == null ? "" : label) + " " + (packageName == null ? "" : packageName)).toLowerCase(Locale.ROOT);
+        String[] tokens = query.trim().split("[^\\p{L}\\p{N}]+");
+        for (String token : tokens) {
+            if (token.length() == 0) continue;
+            if (!haystack.contains(token)) return false;
+        }
+        return true;
     }
 
     private void performTap(float x, float y) {

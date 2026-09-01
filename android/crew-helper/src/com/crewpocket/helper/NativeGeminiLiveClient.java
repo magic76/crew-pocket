@@ -20,6 +20,9 @@ import java.net.URL;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.ArrayList;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import android.content.Context;
 import android.os.Handler;
@@ -48,9 +51,23 @@ final class NativeGeminiLiveClient extends WebSocketListener {
     private WebSocket webSocket;
     private AudioRecord recorder;
     private AudioTrack player;
+    // WebSocket callbacks must stay fast: audio writes can block for a whole
+    // buffer. Keep PCM on a bounded queue and feed AudioTrack from one thread.
+    private final BlockingQueue<byte[]> audioQueue = new LinkedBlockingQueue<byte[]>(96);
+    private final Object playerLock = new Object();
+    private volatile boolean audioPlaybackRunning;
+    private Thread audioPlaybackThread;
     private String resumptionHandle;
     private boolean reconnecting;
     private volatile long visualHoldUntil;
+    private volatile boolean setupReady;
+    private long screenFrameSequence;
+    // Dimensions of the latest image actually shown to Gemini.  They can be
+    // smaller than the physical 1440x3120 screen after compression.
+    private volatile int lastVisionWidth = 1;
+    private volatile int lastVisionHeight = 1;
+    private volatile int lastScreenWidth = 1;
+    private volatile int lastScreenHeight = 1;
     private final Set<String> handledToolCalls = new HashSet<String>();
 
     NativeGeminiLiveClient(String apiKey, Listener listener) { this.apiKey = apiKey; this.listener = listener; }
@@ -91,7 +108,7 @@ final class NativeGeminiLiveClient extends WebSocketListener {
         new Thread(new Runnable() {
             @Override public void run() {
                 try {
-                    boolean sent = sendImageFile(path);
+                    boolean sent = sendImageFile(path, false);
                     Log.d(TAG, sent ? "相機影格已送達 Gemini" : "相機影格未送達 Gemini");
                 } catch (Exception error) { Log.w(TAG, "相機影格傳送失敗：" + error.getMessage()); }
             }
@@ -99,11 +116,16 @@ final class NativeGeminiLiveClient extends WebSocketListener {
     }
 
     void sendScreenFrame() {
+        if (!running || !setupReady || webSocket == null) {
+            Log.d(TAG, "略過螢幕影格：Gemini 尚未完成 setupComplete");
+            return;
+        }
         new Thread(new Runnable() {
             @Override public void run() {
                 try {
                     JSONObject result = captureAndSendScreen();
-                    Log.d(TAG, result.optBoolean("success") ? "螢幕影格已送達 Gemini" : "螢幕影格未送達 Gemini：" + result.optString("error"));
+                    long sequence = ++screenFrameSequence;
+                    Log.d(TAG, result.optBoolean("success") ? "螢幕影格 #" + sequence + " 已送達 Gemini（" + System.currentTimeMillis() + "）" : "螢幕影格 #" + sequence + " 未送達 Gemini：" + result.optString("error"));
                 } catch (Exception error) { Log.w(TAG, "螢幕影格傳送失敗：" + error.getMessage()); }
             }
         }, "crew-native-live-screen").start();
@@ -180,6 +202,7 @@ final class NativeGeminiLiveClient extends WebSocketListener {
     void stop() {
         boolean wasRunning = running;
         running = false;
+        setupReady = false;
         stopAudio();
         try { if (webSocket != null) webSocket.close(1000, "Client ended call"); } catch (Exception ignored) {}
         try { if (httpClient != null) httpClient.dispatcher().executorService().shutdown(); } catch (Exception ignored) {}
@@ -195,7 +218,7 @@ final class NativeGeminiLiveClient extends WebSocketListener {
         } catch (Exception error) { fail("設定失敗：" + error.getMessage(), error); }
     }
     @Override public void onMessage(WebSocket socket, String text) {
-        Log.d(TAG, "Gemini JSON: " + text.substring(0, Math.min(900, text.length())));
+        logInboundFrame(text, false);
         try { handleJson(text); } catch (Exception error) { fail("Gemini 回覆錯誤：" + error.getMessage(), error); }
     }
     @Override public void onMessage(WebSocket socket, ByteString bytes) {
@@ -203,8 +226,17 @@ final class NativeGeminiLiveClient extends WebSocketListener {
         // Browsers receive it as a Blob and call Blob.text(); do the Android
         // equivalent rather than treating a valid setupComplete as an error.
         String text = bytes.utf8();
-        Log.d(TAG, "Gemini binary JSON: " + text.substring(0, Math.min(900, text.length())));
+        logInboundFrame(text, true);
         try { handleJson(text); } catch (Exception error) { fail("Gemini binary 回覆錯誤：" + error.getMessage(), error); }
+    }
+
+    /** Avoid logging base64 PCM: formatting those large messages can starve audio. */
+    private void logInboundFrame(String text, boolean binary) {
+        String kind = text.contains("setupComplete") || text.contains("setup_complete") ? "setupComplete"
+                : text.contains("toolCall") || text.contains("tool_call") ? "toolCall"
+                : text.contains("inlineData") || text.contains("inline_data") ? "audio/modelTurn"
+                : text.contains("turnComplete") || text.contains("turn_complete") ? "turnComplete" : "server event";
+        Log.d(TAG, "Gemini " + (binary ? "binary " : "") + kind + " (" + text.length() + " chars)");
     }
     @Override public void onClosing(WebSocket socket, int code, String reason) { socket.close(code, null); }
     @Override public void onClosed(WebSocket socket, int code, String reason) {
@@ -237,7 +269,7 @@ final class NativeGeminiLiveClient extends WebSocketListener {
             }, 120);
             return;
         }
-        if (response.has("setupComplete") || response.has("setup_complete")) { reportStage("🎙️ 已連線，直接說話"); startAudio(); return; }
+        if (response.has("setupComplete") || response.has("setup_complete")) { setupReady = true; reportStage("🎙️ 已連線，直接說話"); startAudio(); return; }
         JSONObject toolCall = response.optJSONObject("toolCall");
         if (toolCall == null) toolCall = response.optJSONObject("tool_call");
         if (toolCall != null) {
@@ -279,7 +311,7 @@ final class NativeGeminiLiveClient extends WebSocketListener {
                     JSONObject part = parts.getJSONObject(i);
                     JSONObject inline = part.optJSONObject("inlineData");
                     if (inline == null) inline = part.optJSONObject("inline_data");
-                    if (inline != null && inline.optString("data").length() > 0) playAudio(Base64.decode(inline.getString("data"), Base64.DEFAULT));
+                    if (inline != null && inline.optString("data").length() > 0) enqueueAudio(Base64.decode(inline.getString("data"), Base64.DEFAULT));
                     if (part.optString("text").length() > 0) listener.onTranscript("Gemini", part.optString("text"));
                 }
             }
@@ -312,19 +344,27 @@ final class NativeGeminiLiveClient extends WebSocketListener {
         setup.put("outputAudioTranscription", new JSONObject());
         setup.put("tools", new JSONArray().put(new JSONObject().put("functionDeclarations", buildToolDeclarations())));
         setup.put("systemInstruction", new JSONObject().put("parts", new JSONArray().put(new JSONObject().put("text",
-                "你是 Crew Pocket 的原生即時語音助理。自然、準確、簡潔地回應；最終回答一律以 AUDIO 語音說出。預設使用繁體中文，並依使用者主要語言自然切換。"
+                "你是 Crew Pocket 的原生即時語音助理。自然、準確、極簡地回應；最終回答一律以 AUDIO 語音說出。預設使用繁體中文，並依使用者主要語言自然切換。一般操作完成只說一次最終結果，不重述已做步驟、工具名稱或相同確認；除非失敗、不確定或使用者要求細節，回覆限一句。"
                 + "姓名、數字、指令或意圖聽不清楚、前後矛盾或影響結果時，先用一句話確認，不要猜測或把雜訊轉錄當成事實。"
                 + "【工具邊界】只有使用者本輪最新一句明確要求時，才可使用手機操作工具。若使用者要求在輸入框、搜尋列或對話框打字輸入內容，一律呼叫 type_text 工具，不可光用嘴巴說好而不呼叫工具。截圖、點擊、滑動或按鍵不可由過去對話推測；一般問題不可為了確認而使用工具。"
                 + "【主對話訊息】只有使用者明確說『傳給主對話』『告訴主對話』或等同意思時，才使用 send_to_main_chat，內容要是乾淨、精確的完整訊息；傳送後立刻口語告知結果。"
+                + "【語音手機代理】你直接使用 CrewHelper 的通用工具完成使用者本輪明確要求的手機操作；不要把日常操作委派給主對話。必須先 inspect_ui，再依結果使用 launch_app、tap_screen、swipe_screen、type_text 或 press_key；每次動作後都再次 inspect_ui 驗證。tap_screen 優先提供 label；若必須依你看到的影像給 x/y，coordinate_space 必須指定 image，絕不可把縮圖像素當成原始手機座標。使用者說『停止操作』『取消任務』『別操作了』時，立刻停止後續工具呼叫並口語確認。不得刪除、付款、購買、修改帳戶、輸入密碼或驗證碼。使用者在目前草稿已輸入後明確說『送出這則訊息』『傳送』『送出』時，即是只針對眼前草稿的一次性送出授權：直接點擊送出並 inspect_ui 驗證草稿已清空或訊息已出現在對話中，不要再要求第二次確認或複誦內容。若草稿內容、收件對象或送出目標不清楚，才用一句話詢問；任何授權不得沿用到下一則訊息。"
+                + "【手機操作探索】遵守『觀察→操作→等待→驗證』。往上滑通常是向下閱讀更多，往下滑通常是回到上方；往左或往右只有在畫面顯示輪播、分頁或 Tab 時才代表切換，不可假設是下一頁。每次操作後等待並重新分析最新畫面或 UI 節點；若沒有變化，不要重複相同手勢，改找明確的下一步、箭頭、關閉或返回按鈕。最多嘗試三種脫困方式，仍無法前進就停止並說明原因，禁止無限重試。"
                 + "【持續視覺】相機或螢幕分享按鈕啟用時，系統每兩秒直接傳入最新影格。這些影格就是你目前可看的畫面；使用者問『看得到嗎』『畫面是什麼』時，直接根據最新影格回答，不要說看不到，也不要再要求截圖。螢幕分享是手機顯示畫面，相機是實體環境，兩者不可互相替代。不要輸出 markdown。"))));
+        String skillPlaybook = loadVoiceSkillPlaybook();
+        if (!skillPlaybook.isEmpty()) {
+            setup.getJSONObject("systemInstruction").getJSONArray("parts").getJSONObject(0).put("text", setup.getJSONObject("systemInstruction").getJSONArray("parts").getJSONObject(0).optString("text") + "【已載入手機技能手冊】" + skillPlaybook);
+        }
         root.put("setup", setup); return root.toString();
     }
 
     private JSONArray buildToolDeclarations() throws Exception {
         JSONArray tools = new JSONArray();
         tools.put(new JSONObject().put("name", "take_screenshot").put("description", "Only when the user explicitly asks to see, capture, or inspect the current phone screen, app UI, button, or on-screen content. Captures the latest phone display without a screenshot flash."));
+        tools.put(new JSONObject().put("name", "inspect_ui").put("description", "Read the current Android accessibility UI tree before and after every phone action. Returns visible labels, descriptions, clickable state, and bounds; use it instead of guessing coordinates."));
+        tools.put(new JSONObject().put("name", "launch_app").put("description", "Find and open an installed Android app by its visible name. Use this before trying to locate an app icon on the launcher. If several apps match, ask the user to disambiguate.").put("parameters", new JSONObject().put("type", "OBJECT").put("properties", new JSONObject().put("app", new JSONObject().put("type", "STRING").put("description", "Visible app name, for example LINE, Chrome, Settings"))).put("required", new JSONArray().put("app"))));
         tools.put(new JSONObject().put("name", "swipe_screen").put("description", "Scroll or swipe the phone screen. Use distance='long' (or 'page') for full page scroll, 'normal' for standard scroll, or 'short' for small adjustment.").put("parameters", new JSONObject().put("type", "OBJECT").put("properties", new JSONObject().put("direction", new JSONObject().put("type", "STRING").put("enum", new JSONArray().put("up").put("down").put("left").put("right"))).put("distance", new JSONObject().put("type", "STRING").put("enum", new JSONArray().put("short").put("normal").put("long").put("page")))).put("required", new JSONArray().put("direction"))));
-        tools.put(new JSONObject().put("name", "tap_screen").put("description", "Tap on a button, app icon, or coordinate on the phone screen. Provide label (e.g. 'LINE', '設定', '確認') or x, y pixel coordinates.").put("parameters", new JSONObject().put("type", "OBJECT").put("properties", new JSONObject().put("label", new JSONObject().put("type", "STRING").put("description", "The button, app icon, or text label to tap")).put("x", new JSONObject().put("type", "NUMBER").put("description", "X coordinate")).put("y", new JSONObject().put("type", "NUMBER").put("description", "Y coordinate")))));
+        tools.put(new JSONObject().put("name", "tap_screen").put("description", "Tap a button, app icon, or coordinate. Prefer label because it resolves through the live UI tree. If using x/y from the image shown to you, set coordinate_space=image; never treat a compressed image pixel as a physical screen pixel.").put("parameters", new JSONObject().put("type", "OBJECT").put("properties", new JSONObject().put("label", new JSONObject().put("type", "STRING").put("description", "The button, app icon, or text label to tap")).put("x", new JSONObject().put("type", "NUMBER").put("description", "X coordinate")).put("y", new JSONObject().put("type", "NUMBER").put("description", "Y coordinate")).put("coordinate_space", new JSONObject().put("type", "STRING").put("enum", new JSONArray().put("image").put("normalized_1000").put("screen")).put("description", "image = latest image pixel; normalized_1000 = 0..1000; screen = current physical display pixel")))));
         tools.put(new JSONObject().put("name", "type_text").put("description", "REQUIRED whenever the user asks to type, search, or enter text into any input box, search bar, message field, or coordinate. Provide text and optionally target hint (e.g. '搜尋', '訊息') or x, y coordinates.").put("parameters", new JSONObject().put("type", "OBJECT").put("properties", new JSONObject().put("target", new JSONObject().put("type", "STRING").put("description", "Input field hint or label")).put("x", new JSONObject().put("type", "NUMBER").put("description", "Optional X coordinate")).put("y", new JSONObject().put("type", "NUMBER").put("description", "Optional Y coordinate")).put("text", new JSONObject().put("type", "STRING").put("description", "The text to type into the field"))).put("required", new JSONArray().put("text"))));
         tools.put(new JSONObject().put("name", "press_key").put("description", "Press HOME, BACK, or RECENTS only when explicitly requested.").put("parameters", new JSONObject().put("type", "OBJECT").put("properties", new JSONObject().put("key", new JSONObject().put("type", "STRING").put("enum", new JSONArray().put("HOME").put("BACK").put("RECENTS")))).put("required", new JSONArray().put("key"))));
         tools.put(new JSONObject().put("name", "send_to_main_chat").put("description", "Send a clean message to the current or most recently active Crew Pocket main chat ONLY when the user explicitly asks to send, tell, or hand a message to the main chat.").put("parameters", new JSONObject().put("type", "OBJECT").put("properties", new JSONObject().put("message", new JSONObject().put("type", "STRING"))).put("required", new JSONArray().put("message"))));
@@ -342,6 +382,8 @@ final class NativeGeminiLiveClient extends WebSocketListener {
                     JSONObject args = call.optJSONObject("args");
                     if (args == null) args = new JSONObject();
                     if ("take_screenshot".equals(name)) result = captureAndSendScreen();
+                    else if ("inspect_ui".equals(name)) result = inspectUi();
+                    else if ("launch_app".equals(name)) result = launchApp(args);
                     else if ("swipe_screen".equals(name)) result = swipe(args);
                     else if ("tap_screen".equals(name)) result = tap(args);
                     else if ("type_text".equals(name)) result = typeText(args);
@@ -363,43 +405,70 @@ final class NativeGeminiLiveClient extends WebSocketListener {
         String direction = args.optString("direction", "up").toLowerCase();
         String distance = args.optString("distance", "normal").toLowerCase();
         
-        // S24+ physical resolution: 1440 x 3120
-        // Default normal: 2300 -> 700 (1600px span, fast fling)
-        int x1 = 720, y1 = 2300, x2 = 720, y2 = 700;
+        JSONObject metrics = helperGet("/status");
+        int width = metrics.optInt("screenWidth", lastScreenWidth);
+        int height = metrics.optInt("screenHeight", lastScreenHeight);
+        if (width <= 1 || height <= 1) return new JSONObject().put("success", false).put("error", "無法取得目前裝置螢幕尺寸");
+        // Default normal uses proportions so it works on every resolution.
+        int x1 = Math.round(width * 0.50f), y1 = Math.round(height * 0.74f), x2 = Math.round(width * 0.50f), y2 = Math.round(height * 0.22f);
         int duration = 320; // optimal drag duration for Android ViewPager / ScrollView recognition
 
         if ("down".equals(direction)) {
-            y1 = 700; y2 = 2300;
+            y1 = Math.round(height * 0.22f); y2 = Math.round(height * 0.74f);
         } else if ("left".equals(direction)) {
-            x1 = 1250; y1 = 1560; x2 = 190; y2 = 1560;
+            x1 = Math.round(width * 0.87f); y1 = Math.round(height * 0.50f); x2 = Math.round(width * 0.13f); y2 = Math.round(height * 0.50f);
         } else if ("right".equals(direction)) {
-            x1 = 190; y1 = 1560; x2 = 1250; y2 = 1560;
+            x1 = Math.round(width * 0.13f); y1 = Math.round(height * 0.50f); x2 = Math.round(width * 0.87f); y2 = Math.round(height * 0.50f);
         }
 
         if ("long".equals(distance) || "page".equals(distance) || "fast".equals(distance)) {
             duration = 280;
-            if ("up".equals(direction)) { y1 = 2700; y2 = 420; }
-            else if ("down".equals(direction)) { y1 = 420; y2 = 2700; }
-            else if ("left".equals(direction)) { x1 = 1350; x2 = 90; }
-            else if ("right".equals(direction)) { x1 = 90; x2 = 1350; }
+            if ("up".equals(direction)) { y1 = Math.round(height * 0.87f); y2 = Math.round(height * 0.13f); }
+            else if ("down".equals(direction)) { y1 = Math.round(height * 0.13f); y2 = Math.round(height * 0.87f); }
+            else if ("left".equals(direction)) { x1 = Math.round(width * 0.94f); x2 = Math.round(width * 0.06f); }
+            else if ("right".equals(direction)) { x1 = Math.round(width * 0.06f); x2 = Math.round(width * 0.94f); }
         } else if ("short".equals(distance) || "little".equals(distance)) {
             duration = 260;
-            if ("up".equals(direction)) { y1 = 1800; y2 = 1200; }
-            else if ("down".equals(direction)) { y1 = 1200; y2 = 1800; }
-            else if ("left".equals(direction)) { x1 = 950; x2 = 490; }
-            else if ("right".equals(direction)) { x1 = 490; x2 = 950; }
+            if ("up".equals(direction)) { y1 = Math.round(height * 0.58f); y2 = Math.round(height * 0.38f); }
+            else if ("down".equals(direction)) { y1 = Math.round(height * 0.38f); y2 = Math.round(height * 0.58f); }
+            else if ("left".equals(direction)) { x1 = Math.round(width * 0.66f); x2 = Math.round(width * 0.34f); }
+            else if ("right".equals(direction)) { x1 = Math.round(width * 0.34f); x2 = Math.round(width * 0.66f); }
         }
 
+        JSONObject before = new JSONObject();
+        try { before = helperGet("/nodes"); } catch (Exception ignored) {}
         JSONObject reply = helperPost("/swipe", new JSONObject().put("x1", x1).put("y1", y1).put("x2", x2).put("y2", y2).put("duration", duration));
+        Thread.sleep(650);
+        JSONObject after = new JSONObject();
+        try { after = helperGet("/nodes"); } catch (Exception ignored) {}
         reply.put("direction", direction);
         reply.put("distance", distance);
+        reply.put("screenSize", width + "x" + height);
+        boolean changed = !nodeSignature(before).equals(nodeSignature(after));
+        reply.put("screenChanged", changed);
+        reply.put("verification", changed ? "UI 節點已變更，請分析新畫面" : "UI 節點未變更，請改用另一方向或尋找按鈕");
         return reply;
+    }
+
+    private String nodeSignature(JSONObject response) {
+        if (response == null || !response.optBoolean("success")) return "unavailable";
+        JSONArray nodes = response.optJSONArray("nodes");
+        if (nodes == null) return "empty";
+        StringBuilder signature = new StringBuilder();
+        for (int i = 0; i < nodes.length(); i++) {
+            JSONObject node = nodes.optJSONObject(i);
+            if (node != null) signature.append(node.optString("text")).append('|')
+                    .append(node.optString("desc")).append('|').append(node.optString("className")).append(';');
+        }
+        return Integer.toHexString(signature.toString().hashCode());
     }
 
     private JSONObject tap(JSONObject args) throws Exception {
         double targetX = args.optDouble("x", -1);
         double targetY = args.optDouble("y", -1);
         String label = args.optString("label", args.optString("text", args.optString("name", ""))).trim();
+        String coordinateSpace = args.optString("coordinate_space", "").trim().toLowerCase();
+        boolean resolvedFromNode = false;
 
         // 🎯 1. If text label is provided, find exact element coordinates from Accessibility UI Node tree
         if (!label.isEmpty()) {
@@ -417,6 +486,7 @@ final class NativeGeminiLiveClient extends WebSocketListener {
                                 if (bounds != null) {
                                     targetX = (bounds.optDouble("left", 0) + bounds.optDouble("right", 0)) / 2.0;
                                     targetY = (bounds.optDouble("top", 0) + bounds.optDouble("bottom", 0)) / 2.0;
+                                    resolvedFromNode = true;
                                     break;
                                 }
                             }
@@ -430,20 +500,95 @@ final class NativeGeminiLiveClient extends WebSocketListener {
             return new JSONObject().put("success", false).put("error", "找不到指定點擊目標或座標");
         }
 
-        // 📐 2. Coordinate System Normalization & Scaling
-        // Phone physical resolution is 1440 x 3120
-        // If model returns 0.0 ~ 1.0 (normalized percentage):
-        if (targetX <= 1.0 && targetY <= 1.0 && (targetX > 0 || targetY > 0)) {
-            targetX = targetX * 1440.0;
-            targetY = targetY * 3120.0;
-        }
-        // If model returns 0 ~ 1000 scale (standard Gemini Vision bounding box coordinates):
-        else if (targetX <= 1000.0 && targetY <= 1000.0 && targetX > 0 && targetY > 0 && targetY < 1200) {
-            targetX = (targetX / 1000.0) * 1440.0;
-            targetY = (targetY / 1000.0) * 3120.0;
+        // 📐 2. Explicit coordinate conversion.  The visual frame sent to the
+        // model is normally max 1280px on its long edge, not the device size.
+        if (!resolvedFromNode && "image".equals(coordinateSpace)) {
+            if (lastScreenWidth <= 1 || lastScreenHeight <= 1) return new JSONObject().put("success", false).put("error", "尚未取得目前螢幕尺寸，請先要求查看螢幕後再依影像座標點擊");
+            targetX = (targetX / Math.max(1, lastVisionWidth)) * lastScreenWidth;
+            targetY = (targetY / Math.max(1, lastVisionHeight)) * lastScreenHeight;
+        } else if (!resolvedFromNode && "normalized_1000".equals(coordinateSpace)) {
+            if (lastScreenWidth <= 1 || lastScreenHeight <= 1) return new JSONObject().put("success", false).put("error", "尚未取得目前螢幕尺寸，請先 inspect_ui 或查看螢幕");
+            targetX = (targetX / 1000.0) * lastScreenWidth;
+            targetY = (targetY / 1000.0) * lastScreenHeight;
+        } else if (!resolvedFromNode && coordinateSpace.isEmpty() && targetX <= 1.0 && targetY <= 1.0 && (targetX > 0 || targetY > 0)) {
+            targetX = targetX * Math.max(1, lastScreenWidth);
+            targetY = targetY * Math.max(1, lastScreenHeight);
+        } else if (!resolvedFromNode && coordinateSpace.isEmpty() && targetX <= 1000.0 && targetY <= 1000.0 && targetX > 0 && targetY > 0 && targetY < 1200) {
+            targetX = (targetX / 1000.0) * Math.max(1, lastScreenWidth);
+            targetY = (targetY / 1000.0) * Math.max(1, lastScreenHeight);
         }
 
-        return helperPost("/tap", new JSONObject().put("x", Math.round(targetX)).put("y", Math.round(targetY)));
+        JSONObject reply = helperPost("/tap", new JSONObject().put("x", Math.round(targetX)).put("y", Math.round(targetY)));
+        reply.put("resolvedFrom", resolvedFromNode ? "ui_node" : (coordinateSpace.isEmpty() ? "legacy" : coordinateSpace));
+        reply.put("visionSize", lastVisionWidth + "x" + lastVisionHeight).put("screenSize", lastScreenWidth + "x" + lastScreenHeight);
+        return reply;
+    }
+
+    private JSONObject inspectUi() throws Exception {
+        JSONObject raw = helperGet("/nodes");
+        if (!raw.optBoolean("success")) return raw;
+        JSONArray nodes = raw.optJSONArray("nodes");
+        JSONArray visible = new JSONArray();
+        if (nodes != null) {
+            for (int i = 0; i < nodes.length() && visible.length() < 80; i++) {
+                JSONObject node = nodes.optJSONObject(i);
+                if (node == null) continue;
+                String text = node.optString("text", "").trim();
+                String desc = node.optString("desc", "").trim();
+                if (text.isEmpty() && desc.isEmpty()) continue;
+                JSONObject item = new JSONObject().put("text", text).put("desc", desc).put("clickable", node.optBoolean("clickable"));
+                if (node.has("bounds")) item.put("bounds", node.optJSONObject("bounds"));
+                visible.put(item);
+            }
+        }
+        return new JSONObject().put("success", true).put("nodeCount", nodes == null ? 0 : nodes.length()).put("visible", visible)
+                .put("message", "已讀取目前 UI；請只根據 visible 節點決定下一步。");
+    }
+
+    private JSONObject launchApp(JSONObject args) throws Exception {
+        String app = args.optString("app", "").trim();
+        if (app.isEmpty()) return new JSONObject().put("success", false).put("error", "App 名稱不可為空");
+        JSONObject found = helperPost("/apps", new JSONObject().put("query", app));
+        JSONArray matches = found.optJSONArray("matches");
+        if (matches == null || matches.length() == 0) return new JSONObject().put("success", false).put("error", "找不到已安裝的 App：" + app);
+        JSONObject selected = null;
+        String query = app.toLowerCase();
+        for (int i = 0; i < matches.length(); i++) {
+            JSONObject candidate = matches.optJSONObject(i);
+            if (candidate != null && candidate.optString("label", "").toLowerCase().startsWith(query)) {
+                if (selected != null) return new JSONObject().put("success", false).put("error", "找到多個相近 App，請說得更完整");
+                selected = candidate;
+            }
+        }
+        if (selected == null && matches.length() == 1) selected = matches.optJSONObject(0);
+        if (selected == null) return new JSONObject().put("success", false).put("error", "找到多個 App，請說得更完整");
+        JSONObject reply = helperPost("/launch", new JSONObject().put("package", selected.optString("package", "")));
+        if (reply.optBoolean("success")) reply.put("app", selected.optString("label", app)).put("message", "已啟動 App，請立刻 inspect_ui 驗證。");
+        return reply;
+    }
+
+    private String loadVoiceSkillPlaybook() {
+        HttpURLConnection connection = null;
+        try {
+            connection = (HttpURLConnection) new URL("http://127.0.0.1:8000/api/phone/skills").openConnection();
+            connection.setRequestMethod("GET"); connection.setConnectTimeout(1500); connection.setReadTimeout(2500);
+            int code = connection.getResponseCode();
+            if (code < 200 || code >= 300) return "";
+            BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream(), "UTF-8"));
+            StringBuilder raw = new StringBuilder(); String line; while ((line = reader.readLine()) != null) raw.append(line); reader.close();
+            JSONArray skills = new JSONObject(raw.toString()).optJSONArray("skills");
+            if (skills == null) return "";
+            StringBuilder playbook = new StringBuilder();
+            for (int i = 0; i < skills.length() && i < 12 && playbook.length() < 12000; i++) {
+                JSONObject skill = skills.optJSONObject(i);
+                if (skill == null) continue;
+                String name = skill.optString("name", "").trim();
+                String instruction = skill.optString("instruction", "").trim();
+                if (!name.isEmpty() && !instruction.isEmpty()) playbook.append("\n[技能：").append(name).append("] ").append(instruction);
+            }
+            return playbook.toString();
+        } catch (Exception ignored) { return ""; }
+        finally { if (connection != null) connection.disconnect(); }
     }
 
     private JSONObject helperGet(String endpoint) throws Exception {
@@ -520,18 +665,26 @@ final class NativeGeminiLiveClient extends WebSocketListener {
         if (!capture.optBoolean("success")) return capture;
         String path = capture.optString("latestPath", capture.optString("path", ""));
         if (path.isEmpty()) return new JSONObject().put("success", false).put("error", "截圖未提供檔案路徑");
-        if (!sendImageFile(path)) return new JSONObject().put("success", false).put("error", "截圖已取得，但 Gemini 連線不可用");
+        if (!sendImageFile(path, true)) return new JSONObject().put("success", false).put("error", "截圖已取得，但 Gemini 連線不可用");
         return new JSONObject().put("success", true).put("silent", capture.optBoolean("silent")).put("message", "最新手機螢幕已傳送，請只依這張畫面回答。");
     }
 
-    private boolean sendImageFile(String path) throws Exception {
+    private boolean sendImageFile(String path, boolean isScreenFrame) throws Exception {
         Bitmap bitmap = BitmapFactory.decodeFile(path);
         if (bitmap == null) return false;
+        int sourceWidth = bitmap.getWidth();
+        int sourceHeight = bitmap.getHeight();
         int maxEdge = 1280;
         if (Math.max(bitmap.getWidth(), bitmap.getHeight()) > maxEdge) {
             float scale = maxEdge / (float) Math.max(bitmap.getWidth(), bitmap.getHeight());
             Bitmap scaled = Bitmap.createScaledBitmap(bitmap, Math.round(bitmap.getWidth() * scale), Math.round(bitmap.getHeight() * scale), true);
             bitmap.recycle(); bitmap = scaled;
+        }
+        lastVisionWidth = bitmap.getWidth();
+        lastVisionHeight = bitmap.getHeight();
+        if (isScreenFrame) {
+            lastScreenWidth = sourceWidth;
+            lastScreenHeight = sourceHeight;
         }
         ByteArrayOutputStream output = new ByteArrayOutputStream();
         bitmap.compress(Bitmap.CompressFormat.JPEG, 76, output); bitmap.recycle();
@@ -585,10 +738,81 @@ final class NativeGeminiLiveClient extends WebSocketListener {
             }
         } catch (Exception ignored) {}
 
-        int outMin = AudioTrack.getMinBufferSize(24000, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT);
-        player = new AudioTrack(android.media.AudioManager.STREAM_MUSIC, 24000, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT, Math.max(outMin * 4, 16384), AudioTrack.MODE_STREAM);
-        player.play(); recorder.startRecording();
+        createAudioPlayer();
+        startPlaybackWorker();
+        recorder.startRecording();
         new Thread(new Runnable() { @Override public void run() { sendMic(); } }, "crew-native-live-mic").start();
+    }
+
+    private void createAudioPlayer() {
+        synchronized (playerLock) {
+            try { if (player != null) { player.stop(); player.release(); } } catch (Exception ignored) {}
+            int outMin = AudioTrack.getMinBufferSize(24000, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT);
+            // One second leaves room for GC, image upload, and transient Wi-Fi jitter.
+            int bufferBytes = Math.max(outMin * 8, 48000);
+            player = new AudioTrack(android.media.AudioManager.STREAM_MUSIC, 24000,
+                    AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT,
+                    bufferBytes, AudioTrack.MODE_STREAM);
+        }
+    }
+
+    private void startPlaybackWorker() {
+        audioQueue.clear();
+        audioPlaybackRunning = true;
+        audioPlaybackThread = new Thread(new Runnable() {
+            @Override public void run() { runPlaybackLoop(); }
+        }, "crew-native-live-playback");
+        audioPlaybackThread.start();
+    }
+
+    private void runPlaybackLoop() {
+        boolean started = false;
+        while (audioPlaybackRunning) {
+            try {
+                byte[] first = audioQueue.poll(300, TimeUnit.MILLISECONDS);
+                if (first == null) continue;
+                if (!started) {
+                    // Start with about 200 ms buffered. It avoids the initial
+                    // AudioTrack underrun that previously disabled the track.
+                    ArrayList<byte[]> initial = new ArrayList<byte[]>();
+                    initial.add(first);
+                    int bytes = first.length;
+                    long deadline = System.currentTimeMillis() + 180;
+                    while (bytes < 9600 && System.currentTimeMillis() < deadline) {
+                        byte[] next = audioQueue.poll(Math.max(1, deadline - System.currentTimeMillis()), TimeUnit.MILLISECONDS);
+                        if (next == null) break;
+                        initial.add(next); bytes += next.length;
+                    }
+                    synchronized (playerLock) { if (player != null) player.play(); }
+                    started = true;
+                    for (byte[] chunk : initial) writeAudioChunk(chunk);
+                } else {
+                    writeAudioChunk(first);
+                }
+            } catch (InterruptedException ignored) {
+                // stopAudio interrupts this worker; the loop condition decides exit.
+            } catch (Exception error) {
+                Log.w(TAG, "音訊播放工作執行失敗：" + error.getMessage());
+                recoverAudioPlayer();
+                started = false;
+            }
+        }
+    }
+
+    private void writeAudioChunk(byte[] pcm) {
+        if (pcm == null || pcm.length == 0 || interruptedCurrentTurn || agentMuted) return;
+        lastPlaybackActiveAt = System.currentTimeMillis() + (pcm.length * 1000L / (24000 * 2));
+        int written;
+        synchronized (playerLock) { written = player == null ? AudioTrack.ERROR_INVALID_OPERATION : player.write(pcm, 0, pcm.length); }
+        if (written < 0) {
+            Log.w(TAG, "AudioTrack 寫入失敗（" + written + "），重建播放軌");
+            recoverAudioPlayer();
+        }
+    }
+
+    private void recoverAudioPlayer() {
+        if (!audioPlaybackRunning || !running) return;
+        createAudioPlayer();
     }
     private double calculateRms(byte[] pcm, int count) {
         if (count < 2) return 0;
@@ -631,14 +855,13 @@ final class NativeGeminiLiveClient extends WebSocketListener {
             } catch (Exception error) { fail("麥克風串流失敗：" + error.getMessage(), error); }
         }
     }
-    private void playAudio(byte[] pcm) {
-        if (agentMuted || interruptedCurrentTurn) return;
-        try {
-            if (player != null && pcm.length > 0) {
-                lastPlaybackActiveAt = System.currentTimeMillis() + (pcm.length * 1000L / (24000 * 2));
-                player.write(pcm, 0, pcm.length);
-            }
-        } catch (Exception ignored) {}
+    private void enqueueAudio(byte[] pcm) {
+        if (agentMuted || interruptedCurrentTurn || pcm == null || pcm.length == 0) return;
+        // Preserve current speech instead of blocking the WebSocket callback.
+        if (!audioQueue.offer(pcm)) {
+            audioQueue.poll();
+            if (!audioQueue.offer(pcm)) Log.w(TAG, "音訊佇列已滿，略過過期語音片段");
+        }
     }
     private void reportStage(String text) { stage = text; listener.onStatus(text); Log.d(TAG, text); }
     private synchronized void fail(String message, Throwable error) {
@@ -647,7 +870,13 @@ final class NativeGeminiLiveClient extends WebSocketListener {
         running = false; stopAudio(); listener.onStopped(message);
     }
     private void stopAudio() {
+        audioPlaybackRunning = false;
+        audioQueue.clear();
+        try { if (audioPlaybackThread != null) audioPlaybackThread.interrupt(); } catch (Exception ignored) {}
+        audioPlaybackThread = null;
         try { if (recorder != null) { recorder.stop(); recorder.release(); recorder = null; } } catch (Exception ignored) {}
-        try { if (player != null) { player.stop(); player.release(); player = null; } } catch (Exception ignored) {}
+        synchronized (playerLock) {
+            try { if (player != null) { player.stop(); player.release(); player = null; } } catch (Exception ignored) {}
+        }
     }
 }

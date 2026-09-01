@@ -114,6 +114,9 @@ public class MainActivity extends Activity {
 
         // Auto request camera permission on launch if needed
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(new String[]{android.Manifest.permission.RECORD_AUDIO}, 301);
+            }
             if (checkSelfPermission(android.Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
                 requestPermissions(new String[]{android.Manifest.permission.CAMERA}, 101);
             }

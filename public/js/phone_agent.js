@@ -16,8 +16,6 @@
   let phoneScreenPlaceholder = null;
   let phoneTapIndicator = null;
   let phoneActionLog = null;
-  let phoneAiCmdInput = null;
-  let phoneAiCmdBtn = null;
 
   let currentResolution = { width: 1440, height: 3120 };
 
@@ -37,8 +35,6 @@
     phoneScreenPlaceholder = document.getElementById("phone-screen-placeholder");
     phoneTapIndicator = document.getElementById("phone-tap-indicator");
     phoneActionLog = document.getElementById("phone-action-log");
-    phoneAiCmdInput = document.getElementById("phone-ai-cmd-input");
-    phoneAiCmdBtn = document.getElementById("phone-ai-cmd-btn");
 
     if (phoneScreenImg) {
       phoneScreenImg.onload = () => {
@@ -248,39 +244,6 @@
       sendAction({ action: "SWIPE", x1: midX, y1: startY, x2: midX, y2: endY, durationMs: 250 });
     });
 
-    if (phoneAiCmdBtn && phoneAiCmdInput) {
-      phoneAiCmdBtn.addEventListener("click", async () => {
-        const cmdText = phoneAiCmdInput.value.trim();
-        if (!cmdText) return alert("請輸入指令");
-
-        phoneAiCmdBtn.disabled = true;
-        phoneAiCmdBtn.innerHTML = "<span>🧠 AI 視覺分析中...</span>";
-        if (phoneActionLog) phoneActionLog.textContent = `🤖 正在分析螢幕並尋找: "${cmdText}"...`;
-
-        try {
-          const snapRes = await fetch("/api/phone/screenshot", { method: "POST" });
-          const snapData = await snapRes.json();
-
-          if (!snapData || !snapData.success || !snapData.base64) {
-            throw new Error(snapData?.error || "截圖失敗");
-          }
-
-          const promptInput = document.getElementById("prompt-input");
-          if (promptInput) {
-            promptInput.value = `【手機操控指令】請分析附圖中的手機螢幕，並執行動作：「${cmdText}」。解析度為 ${snapData.resolution?.width}x${snapData.resolution?.height}。如果找到目標，請指出 (X, Y) 座標並幫我執行點擊。`;
-            if (typeof window.sendMessage === "function") {
-              togglePhoneModal(false);
-              window.sendMessage();
-            }
-          }
-        } catch (err) {
-          if (phoneActionLog) phoneActionLog.textContent = `❌ AI 執行錯誤: ${err.message}`;
-        } finally {
-          phoneAiCmdBtn.disabled = false;
-          phoneAiCmdBtn.innerHTML = "<span>🚀 執行</span>";
-        }
-      });
-    }
   }
 
   if (document.readyState === "loading") {

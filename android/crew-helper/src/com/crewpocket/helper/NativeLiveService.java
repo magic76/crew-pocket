@@ -5,6 +5,7 @@ import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Context;
+import android.content.pm.PackageManager;
 import android.content.Intent;
 import android.os.Build;
 import android.os.IBinder;
@@ -94,6 +95,11 @@ public class NativeLiveService extends Service {
             return START_NOT_STICKY;
         }
         if (active) return START_NOT_STICKY;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M
+                && checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            end("未取得麥克風權限，請先允許麥克風再開始通話");
+            return START_NOT_STICKY;
+        }
         startForeground(NOTIFICATION_ID, buildNotification("正在連線 Gemini Live"));
         String key = getSharedPreferences("crew_native_live", MODE_PRIVATE).getString("gemini_live_key", "");
         // One-time migration from the original test Activity preference file.
@@ -149,6 +155,7 @@ public class NativeLiveService extends Service {
         }
         visualHandler.removeCallbacks(visualFrameSender);
         if (sharingCamera || sharingScreen) visualHandler.post(visualFrameSender);
+        if (sharingScreen) updateStatus("螢幕分享已啟用，等待 Gemini 連線後傳送最新畫面", true);
         return camera ? sharingCamera : sharingScreen;
     }
 
