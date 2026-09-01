@@ -580,9 +580,11 @@
           </span>
         </button>
 
-        <!-- ⌃ Expand/collapse the detailed Live card without hiding the call. -->
-        <button id="live-dock-expand-btn" type="button" class="flex-1 max-w-[56px] h-12 rounded-2xl bg-indigo-950/80 hover:bg-indigo-900 active:scale-95 border border-indigo-500/40 text-indigo-300 flex items-center justify-center transition shadow-lg shrink-0" title="展開通話資訊">
-          <span id="live-dock-expand-icon" class="text-lg leading-none">⌃</span>
+        <!-- 🎛️ Expand/collapse the detailed Live card without hiding the call. -->
+        <button id="live-dock-expand-btn" type="button" class="flex-1 max-w-[56px] h-12 rounded-2xl bg-indigo-950/80 hover:bg-indigo-900 active:scale-95 border border-indigo-500/40 text-indigo-300 flex items-center justify-center transition shadow-lg shrink-0" title="展開 / 收合通話控制面板">
+          <svg id="live-dock-expand-icon" class="w-5 h-5 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/>
+          </svg>
         </button>
 
         <!-- 🛑 Right: Hangup Button -->
@@ -1284,7 +1286,7 @@
   <script src="/js/storage.js?v=0e143c8da2fc"></script>
   <script src="/js/chat.js?v=a5062d73e2bf"></script>
   <script src="/js/tasks.js?v=2e5e3f5e9e77"></script>
-  <script src="/js/live.js?v=817f11c0699b"></script>
+  <script src="/js/live.js?v=8567ec5b3cb1"></script>
   <script src="/js/phone_agent.js?v=6346f686519a"></script>
   <script src="/js/app.js?v=581e1ccb2265"></script>
 </body>

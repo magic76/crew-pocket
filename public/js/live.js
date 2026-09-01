@@ -1092,7 +1092,7 @@
             <div class="rounded-lg border border-slate-800 bg-black/35 px-2 py-1.5"><span class="text-slate-500">最近異常：</span><span id="live-health-issue" class="text-slate-400">尚無</span></div>
           </div>
 
-          <div id="live-card-tuning-drawer" class="hidden p-2.5 space-y-2 transition-all">
+          <div id="live-card-tuning-drawer" class="hidden p-2.5 space-y-2">
           <div class="rounded-xl border border-slate-800 bg-slate-900/70 px-2.5 py-2" title="調整 Android 系統媒體音量">
             <div class="mb-1 flex items-center justify-between text-[10px]"><span class="text-slate-300">🔈 媒體音量</span><span id="live-card-volume-value" class="font-mono text-teal-300">${selectedVolume}%</span></div>
             <input id="live-card-volume-slider" type="range" min="0" max="100" step="1" value="${selectedVolume}" class="w-full h-8 accent-teal-400 cursor-pointer" aria-label="媒體音量">
@@ -1106,7 +1106,7 @@
                 <span id="live-meter-rms-val" class="text-teal-300">0.000</span>
               </div>
               <div class="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
-                <div id="live-meter-rms-bar" class="bg-teal-400 h-full w-0 transition-all duration-75"></div>
+                <div id="live-meter-rms-bar" class="bg-teal-400 h-full w-0 will-change-transform"></div>
               </div>
             </div>
             <div>
@@ -1115,7 +1115,7 @@
                 <span id="live-meter-sim-val" class="text-indigo-300">--</span>
               </div>
               <div class="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
-                <div id="live-meter-sim-bar" class="bg-indigo-400 h-full w-0 transition-all duration-75"></div>
+                <div id="live-meter-sim-bar" class="bg-indigo-400 h-full w-0 will-change-transform"></div>
               </div>
             </div>
           </div>
@@ -1944,8 +1944,14 @@
     const cardCameraState = document.getElementById('live-card-camera-state');
     const cardScreenState = document.getElementById('live-card-screen-state');
 
-    if (dockExpandBtn) dockExpandBtn.title = liveCardExpanded ? '收合通話資訊' : '展開通話資訊';
-    if (dockExpandIcon) dockExpandIcon.textContent = liveCardExpanded ? '⌄' : '⌃';
+    if (dockExpandBtn) {
+      dockExpandBtn.title = liveCardExpanded ? '收合通話面板' : '展開通話面板';
+      if (liveCardExpanded) {
+        dockExpandBtn.className = 'flex-1 max-w-[56px] h-12 rounded-2xl bg-teal-500/20 hover:bg-teal-500/30 active:scale-95 border border-teal-400/60 text-teal-200 flex items-center justify-center transition shadow-lg shrink-0';
+      } else {
+        dockExpandBtn.className = 'flex-1 max-w-[56px] h-12 rounded-2xl bg-indigo-950/80 hover:bg-indigo-900 active:scale-95 border border-indigo-500/40 text-indigo-300 flex items-center justify-center transition shadow-lg shrink-0';
+      }
+    }
     if (cardCameraState) cardCameraState.classList.toggle('hidden', !isCameraOn);
     if (cardScreenState) cardScreenState.classList.toggle('hidden', !isScreenSharing);
 
@@ -3648,7 +3654,7 @@
                 if (simBar) {
                   const pct = Math.min(100, Math.max(0, Math.round(((curSim - 0.2) / 0.7) * 100)));
                   simBar.style.width = `${pct}%`;
-                  simBar.className = curSim >= TUNING_CONFIG.SIMILARITY_THRESHOLD ? 'bg-teal-400 h-full transition-all duration-75' : 'bg-rose-500 h-full transition-all duration-75';
+                  simBar.className = curSim >= TUNING_CONFIG.SIMILARITY_THRESHOLD ? 'bg-teal-400 h-full will-change-transform' : 'bg-rose-500 h-full will-change-transform';
                 }
               }
 
@@ -3664,11 +3670,15 @@
           });
         }
 
-        if (tuningDrawer && !tuningDrawer.classList.contains('hidden')) {
-          const rmsVal = document.getElementById('live-meter-rms-val');
-          const rmsBar = document.getElementById('live-meter-rms-bar');
-          if (rmsVal) rmsVal.textContent = rms.toFixed(3);
-          if (rmsBar) rmsBar.style.width = `${Math.min(100, Math.round((rms / 0.08) * 100))}%`;
+        if (tuningDrawer && !tuningDrawer.classList.contains('hidden') && (!window._lastMeterUiTime || now - window._lastMeterUiTime > 66)) {
+          window._lastMeterUiTime = now;
+          const currentRms = rms;
+          requestAnimationFrame(() => {
+            const rmsVal = document.getElementById('live-meter-rms-val');
+            const rmsBar = document.getElementById('live-meter-rms-bar');
+            if (rmsVal) rmsVal.textContent = currentRms.toFixed(3);
+            if (rmsBar) rmsBar.style.width = `${Math.min(100, Math.round((currentRms / 0.08) * 100))}%`;
+          });
         }
 
         // Active user speech tracking
