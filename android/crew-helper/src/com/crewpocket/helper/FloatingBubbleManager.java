@@ -869,38 +869,65 @@ public class FloatingBubbleManager {
 
                     LinearLayout card = new LinearLayout(context);
                     card.setOrientation(LinearLayout.VERTICAL);
-                    card.setPadding(dp(16), dp(7), dp(16), dp(16));
+                    card.setPadding(dp(16), dp(12), dp(16), dp(16));
 
                     GradientDrawable cardBg = new GradientDrawable();
-                    cardBg.setColor(Color.parseColor("#0f172a"));
-                    cardBg.setCornerRadius(dp(12));
-                    cardBg.setStroke(2, Color.parseColor("#38bdf8"));
+                    cardBg.setColor(Color.parseColor("#F50F172A")); // Luxury Slate 900
+                    cardBg.setCornerRadius(dp(20));
+                    cardBg.setStroke(dp(1.5f), Color.parseColor("#33818CF8")); // Indigo 400 @ 20%
                     card.setBackground(cardBg);
+                    card.setElevation(dp(20));
 
+                    // Header Row
                     LinearLayout header = new LinearLayout(context);
                     header.setOrientation(LinearLayout.HORIZONTAL);
                     header.setGravity(Gravity.CENTER_VERTICAL);
+                    header.setPadding(dp(2), dp(2), dp(2), dp(6));
 
                     TextView title = new TextView(context);
-                    title.setText("📱 Crew Pocket");
-                    title.setTextSize(15);
-                    title.setTextColor(Color.parseColor("#38bdf8"));
-                    LinearLayout.LayoutParams titleLp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
-                    header.addView(title, titleLp);
+                    title.setText("🤖 Crew Pocket");
+                    title.setTextSize(14);
+                    title.setTextColor(Color.WHITE);
+                    title.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+                    header.addView(title);
+
+                    TextView badge = new TextView(context);
+                    badge.setText("隨身指令");
+                    badge.setTextSize(9);
+                    badge.setTextColor(Color.parseColor("#5EEAD4")); // Teal 300
+                    badge.setTypeface(android.graphics.Typeface.MONOSPACE);
+                    GradientDrawable badgeBg = new GradientDrawable();
+                    badgeBg.setColor(Color.parseColor("#2614B8A6"));
+                    badgeBg.setCornerRadius(dp(6));
+                    badgeBg.setStroke(dp(1), Color.parseColor("#4D14B8A6"));
+                    badge.setBackground(badgeBg);
+                    badge.setPadding(dp(6), dp(2), dp(6), dp(2));
+                    LinearLayout.LayoutParams badgeLp = new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+                    badgeLp.setMargins(dp(8), 0, 0, 0);
+                    header.addView(badge, badgeLp);
+
+                    View spacer = new View(context);
+                    header.addView(spacer, new LinearLayout.LayoutParams(0, 1, 1f));
 
                     TextView closeBtn = new TextView(context);
-                    closeBtn.setText("×");
-                    closeBtn.setTextSize(26);
-                    closeBtn.setTextColor(Color.parseColor("#94a3b8"));
-                    closeBtn.setPadding(16, 8, 16, 8);
+                    closeBtn.setText("✕");
+                    closeBtn.setTextSize(14);
+                    closeBtn.setTextColor(Color.parseColor("#94A3B8"));
+                    closeBtn.setGravity(Gravity.CENTER);
+                    GradientDrawable closeBg = new GradientDrawable();
+                    closeBg.setColor(Color.parseColor("#1E293B"));
+                    closeBg.setCornerRadius(dp(12));
+                    closeBtn.setBackground(closeBg);
                     closeBtn.setOnClickListener(new View.OnClickListener() {
                         @Override
                         public void onClick(View v) {
                             hideDialog();
                         }
                     });
-                    header.addView(closeBtn);
-                    header.setPadding(dp(4), dp(2), dp(2), dp(4));
+                    LinearLayout.LayoutParams closeLp = new LinearLayout.LayoutParams(dp(26), dp(26));
+                    header.addView(closeBtn, closeLp);
+
                     header.setOnTouchListener(new View.OnTouchListener() {
                         private int startX, startY;
                         private float touchX, touchY;
@@ -926,48 +953,50 @@ public class FloatingBubbleManager {
 
                     dialogStatusText = new TextView(context);
                     dialogStatusText.setText(friendlyState(currentState));
-                    dialogStatusText.setTextSize(11);
-                    dialogStatusText.setTextColor(Color.parseColor("#94a3b8"));
-                    dialogStatusText.setPadding(dp(2), dp(6), dp(2), 0);
+                    dialogStatusText.setTextSize(10);
+                    dialogStatusText.setTextColor(Color.parseColor("#94A3B8"));
+                    dialogStatusText.setTypeface(android.graphics.Typeface.MONOSPACE);
+                    dialogStatusText.setPadding(dp(4), dp(2), dp(4), 0);
                     card.addView(dialogStatusText);
 
                     final EditText input = new EditText(context);
                     input.setHint("輸入你想給 Crew Pocket AI 的指令...");
-                    input.setHintTextColor(Color.parseColor("#64748b"));
+                    input.setHintTextColor(Color.parseColor("#64748B"));
                     input.setTextColor(Color.WHITE);
-                    input.setTextSize(14);
+                    input.setTextSize(13);
                     input.setMinLines(2);
-                    input.setMaxLines(2);
-                    input.setLines(2);
+                    input.setMaxLines(3);
                     input.setGravity(Gravity.TOP | Gravity.START);
-                    input.setPadding(dp(14), dp(10), dp(14), dp(10));
+                    input.setPadding(dp(12), dp(10), dp(12), dp(10));
 
                     GradientDrawable inputBg = new GradientDrawable();
-                    inputBg.setColor(Color.parseColor("#020617"));
-                    inputBg.setCornerRadius(16f);
-                    inputBg.setStroke(1, Color.parseColor("#334155"));
+                    inputBg.setColor(Color.parseColor("#020617")); // Slate 950
+                    inputBg.setCornerRadius(dp(14));
+                    inputBg.setStroke(dp(1), Color.parseColor("#334155")); // Slate 700
                     input.setBackground(inputBg);
 
                     LinearLayout.LayoutParams inputLp = new LinearLayout.LayoutParams(
                         LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
                     );
-                    inputLp.setMargins(0, dp(10), 0, dp(10));
+                    inputLp.setMargins(0, dp(8), 0, dp(10));
                     card.addView(input, inputLp);
 
                     LinearLayout actions = new LinearLayout(context);
                     actions.setOrientation(LinearLayout.HORIZONTAL);
-                    actions.setGravity(Gravity.END);
+                    actions.setGravity(Gravity.CENTER_VERTICAL);
 
                     Button btnSnap = new Button(context);
                     btnSnap.setText("📸 截圖");
-                    btnSnap.setTextColor(Color.parseColor("#38bdf8"));
-                    btnSnap.setTextSize(12);
+                    btnSnap.setTextColor(Color.parseColor("#38BDF8"));
+                    btnSnap.setTextSize(11);
+                    btnSnap.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
                     btnSnap.setAllCaps(false);
-                    btnSnap.setMinHeight(dp(40));
-                    btnSnap.setPadding(dp(4), 0, dp(4), 0);
+                    btnSnap.setMinHeight(dp(38));
+                    btnSnap.setPadding(dp(6), 0, dp(6), 0);
                     GradientDrawable snapBg = new GradientDrawable();
-                    snapBg.setColor(Color.parseColor("#1e293b"));
-                    snapBg.setCornerRadius(dp(8));
+                    snapBg.setColor(Color.parseColor("#1E293B"));
+                    snapBg.setCornerRadius(dp(10));
+                    snapBg.setStroke(dp(1), Color.parseColor("#334155"));
                     btnSnap.setBackground(snapBg);
                     btnSnap.setOnClickListener(new View.OnClickListener() {
                         @Override
@@ -990,19 +1019,24 @@ public class FloatingBubbleManager {
                         }
                     });
                     LinearLayout.LayoutParams snapLp = new LinearLayout.LayoutParams(
-                        0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f
+                        0, dp(38), 1f
                     );
-                    snapLp.setMargins(0, 0, dp(8), 0);
+                    snapLp.setMargins(0, 0, dp(6), 0);
+                    actions.addView(btnSnap, snapLp);
+
                     Button btnSend = new Button(context);
-                    btnSend.setText("傳送並執行");
-                    btnSend.setTextColor(Color.parseColor("#020617"));
-                    btnSend.setTextSize(13);
+                    btnSend.setText("💬 傳送執行");
+                    btnSend.setTextColor(Color.WHITE);
+                    btnSend.setTextSize(12);
+                    btnSend.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
                     btnSend.setAllCaps(false);
-                    btnSend.setMinHeight(dp(40));
-                    btnSend.setPadding(dp(4), 0, dp(4), 0);
-                    GradientDrawable sendBg = new GradientDrawable();
-                    sendBg.setColor(Color.parseColor("#38bdf8"));
-                    sendBg.setCornerRadius(dp(8));
+                    btnSend.setMinHeight(dp(38));
+                    btnSend.setPadding(dp(6), 0, dp(6), 0);
+                    GradientDrawable sendBg = new GradientDrawable(
+                        GradientDrawable.Orientation.LEFT_RIGHT,
+                        new int[]{ Color.parseColor("#14B8A6"), Color.parseColor("#4F46E5") }
+                    );
+                    sendBg.setCornerRadius(dp(10));
                     btnSend.setBackground(sendBg);
                     btnSend.setOnClickListener(new View.OnClickListener() {
                         @Override
@@ -1028,17 +1062,22 @@ public class FloatingBubbleManager {
                             }
                         }
                     });
-                    LinearLayout.LayoutParams sendLp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+                    LinearLayout.LayoutParams sendLp = new LinearLayout.LayoutParams(0, dp(38), 1.4f);
+                    sendLp.setMargins(0, 0, dp(6), 0);
+                    actions.addView(btnSend, sendLp);
+
                     Button btnOpen = new Button(context);
                     btnOpen.setText("🌐 開啟");
-                    btnOpen.setTextColor(Color.parseColor("#a5b4fc"));
-                    btnOpen.setTextSize(12);
+                    btnOpen.setTextColor(Color.parseColor("#A5B4FC"));
+                    btnOpen.setTextSize(11);
+                    btnOpen.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
                     btnOpen.setAllCaps(false);
-                    btnOpen.setMinHeight(dp(40));
-                    btnOpen.setPadding(dp(4), 0, dp(4), 0);
+                    btnOpen.setMinHeight(dp(38));
+                    btnOpen.setPadding(dp(6), 0, dp(6), 0);
                     GradientDrawable openBg = new GradientDrawable();
-                    openBg.setColor(Color.parseColor("#1e1b4b"));
-                    openBg.setCornerRadius(dp(8));
+                    openBg.setColor(Color.parseColor("#1E293B"));
+                    openBg.setCornerRadius(dp(10));
+                    openBg.setStroke(dp(1), Color.parseColor("#334155"));
                     btnOpen.setBackground(openBg);
                     btnOpen.setOnClickListener(new View.OnClickListener() {
                         @Override public void onClick(View v) {
@@ -1048,22 +1087,24 @@ public class FloatingBubbleManager {
                         }
                     });
                     LinearLayout.LayoutParams openLp = new LinearLayout.LayoutParams(
-                        0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f
+                        0, dp(38), 0.9f
                     );
-                    openLp.setMargins(0, 0, dp(8), 0);
                     actions.addView(btnOpen, openLp);
-                    actions.addView(btnSnap, snapLp);
-                    actions.addView(btnSend, sendLp);
+
+                    card.addView(actions);
+
                     dialogStopButton = new Button(context);
-                    dialogStopButton.setText("停止生成");
-                    dialogStopButton.setTextColor(Color.parseColor("#fecaca"));
-                    dialogStopButton.setTextSize(12);
+                    dialogStopButton.setText("🛑 停止生成");
+                    dialogStopButton.setTextColor(Color.parseColor("#FECACA"));
+                    dialogStopButton.setTextSize(11);
+                    dialogStopButton.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
                     dialogStopButton.setAllCaps(false);
-                    dialogStopButton.setMinHeight(dp(40));
+                    dialogStopButton.setMinHeight(dp(36));
                     dialogStopButton.setPadding(dp(4), 0, dp(4), 0);
                     GradientDrawable stopBg = new GradientDrawable();
-                    stopBg.setColor(Color.parseColor("#451a1a"));
-                    stopBg.setCornerRadius(dp(8));
+                    stopBg.setColor(Color.parseColor("#450A0A"));
+                    stopBg.setCornerRadius(dp(10));
+                    stopBg.setStroke(dp(1), Color.parseColor("#991B1B"));
                     dialogStopButton.setBackground(stopBg);
                     dialogStopButton.setVisibility(("THINKING".equals(currentState) || "TOOL".equals(currentState)) ? View.VISIBLE : View.GONE);
                     dialogStopButton.setOnClickListener(new View.OnClickListener() {
@@ -1073,11 +1114,10 @@ public class FloatingBubbleManager {
                         }
                     });
                     LinearLayout.LayoutParams stopLp = new LinearLayout.LayoutParams(
-                        LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+                        LinearLayout.LayoutParams.MATCH_PARENT, dp(36)
                     );
                     stopLp.setMargins(0, dp(8), 0, 0);
 
-                    card.addView(actions);
                     card.addView(dialogStopButton, stopLp);
 
                     dialogView = card;
@@ -1415,8 +1455,7 @@ public class FloatingBubbleManager {
                 canvas.drawOval(ringBounds, ringPaint);
             }
 
-            // 3. The Bubble is always a microphone: same circular Crew Pocket
-            // language, with green idle, amber speaking, and red active states.
+            // 3. Perfectly Centered Microphone Icon
             Paint mic = new Paint(Paint.ANTI_ALIAS_FLAG);
             if (nativeVoiceState == 2) {
                 mic.setColor(Color.parseColor("#fef3c7")); // amber light
@@ -1425,13 +1464,35 @@ public class FloatingBubbleManager {
             } else {
                 mic.setColor(Color.parseColor("#d1fae5")); // green light
             }
+
+            // Total icon height: 1.08 * radius (symmetric from -0.54*R to +0.54*R)
+            float halfH = radius * 0.54f;
+            float capW = radius * 0.36f;
+            float capH = radius * 0.58f;
+            float capTop = cy - halfH;
+            float capBottom = capTop + capH;
+
+            // 3a. Capsule Body (Solid Fill)
             mic.setStyle(Paint.Style.FILL);
-            float bodyW = radius * .34f, bodyH = radius * .58f;
-            canvas.drawRoundRect(cx - bodyW / 2f, cy - bodyH * .58f, cx + bodyW / 2f, cy + bodyH * .42f, bodyW / 2f, bodyW / 2f, mic);
-            mic.setStyle(Paint.Style.STROKE); mic.setStrokeWidth(5f); mic.setStrokeCap(Paint.Cap.ROUND);
-            canvas.drawArc(cx - radius * .38f, cy - bodyH * .15f, cx + radius * .38f, cy + radius * .48f, 0, 180, false, mic);
-            canvas.drawLine(cx, cy + radius * .43f, cx, cy + radius * .64f, mic);
-            canvas.drawLine(cx - radius * .22f, cy + radius * .64f, cx + radius * .22f, cy + radius * .64f, mic);
+            canvas.drawRoundRect(cx - capW / 2f, capTop, cx + capW / 2f, capBottom, capW / 2f, capW / 2f, mic);
+
+            // 3b. Cradle U-Shape Arc (Stroke)
+            mic.setStyle(Paint.Style.STROKE);
+            mic.setStrokeWidth(4.5f);
+            mic.setStrokeCap(Paint.Cap.ROUND);
+            float cradleRadius = radius * 0.35f;
+            float cradleTop = capTop + capH * 0.38f;
+            float cradleBottom = capBottom + radius * 0.16f;
+            RectF cradleRect = new RectF(cx - cradleRadius, cradleTop, cx + cradleRadius, cradleBottom);
+            canvas.drawArc(cradleRect, 0, 180, false, mic);
+
+            // 3c. Stem (Vertical Line)
+            float stemBottom = cy + halfH;
+            canvas.drawLine(cx, cradleBottom, cx, stemBottom, mic);
+
+            // 3d. Base Foot (Horizontal Line)
+            float footSpan = radius * 0.22f;
+            canvas.drawLine(cx - footSpan, stemBottom, cx + footSpan, stemBottom, mic);
         }
     }
 }
