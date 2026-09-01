@@ -437,16 +437,43 @@ final class NativeGeminiLiveClient extends WebSocketListener {
 
         JSONObject before = new JSONObject();
         try { before = helperGet("/nodes"); } catch (Exception ignored) {}
-        JSONObject reply = helperPost("/swipe", new JSONObject().put("x1", x1).put("y1", y1).put("x2", x2).put("y2", y2).put("duration", duration));
-        Thread.sleep(650);
+        JSONObject reply = new JSONObject();
+        String execution = "gesture";
+        // Vertical scrolling can use the foreground app's own scroll action.
+        // It is more reliable than a fixed drag for lists and Settings pages.
+        if ("up".equals(direction) || "down".equals(direction)) {
+            reply = helperPost("/scroll", new JSONObject().put("direction", "up".equals(direction) ? "forward" : "backward"));
+            execution = "ui_node";
+            Thread.sleep(500);
+        }
         JSONObject after = new JSONObject();
         try { after = helperGet("/nodes"); } catch (Exception ignored) {}
+        boolean changed = !nodeSignature(before).equals(nodeSignature(after));
+        // Canvas, maps and some custom views expose no scrollable node.  If a
+        // semantic action was unavailable or made no visible change, fall back
+        // once to the existing proportional gesture.
+        if (!reply.optBoolean("success") || !changed) {
+            reply = helperPost("/swipe", new JSONObject().put("x1", x1).put("y1", y1).put("x2", x2).put("y2", y2).put("duration", duration));
+            execution = "gesture_fallback";
+            Thread.sleep(800);
+            try { after = helperGet("/nodes"); } catch (Exception ignored) {}
+            changed = !nodeSignature(before).equals(nodeSignature(after));
+        }
         reply.put("direction", direction);
         reply.put("distance", distance);
         reply.put("screenSize", width + "x" + height);
-        boolean changed = !nodeSignature(before).equals(nodeSignature(after));
+        reply.put("execution", execution);
+        // A list can keep exactly the same labels after scrolling; send the
+        // post-gesture frame so Gemini sees the actual viewport, not just text.
+        JSONObject visual = new JSONObject();
+        try { visual = captureAndSendScreen(); } catch (Exception error) { visual.put("success", false).put("error", error.getMessage()); }
         reply.put("screenChanged", changed);
-        reply.put("verification", changed ? "UI 節點已變更，請分析新畫面" : "UI 節點未變更，請改用另一方向或尋找按鈕");
+        reply.put("screenFrameSent", visual.optBoolean("success"));
+        reply.put("verification", changed
+                ? "UI 節點位置或內容已變更；最新螢幕影格已送達，請分析新畫面"
+                : (visual.optBoolean("success")
+                    ? "文字節點未變，但最新螢幕影格已送達；請依畫面判斷是否已滑動"
+                    : "UI 節點與最新螢幕影格皆無法確認變化，請改用另一方向或尋找按鈕"));
         return reply;
     }
 
@@ -457,8 +484,14 @@ final class NativeGeminiLiveClient extends WebSocketListener {
         StringBuilder signature = new StringBuilder();
         for (int i = 0; i < nodes.length(); i++) {
             JSONObject node = nodes.optJSONObject(i);
-            if (node != null) signature.append(node.optString("text")).append('|')
-                    .append(node.optString("desc")).append('|').append(node.optString("className")).append(';');
+            if (node != null) {
+                signature.append(node.optString("text")).append('|')
+                        .append(node.optString("desc")).append('|').append(node.optString("className")).append('|');
+                JSONObject bounds = node.optJSONObject("bounds");
+                if (bounds != null) signature.append(bounds.optInt("left")).append(',').append(bounds.optInt("top"))
+                        .append(',').append(bounds.optInt("right")).append(',').append(bounds.optInt("bottom"));
+                signature.append(';');
+            }
         }
         return Integer.toHexString(signature.toString().hashCode());
     }
@@ -470,9 +503,15 @@ final class NativeGeminiLiveClient extends WebSocketListener {
         String coordinateSpace = args.optString("coordinate_space", "").trim().toLowerCase();
         boolean resolvedFromNode = false;
 
-        // 🎯 1. If text label is provided, find exact element coordinates from Accessibility UI Node tree
+        // 🎯 1. Let Android activate the matching Accessibility node directly.
+        // This survives layout shifts better than tapping a calculated center.
         if (!label.isEmpty()) {
             try {
+                JSONObject nodeClick = helperPost("/click", new JSONObject().put("label", label));
+                if (nodeClick.optBoolean("success")) {
+                    nodeClick.put("resolvedFrom", "ui_node_action");
+                    return nodeClick;
+                }
                 JSONObject nodesResp = helperGet("/nodes");
                 if (nodesResp.optBoolean("success")) {
                     JSONArray nodes = nodesResp.optJSONArray("nodes");

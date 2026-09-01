@@ -493,6 +493,31 @@ public class CrewAccessibilityService extends AccessibilityService {
                     }
                 });
                 responseJson = "{\"success\":true,\"action\":\"TAP\",\"x\":" + x + ",\"y\":" + y + "}";
+            } else if (path.startsWith("/click")) {
+                final String label = getJsonString(body, "label");
+                final boolean[] clickSuccess = new boolean[]{false};
+                final Object clickLock = new Object();
+                mainHandler.post(new Runnable() {
+                    @Override public void run() {
+                        try { clickSuccess[0] = performClickByLabel(label); }
+                        finally { synchronized (clickLock) { clickLock.notify(); } }
+                    }
+                });
+                synchronized (clickLock) { try { clickLock.wait(1500); } catch (Exception ignored) {} }
+                responseJson = "{\"success\":" + clickSuccess[0] + ",\"action\":\"NODE_CLICK\",\"label\":\"" + jsonEscape(label) + "\"}";
+            } else if (path.startsWith("/scroll")) {
+                String direction = getJsonString(body, "direction");
+                final boolean forward = !"backward".equalsIgnoreCase(direction);
+                final boolean[] scrollSuccess = new boolean[]{false};
+                final Object scrollLock = new Object();
+                mainHandler.post(new Runnable() {
+                    @Override public void run() {
+                        try { scrollSuccess[0] = performScrollAction(forward); }
+                        finally { synchronized (scrollLock) { scrollLock.notify(); } }
+                    }
+                });
+                synchronized (scrollLock) { try { scrollLock.wait(1500); } catch (Exception ignored) {} }
+                responseJson = "{\"success\":" + scrollSuccess[0] + ",\"action\":\"NODE_SCROLL\",\"direction\":\"" + (forward ? "forward" : "backward") + "\"}";
             } else if (path.startsWith("/swipe")) {
                 float x1 = 0, y1 = 0, x2 = 0, y2 = 0;
                 long duration = 300;
@@ -696,6 +721,60 @@ public class CrewAccessibilityService extends AccessibilityService {
         GestureDescription.Builder builder = new GestureDescription.Builder();
         builder.addStroke(new GestureDescription.StrokeDescription(path, 0, 50));
         dispatchGesture(builder.build(), null, null);
+    }
+
+    private boolean performClickByLabel(String label) {
+        if (label == null || label.trim().isEmpty()) return false;
+        AccessibilityNodeInfo root = getRootInActiveWindow();
+        if (root == null) return false;
+        try {
+            AccessibilityNodeInfo target = findMatchingClickableNode(root, label.trim(), true);
+            if (target == null) target = findMatchingClickableNode(root, label.trim(), false);
+            if (target == null) return false;
+            try { return target.performAction(AccessibilityNodeInfo.ACTION_CLICK); }
+            finally { target.recycle(); }
+        } catch (Exception ignored) {
+            return false;
+        } finally {
+            root.recycle();
+        }
+    }
+
+    private AccessibilityNodeInfo findMatchingClickableNode(AccessibilityNodeInfo node, String label, boolean exact) {
+        if (node == null) return null;
+        String query = label.toLowerCase(Locale.ROOT);
+        String text = node.getText() == null ? "" : node.getText().toString().trim();
+        String desc = node.getContentDescription() == null ? "" : node.getContentDescription().toString().trim();
+        boolean matched = exact
+                ? (text.equalsIgnoreCase(label) || desc.equalsIgnoreCase(label))
+                : (text.toLowerCase(Locale.ROOT).contains(query) || desc.toLowerCase(Locale.ROOT).contains(query));
+        if (matched) {
+            AccessibilityNodeInfo clickable = findClickableAncestor(node);
+            if (clickable != null) return clickable;
+        }
+        int count = node.getChildCount();
+        for (int i = 0; i < count; i++) {
+            AccessibilityNodeInfo child = node.getChild(i);
+            if (child == null) continue;
+            try {
+                AccessibilityNodeInfo result = findMatchingClickableNode(child, label, exact);
+                if (result != null) return result;
+            } finally {
+                child.recycle();
+            }
+        }
+        return null;
+    }
+
+    private AccessibilityNodeInfo findClickableAncestor(AccessibilityNodeInfo node) {
+        AccessibilityNodeInfo current = AccessibilityNodeInfo.obtain(node);
+        while (current != null) {
+            if (current.isClickable()) return current;
+            AccessibilityNodeInfo parent = current.getParent();
+            current.recycle();
+            current = parent;
+        }
+        return null;
     }
 
     private boolean performSetText(String text) {

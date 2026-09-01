@@ -96,6 +96,11 @@
   let liveSessionMode = 'operation';
   let liveHealthTimer = null;
   let lastLiveHealthIssue = null;
+  // Lightweight microphone observability: updated from the existing 40ms
+  // AudioWorklet frames only.  It never records or sends extra audio.
+  let latestMicRms = 0;
+  let lastEffectiveMicAt = 0;
+  const EFFECTIVE_MIC_RMS = 0.015;
   const LIVE_PHASE = Object.freeze({
     IDLE: 'idle',
     CONNECTING: 'connecting',
@@ -1079,6 +1084,8 @@
             <div class="grid grid-cols-2 gap-1.5">
               <div class="rounded-lg bg-slate-900/80 border border-slate-800 px-2 py-1.5"><span class="block text-slate-500">WebSocket</span><span id="live-health-connection" class="text-slate-300">未建立</span></div>
               <div class="rounded-lg bg-slate-900/80 border border-slate-800 px-2 py-1.5"><span class="block text-slate-500">麥克風</span><span id="live-health-mic" class="text-slate-300">未開啟</span></div>
+              <div class="rounded-lg bg-slate-900/80 border border-slate-800 px-2 py-1.5"><span class="block text-slate-500">收音音量</span><span id="live-health-mic-level" class="text-slate-300">-- dBFS</span></div>
+              <div class="rounded-lg bg-slate-900/80 border border-slate-800 px-2 py-1.5"><span class="block text-slate-500">有效收音</span><span id="live-health-mic-age" class="text-slate-300">等待說話</span></div>
               <div class="rounded-lg bg-slate-900/80 border border-slate-800 px-2 py-1.5"><span class="block text-slate-500">AI 音訊</span><span id="live-health-playback" class="text-slate-300">等待中</span></div>
               <div class="rounded-lg bg-slate-900/80 border border-slate-800 px-2 py-1.5"><span class="block text-slate-500">聲紋</span><span id="live-health-voiceprint" class="text-slate-300">未啟用</span></div>
             </div>
@@ -1633,6 +1640,17 @@
     element.className = tone;
   }
 
+  function formatMicDbfs(rms) {
+    if (!Number.isFinite(rms) || rms <= 0) return '--';
+    return Math.max(-80, 20 * Math.log10(rms)).toFixed(0);
+  }
+
+  function formatElapsedSeconds(milliseconds) {
+    if (milliseconds < 1000) return `${(milliseconds / 1000).toFixed(1)} 秒前`;
+    if (milliseconds < 60000) return `${Math.floor(milliseconds / 1000)} 秒前`;
+    return `${Math.floor(milliseconds / 60000)} 分前`;
+  }
+
   function updateLiveHealthPanel() {
     const connection = ws && ws.readyState === WebSocket.OPEN && isConnected
       ? (isLiveSetupReady ? '已連線／就緒' : '已連線／設定中')
@@ -1641,6 +1659,13 @@
     const track = micMediaStream?.getAudioTracks?.()[0];
     const mic = !track ? '未開啟' : (!track.enabled || isMuted ? '已靜音' : (track.readyState === 'live' ? '收音中' : '已停止'));
     const micTone = mic === '收音中' ? 'text-emerald-300' : (mic === '已靜音' ? 'text-amber-300' : 'text-rose-300');
+    const micLevel = mic === '收音中' ? `${formatMicDbfs(latestMicRms)} dBFS` : '-- dBFS';
+    const micLevelDbfs = Number(formatMicDbfs(latestMicRms));
+    const micLevelTone = mic !== '收音中' ? 'text-slate-400'
+      : (!Number.isFinite(micLevelDbfs) || micLevelDbfs < -50 ? 'text-amber-300' : 'text-emerald-300');
+    const effectiveMicAge = !lastEffectiveMicAt ? '等待說話' : formatElapsedSeconds(Date.now() - lastEffectiveMicAt);
+    const effectiveMicTone = !lastEffectiveMicAt ? 'text-slate-400'
+      : (Date.now() - lastEffectiveMicAt > 10000 ? 'text-rose-300' : (Date.now() - lastEffectiveMicAt > 5000 ? 'text-amber-300' : 'text-emerald-300'));
     const playback = !audioPlayer ? '等待中' : (audioPlayer.isPlaying ? (isModelTurnComplete ? '播放中／排空中' : '接收並播放') : (isAiResponding ? '接收中' : '已排空'));
     const voiceprint = isVoiceprintActive() ? `門檻 ${TUNING_CONFIG.SIMILARITY_THRESHOLD.toFixed(2)}（本機）` : (userVoiceprintProfile ? '關閉' : '未校準');
     const phaseLabels = { idle: '待命', connecting: '連線中', listening: '聆聽', verifying: '聲紋確認', speaking: 'AI 回應', draining: '音訊排空', cooldown: '切換中' };
@@ -1649,6 +1674,8 @@
       : '尚無';
     setLiveHealthText('live-health-connection', connection, connectionTone);
     setLiveHealthText('live-health-mic', mic, micTone);
+    setLiveHealthText('live-health-mic-level', micLevel, micLevelTone);
+    setLiveHealthText('live-health-mic-age', effectiveMicAge, effectiveMicTone);
     setLiveHealthText('live-health-playback', playback, audioPlayer?.isPlaying ? 'text-indigo-300' : 'text-slate-300');
     setLiveHealthText('live-health-voiceprint', voiceprint, isVoiceprintActive() ? 'text-emerald-300' : 'text-slate-400');
     setLiveHealthText('live-health-phase', phaseLabels[livePhase] || '待命', 'text-slate-400');
@@ -3414,6 +3441,9 @@
       audioPlayer.setMicFrameHandler(({ samples: downsampled, rms }) => {
         if (isMuted || !audioContext) return;
 
+        latestMicRms = rms;
+        if (rms > EFFECTIVE_MIC_RMS) lastEffectiveMicAt = Date.now();
+
         // The microphone can become active before the Gemini setup response.
         // Buffer only when no identity gate is configured. Sending setup-time
         // audio around a saved voiceprint would be an authorization bypass.
@@ -3880,6 +3910,8 @@
     isAiResponding = false;
     isModelTurnComplete = true;
     isMuted = false;
+    latestMicRms = 0;
+    lastEffectiveMicAt = 0;
     hasSentFrameForCurrentTurn = false;
     liveCallStartTs = 0;
     cameraModeStartTs = 0;
