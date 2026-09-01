@@ -995,8 +995,6 @@ async function handleChat(req, res) {
     finalPrompt = `[Uploaded Image: ${image_path}]\n${finalPrompt}`;
   }
 
-  finalPrompt += `\n\n[Voice phone skill teaching]\nThe Native Live voice assistant operates the phone directly with universal tools. You are its teacher only when the user explicitly asks to teach, add, improve, or correct a voice phone skill. Then write one concise, app-agnostic or app-specific operational rule to POST http://127.0.0.1:8000/api/phone/skills as JSON {"name":"...","instruction":"..."}. A useful rule must specify observe → one action → verify, recovery limits, and safety boundaries. Do not become a runtime intermediary for ordinary voice phone operations. Do not save instructions that automate deletion, sending, payment, account changes, passwords, or verification codes.`;
-
   notifyCompanionService('THINKING', prompt || '正在分析圖片');
 
   // Set SSE Headers
