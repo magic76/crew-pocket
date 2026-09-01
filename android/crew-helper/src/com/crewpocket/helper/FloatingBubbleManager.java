@@ -282,8 +282,9 @@ public class FloatingBubbleManager {
                         ? 2038 
                         : WindowManager.LayoutParams.TYPE_PHONE;
 
+                    int size = dp(52);
                     bubbleParams = new WindowManager.LayoutParams(
-                        112, 112,
+                        size, size,
                         overlayType,
                         WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
                         PixelFormat.TRANSLUCENT
@@ -1317,20 +1318,23 @@ public class FloatingBubbleManager {
         return s.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "");
     }
 
-    // 🌊 Custom Fluid Bubble View (Continuous Rotating Water Flow Stream)
+    // 🌊 Custom Fluid Bubble View (Exact Web UI Gradient Replica)
     public static class FluidBubbleView extends View {
         private Paint bgPaint;
         private Paint ringPaint;
-        private Paint textPaint;
+        private Paint glowPaint;
         private RectF ringBounds = new RectF();
-        private SweepGradient waterFlowGradient;
+        private SweepGradient idleSweepGradient;
+        private SweepGradient activeSweepGradient;
+        private SweepGradient speakingSweepGradient;
+        private SweepGradient rainbowSweepGradient;
         private Matrix matrix = new Matrix();
         private float rotationAngle = 0f;
         private boolean isFlowing = false;
         private boolean isSuccessFlash = false;
-        // 0 idle (green microphone), 1 native voice service active (red microphone).
+        // 0 idle, 1 live call active, 2 AI speaking
         private int nativeVoiceState = 0;
-        private ValueAnimator flowAnimator;
+        private ValueAnimator continuousRotator;
 
         public FluidBubbleView(Context context) {
             super(context);
@@ -1339,50 +1343,27 @@ public class FloatingBubbleManager {
 
         private void init() {
             bgPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-            bgPaint.setColor(Color.parseColor("#0f172a"));
             bgPaint.setStyle(Paint.Style.FILL);
 
             ringPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
             ringPaint.setStyle(Paint.Style.STROKE);
-            ringPaint.setStrokeWidth(8f);
+            ringPaint.setStrokeWidth(6.5f);
             ringPaint.setStrokeCap(Paint.Cap.ROUND);
-            ringPaint.setColor(Color.parseColor("#38bdf8"));
 
-            textPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-            textPaint.setTextSize(30f);
-            textPaint.setTextAlign(Paint.Align.CENTER);
-            textPaint.setColor(Color.parseColor("#e0f2fe"));
-            textPaint.setTypeface(android.graphics.Typeface.create("sans-serif", android.graphics.Typeface.BOLD));
+            glowPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+            glowPaint.setStyle(Paint.Style.STROKE);
+            glowPaint.setStrokeWidth(12f);
+
+            startContinuousRotation();
         }
 
-        @Override
-        protected void onSizeChanged(int w, int h, int oldw, int oldh) {
-            super.onSizeChanged(w, h, oldw, oldh);
-            float stroke = ringPaint.getStrokeWidth();
-            ringBounds.set(stroke / 2f + 4f, stroke / 2f + 4f, w - stroke / 2f - 4f, h - stroke / 2f - 4f);
-
-            // Water stream colors: Cyan -> Electric Violet -> Magenta -> Transparent
-            int[] colors = new int[]{
-                Color.parseColor("#38bdf8"),
-                Color.parseColor("#818cf8"),
-                Color.parseColor("#c084fc"),
-                Color.parseColor("#f43f5e"),
-                Color.parseColor("#0038bdf8"),
-                Color.parseColor("#38bdf8")
-            };
-            float[] positions = new float[]{0.0f, 0.25f, 0.5f, 0.75f, 0.9f, 1.0f};
-            waterFlowGradient = new SweepGradient(w / 2f, h / 2f, colors, positions);
-        }
-
-        public void startWaterFlow() {
-            isFlowing = true;
-            isSuccessFlash = false;
-            if (flowAnimator == null) {
-                flowAnimator = ValueAnimator.ofFloat(0f, 360f);
-                flowAnimator.setDuration(1200);
-                flowAnimator.setRepeatCount(ValueAnimator.INFINITE);
-                flowAnimator.setInterpolator(new LinearInterpolator());
-                flowAnimator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
+        private void startContinuousRotation() {
+            if (continuousRotator == null) {
+                continuousRotator = ValueAnimator.ofFloat(0f, 360f);
+                continuousRotator.setDuration(4000); // 4s full rotation (identical to Web CSS)
+                continuousRotator.setRepeatCount(ValueAnimator.INFINITE);
+                continuousRotator.setInterpolator(new LinearInterpolator());
+                continuousRotator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
                     @Override
                     public void onAnimationUpdate(ValueAnimator animation) {
                         rotationAngle = (float) animation.getAnimatedValue();
@@ -1390,16 +1371,87 @@ public class FloatingBubbleManager {
                     }
                 });
             }
-            if (!flowAnimator.isRunning()) {
-                flowAnimator.start();
+            if (!continuousRotator.isRunning()) {
+                continuousRotator.start();
+            }
+        }
+
+        @Override
+        protected void onAttachedToWindow() {
+            super.onAttachedToWindow();
+            startContinuousRotation();
+        }
+
+        @Override
+        protected void onDetachedFromWindow() {
+            super.onDetachedFromWindow();
+            if (continuousRotator != null) {
+                continuousRotator.cancel();
+            }
+        }
+
+        @Override
+        protected void onSizeChanged(int w, int h, int oldw, int oldh) {
+            super.onSizeChanged(w, h, oldw, oldh);
+            float stroke = ringPaint.getStrokeWidth();
+            ringBounds.set(stroke / 2f + 2f, stroke / 2f + 2f, w - stroke / 2f - 2f, h - stroke / 2f - 2f);
+
+            float cx = w / 2f;
+            float cy = h / 2f;
+
+            // 1. Idle Gradient: Teal -> Cyan -> Indigo -> Purple -> Teal (Web #live-voice-btn match)
+            int[] idleColors = new int[]{
+                Color.parseColor("#14B8A6"), // Teal 500
+                Color.parseColor("#06B6D4"), // Cyan 500
+                Color.parseColor("#6366F1"), // Indigo 500
+                Color.parseColor("#A855F7"), // Purple 500
+                Color.parseColor("#14B8A6")  // Teal 500
+            };
+            float[] idlePositions = new float[]{0.0f, 0.25f, 0.60f, 0.85f, 1.0f};
+            idleSweepGradient = new SweepGradient(cx, cy, idleColors, idlePositions);
+
+            // 2. Active Call Gradient: Rose -> Red -> Orange -> Rose
+            int[] activeColors = new int[]{
+                Color.parseColor("#F43F5E"), // Rose 500
+                Color.parseColor("#EF4444"), // Red 500
+                Color.parseColor("#FB923C"), // Orange 400
+                Color.parseColor("#F43F5E")  // Rose 500
+            };
+            activeSweepGradient = new SweepGradient(cx, cy, activeColors, null);
+
+            // 3. Speaking Gradient: Amber -> Gold -> Yellow -> Amber
+            int[] speakColors = new int[]{
+                Color.parseColor("#F59E0B"), // Amber 500
+                Color.parseColor("#FBBF24"), // Amber 400
+                Color.parseColor("#FDE047"), // Yellow 300
+                Color.parseColor("#F59E0B")  // Amber 500
+            };
+            speakingSweepGradient = new SweepGradient(cx, cy, speakColors, null);
+
+            // 4. Fast Rainbow Thinking Stream
+            int[] rainbowColors = new int[]{
+                Color.parseColor("#38BDF8"),
+                Color.parseColor("#818CF8"),
+                Color.parseColor("#C084FC"),
+                Color.parseColor("#F43F5E"),
+                Color.parseColor("#38BDF8")
+            };
+            rainbowSweepGradient = new SweepGradient(cx, cy, rainbowColors, null);
+        }
+
+        public void startWaterFlow() {
+            isFlowing = true;
+            isSuccessFlash = false;
+            if (continuousRotator != null) {
+                continuousRotator.setDuration(1200); // Speed up rotation during tool execution
             }
             invalidate();
         }
 
         public void stopWaterFlow() {
             isFlowing = false;
-            if (flowAnimator != null) {
-                flowAnimator.cancel();
+            if (continuousRotator != null) {
+                continuousRotator.setDuration(4000); // Return to gentle 4s rotation
             }
             isSuccessFlash = true;
             invalidate();
@@ -1415,7 +1467,6 @@ public class FloatingBubbleManager {
 
         public void setNativeVoiceState(int state) {
             nativeVoiceState = state;
-            if (state != 0 && flowAnimator != null) flowAnimator.cancel();
             invalidate();
         }
 
@@ -1424,73 +1475,77 @@ public class FloatingBubbleManager {
             super.onDraw(canvas);
             float cx = getWidth() / 2f;
             float cy = getHeight() / 2f;
-            float radius = (Math.min(getWidth(), getHeight()) / 2f) - 6f;
+            float radius = (Math.min(getWidth(), getHeight()) / 2f) - 4f;
 
-            // 1. Draw Core Dark Sphere
+            // ── 1. Deep Glassmorphism Radial Gradient Background (Slate 900 -> Slate 950) ──
+            int[] coreColors = new int[]{
+                Color.parseColor("#1E293B"), // Slate 800 (Highlight center)
+                Color.parseColor("#0F172A"), // Slate 900
+                Color.parseColor("#020617")  // Slate 950 (Deep edge)
+            };
+            float[] corePositions = new float[]{0.0f, 0.65f, 1.0f};
+            android.graphics.RadialGradient coreGrad = new android.graphics.RadialGradient(
+                cx, cy * 0.9f, radius, coreColors, corePositions, android.graphics.Shader.TileMode.CLAMP
+            );
+            bgPaint.setShader(coreGrad);
             canvas.drawCircle(cx, cy, radius, bgPaint);
 
-            // 2. Draw Stream Ring
+            // ── 2. Rotating Conic/Sweep Gradient Border (Identical to Web) ──
+            matrix.setRotate(rotationAngle, cx, cy);
+            SweepGradient currentGradient;
             if (nativeVoiceState == 2) {
-                // Amber = AI is speaking
-                ringPaint.setShader(null);
-                ringPaint.setStrokeWidth(7f);
-                ringPaint.setColor(Color.parseColor("#f59e0b")); // amber
-                canvas.drawOval(ringBounds, ringPaint);
+                currentGradient = speakingSweepGradient;
             } else if (nativeVoiceState == 1) {
-                // Red = Live call active / listening
-                ringPaint.setShader(null);
-                ringPaint.setStrokeWidth(7f);
-                ringPaint.setColor(Color.parseColor("#ef4444")); // red
-                canvas.drawOval(ringBounds, ringPaint);
-            } else if (isFlowing && waterFlowGradient != null) {
-                matrix.setRotate(rotationAngle, cx, cy);
-                waterFlowGradient.setLocalMatrix(matrix);
-                ringPaint.setShader(waterFlowGradient);
-                ringPaint.setStrokeWidth(9f);
-                canvas.drawOval(ringBounds, ringPaint);
+                currentGradient = activeSweepGradient;
+            } else if (isFlowing) {
+                currentGradient = rainbowSweepGradient;
             } else {
-                ringPaint.setShader(null);
-                ringPaint.setStrokeWidth(6f);
-                ringPaint.setColor(Color.parseColor("#34d399")); // green = idle
+                currentGradient = idleSweepGradient;
+            }
+
+            if (currentGradient != null) {
+                currentGradient.setLocalMatrix(matrix);
+                ringPaint.setShader(currentGradient);
+                ringPaint.setStrokeWidth(5.5f);
                 canvas.drawOval(ringBounds, ringPaint);
             }
 
-            // 3. Perfectly Centered Microphone Icon
+            // ── 3. Perfectly Centered Crisp Microphone (Web Style) ──
             Paint mic = new Paint(Paint.ANTI_ALIAS_FLAG);
             if (nativeVoiceState == 2) {
-                mic.setColor(Color.parseColor("#fef3c7")); // amber light
+                mic.setColor(Color.parseColor("#FEF3C7")); // Warm Gold/Amber White
             } else if (nativeVoiceState == 1) {
-                mic.setColor(Color.parseColor("#fecaca")); // red light
+                mic.setColor(Color.parseColor("#FFFFFF")); // Pure White in Call
             } else {
-                mic.setColor(Color.parseColor("#d1fae5")); // green light
+                mic.setColor(Color.parseColor("#FFFFFF")); // Pure Crisp White in Idle
             }
 
-            // Total icon height: 1.08 * radius (symmetric from -0.54*R to +0.54*R)
-            float halfH = radius * 0.54f;
+            // Geometry mathematically centered around (cx, cy)
+            float halfH = radius * 0.52f;
             float capW = radius * 0.36f;
-            float capH = radius * 0.58f;
+            float capH = radius * 0.56f;
             float capTop = cy - halfH;
             float capBottom = capTop + capH;
 
-            // 3a. Capsule Body (Solid Fill)
+            // 3a. Solid Capsule Body
             mic.setStyle(Paint.Style.FILL);
             canvas.drawRoundRect(cx - capW / 2f, capTop, cx + capW / 2f, capBottom, capW / 2f, capW / 2f, mic);
 
-            // 3b. Cradle U-Shape Arc (Stroke)
+            // 3b. U-Shape Cradle Arc
             mic.setStyle(Paint.Style.STROKE);
             mic.setStrokeWidth(4.5f);
             mic.setStrokeCap(Paint.Cap.ROUND);
-            float cradleRadius = radius * 0.35f;
+            float cradleRadius = radius * 0.34f;
             float cradleTop = capTop + capH * 0.38f;
             float cradleBottom = capBottom + radius * 0.16f;
             RectF cradleRect = new RectF(cx - cradleRadius, cradleTop, cx + cradleRadius, cradleBottom);
             canvas.drawArc(cradleRect, 0, 180, false, mic);
 
-            // 3c. Stem (Vertical Line)
+            // 3c. Vertical Stem
             float stemBottom = cy + halfH;
             canvas.drawLine(cx, cradleBottom, cx, stemBottom, mic);
 
-            // 3d. Base Foot (Horizontal Line)
+            // 3d. Horizontal Base Foot
             float footSpan = radius * 0.22f;
             canvas.drawLine(cx - footSpan, stemBottom, cx + footSpan, stemBottom, mic);
         }
