@@ -143,17 +143,12 @@ agy
 
 規範包含 Termux 執行安全、Mobile-first UI、HTML 沙盒、Chart.js、手機裝置能力，以及子代理協作規則（任務拆分、唯讀優先、避免同檔衝突、主代理統一整合與 commit／push）與工具效率規範（無明確要求不使用外部搜尋、批次讀取、單次修改與集中測試）等專案慣例；請保留在 fork 或部署副本中，避免 AI 修改時忽略 Crew Pocket 的既有行為。
 
-### 步驟 4.2：建置 Android Crew Helper
+### 步驟 4.2：安裝 Android Crew Helper (隨身語音與觸控助理)
 
-Android 浮動泡泡、截圖、相機、媒體音量與無障礙服務的原始碼已整合在 [`android/crew-helper/`](android/crew-helper)。APK 由此目錄的 `build.sh` 建置，完成後會同步更新 `public/CrewHelper.apk`。
+Android 隨身浮動球、相機、螢幕分享與無障礙服務的原始碼已獨立為專屬專案：
+👉 **[Crew Helper 開源倉庫 (magic76/crew-helper)](https://github.com/magic76/crew-helper)**
 
-```bash
-cd ~/agy-web/android/crew-helper
-export CREW_HELPER_KEYSTORE=/path/to/your/local/test.keystore
-bash build.sh
-```
-
-簽署金鑰刻意不放入 Git；請使用與手機已安裝版本相同的 keystore，否則 Android 會拒絕更新安裝。建置產物 `bin/` 與 keystore 已由 `.gitignore` 排除。
+您可以直接前往該倉庫的 [Releases 頁面](https://github.com/magic76/crew-helper/releases/latest) 下載最新已簽署的 APK 進行安裝。
 
 ### 步驟 4.3：Crew Pocket Browser Extension
 
