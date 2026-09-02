@@ -347,11 +347,36 @@ final class NativeGeminiLiveClient extends WebSocketListener {
         }
     }
 
+    private static String mapToSupportedVoice(String name) {
+        if (name == null || name.trim().isEmpty()) return "Kore";
+        String v = name.trim();
+        // Google Gemini Live WebSocket officially supports: "Puck", "Charon", "Kore", "Fenrir", "Aoede"
+        if ("Aoede".equalsIgnoreCase(v) || "Leda".equalsIgnoreCase(v) || "Europa".equalsIgnoreCase(v) ||
+            "Io".equalsIgnoreCase(v) || "Tethys".equalsIgnoreCase(v) || "Ariel".equalsIgnoreCase(v) ||
+            "Sycorax".equalsIgnoreCase(v) || "Titania".equalsIgnoreCase(v) || "Despina".equalsIgnoreCase(v)) {
+            return "Aoede";
+        }
+        if ("Puck".equalsIgnoreCase(v) || "Zephyr".equalsIgnoreCase(v) || "Hyperion".equalsIgnoreCase(v) ||
+            "Enceladus".equalsIgnoreCase(v) || "Mimas".equalsIgnoreCase(v)) {
+            return "Puck";
+        }
+        if ("Charon".equalsIgnoreCase(v) || "Orus".equalsIgnoreCase(v) || "Ganymede".equalsIgnoreCase(v) ||
+            "Iapetus".equalsIgnoreCase(v) || "Aegaeon".equalsIgnoreCase(v) || "Umbriel".equalsIgnoreCase(v) ||
+            "Prospero".equalsIgnoreCase(v)) {
+            return "Charon";
+        }
+        if ("Fenrir".equalsIgnoreCase(v) || "Titan".equalsIgnoreCase(v) || "Caliban".equalsIgnoreCase(v)) {
+            return "Fenrir";
+        }
+        return "Kore"; // Default fallback (Kore, Callisto, Rhea, Dione, Miranda, Galatea)
+    }
+
     private String buildSetup() throws Exception {
         JSONObject root = new JSONObject(); JSONObject setup = new JSONObject();
         setup.put("model", "models/gemini-3.1-flash-live-preview");
         JSONObject generation = new JSONObject(); generation.put("responseModalities", new JSONArray().put("AUDIO"));
-        generation.put("speechConfig", new JSONObject().put("voiceConfig", new JSONObject().put("prebuiltVoiceConfig", new JSONObject().put("voiceName", voiceName.isEmpty() ? "Kore" : voiceName))));
+        String safeVoice = mapToSupportedVoice(voiceName);
+        generation.put("speechConfig", new JSONObject().put("voiceConfig", new JSONObject().put("prebuiltVoiceConfig", new JSONObject().put("voiceName", safeVoice))));
         setup.put("generationConfig", generation);
         // Match the web Live session: its context is continuously compressed,
         // and Gemini can renew the socket before the upstream lifetime expires.
