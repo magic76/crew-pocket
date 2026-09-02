@@ -974,7 +974,12 @@ public class CrewAccessibilityService extends AccessibilityService {
     private void collectClickableNodes(AccessibilityNodeInfo node, List<AccessibilityNodeInfo> list) {
         if (node == null) return;
         if (node.isClickable()) {
-            list.add(AccessibilityNodeInfo.obtain(node));
+            Rect b = new Rect();
+            node.getBoundsInScreen(b);
+            // Ignore giant full-screen containers
+            if (b.width() > 0 && b.height() > 0 && (b.width() < 600 || b.height() < 400)) {
+                list.add(AccessibilityNodeInfo.obtain(node));
+            }
         }
         int count = node.getChildCount();
         for (int i = 0; i < count; i++) {
@@ -986,23 +991,38 @@ public class CrewAccessibilityService extends AccessibilityService {
         }
     }
 
-    private AccessibilityNodeInfo findActiveEditText(AccessibilityNodeInfo node) {
-        if (node == null) return null;
+    private AccessibilityNodeInfo findActiveEditText(AccessibilityNodeInfo root) {
+        if (root == null) return null;
+        List<AccessibilityNodeInfo> editList = new ArrayList<AccessibilityNodeInfo>();
+        collectEditableNodes(root, editList);
+        AccessibilityNodeInfo lowest = null;
+        int maxBottom = -1;
+        for (AccessibilityNodeInfo e : editList) {
+            Rect b = new Rect();
+            e.getBoundsInScreen(b);
+            if (b.bottom > maxBottom && b.height() > 10) {
+                maxBottom = b.bottom;
+                if (lowest != null) lowest.recycle();
+                lowest = AccessibilityNodeInfo.obtain(e);
+            }
+            e.recycle();
+        }
+        return lowest;
+    }
+
+    private void collectEditableNodes(AccessibilityNodeInfo node, List<AccessibilityNodeInfo> list) {
+        if (node == null) return;
         if (node.isEditable() || (node.getClassName() != null && node.getClassName().toString().toLowerCase(Locale.ROOT).contains("edittext"))) {
-            return AccessibilityNodeInfo.obtain(node);
+            list.add(AccessibilityNodeInfo.obtain(node));
         }
         int count = node.getChildCount();
-        for (int i = count - 1; i >= 0; i--) {
+        for (int i = 0; i < count; i++) {
             AccessibilityNodeInfo child = node.getChild(i);
-            if (child == null) continue;
-            try {
-                AccessibilityNodeInfo found = findActiveEditText(child);
-                if (found != null) return found;
-            } finally {
+            if (child != null) {
+                collectEditableNodes(child, list);
                 child.recycle();
             }
         }
-        return null;
     }
 
     private AccessibilityNodeInfo findMatchingNodeById(AccessibilityNodeInfo node, String id) {
