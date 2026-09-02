@@ -1451,6 +1451,7 @@ function updateBtwQueueStatus() {
 // ⚡ While a main response is active, /btw becomes an instant parallel side-question action!
 function updateSendButtonMode() {
   if (!sendBtn || !sendIcon || !stopIcon) return;
+  const srLabel = document.getElementById('send-btn-sr-label');
   sendBtn.classList.remove(
     'bg-indigo-600', 'hover:bg-indigo-500', 'active:bg-indigo-700', 'shadow-indigo-600/30',
     'bg-rose-600', 'hover:bg-rose-500', 'active:bg-rose-700', 'shadow-rose-600/30',
@@ -1463,18 +1464,21 @@ function updateSendButtonMode() {
     stopIcon.classList.add('hidden');
     sendBtn.title = '⚡ 即時並行快問快答 /btw';
     sendBtn.setAttribute('aria-label', '⚡ 即時並行快問快答 /btw');
+    if (srLabel) srLabel.textContent = '即時並行發送';
   } else if (isStreaming) {
     sendBtn.classList.add('bg-rose-600', 'hover:bg-rose-500', 'active:bg-rose-700', 'shadow-rose-600/30');
     sendIcon.classList.add('hidden');
     stopIcon.classList.remove('hidden');
     sendBtn.title = '中斷生成';
     sendBtn.setAttribute('aria-label', '中斷生成');
+    if (srLabel) srLabel.textContent = '中斷生成';
   } else {
     sendBtn.classList.add('bg-indigo-600', 'hover:bg-indigo-500', 'active:bg-indigo-700', 'shadow-indigo-600/30');
     sendIcon.classList.remove('hidden');
     stopIcon.classList.add('hidden');
-    sendBtn.title = '送出';
-    sendBtn.setAttribute('aria-label', '送出');
+    sendBtn.title = '發送訊息';
+    sendBtn.setAttribute('aria-label', '發送訊息');
+    if (srLabel) srLabel.textContent = '發送訊息';
   }
 }
 

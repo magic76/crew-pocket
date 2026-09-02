@@ -525,20 +525,24 @@
             ></textarea>
           </div>
 
-          <!-- Send / Stop Button -->
+          <!-- Send / Stop Button with Semantic Accessibility Support -->
           <button
             id="send-btn"
             type="button"
-            title="送出"
+            title="發送訊息"
+            aria-label="發送訊息"
+            role="button"
+            tabindex="0"
             onclick="handleSendClick(event)"
             class="p-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white shadow-md shadow-indigo-600/30 transition active:scale-95 shrink-0 flex items-center justify-center min-w-[42px] min-h-[42px] cursor-pointer"
           >
+            <span id="send-btn-sr-label" class="sr-only">發送訊息</span>
             <!-- Send Icon -->
-            <svg id="send-icon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg id="send-icon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
             </svg>
             <!-- Stop Icon -->
-            <svg id="stop-icon" class="w-5 h-5 hidden text-white animate-pulse" fill="currentColor" viewBox="0 0 24 24">
+            <svg id="stop-icon" class="w-5 h-5 hidden text-white animate-pulse" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <path d="M6 6h12v12H6z"/>
             </svg>
           </button>
@@ -1284,7 +1288,7 @@
   <script src="/js/ui.js?v=3017a0048977"></script>
   <script src="/js/tools.js?v=a1e169518419"></script>
   <script src="/js/storage.js?v=0e143c8da2fc"></script>
-  <script src="/js/chat.js?v=a5062d73e2bf"></script>
+  <script src="/js/chat.js?v=3e4617273e90"></script>
   <script src="/js/tasks.js?v=2e5e3f5e9e77"></script>
   <script src="/js/live.js?v=6c87e9458076"></script>
   <script src="/js/phone_agent.js?v=6346f686519a"></script>

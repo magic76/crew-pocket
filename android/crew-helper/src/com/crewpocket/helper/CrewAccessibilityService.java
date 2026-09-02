@@ -974,12 +974,25 @@ public class CrewAccessibilityService extends AccessibilityService {
 
     private AccessibilityNodeInfo findMatchingClickableNode(AccessibilityNodeInfo node, String label, boolean exact) {
         if (node == null) return null;
-        String query = label.toLowerCase(Locale.ROOT);
+        String query = label.toLowerCase(Locale.ROOT).trim();
         String text = node.getText() == null ? "" : node.getText().toString().trim();
         String desc = node.getContentDescription() == null ? "" : node.getContentDescription().toString().trim();
+        String viewId = node.getViewIdResourceName() == null ? "" : node.getViewIdResourceName().toString().trim();
+
         boolean matched = exact
-                ? (text.equalsIgnoreCase(label) || desc.equalsIgnoreCase(label))
-                : (text.toLowerCase(Locale.ROOT).contains(query) || desc.toLowerCase(Locale.ROOT).contains(query));
+                ? (text.equalsIgnoreCase(label) || desc.equalsIgnoreCase(label) || viewId.equalsIgnoreCase(label))
+                : (text.toLowerCase(Locale.ROOT).contains(query) || desc.toLowerCase(Locale.ROOT).contains(query) || viewId.toLowerCase(Locale.ROOT).contains(query));
+
+        if (!matched && !exact) {
+            boolean isSendQuery = query.contains("發送") || query.contains("送出") || query.contains("傳送") || query.contains("send");
+            if (isSendQuery) {
+                String combined = (text + " " + desc + " " + viewId).toLowerCase(Locale.ROOT);
+                if (combined.contains("發送") || combined.contains("送出") || combined.contains("傳送") || combined.contains("send") || combined.contains("send-btn")) {
+                    matched = true;
+                }
+            }
+        }
+
         if (matched) {
             AccessibilityNodeInfo clickable = findClickableAncestor(node);
             if (clickable != null) return clickable;
