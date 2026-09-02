@@ -13,17 +13,21 @@ import android.net.Uri;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.speech.tts.TextToSpeech;
+import java.util.Locale;
 
 public class MainActivity extends Activity {
     private TextView statusDot;
     private TextView statusText;
     private TextView statusDetail;
     private LinearLayout statusCard;
+    private TextToSpeech previewTts;
 
     private int dp(float val) {
         return CrewTheme.dp(this, val);
@@ -520,39 +524,293 @@ public class MainActivity extends Activity {
         builder.show();
     }
 
+    public static class VoiceInfo {
+        public final String name;
+        public final boolean isFemale;
+        public final String zhDesc;
+        public final String enDesc;
+        public final float pitch;
+
+        public VoiceInfo(String name, boolean isFemale, String zhDesc, String enDesc, float pitch) {
+            this.name = name;
+            this.isFemale = isFemale;
+            this.zhDesc = zhDesc;
+            this.enDesc = enDesc;
+            this.pitch = pitch;
+        }
+    }
+
+    private static final VoiceInfo[] ALL_VOICES = new VoiceInfo[]{
+        // Female (15)
+        new VoiceInfo("Kore", true, "自然放鬆 · 預設推薦", "Relaxed & Natural · Recommended", 1.15f),
+        new VoiceInfo("Aoede", true, "清澈優雅 · 溫柔細膩", "Breathy & Gentle", 1.18f),
+        new VoiceInfo("Leda", true, "年輕活潑 · 朝氣蓬勃", "Youthful & Bright", 1.25f),
+        new VoiceInfo("Callisto", true, "沉著清晰 · 俐落流暢", "Smooth & Articulate", 1.05f),
+        new VoiceInfo("Europa", true, "活力親切 · 陽光開朗", "Energetic & Friendly", 1.20f),
+        new VoiceInfo("Io", true, "俐落敏銳 · 熱情自信", "Crisp & Enthusiastic", 1.22f),
+        new VoiceInfo("Rhea", true, "溫暖包容 · 慈祥親和", "Warm & Supportive", 1.02f),
+        new VoiceInfo("Dione", true, "輕柔安撫 · 靜謐舒緩", "Soft & Reassuring", 1.10f),
+        new VoiceInfo("Tethys", true, "靈動生動 · 抑揚頓挫", "Vibrant & Animated", 1.16f),
+        new VoiceInfo("Ariel", true, "歡快輕盈 · 清新純淨", "Cheerful & Light", 1.28f),
+        new VoiceInfo("Miranda", true, "真誠細膩 · 娓娓道來", "Friendly & Expressive", 1.12f),
+        new VoiceInfo("Sycorax", true, "氣場強大 · 自信威嚴", "Expressive & Commanding", 0.98f),
+        new VoiceInfo("Titania", true, "優雅華貴 · 典雅端莊", "Luminous & Graceful", 1.14f),
+        new VoiceInfo("Despina", true, "明亮敏捷 · 節奏輕快", "Bright & Agile", 1.24f),
+        new VoiceInfo("Galatea", true, "柔和流暢 · 舒適悅耳", "Gentle & Flowing", 1.08f),
+
+        // Male (15)
+        new VoiceInfo("Puck", false, "活力俏皮 · 幽默隨和", "Playful & Engaging", 0.95f),
+        new VoiceInfo("Charon", false, "沉穩專業 · 冷靜自信", "Deep & Confident", 0.80f),
+        new VoiceInfo("Fenrir", false, "磁性堅定 · 威嚴有力", "Authoritative & Strong", 0.75f),
+        new VoiceInfo("Orus", false, "沉著清晰 · 條理分明", "Firm & Clear", 0.88f),
+        new VoiceInfo("Zephyr", false, "溫暖平靜 · 撫慰人心", "Warm & Calm", 0.92f),
+        new VoiceInfo("Ganymede", false, "醇厚穩重 · 磁性迷人", "Rich & Deep", 0.78f),
+        new VoiceInfo("Titan", false, "渾厚有力 · 磅礴大氣", "Resonant & Powerful", 0.72f),
+        new VoiceInfo("Hyperion", false, "朝氣蓬勃 · 積極果斷", "Dynamic & Energetic", 0.96f),
+        new VoiceInfo("Iapetus", false, "踏實沉著 · 值得信賴", "Grounded & Measured", 0.82f),
+        new VoiceInfo("Enceladus", false, "健談親近 · 鄰家隨和", "Conversational & Warm", 0.90f),
+        new VoiceInfo("Mimas", false, "靈活好奇 · 輕快幽默", "Curious & Lively", 1.00f),
+        new VoiceInfo("Aegaeon", false, "深沉撫慰 · 靜心放鬆", "Deep & Soothing", 0.76f),
+        new VoiceInfo("Umbriel", false, "深邃靜謐 · 哲思冷靜", "Reflective & Calm", 0.84f),
+        new VoiceInfo("Caliban", false, "果斷直率 · 剛毅堅強", "Bold & Direct", 0.78f),
+        new VoiceInfo("Prospero", false, "智慧博學 · 沉著大方", "Wise & Articulate", 0.86f)
+    };
+
+    private void playAudition(VoiceInfo voice) {
+        if (voice == null) return;
+        if (previewTts == null) {
+            final VoiceInfo target = voice;
+            previewTts = new TextToSpeech(this, new TextToSpeech.OnInitListener() {
+                @Override public void onInit(int status) {
+                    if (status == TextToSpeech.SUCCESS) {
+                        speakVoiceSample(target);
+                    }
+                }
+            });
+        } else {
+            speakVoiceSample(voice);
+        }
+    }
+
+    private void speakVoiceSample(VoiceInfo voice) {
+        if (previewTts == null || voice == null) return;
+        try {
+            previewTts.stop();
+            previewTts.setPitch(voice.pitch);
+            previewTts.setSpeechRate(1.0f);
+            if (I18n.isEn(this)) {
+                previewTts.setLanguage(Locale.US);
+                previewTts.speak("Hello! I am " + voice.name + ", your Crew Helper AI voice copilot.", TextToSpeech.QUEUE_FLUSH, null, "sample_" + voice.name);
+            } else {
+                previewTts.setLanguage(Locale.TRADITIONAL_CHINESE);
+                previewTts.speak("你好！我是 " + voice.name + "，我是你的隨身特工語音助理，很高興為你服務！", TextToSpeech.QUEUE_FLUSH, null, "sample_" + voice.name);
+            }
+        } catch (Exception ignored) {}
+    }
+
+    private int currentFilterTab = 0; // 0: All, 1: Female, 2: Male
+
     private void showVoicePersonaDialog() {
         android.app.AlertDialog.Builder builder = new android.app.AlertDialog.Builder(this);
-        final String[] voiceKeys = new String[]{"Kore", "Aoede", "Puck", "Charon", "Fenrir"};
-        String[] voiceLabels = new String[]{
-            I18n.get(this, "👩 Kore（女性 · 自然放鬆，預設推薦）", "👩 Kore (Female · Relaxed, Natural - Recommended)"),
-            I18n.get(this, "👩 Aoede（女性 · 清澈優雅）", "👩 Aoede (Female · Breathy, Engaging)"),
-            I18n.get(this, "👨 Puck（男性 · 活力親切）", "👨 Puck (Male · Playful, Friendly)"),
-            I18n.get(this, "👨 Charon（男性 · 沉穩專業）", "👨 Charon (Male · Deep, Confident)"),
-            I18n.get(this, "👨 Fenrir（男性 · 磁性堅定）", "👨 Fenrir (Male · Authoritative, Strong)")
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(dp(16), dp(16), dp(16), dp(10));
+        root.setBackgroundColor(CrewTheme.BG_PRIMARY);
+
+        TextView titleView = new TextView(this);
+        titleView.setText(I18n.get(this, "🗣️ 語音助理音色選擇 (全 30 款)", "🗣️ Select Voice Persona (30 Voices)"));
+        titleView.setTextSize(16);
+        titleView.setTypeface(Typeface.DEFAULT_BOLD);
+        titleView.setTextColor(CrewTheme.TEXT_PRIMARY);
+        titleView.setPadding(0, 0, 0, dp(4));
+        root.addView(titleView);
+
+        TextView subtitleView = new TextView(this);
+        subtitleView.setText(I18n.get(this, "點擊「▶️ 試聽」可播放聲音，點擊卡片直接選用。", "Tap '▶️ Preview' to listen, tap card to select."));
+        subtitleView.setTextSize(11);
+        subtitleView.setTextColor(CrewTheme.TEXT_SECONDARY);
+        subtitleView.setPadding(0, 0, 0, dp(12));
+        root.addView(subtitleView);
+
+        // Filter Tabs Row
+        final LinearLayout tabsRow = new LinearLayout(this);
+        tabsRow.setOrientation(LinearLayout.HORIZONTAL);
+        tabsRow.setPadding(0, 0, 0, dp(10));
+
+        final String currentVoice = AppConfig.getVoiceName(this);
+        final LinearLayout listContainer = new LinearLayout(this);
+        listContainer.setOrientation(LinearLayout.VERTICAL);
+
+        final android.app.AlertDialog dialogRef[] = new android.app.AlertDialog[1];
+
+        final Runnable refreshList = new Runnable() {
+            @Override public void run() {
+                listContainer.removeAllViews();
+                for (int i = 0; i < ALL_VOICES.length; i++) {
+                    final VoiceInfo voice = ALL_VOICES[i];
+                    if (currentFilterTab == 1 && !voice.isFemale) continue;
+                    if (currentFilterTab == 2 && voice.isFemale) continue;
+
+                    final boolean isSelected = voice.name.equalsIgnoreCase(currentVoice);
+
+                    LinearLayout itemCard = new LinearLayout(MainActivity.this);
+                    itemCard.setOrientation(LinearLayout.HORIZONTAL);
+                    itemCard.setGravity(Gravity.CENTER_VERTICAL);
+                    itemCard.setPadding(dp(12), dp(10), dp(10), dp(10));
+                    int cardBg = isSelected ? Color.parseColor("#140D9488") : CrewTheme.BG_SURFACE;
+                    int borderCol = isSelected ? CrewTheme.TEAL_400 : CrewTheme.BORDER_SUBTLE;
+                    itemCard.setBackground(CrewTheme.createCard(MainActivity.this, cardBg, borderCol, 12));
+
+                    LinearLayout.LayoutParams cardLp = new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+                    cardLp.setMargins(0, 0, 0, dp(8));
+                    itemCard.setLayoutParams(cardLp);
+
+                    // Indicator
+                    TextView indicator = new TextView(MainActivity.this);
+                    indicator.setText(isSelected ? "●" : "○");
+                    indicator.setTextSize(14);
+                    indicator.setTextColor(isSelected ? CrewTheme.TEAL_400 : CrewTheme.TEXT_MUTED);
+                    indicator.setPadding(0, 0, dp(10), 0);
+                    itemCard.addView(indicator);
+
+                    // Text Info
+                    LinearLayout infoCol = new LinearLayout(MainActivity.this);
+                    infoCol.setOrientation(LinearLayout.VERTICAL);
+                    LinearLayout.LayoutParams infoLp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.0f);
+                    infoCol.setLayoutParams(infoLp);
+
+                    LinearLayout nameBadgeRow = new LinearLayout(MainActivity.this);
+                    nameBadgeRow.setOrientation(LinearLayout.HORIZONTAL);
+                    nameBadgeRow.setGravity(Gravity.CENTER_VERTICAL);
+
+                    TextView nameView = new TextView(MainActivity.this);
+                    nameView.setText((voice.isFemale ? "👩 " : "👨 ") + voice.name);
+                    nameView.setTextSize(13);
+                    nameView.setTypeface(Typeface.DEFAULT_BOLD);
+                    nameView.setTextColor(isSelected ? CrewTheme.TEAL_300 : CrewTheme.TEXT_PRIMARY);
+                    nameBadgeRow.addView(nameView);
+
+                    infoCol.addView(nameBadgeRow);
+
+                    TextView descView = new TextView(MainActivity.this);
+                    descView.setText(I18n.get(MainActivity.this, voice.zhDesc, voice.enDesc));
+                    descView.setTextSize(10);
+                    descView.setTextColor(CrewTheme.TEXT_SECONDARY);
+                    descView.setPadding(0, dp(2), 0, 0);
+                    infoCol.addView(descView);
+
+                    itemCard.addView(infoCol);
+
+                    // Audition Button
+                    Button previewBtn = new Button(MainActivity.this);
+                    previewBtn.setText("▶️ " + I18n.get(MainActivity.this, "試聽", "Play"));
+                    previewBtn.setTextSize(11);
+                    previewBtn.setTextColor(CrewTheme.CYAN_400);
+                    previewBtn.setTypeface(Typeface.DEFAULT_BOLD);
+                    previewBtn.setAllCaps(false);
+                    previewBtn.setBackground(CrewTheme.createCard(MainActivity.this, CrewTheme.BG_PRIMARY, CrewTheme.BORDER_SUBTLE, 8));
+                    previewBtn.setPadding(dp(8), dp(4), dp(8), dp(4));
+                    previewBtn.setOnClickListener(new View.OnClickListener() {
+                        @Override public void onClick(View v) {
+                            playAudition(voice);
+                        }
+                    });
+
+                    LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.WRAP_CONTENT, dp(34));
+                    itemCard.addView(previewBtn, btnLp);
+
+                    // Click item to select
+                    itemCard.setOnClickListener(new View.OnClickListener() {
+                        @Override public void onClick(View v) {
+                            AppConfig.setVoiceName(MainActivity.this, voice.name);
+                            Toast.makeText(MainActivity.this, I18n.get(MainActivity.this, "✅ 已選用音色：" + voice.name, "✅ Switched to " + voice.name), Toast.LENGTH_SHORT).show();
+                            if (dialogRef[0] != null) dialogRef[0].dismiss();
+                            recreate();
+                        }
+                    });
+
+                    listContainer.addView(itemCard);
+                }
+            }
         };
 
-        String currentVoice = AppConfig.getVoiceName(this);
-        int selectedIndex = 0;
-        for (int i = 0; i < voiceKeys.length; i++) {
-            if (voiceKeys[i].equalsIgnoreCase(currentVoice)) {
-                selectedIndex = i;
-                break;
-            }
+        // Tab Buttons
+        String[] tabLabels = new String[]{
+            I18n.get(this, "🌟 全部 (30)", "🌟 All (30)"),
+            I18n.get(this, "👩 女性 (15)", "👩 Female (15)"),
+            I18n.get(this, "👨 男性 (15)", "👨 Male (15)")
+        };
+
+        final Button[] tabButtons = new Button[3];
+        for (int i = 0; i < 3; i++) {
+            final int tabIdx = i;
+            Button tab = new Button(this);
+            tab.setText(tabLabels[i]);
+            tab.setTextSize(11);
+            tab.setAllCaps(false);
+            tabButtons[i] = tab;
+
+            tab.setOnClickListener(new View.OnClickListener() {
+                @Override public void onClick(View v) {
+                    currentFilterTab = tabIdx;
+                    for (int j = 0; j < 3; j++) {
+                        boolean active = (j == currentFilterTab);
+                        tabButtons[j].setTextColor(active ? Color.WHITE : CrewTheme.TEXT_MUTED);
+                        tabButtons[j].setTypeface(active ? Typeface.DEFAULT_BOLD : Typeface.DEFAULT);
+                        tabButtons[j].setBackground(CrewTheme.createCard(MainActivity.this, active ? CrewTheme.TEAL_500 : CrewTheme.BG_SURFACE, CrewTheme.BORDER_SUBTLE, 10));
+                    }
+                    refreshList.run();
+                }
+            });
+
+            LinearLayout.LayoutParams tabLp = new LinearLayout.LayoutParams(0, dp(34), 1.0f);
+            if (i > 0) tabLp.setMargins(dp(6), 0, 0, 0);
+            tabsRow.addView(tab, tabLp);
         }
 
-        builder.setTitle(I18n.get(this, "選擇語音助理音色", "Select Voice Persona"));
-        builder.setSingleChoiceItems(voiceLabels, selectedIndex, new android.content.DialogInterface.OnClickListener() {
-            @Override
-            public void onClick(android.content.DialogInterface dialog, int which) {
-                String chosenVoice = voiceKeys[which];
-                AppConfig.setVoiceName(MainActivity.this, chosenVoice);
-                Toast.makeText(MainActivity.this, I18n.get(MainActivity.this, "✅ 已切換音色為 " + chosenVoice, "✅ Switched voice persona to " + chosenVoice), Toast.LENGTH_SHORT).show();
-                dialog.dismiss();
-                recreate();
+        // Initialize Tab Styles
+        for (int j = 0; j < 3; j++) {
+            boolean active = (j == currentFilterTab);
+            tabButtons[j].setTextColor(active ? Color.WHITE : CrewTheme.TEXT_MUTED);
+            tabButtons[j].setTypeface(active ? Typeface.DEFAULT_BOLD : Typeface.DEFAULT);
+            tabButtons[j].setBackground(CrewTheme.createCard(this, active ? CrewTheme.TEAL_500 : CrewTheme.BG_SURFACE, CrewTheme.BORDER_SUBTLE, 10));
+        }
+
+        root.addView(tabsRow);
+
+        ScrollView listScroll = new ScrollView(this);
+        listScroll.setFillViewport(true);
+        LinearLayout.LayoutParams scrollLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(340));
+        listScroll.setLayoutParams(scrollLp);
+        listScroll.addView(listContainer);
+        root.addView(listScroll);
+
+        refreshList.run();
+
+        builder.setView(root);
+        builder.setNegativeButton(I18n.get(this, "關閉", "Close"), new android.content.DialogInterface.OnClickListener() {
+            @Override public void onClick(android.content.DialogInterface dialog, int which) {
+                if (previewTts != null) previewTts.stop();
             }
         });
-        builder.setNegativeButton(I18n.get(this, "取消", "Cancel"), null);
-        builder.show();
+
+        android.app.AlertDialog dialog = builder.create();
+        dialogRef[0] = dialog;
+        dialog.show();
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        if (previewTts != null) {
+            try {
+                previewTts.stop();
+                previewTts.shutdown();
+                previewTts = null;
+            } catch (Exception ignored) {}
+        }
     }
 
     @Override
