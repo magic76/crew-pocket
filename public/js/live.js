@@ -1829,8 +1829,8 @@
           const transcript = String(event.results[i][0].transcript || '').toLowerCase().trim();
           console.log('[WakeWord Detected]', transcript);
 
-          // Matches: "嗨酷", "嗨 酷", "嗨，酷", "hey crew", "hi crew", "hello crew", "開酷", "黑酷"
-          const isMatch = /嗨\s*酷|嗨\s*crew|hey\s*crew|hi\s*crew|hello\s*crew|黑\s*酷|開\s*酷/i.test(transcript);
+          // Matches: "嗨酷", "嗨 酷", "嗨，酷", "hey crew", "hi crew", "hello crew", "開酷", "黑酷", "嘿酷", "hi 酷", "嗨 crew"
+          const isMatch = /嗨\s*酷|嘿\s*酷|嗨\s*crew|hey\s*crew|hi\s*crew|hello\s*crew|黑\s*酷|開\s*酷|叫\s*酷|hi\s*酷/i.test(transcript);
           if (isMatch) {
             console.log('⚡ [WakeWord Triggered!]', transcript);
             wakeWordCooldown = true;
@@ -1846,7 +1846,7 @@
 
       wakeWordRecognizer.onerror = (event) => {
         if (event.error === 'not-allowed') {
-          console.warn('[WakeWord] Mic permission not granted for background wake word.');
+          console.warn('[WakeWord] Mic permission not granted. Tap anywhere on screen to enable wake word.');
         }
       };
 
@@ -1866,6 +1866,17 @@
     } catch (e) {
       console.warn('[WakeWord] Init failed:', e.message);
     }
+  }
+
+  // Bind first user gesture to ensure browser grants Web Audio / Speech permission
+  if (typeof document !== 'undefined') {
+    ['click', 'touchstart', 'keydown'].forEach(evt => {
+      document.addEventListener(evt, () => {
+        if (!isConnected && isWakeWordEnabled && !wakeWordRecognizer) {
+          startWakeWordListener();
+        }
+      }, { passive: true });
+    });
   }
 
   function startWakeWordListener() {
