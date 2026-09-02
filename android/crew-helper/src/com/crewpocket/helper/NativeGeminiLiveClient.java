@@ -1002,7 +1002,9 @@ final class NativeGeminiLiveClient extends WebSocketListener {
     }
 
     private volatile long lastPlaybackActiveAt = 0;
-    private static final double INTERRUPT_RMS_THRESHOLD = 0.035; // Sensitive voice energy threshold for interruption
+    private double noiseFloor = 0.015;
+    private static final double MIN_INTERRUPT_THRESHOLD = 0.075; // Raised from 0.035 to resist ambient noise
+    private static final int REQUIRED_CONSECUTIVE_FRAMES = 4; // 160ms sustained speech energy
 
     private void sendMic() {
         byte[] pcm = new byte[1280]; // 40ms @ 16kHz 16-bit mono
@@ -1012,21 +1014,26 @@ final class NativeGeminiLiveClient extends WebSocketListener {
             int count = recorder.read(pcm, 0, pcm.length); if (count <= 0) continue;
             if (agentMuted) continue;
 
-            long now = System.currentTimeMillis();
             double rms = calculateRms(pcm, count);
+
+            // 🌿 Dynamically track ambient background noise floor when user is quiet
+            if (!aiSpeaking && rms < 0.05) {
+                noiseFloor = noiseFloor * 0.96 + rms * 0.04;
+            }
 
             if (aiSpeaking) {
                 if (!allowVoiceInterruption) {
-                    // 🛡️ 防插話保護模式：AI 說話時靜音麥克風，防止環境音干擾
+                    // 🛡️ 防插話保護模式：AI 說話時麥克風完全靜音，徹底杜絕任何環境音插話
                     consecutiveVoiceFrames = 0;
                     continue;
                 }
 
-                // 🎙️ 允許插話模式：
-                // 當使用者開口講話（RMS 能量突增），連續 2 訊框（約 80ms）即刻觸發本地 0ms 停止播放！
-                if (rms >= INTERRUPT_RMS_THRESHOLD) {
+                // 🎙️ 智慧抗噪插話判定：
+                // 門檻提升至動態底噪的 2.2 倍（且不低於 0.075），並要求連續 4 訊框（160ms）持續發聲
+                double dynamicThreshold = Math.max(MIN_INTERRUPT_THRESHOLD, noiseFloor * 2.2);
+                if (rms >= dynamicThreshold) {
                     consecutiveVoiceFrames++;
-                    if (consecutiveVoiceFrames >= 2) {
+                    if (consecutiveVoiceFrames >= REQUIRED_CONSECUTIVE_FRAMES) {
                         triggerLocalInterruption();
                         consecutiveVoiceFrames = 0;
                     }
@@ -1034,7 +1041,7 @@ final class NativeGeminiLiveClient extends WebSocketListener {
                     if (consecutiveVoiceFrames > 0) consecutiveVoiceFrames--;
                 }
 
-                // 若尚未觸發打斷且僅有微弱喇叭殘響，暫緩傳送以防無效迴音
+                // 若尚未確認為明確插話指令，暫緩將喇叭音訊回傳給 Gemini，避免伺服器端迴音干擾
                 if (aiSpeaking) {
                     continue;
                 }
@@ -1043,6 +1050,12 @@ final class NativeGeminiLiveClient extends WebSocketListener {
             }
 
             byte[] chunk = (count == pcm.length) ? pcm.clone() : Arrays.copyOf(pcm, count);
+
+            // 🛡️ 靜音微弱底噪門檻：若聲音能量低於底噪臨界值，壓制微弱雜音，防止 Gemini 伺服器誤判背景音為使用者說話
+            double gateThreshold = Math.max(0.012, noiseFloor * 1.15);
+            if (!aiSpeaking && rms < gateThreshold) {
+                Arrays.fill(chunk, (byte) 0);
+            }
 
             // 🎙️ 連續即時串流給 Gemini Live
             try {
