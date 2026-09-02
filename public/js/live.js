@@ -178,12 +178,23 @@
         }
       };
 
-      // Keep the proven AudioWorklet queue, but send it straight to the
-      // device output. CrewHelper remains responsible for media volume.
       this.outputGain = this.ctx.createGain();
-      this.outputGain.gain.value = 1;
+      const initialVol = getLiveVolumePercent();
+      this.outputGain.gain.value = Math.pow(initialVol / 100, 2);
       this.node.connect(this.outputGain);
       this.outputGain.connect(this.ctx.destination);
+    }
+
+    setVolume(percent) {
+      if (!this.outputGain) return;
+      const normalized = Math.max(0, Math.min(100, Number(percent) || 0)) / 100;
+      // Exponential audio curve for natural perceived volume
+      const gain = Math.pow(normalized, 2);
+      try {
+        this.outputGain.gain.setValueAtTime(gain, this.ctx.currentTime);
+      } catch (_) {
+        this.outputGain.gain.value = gain;
+      }
     }
 
     get activeSources() {
@@ -2534,6 +2545,7 @@
       const result = await response.json();
       if (requestSequence === mediaVolumeRequestSequence && result.success === true && Number.isFinite(Number(result.percent))) {
         renderLiveVolume(result.percent);
+        if (audioPlayer) audioPlayer.setVolume(result.percent);
       }
     } catch (error) {
       console.debug('[Live Volume] CrewHelper volume sync unavailable:', error.message);
@@ -2542,6 +2554,9 @@
 
   function applyLiveVolume(value, immediate = false) {
     const percent = renderLiveVolume(value);
+    if (audioPlayer) {
+      audioPlayer.setVolume(percent);
+    }
     const requestSequence = ++mediaVolumeRequestSequence;
     if (mediaVolumeUpdateTimer) clearTimeout(mediaVolumeUpdateTimer);
     const update = async () => {
@@ -2555,6 +2570,7 @@
         const result = await response.json();
         if (requestSequence === mediaVolumeRequestSequence && result.success === true && Number.isFinite(Number(result.percent))) {
           renderLiveVolume(result.percent);
+          if (audioPlayer) audioPlayer.setVolume(result.percent);
         }
       } catch (error) {
         console.warn('[Live Volume] Unable to set Android media volume:', error.message);
