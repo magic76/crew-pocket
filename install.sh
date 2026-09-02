@@ -140,15 +140,10 @@ case "$1" in
         echo "✓ 更新完成！請重啟服務：crew stop && crew"
         ;;
     apk)
-        echo "📱 正在下載 / 開啟最新 Crew Helper APK..."
-        if [ -f "$TARGET_DIR/public/CrewHelper.apk" ]; then
-            if command -v termux-open > /dev/null 2>&1; then
-                termux-open "$TARGET_DIR/public/CrewHelper.apk"
-            else
-                echo "APK 檔案路徑: $TARGET_DIR/public/CrewHelper.apk"
-            fi
-        else
-            echo "未找到本地 APK，請從 Web 介面或 http://127.0.0.1:8000/CrewHelper.apk 下載"
+        echo "📱 正在開啟 Crew Helper APK 下載頁面..."
+        echo "👉 請至: https://github.com/magic76/crew-helper/releases/latest"
+        if command -v termux-open-url > /dev/null 2>&1; then
+            termux-open-url https://github.com/magic76/crew-helper/releases/latest
         fi
         ;;
     *)
