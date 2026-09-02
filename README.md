@@ -1,7 +1,17 @@
 # Crew Pocket (口袋指揮 2.0) 🚀
 
-> **Flagship Tactical Mobile AI Assistant running on Android Termux.**  
-> 專為行動端量身打造的旗艦級隨身特工 AI 助理。
+<div align="center">
+
+![Crew Pocket Mobile AI Assistant](public/assets/hero_banner.jpg)
+
+**Flagship Tactical Mobile AI Assistant running on Android Termux.**  
+專為行動端量身打造的旗艦級隨身特工 AI 助理。
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-emerald.svg)](LICENSE)
+[![Platform](https://img.shields.io/badge/Platform-Android%20Termux-indigo.svg)](https://termux.dev/)
+[![Engine](https://img.shields.io/badge/AI%20Engines-Antigravity%20%7C%20Codex-purple.svg)](#-雙-agent-provider)
+
+</div>
 
 ---
 
@@ -14,6 +24,13 @@ curl -fsSL https://raw.githubusercontent.com/magic76/crew-pocket/main/install.sh
 ```
 
 安裝完成後，直接輸入 **`crew`** 即可啟動服務並自動開啟手機瀏覽器！✨
+
+---
+
+## 📱 隨身語音與無障礙操作助手 (Crew Helper APK)
+
+專屬的 Android 隨身浮動球、Gemini Live 即時雙向語音通話與無障礙手指觸控輔助 App 已獨立為專用專案：
+👉 **[Crew Helper Android APK 專案庫](https://github.com/magic76/crew-helper)**（可直接下載最新版 APK 安裝）
 
 ---
 
