@@ -44,6 +44,7 @@ final class NativeGeminiLiveClient extends WebSocketListener {
         void onSpeakingChanged(boolean speaking);
     }
     private final String apiKey;
+    private final String serverUrl;
     private final Listener listener;
     private volatile boolean running;
     private volatile String stage = "尚未開始";
@@ -70,7 +71,12 @@ final class NativeGeminiLiveClient extends WebSocketListener {
     private volatile int lastScreenHeight = 1;
     private final Set<String> handledToolCalls = new HashSet<String>();
 
-    NativeGeminiLiveClient(String apiKey, Listener listener) { this.apiKey = apiKey; this.listener = listener; }
+    NativeGeminiLiveClient(String apiKey, Listener listener) { this(apiKey, "", listener); }
+    NativeGeminiLiveClient(String apiKey, String serverUrl, Listener listener) {
+        this.apiKey = apiKey;
+        this.serverUrl = serverUrl == null ? "" : serverUrl.trim();
+        this.listener = listener;
+    }
     boolean isRunning() { return running; }
     String getStage() { return stage; }
     boolean canSendVisualFrame() { return running && System.currentTimeMillis() >= visualHoldUntil; }
@@ -144,11 +150,13 @@ final class NativeGeminiLiveClient extends WebSocketListener {
         if (!running) return;
         Request request = new Request.Builder()
                 .url("wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent?key=" + apiKey)
-                .header("Origin", "http://127.0.0.1:8000")
+                .header("Origin", "https://generativelanguage.googleapis.com")
                 .build();
         webSocket = httpClient.newWebSocket(request, this);
     }
 
+    private android.media.audiofx.AcousticEchoCanceler aecEffect = null;
+    private android.media.audiofx.NoiseSuppressor nsEffect = null;
     private volatile boolean agentMuted = false;
     private volatile boolean aiSpeaking = false;
     private volatile boolean interruptedCurrentTurn = false;
@@ -672,9 +680,11 @@ final class NativeGeminiLiveClient extends WebSocketListener {
     }
 
     private String loadVoiceSkillPlaybook() {
+        if (serverUrl.isEmpty()) return ""; // Standalone mode: no custom skills server needed
         HttpURLConnection connection = null;
         try {
-            connection = (HttpURLConnection) new URL("http://127.0.0.1:8000/api/phone/skills").openConnection();
+            String endpoint = serverUrl.replaceAll("/+$", "") + "/api/phone/skills";
+            connection = (HttpURLConnection) new URL(endpoint).openConnection();
             connection.setRequestMethod("GET"); connection.setConnectTimeout(1500); connection.setReadTimeout(2500);
             int code = connection.getResponseCode();
             if (code < 200 || code >= 300) return "";
@@ -746,9 +756,13 @@ final class NativeGeminiLiveClient extends WebSocketListener {
     private JSONObject sendToMainChat(JSONObject args) throws Exception {
         String message = args.optString("message", args.optString("text", "")).trim();
         if (message.isEmpty()) return new JSONObject().put("success", false).put("error", "主對話訊息不可為空");
+        if (serverUrl.isEmpty()) {
+            return new JSONObject().put("success", true).put("message", "目前為獨立雲端模式，訊息已由語音助理即時紀錄與回答。");
+        }
         HttpURLConnection connection = null;
         try {
-            connection = (HttpURLConnection) new URL("http://127.0.0.1:8000/api/inbound/messages").openConnection();
+            String endpoint = serverUrl.replaceAll("/+$", "") + "/api/inbound/messages";
+            connection = (HttpURLConnection) new URL(endpoint).openConnection();
             connection.setRequestMethod("POST"); connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
             connection.setDoOutput(true); connection.setConnectTimeout(3500); connection.setReadTimeout(7000);
             byte[] body = new JSONObject().put("message", message).put("source", "NativeGeminiLive").toString().getBytes("UTF-8");
@@ -838,13 +852,13 @@ final class NativeGeminiLiveClient extends WebSocketListener {
         try {
             // 🛡️ AcousticEchoCanceler (AEC): Essential to prevent AI hearing its own voice from loudspeaker!
             if (android.media.audiofx.AcousticEchoCanceler.isAvailable()) {
-                android.media.audiofx.AcousticEchoCanceler aec = android.media.audiofx.AcousticEchoCanceler.create(recorder.getAudioSessionId());
-                if (aec != null) aec.setEnabled(true);
+                aecEffect = android.media.audiofx.AcousticEchoCanceler.create(recorder.getAudioSessionId());
+                if (aecEffect != null) aecEffect.setEnabled(true);
             }
             // Keep NoiseSuppressor to clean air conditioner / ambient hiss
             if (android.media.audiofx.NoiseSuppressor.isAvailable()) {
-                android.media.audiofx.NoiseSuppressor ns = android.media.audiofx.NoiseSuppressor.create(recorder.getAudioSessionId());
-                if (ns != null) ns.setEnabled(true);
+                nsEffect = android.media.audiofx.NoiseSuppressor.create(recorder.getAudioSessionId());
+                if (nsEffect != null) nsEffect.setEnabled(true);
             }
         } catch (Exception ignored) {}
 
@@ -913,7 +927,15 @@ final class NativeGeminiLiveClient extends WebSocketListener {
         if (pcm == null || pcm.length == 0 || interruptedCurrentTurn || agentMuted) return;
         lastPlaybackActiveAt = System.currentTimeMillis() + (pcm.length * 1000L / (24000 * 2));
         int written;
-        synchronized (playerLock) { written = player == null ? AudioTrack.ERROR_INVALID_OPERATION : player.write(pcm, 0, pcm.length); }
+        synchronized (playerLock) {
+            // 🛡️ Ensure AudioTrack is in PLAYING state (e.g. after interruption flush/pause)
+            if (player != null && player.getPlayState() != AudioTrack.PLAYSTATE_PLAYING) {
+                try {
+                    player.play();
+                } catch (Exception ignored) {}
+            }
+            written = player == null ? AudioTrack.ERROR_INVALID_OPERATION : player.write(pcm, 0, pcm.length);
+        }
         if (written < 0) {
             Log.w(TAG, "AudioTrack 寫入失敗（" + written + "），重建播放軌");
             recoverAudioPlayer();
@@ -1007,6 +1029,8 @@ final class NativeGeminiLiveClient extends WebSocketListener {
         audioQueue.clear();
         try { if (audioPlaybackThread != null) audioPlaybackThread.interrupt(); } catch (Exception ignored) {}
         audioPlaybackThread = null;
+        if (aecEffect != null) { try { aecEffect.release(); } catch (Exception ignored) {} aecEffect = null; }
+        if (nsEffect != null) { try { nsEffect.release(); } catch (Exception ignored) {} nsEffect = null; }
         try { if (recorder != null) { recorder.stop(); recorder.release(); recorder = null; } } catch (Exception ignored) {}
         synchronized (playerLock) {
             try { if (player != null) { player.stop(); player.release(); player = null; } } catch (Exception ignored) {}

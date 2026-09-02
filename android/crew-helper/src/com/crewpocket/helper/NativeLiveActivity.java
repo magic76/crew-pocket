@@ -152,9 +152,7 @@ public class NativeLiveActivity extends Activity {
         inputLp.setMargins(0, dp(8), 0, 0);
         keyCard.addView(apiKeyInput, inputLp);
 
-        SharedPreferences nativePrefs = getSharedPreferences("crew_native_live", MODE_PRIVATE);
-        String savedKey = nativePrefs.getString("gemini_live_key", "");
-        if (savedKey.isEmpty()) savedKey = getPreferences(MODE_PRIVATE).getString("gemini_live_key", "");
+        String savedKey = AppConfig.getGeminiApiKey(this);
         apiKeyInput.setText(savedKey);
 
         root.addView(keyCard);
@@ -279,7 +277,7 @@ public class NativeLiveActivity extends Activity {
             requestPermissions(new String[]{android.Manifest.permission.RECORD_AUDIO}, REQUEST_RECORD_AUDIO);
             return;
         }
-        getSharedPreferences("crew_native_live", MODE_PRIVATE).edit().putString("gemini_live_key", key).apply();
+        AppConfig.setGeminiApiKey(this, key);
         startClient(key);
     }
 

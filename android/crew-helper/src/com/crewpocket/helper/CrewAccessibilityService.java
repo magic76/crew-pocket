@@ -20,6 +20,7 @@ import android.database.Cursor;
 import android.content.ContentUris;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
+import android.util.Log;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -165,10 +166,15 @@ public class CrewAccessibilityService extends AccessibilityService {
             @Override
             public void run() {
                 try {
+                    if (!AppConfig.isLocalBridgeEnabled(CrewAccessibilityService.this)) {
+                        Log.i(TAG, "Local bridge is disabled in AppConfig, server not started");
+                        return;
+                    }
                     if (serverSocket != null) {
                         try { serverSocket.close(); } catch (Exception e) {}
                     }
-                    serverSocket = new ServerSocket(PORT);
+                    // 🛡️ Bind strictly to loopback (127.0.0.1) so LAN/Wi-Fi devices cannot access
+                    serverSocket = new ServerSocket(PORT, 50, java.net.InetAddress.getLoopbackAddress());
                     while (isRunning && !serverSocket.isClosed()) {
                         final Socket socket = serverSocket.accept();
                         new Thread(new Runnable() {

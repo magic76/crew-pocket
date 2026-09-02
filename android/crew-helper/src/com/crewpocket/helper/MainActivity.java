@@ -151,8 +151,7 @@ public class MainActivity extends Activity {
         root.addView(makeActionCard("⚙️", "開啟「無障礙服務」", "啟用跨 App 螢幕截圖、觸控點擊與跨應用操控", CrewTheme.INDIGO_500, new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                Intent intent = new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS);
-                startActivity(intent);
+                showAccessibilityDisclosureDialog();
             }
         }));
 
@@ -342,6 +341,44 @@ public class MainActivity extends Activity {
         }
     }
 
+    private void showAccessibilityDisclosureDialog() {
+        android.app.AlertDialog.Builder builder = new android.app.AlertDialog.Builder(this);
+        LinearLayout layout = new LinearLayout(this);
+        layout.setOrientation(LinearLayout.VERTICAL);
+        layout.setPadding(dp(20), dp(18), dp(20), dp(12));
+        layout.setBackgroundColor(CrewTheme.BG_PRIMARY);
+
+        TextView titleView = new TextView(this);
+        titleView.setText("🛡️ 無障礙服務使用說明 (Prominent Disclosure)");
+        titleView.setTextSize(15);
+        titleView.setTypeface(Typeface.DEFAULT_BOLD);
+        titleView.setTextColor(CrewTheme.TEXT_PRIMARY);
+        titleView.setPadding(0, 0, 0, dp(10));
+        layout.addView(titleView);
+
+        TextView bodyView = new TextView(this);
+        bodyView.setText("本 App 使用 Android AccessibilityService API 提供語音助理操作與螢幕感知輔助：\n\n"
+                + "• 螢幕感知：讀取畫面上的按鈕標籤與文字，讓 AI 能理解畫面內容並回答您的提問。\n"
+                + "• 輔助點擊與滑動：依據您的明確語音指令（如『點擊送出』、『往下滑』），代替您執行點擊與滑動操作。\n"
+                + "• 隱私保證：本 App 絕不會記錄、儲存或傳輸任何密碼、信用卡號等機密金融資料與個人機密。\n"
+                + "• 隨時撤銷：您可以隨時在系統『設定 > 無障礙』中停用此服務。");
+        bodyView.setTextSize(12);
+        bodyView.setTextColor(CrewTheme.TEXT_SECONDARY);
+        bodyView.setLineSpacing(dp(2), 1.15f);
+        layout.addView(bodyView);
+
+        builder.setView(layout);
+        builder.setPositiveButton("同意並前往設定", new android.content.DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(android.content.DialogInterface dialog, int which) {
+                Intent intent = new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS);
+                startActivity(intent);
+            }
+        });
+        builder.setNegativeButton("取消", null);
+        builder.show();
+    }
+
     private void showSettingsDialog() {
         android.app.AlertDialog.Builder builder = new android.app.AlertDialog.Builder(this);
         LinearLayout layout = new LinearLayout(this);
@@ -371,6 +408,7 @@ public class MainActivity extends Activity {
         keyInput.setText(AppConfig.getGeminiApiKey(this));
         keyInput.setTextSize(12);
         keyInput.setTextColor(CrewTheme.TEXT_PRIMARY);
+        keyInput.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
         keyInput.setBackground(CrewTheme.createCard(this, CrewTheme.BG_SURFACE, CrewTheme.BORDER_SUBTLE, 8));
         keyInput.setPadding(dp(10), dp(10), dp(10), dp(10));
         LinearLayout.LayoutParams keyLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
