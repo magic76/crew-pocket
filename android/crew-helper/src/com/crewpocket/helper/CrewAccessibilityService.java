@@ -828,39 +828,15 @@ public class CrewAccessibilityService extends AccessibilityService {
                 target = findMatchingNodeById(root, id.trim());
             }
             if (target == null && label != null && !label.trim().isEmpty()) {
-                String l = label.trim().toLowerCase(Locale.ROOT);
-                if (l.contains("送出") || l.contains("傳送") || l.contains("發送") || l.equals("send") || l.contains("submit")) {
-                    target = findSendButton(root);
-                }
-                if (target == null) target = findMatchingClickableNode(root, label.trim(), true);
+                target = findMatchingClickableNode(root, label.trim(), true);
                 if (target == null) target = findMatchingClickableNode(root, label.trim(), false);
             }
-            if (target == null) {
-                // If looking for send button and node not found, fallback to physical tap at bottom right next to active EditText
-                String l = (label != null) ? label.trim().toLowerCase(Locale.ROOT) : "";
-                if (l.contains("送出") || l.contains("傳送") || l.contains("發送") || l.equals("send") || l.contains("submit")) {
-                    AccessibilityNodeInfo editor = findActiveEditText(root);
-                    if (editor != null) {
-                        try {
-                            Rect editBounds = new Rect();
-                            editor.getBoundsInScreen(editBounds);
-                            android.util.DisplayMetrics metrics = getResources().getDisplayMetrics();
-                            int tapX = metrics.widthPixels - 55;
-                            int tapY = editBounds.centerY();
-                            performTap(tapX, tapY);
-                            return true;
-                        } finally {
-                            editor.recycle();
-                        }
-                    }
-                }
-                return false;
-            }
+            if (target == null) return false;
             try {
                 Rect bounds = new Rect();
                 target.getBoundsInScreen(bounds);
                 boolean clicked = target.performAction(AccessibilityNodeInfo.ACTION_CLICK);
-                // Dual dispatch: Physical tap ensures custom views and touch listeners receive the click
+                // Physical tap fallback ensures custom views and touch listeners receive click
                 if (bounds.width() > 0 && bounds.height() > 0) {
                     performTap(bounds.centerX(), bounds.centerY());
                     return true;
@@ -872,110 +848,6 @@ public class CrewAccessibilityService extends AccessibilityService {
         } finally {
             root.recycle();
         }
-    }
-
-    private AccessibilityNodeInfo findSendButton(AccessibilityNodeInfo root) {
-        if (root == null) return null;
-        android.util.DisplayMetrics metrics = getResources().getDisplayMetrics();
-        int screenWidth = metrics.widthPixels;
-        int screenHeight = metrics.heightPixels;
-
-        // 1. Highest Priority: Find the bottom-most active EditText (Chat input box)
-        AccessibilityNodeInfo editor = findActiveEditText(root);
-        if (editor != null) {
-            try {
-                Rect editBounds = new Rect();
-                editor.getBoundsInScreen(editBounds);
-
-                List<AccessibilityNodeInfo> clickableList = new ArrayList<AccessibilityNodeInfo>();
-                collectClickableNodes(root, clickableList);
-
-                AccessibilityNodeInfo bestCandidate = null;
-                int maxScore = -1;
-                int maxRight = -1;
-
-                for (AccessibilityNodeInfo cand : clickableList) {
-                    if (cand.equals(editor)) {
-                        cand.recycle();
-                        continue;
-                    }
-                    Rect candBounds = new Rect();
-                    cand.getBoundsInScreen(candBounds);
-
-                    // Must be vertically aligned with the input box (+- 80px) and in lower screen area
-                    boolean verticallyAligned = Math.abs(candBounds.centerY() - editBounds.centerY()) <= (editBounds.height() + 80);
-                    // Must be to the right side of the input box center
-                    boolean horizontallyToRight = candBounds.centerX() > (editBounds.left + editBounds.width() * 0.4);
-
-                    if (verticallyAligned && horizontallyToRight && candBounds.centerY() > screenHeight * 0.3) {
-                        String text = cand.getText() == null ? "" : cand.getText().toString().toLowerCase(Locale.ROOT);
-                        String desc = cand.getContentDescription() == null ? "" : cand.getContentDescription().toString().toLowerCase(Locale.ROOT);
-                        CharSequence viewId = cand.getViewIdResourceName();
-                        String idStr = viewId == null ? "" : viewId.toString().toLowerCase(Locale.ROOT);
-
-                        int score = 0;
-                        if (text.equals("傳送") || text.equals("發送") || text.equals("送出") || text.equals("send")) score += 100;
-                        else if (text.contains("傳送") || text.contains("發送") || text.contains("送出") || text.contains("send")) score += 60;
-
-                        if (desc.equals("傳送") || desc.equals("發送") || desc.equals("送出") || desc.equals("send")) score += 100;
-                        else if (desc.contains("傳送") || desc.contains("發送") || desc.contains("送出") || desc.contains("send")) score += 60;
-
-                        if (idStr.contains("send_btn") || idStr.contains("btn_send") || idStr.contains("button_send") || idStr.contains("send_button") || idStr.contains("send_image_button")) score += 80;
-                        else if (idStr.contains("send") && !idStr.contains("action")) score += 50;
-
-                        // Prefer elements further to the right edge (highest X)
-                        int rightBonus = (int) ((candBounds.centerX() / (float) screenWidth) * 40);
-                        score += rightBonus;
-
-                        if (score > maxScore || (score == maxScore && candBounds.right > maxRight)) {
-                            maxScore = score;
-                            maxRight = candBounds.right;
-                            if (bestCandidate != null) bestCandidate.recycle();
-                            bestCandidate = AccessibilityNodeInfo.obtain(cand);
-                        }
-                    }
-                    cand.recycle();
-                }
-
-                if (bestCandidate != null) return bestCandidate;
-            } finally {
-                editor.recycle();
-            }
-        }
-
-        // 2. Fallback: Search for bottom-area send buttons (strictly Y > 50% of screen to avoid top toolbar)
-        String[] sendLabels = new String[]{"送出", "傳送", "發送", "send", "submit", "送出訊息", "發送訊息", "傳送訊息", "send message"};
-        String[] sendIds = new String[]{"btn_send", "send_btn", "button_send", "composer_send", "iv_send", "chat_send", "send_button", "send_image_button", "send_message", "input_send"};
-
-        for (String label : sendLabels) {
-            AccessibilityNodeInfo node = findMatchingClickableNode(root, label, true);
-            if (node != null) {
-                Rect b = new Rect();
-                node.getBoundsInScreen(b);
-                if (b.centerY() > screenHeight * 0.45) return node;
-                node.recycle();
-            }
-        }
-        for (String label : sendLabels) {
-            AccessibilityNodeInfo node = findMatchingClickableNode(root, label, false);
-            if (node != null) {
-                Rect b = new Rect();
-                node.getBoundsInScreen(b);
-                if (b.centerY() > screenHeight * 0.45) return node;
-                node.recycle();
-            }
-        }
-        for (String idHint : sendIds) {
-            AccessibilityNodeInfo node = findMatchingNodeById(root, idHint);
-            if (node != null) {
-                Rect b = new Rect();
-                node.getBoundsInScreen(b);
-                if (b.centerY() > screenHeight * 0.45) return node;
-                node.recycle();
-            }
-        }
-
-        return null;
     }
 
     private void collectClickableNodes(AccessibilityNodeInfo node, List<AccessibilityNodeInfo> list) {
