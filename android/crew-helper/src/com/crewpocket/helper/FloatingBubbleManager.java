@@ -202,6 +202,7 @@ public class FloatingBubbleManager {
     private DockIconButton voiceScreenButton = null;
     private DockIconButton voiceMuteButton = null;
     private TextView voiceInterruptionButton = null;
+    private TextView voiceWakeButton = null;
     private View dialogView = null;
     private WindowManager.LayoutParams bubbleParams = null;
     private WindowManager.LayoutParams dialogParams = null;
@@ -766,7 +767,24 @@ public class FloatingBubbleManager {
                             refreshVoiceControls();
                         }
                     });
-                    headerRow.addView(voiceInterruptionButton);
+                    LinearLayout.LayoutParams interLp = new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+                    interLp.setMargins(0, 0, dp(6), 0);
+                    headerRow.addView(voiceInterruptionButton, interLp);
+
+                    voiceWakeButton = new TextView(context);
+                    voiceWakeButton.setTextSize(11);
+                    voiceWakeButton.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+                    voiceWakeButton.setPadding(dp(8), dp(3), dp(8), dp(3));
+                    voiceWakeButton.setOnClickListener(new View.OnClickListener() {
+                        @Override public void onClick(View v) {
+                            vibrateShort();
+                            boolean next = CrewAccessibilityService.toggleKeepAwake();
+                            Toast.makeText(context, next ? "☀️ 螢幕常亮已開啟（防止休眠）" : "🌙 螢幕常亮已關閉", Toast.LENGTH_SHORT).show();
+                            refreshVoiceControls();
+                        }
+                    });
+                    headerRow.addView(voiceWakeButton);
 
                     TextView close = new TextView(context);
                     close.setText("✕");
@@ -869,6 +887,7 @@ public class FloatingBubbleManager {
                 voiceCameraButton = null;
                 voiceScreenButton = null;
                 voiceMuteButton = null;
+                voiceWakeButton = null;
             }
         });
     }
@@ -983,6 +1002,24 @@ public class FloatingBubbleManager {
                         voiceInterruptionButton.setTextColor(Color.parseColor("#FCD34D")); // Amber 300
                     }
                     voiceInterruptionButton.setBackground(pillBg);
+                }
+
+                if (voiceWakeButton != null) {
+                    boolean isAwake = CrewAccessibilityService.isKeepAwakeActive();
+                    GradientDrawable wakeBg = new GradientDrawable();
+                    wakeBg.setCornerRadius(dp(12));
+                    if (isAwake) {
+                        wakeBg.setColor(Color.parseColor("#78350F")); // Amber 900
+                        wakeBg.setStroke(dp(1), Color.parseColor("#F59E0B")); // Amber 500
+                        voiceWakeButton.setText("☀️ 常亮中");
+                        voiceWakeButton.setTextColor(Color.parseColor("#FCD34D")); // Amber 300
+                    } else {
+                        wakeBg.setColor(Color.parseColor("#1E293B")); // Slate 800
+                        wakeBg.setStroke(dp(1), Color.parseColor("#475569")); // Slate 600
+                        voiceWakeButton.setText("☀️ 常亮");
+                        voiceWakeButton.setTextColor(Color.parseColor("#94A3B8")); // Slate 400
+                    }
+                    voiceWakeButton.setBackground(wakeBg);
                 }
             }
         });
