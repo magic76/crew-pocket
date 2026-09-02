@@ -113,7 +113,8 @@ public class NativeLiveService extends Service {
         FloatingBubbleManager.getInstance(this).updateNativeLiveStatus("正在連線 Gemini Live", true);
         final String apiKey = key;
         final String serverUrl = AppConfig.getServerUrl(this);
-        client = new NativeGeminiLiveClient(apiKey, serverUrl, new NativeGeminiLiveClient.Listener() {
+        final String voiceName = AppConfig.getVoiceName(this);
+        client = new NativeGeminiLiveClient(apiKey, serverUrl, voiceName, new NativeGeminiLiveClient.Listener() {
             @Override public void onStatus(String text) {
                 updateStatus(text, true);
             }

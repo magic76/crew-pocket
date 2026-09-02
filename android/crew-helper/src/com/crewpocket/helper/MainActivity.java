@@ -240,6 +240,14 @@ public class MainActivity extends Activity {
             }
         }));
 
+        // I. Voice Persona Selection Card
+        root.addView(makeActionCard("🗣️", I18n.cardVoicePersonaTitle(this), I18n.cardVoicePersonaDesc(this), CrewTheme.TEAL_400, new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                showVoicePersonaDialog();
+            }
+        }));
+
         // ── 4. Footer Brand Info ──
         LinearLayout footer = new LinearLayout(this);
         footer.setOrientation(LinearLayout.VERTICAL);
@@ -504,6 +512,41 @@ public class MainActivity extends Activity {
                 } else {
                     AppConfig.setLanguage(MainActivity.this, "auto");
                 }
+                dialog.dismiss();
+                recreate();
+            }
+        });
+        builder.setNegativeButton(I18n.get(this, "取消", "Cancel"), null);
+        builder.show();
+    }
+
+    private void showVoicePersonaDialog() {
+        android.app.AlertDialog.Builder builder = new android.app.AlertDialog.Builder(this);
+        final String[] voiceKeys = new String[]{"Kore", "Aoede", "Puck", "Charon", "Fenrir"};
+        String[] voiceLabels = new String[]{
+            I18n.get(this, "👩 Kore（女性 · 自然放鬆，預設推薦）", "👩 Kore (Female · Relaxed, Natural - Recommended)"),
+            I18n.get(this, "👩 Aoede（女性 · 清澈優雅）", "👩 Aoede (Female · Breathy, Engaging)"),
+            I18n.get(this, "👨 Puck（男性 · 活力親切）", "👨 Puck (Male · Playful, Friendly)"),
+            I18n.get(this, "👨 Charon（男性 · 沉穩專業）", "👨 Charon (Male · Deep, Confident)"),
+            I18n.get(this, "👨 Fenrir（男性 · 磁性堅定）", "👨 Fenrir (Male · Authoritative, Strong)")
+        };
+
+        String currentVoice = AppConfig.getVoiceName(this);
+        int selectedIndex = 0;
+        for (int i = 0; i < voiceKeys.length; i++) {
+            if (voiceKeys[i].equalsIgnoreCase(currentVoice)) {
+                selectedIndex = i;
+                break;
+            }
+        }
+
+        builder.setTitle(I18n.get(this, "選擇語音助理音色", "Select Voice Persona"));
+        builder.setSingleChoiceItems(voiceLabels, selectedIndex, new android.content.DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(android.content.DialogInterface dialog, int which) {
+                String chosenVoice = voiceKeys[which];
+                AppConfig.setVoiceName(MainActivity.this, chosenVoice);
+                Toast.makeText(MainActivity.this, I18n.get(MainActivity.this, "✅ 已切換音色為 " + chosenVoice, "✅ Switched voice persona to " + chosenVoice), Toast.LENGTH_SHORT).show();
                 dialog.dismiss();
                 recreate();
             }

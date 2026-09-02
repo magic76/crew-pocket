@@ -113,4 +113,13 @@ public final class I18n {
         if ("zh".equalsIgnoreCase(lang)) return "目前：繁體中文（點擊切換）";
         return get(ctx, "目前：跟隨系統語言（點擊切換）", "Current: System Default (Tap to switch)");
     }
+
+    public static String cardVoicePersonaTitle(Context ctx) {
+        return get(ctx, "語音助理音色 (Voice Persona)", "Voice Persona");
+    }
+
+    public static String cardVoicePersonaDesc(Context ctx) {
+        String voice = AppConfig.getVoiceName(ctx);
+        return get(ctx, "目前音色：" + voice + " · 點擊切換 5 款 Gemini 官方音色", "Current: " + voice + " · Tap to choose 5 Gemini voices");
+    }
 }

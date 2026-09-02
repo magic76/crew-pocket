@@ -300,9 +300,9 @@ public class NativeLiveActivity extends Activity {
     }
 
     private void startClient(String key) {
-        updateStatus(CrewTheme.CYAN_400, "正在連線 Gemini Live…");
-        lastTranscriptRole = "";
-        client = new NativeGeminiLiveClient(key, new NativeGeminiLiveClient.Listener() {
+        String serverUrl = AppConfig.getServerUrl(this);
+        String voiceName = AppConfig.getVoiceName(this);
+        client = new NativeGeminiLiveClient(key, serverUrl, voiceName, new NativeGeminiLiveClient.Listener() {
             @Override public void onStatus(final String text) {
                 updateStatus(CrewTheme.TEAL_400, text);
             }

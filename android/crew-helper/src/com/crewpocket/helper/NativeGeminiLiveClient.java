@@ -45,6 +45,7 @@ final class NativeGeminiLiveClient extends WebSocketListener {
     }
     private final String apiKey;
     private final String serverUrl;
+    private final String voiceName;
     private final Listener listener;
     private volatile boolean running;
     private volatile String stage = "尚未開始";
@@ -71,10 +72,12 @@ final class NativeGeminiLiveClient extends WebSocketListener {
     private volatile int lastScreenHeight = 1;
     private final Set<String> handledToolCalls = new HashSet<String>();
 
-    NativeGeminiLiveClient(String apiKey, Listener listener) { this(apiKey, "", listener); }
-    NativeGeminiLiveClient(String apiKey, String serverUrl, Listener listener) {
+    NativeGeminiLiveClient(String apiKey, Listener listener) { this(apiKey, "", AppConfig.DEFAULT_VOICE, listener); }
+    NativeGeminiLiveClient(String apiKey, String serverUrl, Listener listener) { this(apiKey, serverUrl, AppConfig.DEFAULT_VOICE, listener); }
+    NativeGeminiLiveClient(String apiKey, String serverUrl, String voiceName, Listener listener) {
         this.apiKey = apiKey;
         this.serverUrl = serverUrl == null ? "" : serverUrl.trim();
+        this.voiceName = voiceName == null || voiceName.trim().isEmpty() ? AppConfig.DEFAULT_VOICE : voiceName.trim();
         this.listener = listener;
     }
     boolean isRunning() { return running; }
@@ -348,7 +351,7 @@ final class NativeGeminiLiveClient extends WebSocketListener {
         JSONObject root = new JSONObject(); JSONObject setup = new JSONObject();
         setup.put("model", "models/gemini-3.1-flash-live-preview");
         JSONObject generation = new JSONObject(); generation.put("responseModalities", new JSONArray().put("AUDIO"));
-        generation.put("speechConfig", new JSONObject().put("voiceConfig", new JSONObject().put("prebuiltVoiceConfig", new JSONObject().put("voiceName", "Kore"))));
+        generation.put("speechConfig", new JSONObject().put("voiceConfig", new JSONObject().put("prebuiltVoiceConfig", new JSONObject().put("voiceName", voiceName.isEmpty() ? "Kore" : voiceName))));
         setup.put("generationConfig", generation);
         // Match the web Live session: its context is continuously compressed,
         // and Gemini can renew the socket before the upstream lifetime expires.
