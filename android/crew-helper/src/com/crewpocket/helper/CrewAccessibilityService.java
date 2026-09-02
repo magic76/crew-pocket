@@ -877,9 +877,10 @@ public class CrewAccessibilityService extends AccessibilityService {
     private AccessibilityNodeInfo findSendButton(AccessibilityNodeInfo root) {
         if (root == null) return null;
         android.util.DisplayMetrics metrics = getResources().getDisplayMetrics();
+        int screenWidth = metrics.widthPixels;
         int screenHeight = metrics.heightPixels;
 
-        // 1. Highest Priority: Spatial search around the active/bottom-most EditText
+        // 1. Highest Priority: Find the bottom-most active EditText (Chat input box)
         AccessibilityNodeInfo editor = findActiveEditText(root);
         if (editor != null) {
             try {
@@ -890,9 +891,9 @@ public class CrewAccessibilityService extends AccessibilityService {
                 collectClickableNodes(root, clickableList);
 
                 AccessibilityNodeInfo bestCandidate = null;
+                int maxScore = -1;
                 int maxRight = -1;
 
-                // Priority 1a: Clickable candidate on the same horizontal row to the right of EditText
                 for (AccessibilityNodeInfo cand : clickableList) {
                     if (cand.equals(editor)) {
                         cand.recycle();
@@ -903,25 +904,31 @@ public class CrewAccessibilityService extends AccessibilityService {
 
                     // Must be vertically aligned with the input box (+- 80px) and in lower screen area
                     boolean verticallyAligned = Math.abs(candBounds.centerY() - editBounds.centerY()) <= (editBounds.height() + 80);
-                    // Must be to the right of input box
+                    // Must be to the right side of the input box center
                     boolean horizontallyToRight = candBounds.centerX() > (editBounds.left + editBounds.width() * 0.4);
 
                     if (verticallyAligned && horizontallyToRight && candBounds.centerY() > screenHeight * 0.3) {
-                        // Check if candidate has send ID/label
                         String text = cand.getText() == null ? "" : cand.getText().toString().toLowerCase(Locale.ROOT);
                         String desc = cand.getContentDescription() == null ? "" : cand.getContentDescription().toString().toLowerCase(Locale.ROOT);
                         CharSequence viewId = cand.getViewIdResourceName();
                         String idStr = viewId == null ? "" : viewId.toString().toLowerCase(Locale.ROOT);
 
-                        if (text.contains("送出") || text.contains("傳送") || text.contains("發送") || text.contains("send") ||
-                            desc.contains("送出") || desc.contains("傳送") || desc.contains("發送") || desc.contains("send") ||
-                            idStr.contains("send") || idStr.contains("submit") || idStr.contains("btn_send") || idStr.contains("composer")) {
-                            if (bestCandidate != null) bestCandidate.recycle();
-                            bestCandidate = AccessibilityNodeInfo.obtain(cand);
-                            break;
-                        }
+                        int score = 0;
+                        if (text.equals("傳送") || text.equals("發送") || text.equals("送出") || text.equals("send")) score += 100;
+                        else if (text.contains("傳送") || text.contains("發送") || text.contains("送出") || text.contains("send")) score += 60;
 
-                        if (candBounds.right > maxRight) {
+                        if (desc.equals("傳送") || desc.equals("發送") || desc.equals("送出") || desc.equals("send")) score += 100;
+                        else if (desc.contains("傳送") || desc.contains("發送") || desc.contains("送出") || desc.contains("send")) score += 60;
+
+                        if (idStr.contains("send_btn") || idStr.contains("btn_send") || idStr.contains("button_send") || idStr.contains("send_button") || idStr.contains("send_image_button")) score += 80;
+                        else if (idStr.contains("send") && !idStr.contains("action")) score += 50;
+
+                        // Prefer elements further to the right edge (highest X)
+                        int rightBonus = (int) ((candBounds.centerX() / (float) screenWidth) * 40);
+                        score += rightBonus;
+
+                        if (score > maxScore || (score == maxScore && candBounds.right > maxRight)) {
+                            maxScore = score;
                             maxRight = candBounds.right;
                             if (bestCandidate != null) bestCandidate.recycle();
                             bestCandidate = AccessibilityNodeInfo.obtain(cand);
