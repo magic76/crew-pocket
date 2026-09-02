@@ -2908,6 +2908,7 @@
             };
           } else {
             toolResult = { success: false, error: data?.error || '無法取得無障礙畫面節點，可能處於純畫布 (Canvas) 或特殊自訂 UI' };
+          }
           appendCardTranscript('system', `🔍 語音讀取畫面結構 (${toolResult.nodeCount || 0} 個元件)`);
 
         } else if (name === 'get_device_capabilities') {
