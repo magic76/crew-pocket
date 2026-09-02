@@ -1829,8 +1829,8 @@
           const transcript = String(event.results[i][0].transcript || '').toLowerCase().trim();
           console.log('[WakeWord Detected]', transcript);
 
-          // Matches: "嗨酷", "嗨 酷", "嗨，酷", "hey crew", "hi crew", "hello crew", "開酷", "黑酷", "嘿酷", "hi 酷", "嗨 crew"
-          const isMatch = /嗨\s*酷|嘿\s*酷|嗨\s*crew|hey\s*crew|hi\s*crew|hello\s*crew|黑\s*酷|開\s*酷|叫\s*酷|hi\s*酷/i.test(transcript);
+          // Matches: "小酷小酷", "小酷", "小酷同學", "阿酷阿酷", "嗨小酷", "hey pocket", "hey crew", "hi crew", "嗨酷"
+          const isMatch = /小\s*酷\s*小\s*酷|小\s*酷|阿\s*酷\s*阿\s*酷|小\s*酷\s*同\s*學|嗨\s*小\s*酷|hey\s*pocket|hey\s*crew|hi\s*crew|hello\s*crew|嗨\s*酷/i.test(transcript);
           if (isMatch) {
             console.log('⚡ [WakeWord Triggered!]', transcript);
             wakeWordCooldown = true;
@@ -1862,7 +1862,7 @@
       };
 
       wakeWordRecognizer.start();
-      console.log('[WakeWord] 🟢 喚醒詞監聽中：「嗨 酷」/「Hey Crew」');
+      console.log('[WakeWord] 🟢 喚醒詞監聽中：「小酷小酷」/「小酷」/「Hey Pocket」');
     } catch (e) {
       console.warn('[WakeWord] Init failed:', e.message);
     }

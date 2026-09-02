@@ -1051,7 +1051,7 @@ public class CrewAccessibilityService extends AccessibilityService {
         for (String text : matches) {
             if (text == null) continue;
             String lower = text.trim().toLowerCase(Locale.ROOT).replace(" ", "");
-            if (lower.contains("嗨酷") || lower.contains("嘿酷") || lower.contains("heycrew") || lower.contains("hicrew") || lower.contains("開酷") || lower.contains("黑酷") || lower.contains("hellocrew") || lower.contains("嗨crew")) {
+            if (lower.contains("小酷小酷") || lower.contains("小酷") || lower.contains("小酷同學") || lower.contains("阿酷阿酷") || lower.contains("嗨小酷") || lower.contains("小庫小庫") || lower.contains("小褲小褲") || lower.contains("heypocket") || lower.contains("heycrew") || lower.contains("hicrew") || lower.contains("嗨酷")) {
                 stopNativeWakeWordListener();
                 try {
                     android.os.Vibrator v = (android.os.Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
