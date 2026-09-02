@@ -878,39 +878,23 @@ public class CrewAccessibilityService extends AccessibilityService {
 
     private AccessibilityNodeInfo findSendButton(AccessibilityNodeInfo root) {
         if (root == null) return null;
-        String[] sendLabels = new String[]{"送出", "傳送", "發送", "send", "submit", "送出訊息", "發送訊息", "傳送訊息", "send message"};
-        String[] sendIds = new String[]{"send", "submit", "btn_send", "send_btn", "button_send", "composer_send", "iv_send", "chat_send", "send_button", "send_image_button", "action_send", "send_message", "input_send"};
+        android.util.DisplayMetrics metrics = getResources().getDisplayMetrics();
+        int screenHeight = metrics.heightPixels;
 
-        // 1. Exact label / content description match
-        for (String label : sendLabels) {
-            AccessibilityNodeInfo node = findMatchingClickableNode(root, label, true);
-            if (node != null) return node;
-        }
-        // 2. Partial label / content description match
-        for (String label : sendLabels) {
-            AccessibilityNodeInfo node = findMatchingClickableNode(root, label, false);
-            if (node != null) return node;
-        }
-        // 3. Resource ID match
-        for (String idHint : sendIds) {
-            AccessibilityNodeInfo node = findMatchingNodeById(root, idHint);
-            if (node != null) return node;
-        }
-
-        // 4. Spatial geometry search: Find clickable icon to the right of the lowest active EditText
+        // 1. Highest Priority: Spatial search around the active/bottom-most EditText
         AccessibilityNodeInfo editor = findActiveEditText(root);
         if (editor != null) {
             try {
                 Rect editBounds = new Rect();
                 editor.getBoundsInScreen(editBounds);
 
-                // Collect all clickable candidate nodes across the active window
                 List<AccessibilityNodeInfo> clickableList = new ArrayList<AccessibilityNodeInfo>();
                 collectClickableNodes(root, clickableList);
 
                 AccessibilityNodeInfo bestCandidate = null;
                 int maxRight = -1;
 
+                // Priority 1a: Clickable candidate on the same horizontal row to the right of EditText
                 for (AccessibilityNodeInfo cand : clickableList) {
                     if (cand.equals(editor)) {
                         cand.recycle();
@@ -919,12 +903,26 @@ public class CrewAccessibilityService extends AccessibilityService {
                     Rect candBounds = new Rect();
                     cand.getBoundsInScreen(candBounds);
 
-                    // Candidate must be vertically aligned with the input box (+- 80px)
+                    // Must be vertically aligned with the input box (+- 80px) and in lower screen area
                     boolean verticallyAligned = Math.abs(candBounds.centerY() - editBounds.centerY()) <= (editBounds.height() + 80);
-                    // Candidate must be to the right of the center of input box
-                    boolean horizontallyToRight = candBounds.centerX() > (editBounds.left + editBounds.width() * 0.45);
+                    // Must be to the right of input box
+                    boolean horizontallyToRight = candBounds.centerX() > (editBounds.left + editBounds.width() * 0.4);
 
-                    if (verticallyAligned && horizontallyToRight) {
+                    if (verticallyAligned && horizontallyToRight && candBounds.centerY() > screenHeight * 0.3) {
+                        // Check if candidate has send ID/label
+                        String text = cand.getText() == null ? "" : cand.getText().toString().toLowerCase(Locale.ROOT);
+                        String desc = cand.getContentDescription() == null ? "" : cand.getContentDescription().toString().toLowerCase(Locale.ROOT);
+                        CharSequence viewId = cand.getViewIdResourceName();
+                        String idStr = viewId == null ? "" : viewId.toString().toLowerCase(Locale.ROOT);
+
+                        if (text.contains("送出") || text.contains("傳送") || text.contains("發送") || text.contains("send") ||
+                            desc.contains("送出") || desc.contains("傳送") || desc.contains("發送") || desc.contains("send") ||
+                            idStr.contains("send") || idStr.contains("submit") || idStr.contains("btn_send") || idStr.contains("composer")) {
+                            if (bestCandidate != null) bestCandidate.recycle();
+                            bestCandidate = AccessibilityNodeInfo.obtain(cand);
+                            break;
+                        }
+
                         if (candBounds.right > maxRight) {
                             maxRight = candBounds.right;
                             if (bestCandidate != null) bestCandidate.recycle();
@@ -939,6 +937,39 @@ public class CrewAccessibilityService extends AccessibilityService {
                 editor.recycle();
             }
         }
+
+        // 2. Fallback: Search for bottom-area send buttons (strictly Y > 50% of screen to avoid top toolbar)
+        String[] sendLabels = new String[]{"送出", "傳送", "發送", "send", "submit", "送出訊息", "發送訊息", "傳送訊息", "send message"};
+        String[] sendIds = new String[]{"btn_send", "send_btn", "button_send", "composer_send", "iv_send", "chat_send", "send_button", "send_image_button", "send_message", "input_send"};
+
+        for (String label : sendLabels) {
+            AccessibilityNodeInfo node = findMatchingClickableNode(root, label, true);
+            if (node != null) {
+                Rect b = new Rect();
+                node.getBoundsInScreen(b);
+                if (b.centerY() > screenHeight * 0.45) return node;
+                node.recycle();
+            }
+        }
+        for (String label : sendLabels) {
+            AccessibilityNodeInfo node = findMatchingClickableNode(root, label, false);
+            if (node != null) {
+                Rect b = new Rect();
+                node.getBoundsInScreen(b);
+                if (b.centerY() > screenHeight * 0.45) return node;
+                node.recycle();
+            }
+        }
+        for (String idHint : sendIds) {
+            AccessibilityNodeInfo node = findMatchingNodeById(root, idHint);
+            if (node != null) {
+                Rect b = new Rect();
+                node.getBoundsInScreen(b);
+                if (b.centerY() > screenHeight * 0.45) return node;
+                node.recycle();
+            }
+        }
+
         return null;
     }
 
