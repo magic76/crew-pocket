@@ -546,11 +546,18 @@ public class FloatingBubbleManager {
 
     public void openCrewPocket() {
         try {
-            Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse("http://127.0.0.1:8000"));
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            context.startActivity(intent);
+            String server = AppConfig.getServerUrl(context);
+            if (server != null && !server.isEmpty()) {
+                Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(server));
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                context.startActivity(intent);
+            } else {
+                Intent intent = new Intent(context, MainActivity.class);
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                context.startActivity(intent);
+            }
         } catch (Exception e) {
-            Toast.makeText(context, "無法開啟 Crew Pocket", Toast.LENGTH_SHORT).show();
+            Toast.makeText(context, "無法開啟主介面", Toast.LENGTH_SHORT).show();
         }
     }
 
@@ -1431,11 +1438,17 @@ public class FloatingBubbleManager {
             public void run() {
                 boolean success = false;
                 String detail = "無法連線";
+                String server = AppConfig.getServerUrl(context);
+                if (server == null || server.isEmpty()) {
+                    server = AppConfig.DEFAULT_SERVER;
+                }
+                String endpoint = server.replaceAll("/+$", "") + "/api/inbound/messages";
+
                 try {
                     for (int attempt = 1; attempt <= 3 && !success; attempt++) {
                         HttpURLConnection conn = null;
                         try {
-                            URL url = new URL("http://127.0.0.1:8000/api/inbound/messages");
+                            URL url = new URL(endpoint);
                             conn = (HttpURLConnection) url.openConnection();
                             conn.setRequestMethod("POST");
                             conn.setRequestProperty("Content-Type", "application/json; charset=utf-8");

@@ -218,6 +218,20 @@ public class MainActivity extends Activity {
             }
         ));
 
+        // G. Dual-Mode Settings Card (Standalone vs Connected Server)
+        boolean isStandalone = AppConfig.isStandaloneMode(this);
+        String currentServer = AppConfig.getServerUrl(this);
+        String modeSummary = isStandalone
+            ? "模式：☁️ 純獨立雲端模式 (直連 Gemini Live)"
+            : "模式：🔗 Crew Pocket 連線 (" + currentServer + ")";
+
+        root.addView(makeActionCard("⚙️", "運作模式與 API 設定", modeSummary + " · 點擊配置", CrewTheme.CYAN_400, new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                showSettingsDialog();
+            }
+        }));
+
         // ── 4. Footer Brand Info ──
         LinearLayout footer = new LinearLayout(this);
         footer.setOrientation(LinearLayout.VERTICAL);
@@ -326,6 +340,77 @@ public class MainActivity extends Activity {
                 requestPermissions(new String[]{android.Manifest.permission.READ_EXTERNAL_STORAGE}, 102);
             }
         }
+    }
+
+    private void showSettingsDialog() {
+        android.app.AlertDialog.Builder builder = new android.app.AlertDialog.Builder(this);
+        LinearLayout layout = new LinearLayout(this);
+        layout.setOrientation(LinearLayout.VERTICAL);
+        layout.setPadding(dp(20), dp(16), dp(20), dp(10));
+        layout.setBackgroundColor(CrewTheme.BG_PRIMARY);
+
+        TextView titleView = new TextView(this);
+        titleView.setText("⚙️ 運作模式與連線設定");
+        titleView.setTextSize(16);
+        titleView.setTypeface(Typeface.DEFAULT_BOLD);
+        titleView.setTextColor(CrewTheme.TEXT_PRIMARY);
+        titleView.setPadding(0, 0, 0, dp(12));
+        layout.addView(titleView);
+
+        // 1. Gemini API Key (BYOK)
+        TextView keyLabel = new TextView(this);
+        keyLabel.setText("1. Gemini API Key (BYOK 獨立雲端模式)");
+        keyLabel.setTextSize(12);
+        keyLabel.setTypeface(Typeface.DEFAULT_BOLD);
+        keyLabel.setTextColor(CrewTheme.TEAL_400);
+        layout.addView(keyLabel);
+
+        final android.widget.EditText keyInput = new android.widget.EditText(this);
+        keyInput.setHint("請輸入 AIzaSy 開頭的 Gemini API Key");
+        keyInput.setHintTextColor(CrewTheme.TEXT_MUTED);
+        keyInput.setText(AppConfig.getGeminiApiKey(this));
+        keyInput.setTextSize(12);
+        keyInput.setTextColor(CrewTheme.TEXT_PRIMARY);
+        keyInput.setBackground(CrewTheme.createCard(this, CrewTheme.BG_SURFACE, CrewTheme.BORDER_SUBTLE, 8));
+        keyInput.setPadding(dp(10), dp(10), dp(10), dp(10));
+        LinearLayout.LayoutParams keyLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        keyLp.setMargins(0, dp(4), 0, dp(14));
+        layout.addView(keyInput, keyLp);
+
+        // 2. Custom Server URL (Connected Mode)
+        TextView serverLabel = new TextView(this);
+        serverLabel.setText("2. Crew Pocket 伺服器網址 (連線擴充模式)");
+        serverLabel.setTextSize(12);
+        serverLabel.setTypeface(Typeface.DEFAULT_BOLD);
+        serverLabel.setTextColor(CrewTheme.INDIGO_400);
+        layout.addView(serverLabel);
+
+        final android.widget.EditText serverInput = new android.widget.EditText(this);
+        serverInput.setHint("留空為純獨立模式，或填 http://127.0.0.1:8000");
+        serverInput.setHintTextColor(CrewTheme.TEXT_MUTED);
+        serverInput.setText(AppConfig.getServerUrl(this));
+        serverInput.setTextSize(12);
+        serverInput.setTextColor(CrewTheme.TEXT_PRIMARY);
+        serverInput.setBackground(CrewTheme.createCard(this, CrewTheme.BG_SURFACE, CrewTheme.BORDER_SUBTLE, 8));
+        serverInput.setPadding(dp(10), dp(10), dp(10), dp(10));
+        LinearLayout.LayoutParams serverLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        serverLp.setMargins(0, dp(4), 0, dp(14));
+        layout.addView(serverInput, serverLp);
+
+        builder.setView(layout);
+        builder.setPositiveButton("儲存設定", new android.content.DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(android.content.DialogInterface dialog, int which) {
+                String newKey = keyInput.getText().toString().trim();
+                String newServer = serverInput.getText().toString().trim();
+                AppConfig.setGeminiApiKey(MainActivity.this, newKey);
+                AppConfig.setServerUrl(MainActivity.this, newServer);
+                Toast.makeText(MainActivity.this, "✅ 設定已儲存生效！", Toast.LENGTH_SHORT).show();
+                recreate();
+            }
+        });
+        builder.setNegativeButton("取消", null);
+        builder.show();
     }
 
     @Override

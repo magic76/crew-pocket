@@ -101,11 +101,9 @@ public class NativeLiveService extends Service {
             return START_NOT_STICKY;
         }
         startForeground(NOTIFICATION_ID, buildNotification("正在連線 Gemini Live"));
-        String key = getSharedPreferences("crew_native_live", MODE_PRIVATE).getString("gemini_live_key", "");
-        // One-time migration from the original test Activity preference file.
-        if (key.isEmpty()) key = getSharedPreferences("com.crewpocket.helper.NativeLiveActivity", MODE_PRIVATE).getString("gemini_live_key", "");
+        String key = AppConfig.getGeminiApiKey(this);
         if (key.length() < 20) {
-            end("尚未設定 Gemini API Key");
+            end("尚未設定 Gemini API Key，請至主畫面填寫");
             return START_NOT_STICKY;
         }
         active = true;
