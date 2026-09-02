@@ -402,6 +402,22 @@ public class MainActivity extends Activity {
         keyLabel.setTextColor(CrewTheme.TEAL_400);
         layout.addView(keyLabel);
 
+        TextView keyHintLink = new TextView(this);
+        keyHintLink.setText("🔗 免費申請 Gemini API Key (aistudio.google.com) ↗");
+        keyHintLink.setTextSize(11);
+        keyHintLink.setTextColor(CrewTheme.CYAN_400);
+        keyHintLink.setPadding(0, dp(2), 0, dp(4));
+        keyHintLink.setClickable(true);
+        keyHintLink.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                try {
+                    startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("https://aistudio.google.com/apikey")));
+                } catch (Exception ignored) {}
+            }
+        });
+        layout.addView(keyHintLink);
+
         final android.widget.EditText keyInput = new android.widget.EditText(this);
         keyInput.setHint("請輸入 AIzaSy 開頭的 Gemini API Key");
         keyInput.setHintTextColor(CrewTheme.TEXT_MUTED);

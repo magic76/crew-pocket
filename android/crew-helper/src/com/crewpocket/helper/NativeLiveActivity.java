@@ -1,8 +1,10 @@
 package com.crewpocket.helper;
 
 import android.app.Activity;
+import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.net.Uri;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
@@ -154,6 +156,22 @@ public class NativeLiveActivity extends Activity {
 
         String savedKey = AppConfig.getGeminiApiKey(this);
         apiKeyInput.setText(savedKey);
+
+        TextView keyHint = new TextView(this);
+        keyHint.setText("🔗 免費申請 Gemini API Key (aistudio.google.com) ↗");
+        keyHint.setTextSize(11);
+        keyHint.setTextColor(CrewTheme.CYAN_400);
+        keyHint.setPadding(0, dp(6), 0, 0);
+        keyHint.setClickable(true);
+        keyHint.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                try {
+                    startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("https://aistudio.google.com/apikey")));
+                } catch (Exception ignored) {}
+            }
+        });
+        keyCard.addView(keyHint);
 
         root.addView(keyCard);
 
