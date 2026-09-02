@@ -817,11 +817,10 @@
         <button id="close-model-btn" class="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition text-xs font-mono">✕</button>
       </div>
 
-      <!-- Agent Provider -->
-      <div class="p-3 border-b border-slate-800 bg-slate-950/70 shrink-0">
+      <!-- Agent Provider (Dynamically rendered based on installed CLI tools) -->
+      <div id="provider-section" class="p-3 border-b border-slate-800 bg-slate-950/70 shrink-0">
         <div class="grid grid-cols-2 gap-2" id="provider-options-container">
-          <button type="button" data-provider="antigravity" onclick="selectProvider('antigravity')" class="provider-option px-3 py-2 rounded-xl border text-xs font-bold transition active:scale-95">✨ Antigravity</button>
-          <button type="button" data-provider="codex" onclick="selectProvider('codex')" class="provider-option px-3 py-2 rounded-xl border text-xs font-bold transition active:scale-95">🧩 OpenAI Codex</button>
+          <!-- Loaded dynamically: Antigravity, Codex, etc. -->
         </div>
       </div>
 
@@ -1284,12 +1283,12 @@
 
   <!-- Modular Scripts (Cache-busted v7.8) -->
   <script src="/js/i18n.js?v=658a42026ca6"></script>
-  <script src="/js/ui.js?v=3017a0048977"></script>
+  <script src="/js/ui.js?v=82bde244088c"></script>
   <script src="/js/tools.js?v=a1e169518419"></script>
   <script src="/js/storage.js?v=0e143c8da2fc"></script>
   <script src="/js/chat.js?v=f9a6318c7d03"></script>
   <script src="/js/tasks.js?v=2e5e3f5e9e77"></script>
-  <script src="/js/live.js?v=9d8afae839c3"></script>
+  <script src="/js/live.js?v=8bab54e07fcd"></script>
   <script src="/js/phone_agent.js?v=6346f686519a"></script>
   <script src="/js/app.js?v=581e1ccb2265"></script>
 </body>

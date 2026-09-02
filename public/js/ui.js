@@ -512,6 +512,10 @@ function activeConversationStorageKey() {
 }
 
 function renderProviderOptions() {
+  const providerSection = document.getElementById('provider-section');
+  if (providerSection) {
+    providerSection.style.display = availableProviders.length <= 1 ? 'none' : 'block';
+  }
   if (!providerOptionsContainer) return;
   providerOptionsContainer.style.gridTemplateColumns = `repeat(${Math.min(availableProviders.length, 3)}, minmax(0, 1fr))`;
   providerOptionsContainer.innerHTML = availableProviders.map(provider => `

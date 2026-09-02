@@ -5,6 +5,18 @@
 
 ---
 
+## ⚡ 1 秒極速安裝 (One-Line Quick Install)
+
+打開 **Termux**，直接貼上並執行以下指令，即可完成所有依賴與環境設定：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/magic76/crew-pocket/main/install.sh | bash
+```
+
+安裝完成後，直接輸入 **`crew`** 即可啟動服務並自動開啟手機瀏覽器！✨
+
+---
+
 ## 🌟 核心特色 (Key Features)
 
 - 🌐 **原生無縫內嵌沙盒 2.0 (Seamless Inline Sandboxes)**：HTML / SVG / Web Audio / Chart.js 產物直接在對話中滿版動態渲染，高度智慧自適應，支援觸控互動、全螢幕大視野與代碼一鍵複製。
