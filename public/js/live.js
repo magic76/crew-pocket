@@ -1798,16 +1798,96 @@
   }
 
   // ==========================================
-  // 🎙️ Real-time Speech-to-Text (STT) Engine
+  // 🎙️ Wake Word Detection ("嗨 酷" / "Hey Crew")
   // ==========================================
+  let wakeWordRecognizer = null;
+  let isWakeWordEnabled = true;
+  let wakeWordCooldown = false;
+
+  function initWakeWordListener() {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      console.log('[WakeWord] SpeechRecognition not supported in this browser environment.');
+      return;
+    }
+
+    if (wakeWordRecognizer) {
+      try { wakeWordRecognizer.abort(); } catch (_) {}
+      wakeWordRecognizer = null;
+    }
+
+    try {
+      wakeWordRecognizer = new SpeechRecognition();
+      wakeWordRecognizer.continuous = true;
+      wakeWordRecognizer.interimResults = true;
+      wakeWordRecognizer.lang = 'zh-TW';
+
+      wakeWordRecognizer.onresult = (event) => {
+        if (isConnected || wakeWordCooldown || !isWakeWordEnabled) return;
+
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const transcript = String(event.results[i][0].transcript || '').toLowerCase().trim();
+          console.log('[WakeWord Detected]', transcript);
+
+          // Matches: "嗨酷", "嗨 酷", "嗨，酷", "hey crew", "hi crew", "hello crew", "開酷", "黑酷"
+          const isMatch = /嗨\s*酷|嗨\s*crew|hey\s*crew|hi\s*crew|hello\s*crew|黑\s*酷|開\s*酷/i.test(transcript);
+          if (isMatch) {
+            console.log('⚡ [WakeWord Triggered!]', transcript);
+            wakeWordCooldown = true;
+            if (navigator.vibrate) navigator.vibrate([30, 50, 30]);
+            appendCardTranscript('system', `🗣️ 語音喚醒詞觸發：${transcript}`);
+            stopWakeWordListener();
+            startLiveSession('operation');
+            setTimeout(() => { wakeWordCooldown = false; }, 4000);
+            break;
+          }
+        }
+      };
+
+      wakeWordRecognizer.onerror = (event) => {
+        if (event.error === 'not-allowed') {
+          console.warn('[WakeWord] Mic permission not granted for background wake word.');
+        }
+      };
+
+      wakeWordRecognizer.onend = () => {
+        // Automatically re-arm wake word listener when idle
+        if (!isConnected && isWakeWordEnabled) {
+          setTimeout(() => {
+            if (!isConnected && isWakeWordEnabled) {
+              try { wakeWordRecognizer && wakeWordRecognizer.start(); } catch (_) {}
+            }
+          }, 800);
+        }
+      };
+
+      wakeWordRecognizer.start();
+      console.log('[WakeWord] 🟢 喚醒詞監聽中：「嗨 酷」/「Hey Crew」');
+    } catch (e) {
+      console.warn('[WakeWord] Init failed:', e.message);
+    }
+  }
+
+  function startWakeWordListener() {
+    isWakeWordEnabled = true;
+    if (!isConnected) {
+      initWakeWordListener();
+    }
+  }
+
+  function stopWakeWordListener() {
+    if (wakeWordRecognizer) {
+      try { wakeWordRecognizer.abort(); } catch (_) {}
+      wakeWordRecognizer = null;
+    }
+  }
+
   function startSpeechRecognition() {
-    // Deliberately disabled: Android Web Speech repeatedly acquires audio
-    // focus and emits system chimes. Gemini Live already receives raw PCM.
-    speechRecognizer = null;
+    startWakeWordListener();
   }
 
   function stopSpeechRecognition() {
-    speechRecognizer = null;
+    stopWakeWordListener();
   }
 
   // ==========================================
@@ -2890,6 +2970,14 @@
             toolResult = { success: false, error: '請提供按鈕文字 label 或 x, y 座標' };
           }
 
+        } else if (name === 'end_voice_session') {
+          toolResult = { success: true, message: '語音通話即將結束，已停止交談。' };
+          if (navigator.vibrate) navigator.vibrate([40, 80]);
+          appendCardTranscript('system', '📞 語音指令掛斷通話');
+          setTimeout(() => {
+            stopLiveSession();
+          }, 1200);
+
         } else if (name === 'press_key') {
           const key = (args.key || 'HOME').toUpperCase();
           const res = await fetch('/api/phone/action', {
@@ -3132,6 +3220,7 @@
 1. 第一層（系統原生優先）：開啟 App（如「打開幣安」「開 Chrome」）一律呼叫 launch_app(app='...') 直接啟動，絕不在桌面滑動翻頁找圖示。系統按鍵（首頁、返回、多工、通知列、快捷設定）一律呼叫 press_key。網址一律呼叫 open_url。
 2. 第二層（Accessibility 語意執行）：一律以語意操作為主。點擊按鈕呼叫 tap_element(text='...') 或 tap_element(id='...')；滑動呼叫 swipe_screen(direction='up'|'down'|'left'|'right', distance='short'|'normal'|'long') 或 scroll_screen；輸入呼叫 type_text(text='...', target='...')；判斷畫面呼叫 get_screen_elements 或 wait_for_element。絕不自行計算猜測 (x, y) 像素座標。
 3. 第三層（Vision 視覺兜底）：只有在 accessibility tree 完全取不到有效節點（例如 Canvas 畫布、Unity、WebGL、遊戲自訂 UI）時，才呼叫 take_screenshot 截圖並以 tap_coordinate(x, y) 進行兜底點擊。
+【結束通話】當使用者說「關閉」、「掛斷」、「結束通話」、「退下」、「先這樣」或「再見」時，先簡短道別一句（如「好的，先為您關閉，隨時喊我！」），並一律呼叫 end_voice_session 工具以自動結束通話。
 【動作執行迴圈】遵守「取得畫面狀態 (get_screen_elements) → 決策語意動作 → 執行動作 → 再次檢查畫面驗證結果 → 推進下一步（最多5步）」。相機影格與手機螢幕不可混淆。`;
         const discussionPrompt = liveSessionMode === 'discussion'
           ? "\n\n【討論模式】協助釐清需求、追問關鍵資訊並整理共識。不得操作手機、截圖或寫檔。只有使用者明確說要填入輸入框時才能使用 draft_message，而且不得自動送出；「好」「可以」不算傳送授權。"
@@ -3280,6 +3369,34 @@
                     name: "get_device_capabilities",
                     description: "Discover currently supported device capabilities (e.g. app_launch, accessibility, notifications, semantic_tap, semantic_scroll, text_input).",
                     parameters: { type: "OBJECT", properties: {} }
+                  },
+                  {
+                    name: "end_voice_session",
+                    description: "End or close the voice session immediately when the user asks to hang up, close, stop talking, or says goodbye (e.g. '關閉', '掛斷', '結束通話', '退下', '再見', '先這樣').",
+                    parameters: {
+                      type: "OBJECT",
+                      properties: {
+                        reason: { type: "STRING", description: "Reason for ending session (e.g. user_requested, completed)" }
+                      }
+                    }
+                  },
+
+                  // 📱 Tier 3: Vision / Coordinate Fallback
+                  {
+                    name: "take_screenshot",
+                    description: "Capture the PHONE DISPLAY only when accessibility tree cannot read the elements (e.g. Canvas, Unity, WebGL, custom games) or user explicitly requests screen capture."
+                  },
+                  {
+                    name: "tap_coordinate",
+                    description: "Fallback pixel tap ONLY when semantic tap_element cannot find the element on Canvas, Unity, WebGL or custom game UI.",
+                    parameters: {
+                      type: "OBJECT",
+                      properties: {
+                        x: { type: "NUMBER", description: "X pixel coordinate" },
+                        y: { type: "NUMBER", description: "Y pixel coordinate" }
+                      },
+                      required: ["x", "y"]
+                    }
                   },
                   {
                     name: "draft_message",
@@ -4126,6 +4243,12 @@
     }
     ws = null;
     try { setMediaSessionActive(false); } catch (_) {}
+
+    setTimeout(() => {
+      if (!isConnected && isWakeWordEnabled) {
+        startWakeWordListener();
+      }
+    }, 1200);
   }
 
   async function endLiveSession() {
@@ -4445,5 +4568,10 @@
   if (dockHangupBtn) {
     dockHangupBtn.addEventListener('click', endLiveSession);
   }
+
+  // 🎙️ Automatically start wake word listener for "嗨 酷" / "Hey Crew"
+  try {
+    startWakeWordListener();
+  } catch (_) {}
 
 })();
