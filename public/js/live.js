@@ -3510,10 +3510,6 @@
 
                   // 📱 Tier 3: Vision / Coordinate Fallback
                   {
-                    name: "take_screenshot",
-                    description: "Capture the PHONE DISPLAY only when accessibility tree cannot read the elements (e.g. Canvas, Unity, WebGL, custom games) or user explicitly requests screen capture."
-                  },
-                  {
                     name: "tap_coordinate",
                     description: "Fallback pixel tap ONLY when semantic tap_element cannot find the element on Canvas, Unity, WebGL or custom game UI.",
                     parameters: {
