@@ -101,9 +101,36 @@ public class CrewAccessibilityService extends AccessibilityService {
     @Override
     public void onInterrupt() {}
 
+    private android.os.PowerManager.WakeLock screenWakeLock = null;
+
+    private synchronized void setScreenKeepAwake(boolean enable) {
+        try {
+            if (enable) {
+                if (screenWakeLock == null) {
+                    android.os.PowerManager pm = (android.os.PowerManager) getSystemService(Context.POWER_SERVICE);
+                    if (pm != null) {
+                        screenWakeLock = pm.newWakeLock(
+                            android.os.PowerManager.SCREEN_BRIGHT_WAKE_LOCK | android.os.PowerManager.ON_AFTER_RELEASE,
+                            "CrewPocket:ScreenKeepAwake"
+                        );
+                        screenWakeLock.setReferenceCounted(false);
+                    }
+                }
+                if (screenWakeLock != null && !screenWakeLock.isHeld()) {
+                    screenWakeLock.acquire(4 * 60 * 60 * 1000L); // Max 4h safety timeout
+                }
+            } else {
+                if (screenWakeLock != null && screenWakeLock.isHeld()) {
+                    screenWakeLock.release();
+                }
+            }
+        } catch (Exception ignored) {}
+    }
+
     @Override
     public void onDestroy() {
         isRunning = false;
+        setScreenKeepAwake(false);
         try {
             if (serverSocket != null && !serverSocket.isClosed()) {
                 serverSocket.close();
@@ -629,6 +656,10 @@ public class CrewAccessibilityService extends AccessibilityService {
                     boolean cancelled = mgr.cancelTask(id);
                     responseJson = "{\"success\":" + cancelled + ",\"id\":\"" + (id != null ? jsonEscape(id) : "") + "\",\"message\":\"" + (cancelled ? "已取消該排程" : "找不到指定計時器") + "\"}";
                 }
+            } else if (path.startsWith("/keep_awake")) {
+                boolean enable = body.contains("\"enabled\":true") || body.contains("\"enable\":true");
+                setScreenKeepAwake(enable);
+                responseJson = "{\"success\":true,\"keepAwake\":" + enable + "}";
             } else if (path.startsWith("/key")) {
                 String key = "HOME";
                 if (body.contains("\"BACK\"")) key = "BACK";

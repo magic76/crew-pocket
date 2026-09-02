@@ -131,6 +131,12 @@
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/>
         </svg>
       </button>
+      <!-- ☀️ Screen Keep Awake Quick Toggle Button -->
+      <button id="wake-lock-btn" class="w-8 h-8 p-1.5 rounded-full bg-slate-900/90 hover:bg-slate-800 text-slate-400 hover:text-amber-300 transition active:scale-95 shrink-0 border border-slate-700/80 flex items-center justify-center" title="螢幕常亮：已關閉 (點擊開啟防止休眠)">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+        </svg>
+      </button>
       <!-- 🧰 Unified Tools Dropdown Trigger Button -->
       <button id="tools-menu-btn" class="w-8 h-8 p-1.5 rounded-full bg-slate-900/90 hover:bg-slate-800 text-slate-300 hover:text-white transition active:scale-95 shrink-0 border border-slate-700/80 flex items-center justify-center" title="🧰 工具與功能選單 (檔案 / 用量 / 錦囊 / 通知)">
         <svg class="w-4 h-4 text-indigo-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
@@ -279,6 +285,17 @@
           <div class="flex flex-col min-w-0">
             <span class="font-semibold text-slate-100 group-hover:text-indigo-300">系統推播通知</span>
             <span id="notify-status-subtext" class="text-[10px] text-slate-400">點擊開啟 / 關閉</span>
+          </div>
+        </button>
+
+        <!-- 7. Screen Keep Awake Toggle -->
+        <button id="menu-wake-lock-btn" class="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-xs text-slate-200 hover:bg-slate-800/90 hover:text-amber-300 transition text-left group" title="切換螢幕常亮（防止休眠）">
+          <div id="wake-lock-menu-icon" class="w-6 h-6 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-slate-400 group-hover:scale-105 transition shrink-0">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+          </div>
+          <div class="flex flex-col min-w-0">
+            <span id="wake-lock-status-title" class="font-semibold text-slate-100 group-hover:text-amber-300">螢幕常亮</span>
+            <span id="wake-lock-status-subtext" class="text-[10px] text-slate-400">點擊開啟防止螢幕休眠</span>
           </div>
         </button>
 
@@ -1287,6 +1304,7 @@
   <script src="/js/chat.js?v=a5062d73e2bf"></script>
   <script src="/js/tasks.js?v=2e5e3f5e9e77"></script>
   <script src="/js/live.js?v=6c87e9458076"></script>
+  <script src="/js/wakelock.js?v=900169f3eace"></script>
   <script src="/js/phone_agent.js?v=6346f686519a"></script>
   <script src="/js/app.js?v=581e1ccb2265"></script>
 </body>
