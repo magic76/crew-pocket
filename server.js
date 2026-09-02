@@ -188,6 +188,35 @@ async function handlePhoneAction(req, res) {
       result = { success: true, capabilities: deviceAdapter.getCapabilities() };
     } else if (action === 'APPS' || action === 'INSTALLED_APPS') {
       result = { success: true, apps: await deviceAdapter.getInstalledApps() };
+    } else if (action === 'SCHEDULE_CREATE' || action === 'SCHEDULE') {
+      try {
+        const helperRes = await fetch('http://127.0.0.1:8766/schedule/create', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+        result = await helperRes.json();
+      } catch (e) {
+        result = { success: false, error: '小幫手服務未啟動：' + e.message };
+      }
+    } else if (action === 'SCHEDULE_LIST' || action === 'SCHEDULES') {
+      try {
+        const helperRes = await fetch('http://127.0.0.1:8766/schedule/list');
+        result = await helperRes.json();
+      } catch (e) {
+        result = { success: false, error: '小幫手服務未啟動：' + e.message };
+      }
+    } else if (action === 'SCHEDULE_CANCEL') {
+      try {
+        const helperRes = await fetch('http://127.0.0.1:8766/schedule/cancel', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+        result = await helperRes.json();
+      } catch (e) {
+        result = { success: false, error: '小幫手服務未啟動：' + e.message };
+      }
     } else {
       result = { success: false, error: `未知的操作類型：${action}` };
     }

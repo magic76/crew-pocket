@@ -2989,6 +2989,54 @@
             stopLiveSession();
           }, 1200);
 
+        } else if (name === 'schedule_reminder') {
+          const delaySec = Number(args.delay_seconds || 60);
+          const message = String(args.message || args.label || '時間到了');
+          const label = String(args.label || `${delaySec}秒後提醒`);
+          const res = await fetch('/api/phone/action', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'SCHEDULE_CREATE', type: 'reminder', delay_seconds: delaySec, message, label })
+          });
+          toolResult = await res.json().catch(() => ({ success: false, error: '建立計時器失敗' }));
+          if (navigator.vibrate) navigator.vibrate(30);
+          appendCardTranscript('system', `⏰ 已設定計時提醒：${label}`);
+
+        } else if (name === 'start_screen_monitor') {
+          const intervalSec = Number(args.interval_seconds || 60);
+          const durationMin = Number(args.duration_minutes || 10);
+          const condition = String(args.target_condition || '');
+          const label = String(args.label || (condition ? `等待「${condition}」` : `每${intervalSec}秒檢查畫面`));
+          const res = await fetch('/api/phone/action', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'SCHEDULE_CREATE', type: 'screen_monitor', interval_seconds: intervalSec, duration_minutes: durationMin, condition, label, speech: true })
+          });
+          toolResult = await res.json().catch(() => ({ success: false, error: '啟動畫面巡檢失敗' }));
+          if (navigator.vibrate) navigator.vibrate(30);
+          appendCardTranscript('system', `👀 已啟動畫面巡檢：${label}`);
+
+        } else if (name === 'list_active_schedules') {
+          const res = await fetch('/api/phone/action', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'SCHEDULE_LIST' })
+          });
+          toolResult = await res.json().catch(() => ({ success: false, error: '取得排程清單失敗' }));
+          appendCardTranscript('system', `📋 查詢排程任務：${toolResult.summary || '目前無排程'}`);
+
+        } else if (name === 'cancel_schedule') {
+          const cancelAll = Boolean(args.cancel_all);
+          const taskId = String(args.task_id || args.label_hint || '');
+          const res = await fetch('/api/phone/action', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'SCHEDULE_CANCEL', all: cancelAll, id: taskId })
+          });
+          toolResult = await res.json().catch(() => ({ success: false, error: '取消排程失敗' }));
+          if (navigator.vibrate) navigator.vibrate(30);
+          appendCardTranscript('system', `🗑️ 取消排程：${toolResult.message || '已處理'}`);
+
         } else if (name === 'press_key') {
           const key = (args.key || 'HOME').toUpperCase();
           const res = await fetch('/api/phone/action', {
@@ -3388,6 +3436,50 @@
                       type: "OBJECT",
                       properties: {
                         reason: { type: "STRING", description: "Reason for ending session (e.g. user_requested, completed)" }
+                      }
+                    }
+                  },
+                  {
+                    name: "schedule_reminder",
+                    description: "Set a countdown timer or reminder in seconds (e.g. 300 for 5 minutes). When time is up, the assistant vibrates and announces the reminder message.",
+                    parameters: {
+                      type: "OBJECT",
+                      properties: {
+                        delay_seconds: { type: "NUMBER", description: "Delay in seconds, e.g. 300 for 5 minutes" },
+                        message: { type: "STRING", description: "Reminder message to announce when timer expires" },
+                        label: { type: "STRING", description: "Short descriptive label for this timer" }
+                      },
+                      required: ["delay_seconds"]
+                    }
+                  },
+                  {
+                    name: "start_screen_monitor",
+                    description: "Start periodic background screen checks or wait until a specific condition/text appears on screen.",
+                    parameters: {
+                      type: "OBJECT",
+                      properties: {
+                        interval_seconds: { type: "NUMBER", description: "Interval between checks in seconds (default 60)" },
+                        duration_minutes: { type: "NUMBER", description: "Total monitoring duration in minutes (default 10)" },
+                        target_condition: { type: "STRING", description: "Optional target text to wait for (e.g. '已送達', '完成')" },
+                        label: { type: "STRING", description: "Short descriptive task name" }
+                      },
+                      required: ["interval_seconds"]
+                    }
+                  },
+                  {
+                    name: "list_active_schedules",
+                    description: "List all currently active timers, background screen monitors, and countdowns with their remaining time.",
+                    parameters: { type: "OBJECT", properties: {} }
+                  },
+                  {
+                    name: "cancel_schedule",
+                    description: "Cancel one or all active timers/screen monitors.",
+                    parameters: {
+                      type: "OBJECT",
+                      properties: {
+                        task_id: { type: "STRING", description: "Optional task ID to cancel, e.g. 'timer_1'" },
+                        label_hint: { type: "STRING", description: "Optional keyword/label of the timer to cancel" },
+                        cancel_all: { type: "BOOLEAN", description: "Set true to cancel all active timers and monitors" }
                       }
                     }
                   },

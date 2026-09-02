@@ -592,6 +592,43 @@ public class CrewAccessibilityService extends AccessibilityService {
                     try { typeLock.wait(1500); } catch (Exception ignored) {}
                 }
                 responseJson = "{\"success\":" + typeSuccess[0] + ",\"action\":\"TYPE\",\"text\":\"" + fText.replace("\"", "\\\"") + "\"}";
+            } else if (path.startsWith("/schedule/create")) {
+                String type = getJsonString(body, "type");
+                String label = getJsonString(body, "label");
+                String message = getJsonString(body, "message");
+                String condition = getJsonString(body, "condition");
+                int delaySec = 0;
+                int intervalSec = 60;
+                int durationMin = 10;
+                boolean speech = body.contains("\"speech\":true") || body.contains("\"report_speech\":true");
+                try {
+                    if (body.contains("\"delay_seconds\":")) delaySec = Integer.parseInt(body.substring(body.indexOf("\"delay_seconds\":") + 16).split("[,}]")[0].trim());
+                    if (body.contains("\"interval_seconds\":")) intervalSec = Integer.parseInt(body.substring(body.indexOf("\"interval_seconds\":") + 19).split("[,}]")[0].trim());
+                    if (body.contains("\"duration_minutes\":")) durationMin = Integer.parseInt(body.substring(body.indexOf("\"duration_minutes\":") + 19).split("[,}]")[0].trim());
+                } catch (Exception ignored) {}
+
+                ScheduledTaskManager mgr = ScheduledTaskManager.getInstance(this);
+                ScheduledTaskManager.ScheduledTask task;
+                if ("screen_monitor".equalsIgnoreCase(type) || "condition_wait".equalsIgnoreCase(type) || (condition != null && !condition.trim().isEmpty())) {
+                    task = mgr.startScreenMonitor(label, intervalSec, durationMin, condition, speech);
+                } else {
+                    task = mgr.scheduleReminder(label, delaySec > 0 ? delaySec : 60, message);
+                }
+                responseJson = "{\"success\":true,\"task\":" + task.toJson().toString() + "}";
+            } else if (path.startsWith("/schedule/list")) {
+                ScheduledTaskManager mgr = ScheduledTaskManager.getInstance(this);
+                responseJson = "{\"success\":true,\"tasks\":" + mgr.getActiveTasksJson().toString() + ",\"summary\":\"" + jsonEscape(mgr.getActiveTasksSummaryText()) + "\"}";
+            } else if (path.startsWith("/schedule/cancel")) {
+                String id = getJsonString(body, "id");
+                boolean all = body.contains("\"all\":true") || body.contains("\"cancel_all\":true");
+                ScheduledTaskManager mgr = ScheduledTaskManager.getInstance(this);
+                if (all) {
+                    int count = mgr.cancelAllTasks();
+                    responseJson = "{\"success\":true,\"cancelledCount\":" + count + ",\"message\":\"已取消所有排程與計時器\"}";
+                } else {
+                    boolean cancelled = mgr.cancelTask(id);
+                    responseJson = "{\"success\":" + cancelled + ",\"id\":\"" + (id != null ? jsonEscape(id) : "") + "\",\"message\":\"" + (cancelled ? "已取消該排程" : "找不到指定計時器") + "\"}";
+                }
             } else if (path.startsWith("/key")) {
                 String key = "HOME";
                 if (body.contains("\"BACK\"")) key = "BACK";
