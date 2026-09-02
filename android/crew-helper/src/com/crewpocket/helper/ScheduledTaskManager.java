@@ -134,7 +134,9 @@ public class ScheduledTaskManager {
                 if (task.cancelled) return;
                 if (System.currentTimeMillis() >= task.targetTime) {
                     activeTasks.remove(task.id);
-                    triggerAlarm("巡檢時間結束", task.label + " 已完成設定的 " + task.durationMinutes + " 分鐘監控。");
+                    try {
+                        FloatingBubbleManager.getInstance(context).updateNotification("⏰ 監控已結束：" + task.label);
+                    } catch (Exception ignored) {}
                     return;
                 }
 
@@ -168,10 +170,6 @@ public class ScheduledTaskManager {
                         triggerAlarm("目標條件已達成", "畫面上已出現「" + task.conditionText + "」！");
                         return;
                     }
-                }
-
-                if (task.reportSpeech) {
-                    speak("第 " + task.checkCount + " 次巡檢：目前仍在監看畫面。");
                 }
             } finally {
                 root.recycle();
