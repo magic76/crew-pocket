@@ -214,6 +214,9 @@ async function handlePhoneAction(req, res) {
           body: JSON.stringify(body)
         });
         result = await helperRes.json();
+      } catch (e) {
+        result = { success: false, error: '小幫手服務未啟動：' + e.message };
+      }
     } else if (action === 'KEEP_AWAKE' || action === 'SET_KEEP_AWAKE') {
       try {
         const helperRes = await fetch('http://127.0.0.1:8766/keep_awake', {
