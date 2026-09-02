@@ -1054,6 +1054,34 @@ public class FloatingBubbleManager {
                     View spacer = new View(context);
                     header.addView(spacer, new LinearLayout.LayoutParams(0, 1, 1f));
 
+                    final TextView wakePill = new TextView(context);
+                    final boolean initialAwake = CrewAccessibilityService.isKeepAwakeActive();
+                    wakePill.setText(initialAwake ? "☀️ 常亮中" : "☀️ 常亮");
+                    wakePill.setTextSize(10);
+                    wakePill.setTextColor(initialAwake ? Color.parseColor("#FCD34D") : Color.parseColor("#94A3B8"));
+                    wakePill.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+                    wakePill.setPadding(dp(8), dp(3), dp(8), dp(3));
+                    final GradientDrawable wakePillBg = new GradientDrawable();
+                    wakePillBg.setColor(initialAwake ? Color.parseColor("#78350F") : Color.parseColor("#1E293B"));
+                    wakePillBg.setCornerRadius(dp(10));
+                    wakePillBg.setStroke(dp(1), initialAwake ? Color.parseColor("#F59E0B") : Color.parseColor("#334155"));
+                    wakePill.setBackground(wakePillBg);
+                    wakePill.setOnClickListener(new View.OnClickListener() {
+                        @Override public void onClick(View v) {
+                            vibrateShort();
+                            boolean next = CrewAccessibilityService.toggleKeepAwake();
+                            wakePill.setText(next ? "☀️ 常亮中" : "☀️ 常亮");
+                            wakePill.setTextColor(next ? Color.parseColor("#FCD34D") : Color.parseColor("#94A3B8"));
+                            wakePillBg.setColor(next ? Color.parseColor("#78350F") : Color.parseColor("#1E293B"));
+                            wakePillBg.setStroke(dp(1), next ? Color.parseColor("#F59E0B") : Color.parseColor("#334155"));
+                            Toast.makeText(context, next ? "☀️ 螢幕常亮已開啟（防止休眠）" : "🌙 螢幕常亮已關閉", Toast.LENGTH_SHORT).show();
+                        }
+                    });
+                    LinearLayout.LayoutParams wakeLp = new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+                    wakeLp.setMargins(0, 0, dp(8), 0);
+                    header.addView(wakePill, wakeLp);
+
                     TextView closeBtn = new TextView(context);
                     closeBtn.setText("✕");
                     closeBtn.setTextSize(14);
