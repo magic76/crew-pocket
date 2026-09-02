@@ -1640,8 +1640,18 @@ async function sendMessage(queuedMessage = null) {
   const text = queuedMessage ? queuedMessage.text : getPromptText();
   const imgPath = queuedMessage ? queuedMessage.imagePath : uploadedImagePath;
 
-  if (!text && !imgPath) return;
-  if (isStreaming) return;
+  if (!text && !imgPath) {
+    if (promptInput) {
+      promptInput.focus();
+      promptInput.classList.add('ring-2', 'ring-indigo-500');
+      setTimeout(() => promptInput.classList.remove('ring-2', 'ring-indigo-500'), 300);
+    }
+    return;
+  }
+  if (isStreaming) {
+    console.warn('[sendMessage] Currently streaming, ignoring duplicate send request');
+    return;
+  }
 
   if (typeof window.haptic === 'function') {
     window.haptic('medium');
@@ -2246,18 +2256,19 @@ async function sendMessage(queuedMessage = null) {
     liveStatusElem.style.display = 'none';
     if (currentAbortController === streamAbortController) {
       currentAbortController = null;
-      setStreamingState(false);
     }
+    setStreamingState(false);
     if (isStreamVisible()) scrollToBottom();
     setTimeout(flushQueuedBtwMessage, 0);
   }
 }
 
 function handleSendClick(e) {
-  if (e?.defaultPrevented) return;
   if (e) {
-    if (e.cancelable) e.preventDefault();
-    e.stopPropagation();
+    try {
+      if (typeof e.preventDefault === 'function') e.preventDefault();
+      if (typeof e.stopPropagation === 'function') e.stopPropagation();
+    } catch (_) {}
   }
 
   // ⚡ /btw: Immediately launch concurrent sidecard without queueing or blocking!
@@ -2267,7 +2278,7 @@ function handleSendClick(e) {
   }
 
   if (isStreaming) {
-    if (Date.now() - streamingStartedAt > 800) {
+    if (Date.now() - streamingStartedAt > 500) {
       if (navigator.vibrate) navigator.vibrate([40, 40, 40]);
       stopGeneration();
     }
