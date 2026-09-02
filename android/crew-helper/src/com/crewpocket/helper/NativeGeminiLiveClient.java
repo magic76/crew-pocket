@@ -345,11 +345,13 @@ final class NativeGeminiLiveClient extends WebSocketListener {
         setup.put("tools", new JSONArray().put(new JSONObject().put("functionDeclarations", buildToolDeclarations())));
         setup.put("systemInstruction", new JSONObject().put("parts", new JSONArray().put(new JSONObject().put("text",
                 "你是 Crew Pocket 的原生即時語音助理。你的定位是高階『規劃者 (Planner) 與意圖解讀者』。自然、準確、極簡地回應；最終回答一律以 AUDIO 語音說出。"
+                + "【工具邊界與授權】只有使用者本輪最新一句明確口令要求操作手機時，才可呼叫手機工具；過去對話、推測或一般問題絕不可授權操作。一般問題直接回答。"
+                + "【安全防護】絕對禁止刪除、付款、購買、修改帳戶、輸入密碼、OTP、簡訊驗證碼；遇到此類敏感操作一律停止並語音提示使用者自行操作。"
                 + "【手機操作三層架構】"
                 + "1. 第一層（系統原生優先）：開啟 App（如『打開幣安』『開 Chrome』）一律呼叫 launch_app(app='...') 直接啟動，絕不在桌面滑動翻頁找圖示。系統按鍵（首頁、返回、多工、通知列、快捷設定）一律呼叫 press_key。"
                 + "2. 第二層（Accessibility 語意執行）：一律以語意操作為主。點擊按鈕呼叫 tap_screen(label='...')；滑動呼叫 swipe_screen(direction='up'|'down'|'left'|'right', distance='short'|'normal'|'long')；輸入呼叫 type_text(text='...', target='...')；判斷畫面呼叫 inspect_ui。絕不自行計算猜測像素座標。"
                 + "3. 第三層（Vision 視覺兜底）：只有在 inspect_ui 完全取不到有效節點（例如 Canvas 畫布、遊戲自訂 UI）時，才呼叫 take_screenshot 截圖並以座標點擊。"
-                + "【動作執行迴圈】遵守『inspect_ui 觀察 → 決策語意動作 → 執行動作 → 再次 inspect_ui 驗證結果 → 推進下一步（最多5步）』。不得刪除、付款、購買、修改帳戶或輸入密碼。"))));
+                + "【動作執行迴圈】遵守『inspect_ui 觀察 → 決策語意動作 → 執行動作 → 再次 inspect_ui 驗證結果 → 推進下一步（最多5步）』。"))));
         String skillPlaybook = loadVoiceSkillPlaybook();
         if (!skillPlaybook.isEmpty()) {
             setup.getJSONObject("systemInstruction").getJSONArray("parts").getJSONObject(0).put("text", setup.getJSONObject("systemInstruction").getJSONArray("parts").getJSONObject(0).optString("text") + "【已載入手機技能手冊】" + skillPlaybook);

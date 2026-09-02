@@ -508,6 +508,7 @@ public class CrewAccessibilityService extends AccessibilityService {
                 responseJson = "{\"success\":" + clickSuccess[0] + ",\"action\":\"NODE_CLICK\",\"label\":\"" + jsonEscape(label) + "\",\"id\":\"" + jsonEscape(id) + "\"}";
             } else if (path.startsWith("/scroll")) {
                 String direction = getJsonString(body, "direction");
+                final String targetId = getJsonString(body, "id");
                 if (direction == null || direction.isEmpty()) direction = "up";
                 final String fDir = direction.toLowerCase(Locale.ROOT);
                 final boolean[] scrollSuccess = new boolean[]{false};
@@ -516,9 +517,9 @@ public class CrewAccessibilityService extends AccessibilityService {
                     @Override public void run() {
                         try {
                             if ("up".equals(fDir) || "forward".equals(fDir)) {
-                                scrollSuccess[0] = performScrollAction(true);
+                                scrollSuccess[0] = performScrollAction(true, targetId);
                             } else if ("down".equals(fDir) || "backward".equals(fDir)) {
-                                scrollSuccess[0] = performScrollAction(false);
+                                scrollSuccess[0] = performScrollAction(false, targetId);
                             }
                             if (!scrollSuccess[0]) {
                                 // Fallback to proportional gesture swipe
@@ -539,7 +540,7 @@ public class CrewAccessibilityService extends AccessibilityService {
                     }
                 });
                 synchronized (scrollLock) { try { scrollLock.wait(1500); } catch (Exception ignored) {} }
-                responseJson = "{\"success\":" + scrollSuccess[0] + ",\"action\":\"SCROLL\",\"direction\":\"" + fDir + "\"}";
+                responseJson = "{\"success\":" + scrollSuccess[0] + ",\"action\":\"SCROLL\",\"direction\":\"" + fDir + (targetId != null ? "\",\"id\":\"" + jsonEscape(targetId) : "") + "\"}";
             } else if (path.startsWith("/swipe")) {
                 float x1 = 0, y1 = 0, x2 = 0, y2 = 0;
                 long duration = 300;
@@ -910,11 +911,25 @@ public class CrewAccessibilityService extends AccessibilityService {
         return null;
     }
 
-    private boolean performScrollAction(boolean forward) {
+    private boolean performScrollAction(boolean forward, String id) {
         AccessibilityNodeInfo root = getRootInActiveWindow();
         if (root == null) return false;
         try {
-            AccessibilityNodeInfo scrollable = findScrollableNode(root);
+            AccessibilityNodeInfo scrollable = null;
+            if (id != null && !id.trim().isEmpty()) {
+                AccessibilityNodeInfo targetNode = findMatchingNodeById(root, id.trim());
+                if (targetNode != null) {
+                    if (targetNode.isScrollable()) {
+                        scrollable = targetNode;
+                    } else {
+                        scrollable = findScrollableNode(targetNode);
+                        if (scrollable == null) scrollable = targetNode;
+                    }
+                }
+            }
+            if (scrollable == null) {
+                scrollable = findScrollableNode(root);
+            }
             if (scrollable != null) {
                 int action = forward ? AccessibilityNodeInfo.ACTION_SCROLL_FORWARD : AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD;
                 boolean success = scrollable.performAction(action);
