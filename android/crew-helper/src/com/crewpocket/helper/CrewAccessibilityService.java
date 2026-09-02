@@ -798,7 +798,27 @@ public class CrewAccessibilityService extends AccessibilityService {
                 if (target == null) target = findMatchingClickableNode(root, label.trim(), true);
                 if (target == null) target = findMatchingClickableNode(root, label.trim(), false);
             }
-            if (target == null) return false;
+            if (target == null) {
+                // If looking for send button and node not found, fallback to physical tap right of active EditText
+                String l = (label != null) ? label.trim().toLowerCase(Locale.ROOT) : "";
+                if (l.contains("送出") || l.contains("傳送") || l.contains("發送") || l.equals("send") || l.contains("submit")) {
+                    AccessibilityNodeInfo editor = findActiveEditText(root);
+                    if (editor != null) {
+                        try {
+                            Rect editBounds = new Rect();
+                            editor.getBoundsInScreen(editBounds);
+                            android.util.DisplayMetrics metrics = getResources().getDisplayMetrics();
+                            int tapX = Math.min(metrics.widthPixels - 70, editBounds.right + 60);
+                            int tapY = editBounds.centerY();
+                            performTap(tapX, tapY);
+                            return true;
+                        } finally {
+                            editor.recycle();
+                        }
+                    }
+                }
+                return false;
+            }
             try {
                 if (target.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
                     return true;
@@ -822,14 +842,14 @@ public class CrewAccessibilityService extends AccessibilityService {
     private AccessibilityNodeInfo findSendButton(AccessibilityNodeInfo root) {
         if (root == null) return null;
         String[] sendLabels = new String[]{"送出", "傳送", "發送", "send", "submit", "送出訊息", "發送訊息", "傳送訊息", "send message"};
-        String[] sendIds = new String[]{"send", "submit", "btn_send", "send_btn", "button_send", "composer_send", "iv_send", "chat_send", "send_button", "send_image_button", "action_send"};
+        String[] sendIds = new String[]{"send", "submit", "btn_send", "send_btn", "button_send", "composer_send", "iv_send", "chat_send", "send_button", "send_image_button", "action_send", "send_message", "input_send"};
 
-        // 1. Exact label match on send keywords
+        // 1. Exact label / content description match
         for (String label : sendLabels) {
             AccessibilityNodeInfo node = findMatchingClickableNode(root, label, true);
             if (node != null) return node;
         }
-        // 2. Partial label match
+        // 2. Partial label / content description match
         for (String label : sendLabels) {
             AccessibilityNodeInfo node = findMatchingClickableNode(root, label, false);
             if (node != null) return node;
@@ -839,40 +859,65 @@ public class CrewAccessibilityService extends AccessibilityService {
             AccessibilityNodeInfo node = findMatchingNodeById(root, idHint);
             if (node != null) return node;
         }
-        // 4. Sibling detection: Clickable icon right of active EditText
+
+        // 4. Spatial geometry search: Find clickable icon to the right of the lowest active EditText
         AccessibilityNodeInfo editor = findActiveEditText(root);
         if (editor != null) {
             try {
                 Rect editBounds = new Rect();
                 editor.getBoundsInScreen(editBounds);
-                AccessibilityNodeInfo parent = editor.getParent();
-                if (parent != null) {
-                    try {
-                        int childCount = parent.getChildCount();
-                        for (int i = 0; i < childCount; i++) {
-                            AccessibilityNodeInfo sibling = parent.getChild(i);
-                            if (sibling == null) continue;
-                            try {
-                                if (sibling.isClickable() && !sibling.equals(editor)) {
-                                    Rect sibBounds = new Rect();
-                                    sibling.getBoundsInScreen(sibBounds);
-                                    if (sibBounds.left >= editBounds.right - 120 || sibBounds.centerX() > editBounds.centerX()) {
-                                        return AccessibilityNodeInfo.obtain(sibling);
-                                    }
-                                }
-                            } finally {
-                                sibling.recycle();
-                            }
-                        }
-                    } finally {
-                        parent.recycle();
+
+                // Collect all clickable candidate nodes across the active window
+                List<AccessibilityNodeInfo> clickableList = new ArrayList<AccessibilityNodeInfo>();
+                collectClickableNodes(root, clickableList);
+
+                AccessibilityNodeInfo bestCandidate = null;
+                int maxRight = -1;
+
+                for (AccessibilityNodeInfo cand : clickableList) {
+                    if (cand.equals(editor)) {
+                        cand.recycle();
+                        continue;
                     }
+                    Rect candBounds = new Rect();
+                    cand.getBoundsInScreen(candBounds);
+
+                    // Candidate must be vertically aligned with the input box (+- 80px)
+                    boolean verticallyAligned = Math.abs(candBounds.centerY() - editBounds.centerY()) <= (editBounds.height() + 80);
+                    // Candidate must be to the right of the center of input box
+                    boolean horizontallyToRight = candBounds.centerX() > (editBounds.left + editBounds.width() * 0.45);
+
+                    if (verticallyAligned && horizontallyToRight) {
+                        if (candBounds.right > maxRight) {
+                            maxRight = candBounds.right;
+                            if (bestCandidate != null) bestCandidate.recycle();
+                            bestCandidate = AccessibilityNodeInfo.obtain(cand);
+                        }
+                    }
+                    cand.recycle();
                 }
+
+                if (bestCandidate != null) return bestCandidate;
             } finally {
                 editor.recycle();
             }
         }
         return null;
+    }
+
+    private void collectClickableNodes(AccessibilityNodeInfo node, List<AccessibilityNodeInfo> list) {
+        if (node == null) return;
+        if (node.isClickable()) {
+            list.add(AccessibilityNodeInfo.obtain(node));
+        }
+        int count = node.getChildCount();
+        for (int i = 0; i < count; i++) {
+            AccessibilityNodeInfo child = node.getChild(i);
+            if (child != null) {
+                collectClickableNodes(child, list);
+                child.recycle();
+            }
+        }
     }
 
     private AccessibilityNodeInfo findActiveEditText(AccessibilityNodeInfo node) {
