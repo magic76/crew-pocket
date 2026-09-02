@@ -308,7 +308,7 @@ public class FloatingBubbleManager {
             dockAnimator.cancel();
         }
         int screenWidth = windowManager.getDefaultDisplay().getWidth();
-        int bSize = bubbleParams.width > 0 ? bubbleParams.width : dp(52);
+        int bSize = bubbleParams.width > 0 ? bubbleParams.width : dp(40);
         int targetX = (bubbleParams.x < screenWidth / 2) ? dp(4) : (screenWidth - bSize - dp(4));
 
         bubbleParams.x = targetX;
@@ -322,10 +322,10 @@ public class FloatingBubbleManager {
         if (NativeLiveService.isActive() || nativeLiveRequested) return;
 
         int screenWidth = windowManager.getDefaultDisplay().getWidth();
-        int bSize = bubbleParams.width > 0 ? bubbleParams.width : dp(52);
+        int bSize = bubbleParams.width > 0 ? bubbleParams.width : dp(40);
 
         final int startX = bubbleParams.x;
-        // Slide 58% off-screen, leaving 42% (approx 22dp) as a sleek glowing edge tab
+        // Slide 58% off-screen, leaving 42% (approx 17dp) as a sleek glowing edge tab
         final int endX = (startX < screenWidth / 2) ? - (bSize * 58 / 100) : (screenWidth - (bSize * 42 / 100));
 
         if (dockAnimator != null && dockAnimator.isRunning()) {
@@ -366,7 +366,7 @@ public class FloatingBubbleManager {
                         ? 2038 
                         : WindowManager.LayoutParams.TYPE_PHONE;
 
-                    int size = dp(52);
+                    int size = dp(40);
                     bubbleParams = new WindowManager.LayoutParams(
                         size, size,
                         overlayType,
@@ -460,7 +460,7 @@ public class FloatingBubbleManager {
         try {
             int screenWidth = windowManager.getDefaultDisplay().getWidth();
             int screenHeight = windowManager.getDefaultDisplay().getHeight();
-            int bSize = bubbleParams.width > 0 ? bubbleParams.width : dp(52);
+            int bSize = bubbleParams.width > 0 ? bubbleParams.width : dp(40);
             int topLimit = getStatusBarHeight() + dp(4);
             int bottomLimit = screenHeight - dp(64);
 
@@ -1600,7 +1600,7 @@ public class FloatingBubbleManager {
             super.onDraw(canvas);
             float cx = getWidth() / 2f;
             float cy = getHeight() / 2f;
-            float radius = (Math.min(getWidth(), getHeight()) / 2f) - 4f;
+            float radius = (Math.min(getWidth(), getHeight()) / 2f) - 2.5f;
 
             // ── 1. Deep Glassmorphism Radial Gradient Background (Slate 900 -> Slate 950) ──
             int[] coreColors = new int[]{
@@ -1631,7 +1631,7 @@ public class FloatingBubbleManager {
             if (currentGradient != null) {
                 currentGradient.setLocalMatrix(matrix);
                 ringPaint.setShader(currentGradient);
-                ringPaint.setStrokeWidth(5.5f);
+                ringPaint.setStrokeWidth(4.2f);
                 canvas.drawOval(ringBounds, ringPaint);
             }
 
@@ -1658,7 +1658,7 @@ public class FloatingBubbleManager {
 
             // 3b. U-Shape Cradle Arc
             mic.setStyle(Paint.Style.STROKE);
-            mic.setStrokeWidth(4.5f);
+            mic.setStrokeWidth(3.4f);
             mic.setStrokeCap(Paint.Cap.ROUND);
             float cradleRadius = radius * 0.34f;
             float cradleTop = capTop + capH * 0.38f;
