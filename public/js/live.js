@@ -1812,15 +1812,13 @@
   // 🎙️ Wake Word Detection ("嗨 酷" / "Hey Crew")
   // ==========================================
   let wakeWordRecognizer = null;
-  let isWakeWordEnabled = true;
+  let isWakeWordEnabled = false; // Default OFF to protect privacy & battery
   let wakeWordCooldown = false;
 
   function initWakeWordListener() {
+    if (!isWakeWordEnabled) return;
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      console.log('[WakeWord] SpeechRecognition not supported in this browser environment.');
-      return;
-    }
+    if (!SpeechRecognition) return;
 
     if (wakeWordRecognizer) {
       try { wakeWordRecognizer.abort(); } catch (_) {}
@@ -1838,12 +1836,8 @@
 
         for (let i = event.resultIndex; i < event.results.length; i++) {
           const transcript = String(event.results[i][0].transcript || '').toLowerCase().trim();
-          console.log('[WakeWord Detected]', transcript);
-
-          // Matches: "小酷小酷", "小酷", "小酷同學", "阿酷阿酷", "嗨小酷", "hey pocket", "hey crew", "hi crew", "嗨酷"
           const isMatch = /小\s*酷\s*小\s*酷|小\s*酷|阿\s*酷\s*阿\s*酷|小\s*酷\s*同\s*學|嗨\s*小\s*酷|hey\s*pocket|hey\s*crew|hi\s*crew|hello\s*crew|嗨\s*酷/i.test(transcript);
           if (isMatch) {
-            console.log('⚡ [WakeWord Triggered!]', transcript);
             wakeWordCooldown = true;
             if (navigator.vibrate) navigator.vibrate([30, 50, 30]);
             appendCardTranscript('system', `🗣️ 語音喚醒詞觸發：${transcript}`);
@@ -1855,14 +1849,9 @@
         }
       };
 
-      wakeWordRecognizer.onerror = (event) => {
-        if (event.error === 'not-allowed') {
-          console.warn('[WakeWord] Mic permission not granted. Tap anywhere on screen to enable wake word.');
-        }
-      };
+      wakeWordRecognizer.onerror = () => {};
 
       wakeWordRecognizer.onend = () => {
-        // Automatically re-arm wake word listener when idle
         if (!isConnected && isWakeWordEnabled) {
           setTimeout(() => {
             if (!isConnected && isWakeWordEnabled) {
@@ -1873,21 +1862,7 @@
       };
 
       wakeWordRecognizer.start();
-      console.log('[WakeWord] 🟢 喚醒詞監聽中：「小酷小酷」/「小酷」/「Hey Pocket」');
-    } catch (e) {
-      console.warn('[WakeWord] Init failed:', e.message);
-    }
-  }
-
-  // Bind first user gesture to ensure browser grants Web Audio / Speech permission
-  if (typeof document !== 'undefined') {
-    ['click', 'touchstart', 'keydown'].forEach(evt => {
-      document.addEventListener(evt, () => {
-        if (!isConnected && isWakeWordEnabled && !wakeWordRecognizer) {
-          startWakeWordListener();
-        }
-      }, { passive: true });
-    });
+    } catch (_) {}
   }
 
   function startWakeWordListener() {
@@ -1898,8 +1873,10 @@
   }
 
   function stopWakeWordListener() {
+    isWakeWordEnabled = false;
     if (wakeWordRecognizer) {
       try { wakeWordRecognizer.abort(); } catch (_) {}
+      try { wakeWordRecognizer.stop(); } catch (_) {}
       wakeWordRecognizer = null;
     }
   }
@@ -4321,7 +4298,10 @@
   function releaseLiveRuntimeResources() {
     const stopTracks = stream => {
       try {
-        stream?.getTracks?.().forEach(track => {
+        if (!stream) return;
+        const tracks = typeof stream.getTracks === 'function' ? stream.getTracks() : [];
+        tracks.forEach(track => {
+          try { track.enabled = false; } catch (_) {}
           try { track.stop(); } catch (_) {}
         });
       } catch (_) {}
@@ -4343,6 +4323,7 @@
     stopCallProtection();
     stopLiveHealthMonitor();
     stopVisualizer();
+    stopWakeWordListener();
     stopSpeechRecognition();
 
     if (cameraInterval) clearInterval(cameraInterval);
@@ -4382,12 +4363,6 @@
     }
     ws = null;
     try { setMediaSessionActive(false); } catch (_) {}
-
-    setTimeout(() => {
-      if (!isConnected && isWakeWordEnabled) {
-        startWakeWordListener();
-      }
-    }, 1200);
   }
 
   async function endLiveSession() {
@@ -4707,10 +4682,5 @@
   if (dockHangupBtn) {
     dockHangupBtn.addEventListener('click', endLiveSession);
   }
-
-  // 🎙️ Automatically start wake word listener for "嗨 酷" / "Hey Crew"
-  try {
-    startWakeWordListener();
-  } catch (_) {}
 
 })();
