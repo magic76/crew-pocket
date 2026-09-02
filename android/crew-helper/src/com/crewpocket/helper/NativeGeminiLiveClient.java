@@ -190,13 +190,23 @@ final class NativeGeminiLiveClient extends WebSocketListener {
     }
 
     void stopPlayback() {
-        try {
-            if (player != null) {
-                player.pause();
-                player.flush();
-                player.play();
-            }
-        } catch (Exception ignored) {}
+        audioQueue.clear();
+        synchronized (playerLock) {
+            try {
+                if (player != null) {
+                    player.pause();
+                    player.flush();
+                }
+            } catch (Exception ignored) {}
+        }
+    }
+
+    private void triggerLocalInterruption() {
+        interruptedCurrentTurn = true;
+        aiSpeaking = false;
+        stopPlayback();
+        listener.onSpeakingChanged(false);
+        Log.d(TAG, "⚡ 本地零延遲語音插話觸發：立即停止播放並無縫收音");
     }
 
     void stop() {
@@ -816,8 +826,14 @@ final class NativeGeminiLiveClient extends WebSocketListener {
     private void startAudio() {
         if (!running || recorder != null) return;
         int min = AudioRecord.getMinBufferSize(16000, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT);
-        recorder = new AudioRecord(MediaRecorder.AudioSource.MIC, 16000, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, Math.max(min * 4, 8192));
-        
+        int bufferBytes = Math.max(min * 4, 8192);
+        try {
+            // 🎙️ VOICE_COMMUNICATION engages Android's hardware DSP full-duplex AEC (Acoustic Echo Cancellation) & AGC
+            recorder = new AudioRecord(MediaRecorder.AudioSource.VOICE_COMMUNICATION, 16000, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, bufferBytes);
+        } catch (Exception e) {
+            recorder = new AudioRecord(MediaRecorder.AudioSource.MIC, 16000, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, bufferBytes);
+        }
+
         // Attach hardware audio effects if supported by Samsung/Android
         try {
             // 🛡️ AcousticEchoCanceler (AEC): Essential to prevent AI hearing its own voice from loudspeaker!
@@ -920,21 +936,44 @@ final class NativeGeminiLiveClient extends WebSocketListener {
     }
 
     private volatile long lastPlaybackActiveAt = 0;
+    private static final double INTERRUPT_RMS_THRESHOLD = 0.035; // Sensitive voice energy threshold for interruption
 
     private void sendMic() {
         byte[] pcm = new byte[1280]; // 40ms @ 16kHz 16-bit mono
+        int consecutiveVoiceFrames = 0;
 
         while (running && recorder != null && webSocket != null) {
             int count = recorder.read(pcm, 0, pcm.length); if (count <= 0) continue;
             if (agentMuted) continue;
 
             long now = System.currentTimeMillis();
+            double rms = calculateRms(pcm, count);
 
-            // 🛡️ Web 對齊的 AI 喇叭回音保護罩（Echo Guard）：
-            // 當 AI 正在發聲，或播完後的 500ms 殘響冷卻期內，麥克風自動靜音不傳送！
-            // 這徹底阻斷手機喇叭自說自話的無限迴圈。使用者想插話只需「點擊浮動按鈕」即可秒斷 AI 並開口。
-            if (aiSpeaking || (now - lastPlaybackActiveAt < 500)) {
-                continue;
+            if (aiSpeaking) {
+                if (!allowVoiceInterruption) {
+                    // 🛡️ 防插話保護模式：AI 說話時靜音麥克風，防止環境音干擾
+                    consecutiveVoiceFrames = 0;
+                    continue;
+                }
+
+                // 🎙️ 允許插話模式：
+                // 當使用者開口講話（RMS 能量突增），連續 2 訊框（約 80ms）即刻觸發本地 0ms 停止播放！
+                if (rms >= INTERRUPT_RMS_THRESHOLD) {
+                    consecutiveVoiceFrames++;
+                    if (consecutiveVoiceFrames >= 2) {
+                        triggerLocalInterruption();
+                        consecutiveVoiceFrames = 0;
+                    }
+                } else {
+                    if (consecutiveVoiceFrames > 0) consecutiveVoiceFrames--;
+                }
+
+                // 若尚未觸發打斷且僅有微弱喇叭殘響，暫緩傳送以防無效迴音
+                if (aiSpeaking) {
+                    continue;
+                }
+            } else {
+                consecutiveVoiceFrames = 0;
             }
 
             byte[] chunk = (count == pcm.length) ? pcm.clone() : Arrays.copyOf(pcm, count);
