@@ -913,6 +913,13 @@ let historyRenderVersion = 0;
 let historyLoadOverlay = null;
 let historyPageState = null;
 let historyLoadEarlierObserver = null;
+let backgroundHistoryPoll = null;
+
+function stopBackgroundHistoryPoll() {
+  if (!backgroundHistoryPoll) return;
+  clearInterval(backgroundHistoryPoll.interval);
+  backgroundHistoryPoll = null;
+}
 
 function showHistoryLoadOverlay() {
   if (historyLoadOverlay) historyLoadOverlay.remove();
@@ -1057,6 +1064,9 @@ async function loadConversationHistory(convId) {
     alert('🎙️ 目前仍在語音通話中，請先按紅色掛斷，完成備忘錄保存後再切換歷史對話。');
     return false;
   }
+  // A previous load of this same conversation may still be polling a
+  // background response. It must not append into a newer history render.
+  stopBackgroundHistoryPoll();
   const renderVersion = ++historyRenderVersion;
   const loadOverlay = showHistoryLoadOverlay();
   historyPageState = null;
@@ -1152,10 +1162,14 @@ async function loadConversationHistory(convId) {
             messagesContainer.appendChild(liveCard);
             scrollToBottom(true);
 
-            // Poll until generation completes
-            const pollInterval = setInterval(async () => {
-              if (currentConversationId !== convId) {
-                clearInterval(pollInterval);
+            // Keep exactly one poll for the active history render. When the
+            // response is persisted, reload history instead of appending its
+            // final message; this guarantees one DOM card per response.
+            const poll = { convId, renderVersion, interval: null };
+            backgroundHistoryPoll = poll;
+            poll.interval = setInterval(async () => {
+              if (backgroundHistoryPoll !== poll || currentConversationId !== convId || renderVersion !== historyRenderVersion) {
+                if (backgroundHistoryPoll === poll) stopBackgroundHistoryPoll();
                 return;
               }
               try {
@@ -1163,22 +1177,12 @@ async function loadConversationHistory(convId) {
                 if (checkRes.ok) {
                   const checkData = await checkRes.json();
                   if (!checkData.isBusy) {
-                    clearInterval(pollInterval);
+                    stopBackgroundHistoryPoll();
                     setStreamingState(false);
                     const card = document.getElementById('resumed-live-card');
                     if (card) card.remove();
-
-                    // Reload latest history to smoothly display the completed assistant response
-                    const freshRes = await fetch(`/api/history?id=${convId}&${providerQuery()}`);
-                    if (freshRes.ok) {
-                      const freshData = await freshRes.json();
-                      if (freshData.context_stats) updateContextPill(freshData.context_stats);
-                      if (freshData.messages && freshData.messages.length > 0) {
-                        const lastMsg = freshData.messages[freshData.messages.length - 1];
-                        if (lastMsg.role === 'assistant') {
-                          appendMessage('assistant', lastMsg.content, lastMsg.timestamp, lastMsg.tools || [], lastMsg.thinking || '', false);
-                        }
-                      }
+                    if (currentConversationId === convId && renderVersion === historyRenderVersion) {
+                      loadConversationHistory(convId);
                     }
                   }
                 }
