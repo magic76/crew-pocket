@@ -1006,7 +1006,7 @@
 
     const card = document.createElement('div');
     card.id = 'live-inline-card';
-    card.className = 'fixed left-2 right-2 top-[60px] z-40 flex justify-center transition-all duration-300 animate-fadeIn pointer-events-none';
+    card.className = 'fixed left-2 right-2 top-[60px] z-40 flex justify-center pointer-events-none';
     
     card.innerHTML = `
       <div class="bg-gradient-to-b from-slate-900 via-slate-900 to-slate-950 border border-teal-500/50 rounded-2xl p-2 sm:p-2.5 text-xs sm:text-sm shadow-2xl shadow-teal-950/50 w-full max-w-2xl min-w-0 space-y-1.5 relative max-h-[62dvh] overflow-y-auto overscroll-contain pointer-events-auto">
@@ -1743,9 +1743,14 @@
     const canvasCtx = canvas.getContext('2d');
     const bufferLength = analyser ? analyser.frequencyBinCount : 32;
     const dataArray = new Uint8Array(bufferLength);
+    let lastDraw = 0;
 
-    function draw() {
+    function draw(now) {
       animFrameId = requestAnimationFrame(draw);
+      if (!canvas.isConnected || !isConnected) return;
+      if (now - lastDraw < 33) return; // 30 FPS cap for zero-lag smoothness
+      lastDraw = now;
+
       const width = canvas.width;
       const height = canvas.height;
 
@@ -1767,34 +1772,22 @@
         return;
       }
 
-      const barCount = 28;
+      const barCount = 24;
       const barWidth = (width / barCount) * 0.7;
       const gap = (width / barCount) * 0.3;
 
       for (let i = 0; i < barCount; i++) {
         const val = dataArray[i * 2] || 0;
         const percent = val / 255;
-        const barHeight = Math.max(3, percent * height * 0.85);
+        const barHeight = Math.max(2, percent * height * 0.85);
         const x = i * (barWidth + gap) + gap / 2;
         const y = (height - barHeight) / 2;
 
-        const gradient = canvasCtx.createLinearGradient(0, y, 0, y + barHeight);
-        if (isConnected) {
-          gradient.addColorStop(0, '#2dd4bf'); // teal
-          gradient.addColorStop(0.5, '#6366f1'); // indigo
-          gradient.addColorStop(1, '#ec4899'); // pink
-        } else {
-          gradient.addColorStop(0, '#64748b');
-          gradient.addColorStop(1, '#334155');
-        }
-
-        canvasCtx.fillStyle = gradient;
-        canvasCtx.beginPath();
-        canvasCtx.roundRect(x, y, barWidth, barHeight, 3);
-        canvasCtx.fill();
+        canvasCtx.fillStyle = isConnected ? '#2dd4bf' : '#64748b';
+        canvasCtx.fillRect(x, y, barWidth, barHeight);
       }
     }
-    draw();
+    animFrameId = requestAnimationFrame(draw);
   }
 
   function stopVisualizer() {
