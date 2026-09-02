@@ -1337,6 +1337,7 @@ function renderConversationItems(conversations, filterQuery = '') {
       currentDiffX = 0;
       isSwiping = false;
       isVerticalScroll = false;
+      wrapper.classList.remove('is-swiping-left');
       contentEl.style.transition = 'none';
     };
 
@@ -1359,9 +1360,11 @@ function renderConversationItems(conversations, filterQuery = '') {
       if (diffX < 0) {
         currentDiffX = diffX;
         const visualX = diffX < -120 ? -120 + (diffX + 120) * 0.35 : diffX;
+        wrapper.classList.toggle('is-swiping-left', diffX < -8);
         contentEl.style.transform = `translateX(${visualX}px)`;
       } else {
         currentDiffX = 0;
+        wrapper.classList.remove('is-swiping-left');
         contentEl.style.transform = 'translateX(0px)';
       }
     };
@@ -1374,6 +1377,7 @@ function renderConversationItems(conversations, filterQuery = '') {
         const confirmed = window.confirm(`確定刪除「${title}」？\n\n此對話將永久移除，無法復原。`);
         if (!confirmed) {
           currentDiffX = 0;
+          wrapper.classList.remove('is-swiping-left');
           contentEl.style.transition = 'transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1)';
           contentEl.style.transform = 'translateX(0px)';
           return;
@@ -1381,6 +1385,7 @@ function renderConversationItems(conversations, filterQuery = '') {
         isDeleted = true;
         deleteConversationDirect(conv.id, wrapper, conversationProvider);
       } else {
+        wrapper.classList.remove('is-swiping-left');
         contentEl.style.transition = 'transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1)';
         contentEl.style.transform = 'translateX(0px)';
       }

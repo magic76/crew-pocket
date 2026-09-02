@@ -189,27 +189,45 @@ header, footer { position: relative; }
    6. Premium Drawer (History Sidebar)
    ========================================= */
 #drawer {
-  background: linear-gradient(180deg, rgba(15,23,42,0.98), rgba(2,6,23,0.96)) !important;
-  backdrop-filter: blur(32px) saturate(180%) !important;
-  -webkit-backdrop-filter: blur(32px) saturate(180%) !important;
+  /* The drawer is nearly opaque already. Avoid backdrop blur here: on Android
+     Chrome it forces a full-screen repaint on every swipe animation frame. */
+  background: linear-gradient(180deg, rgb(15, 23, 42), rgb(2, 6, 23)) !important;
   border-right: 1px solid rgba(99,102,241,0.1) !important;
   box-shadow: 4px 0 40px rgba(0,0,0,0.5) !important;
+  will-change: transform;
+  contain: layout paint style;
+}
+
+#drawer-overlay {
+  will-change: opacity;
+}
+
+/* Keep the destructive red layer out of the compositor until the row is
+   genuinely being swiped. This prevents a one-frame red flash during list
+   rendering or when the drawer first opens. */
+#conv-list .swipe-delete-bg {
+  opacity: 0;
+  visibility: hidden;
+}
+
+#conv-list .swipe-item-wrapper.is-swiping-left .swipe-delete-bg {
+  opacity: 1;
+  visibility: visible;
 }
 
 /* History items hover glow line */
-#conv-list > * {
-  transition: all 0.2s ease !important;
+#conv-list > .swipe-item-wrapper {
+  transition: border-color 0.2s ease, background-color 0.2s ease !important;
   border-left: 2px solid transparent;
 }
 
-#conv-list > *:hover {
+#conv-list > .swipe-item-wrapper:hover {
   background: linear-gradient(90deg, rgba(99,102,241,0.08), transparent) !important;
   border-left-color: #6366f1 !important;
-  transform: translateX(2px);
 }
 
-#conv-list > *.active,
-#conv-list > *[data-active="true"] {
+#conv-list > .swipe-item-wrapper.active,
+#conv-list > .swipe-item-wrapper[data-active="true"] {
   border-left-color: #818cf8 !important;
   background: linear-gradient(90deg, rgba(99,102,241,0.12), transparent) !important;
 }
