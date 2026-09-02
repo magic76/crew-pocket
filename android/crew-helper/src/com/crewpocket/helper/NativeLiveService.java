@@ -109,6 +109,9 @@ public class NativeLiveService extends Service {
             return START_NOT_STICKY;
         }
         active = true;
+        if (CrewAccessibilityService.getInstance() != null) {
+            CrewAccessibilityService.getInstance().stopNativeWakeWordListener();
+        }
         FloatingBubbleManager.getInstance(this).updateNativeLiveStatus("正在連線 Gemini Live", true);
         final String apiKey = key;
         client = new NativeGeminiLiveClient(apiKey, new NativeGeminiLiveClient.Listener() {
@@ -130,10 +133,11 @@ public class NativeLiveService extends Service {
         return START_STICKY;
     }
 
-    private void updateStatus(String text, boolean keepActive) {
-        FloatingBubbleManager.getInstance(this).updateNativeLiveStatus(text, keepActive);
-        NotificationManager manager = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
-        manager.notify(NOTIFICATION_ID, buildNotification(text));
+    private void updateStatus(String status, boolean showOngoing) {
+        if (!active) return;
+        NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+        if (nm != null) nm.notify(NOTIFICATION_ID, buildNotification(status));
+        FloatingBubbleManager.getInstance(this).updateNativeLiveStatus(status, showOngoing);
     }
 
     private boolean toggleVisualSharing(boolean camera) {
@@ -205,6 +209,9 @@ public class NativeLiveService extends Service {
         if (closing != null && closing.isRunning()) closing.stop();
         FloatingBubbleManager.getInstance(this).updateNativeLiveStatus(reason, false);
         try { ((NotificationManager) getSystemService(NOTIFICATION_SERVICE)).cancel(NOTIFICATION_ID); } catch (Exception ignored) {}
+        if (CrewAccessibilityService.getInstance() != null) {
+            CrewAccessibilityService.getInstance().startNativeWakeWordListener();
+        }
         stopForeground(true);
         stopSelf();
     }

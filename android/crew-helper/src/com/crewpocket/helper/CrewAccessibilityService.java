@@ -11,6 +11,7 @@ import android.graphics.Path;
 import android.graphics.Rect;
 import android.graphics.Bitmap;
 import android.os.Build;
+import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.media.AudioManager;
@@ -31,6 +32,7 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.Locale;
 import java.util.List;
@@ -47,6 +49,9 @@ public class CrewAccessibilityService extends AccessibilityService {
     private ServerSocket serverSocket;
     private boolean isRunning = false;
     private Handler mainHandler;
+    private android.speech.SpeechRecognizer wakeRecognizer;
+    private Intent wakeRecognizerIntent;
+    private boolean wakeWordActive = false;
 
     public static boolean isServiceRunning() { return instance != null; }
     public static CrewAccessibilityService getInstance() {
@@ -67,6 +72,7 @@ public class CrewAccessibilityService extends AccessibilityService {
             public void run() {
                 try {
                     FloatingBubbleManager.getInstance(CrewAccessibilityService.this).showNotification();
+                    startNativeWakeWordListener();
                 } catch (Exception ignored) {}
             }
         }, 800);
@@ -785,7 +791,11 @@ public class CrewAccessibilityService extends AccessibilityService {
                 target = findMatchingNodeById(root, id.trim());
             }
             if (target == null && label != null && !label.trim().isEmpty()) {
-                target = findMatchingClickableNode(root, label.trim(), true);
+                String l = label.trim().toLowerCase(Locale.ROOT);
+                if (l.contains("送出") || l.contains("傳送") || l.contains("發送") || l.equals("send") || l.contains("submit")) {
+                    target = findSendButton(root);
+                }
+                if (target == null) target = findMatchingClickableNode(root, label.trim(), true);
                 if (target == null) target = findMatchingClickableNode(root, label.trim(), false);
             }
             if (target == null) return false;
@@ -807,6 +817,81 @@ public class CrewAccessibilityService extends AccessibilityService {
         } finally {
             root.recycle();
         }
+    }
+
+    private AccessibilityNodeInfo findSendButton(AccessibilityNodeInfo root) {
+        if (root == null) return null;
+        String[] sendLabels = new String[]{"送出", "傳送", "發送", "send", "submit", "送出訊息", "發送訊息", "傳送訊息", "send message"};
+        String[] sendIds = new String[]{"send", "submit", "btn_send", "send_btn", "button_send", "composer_send", "iv_send", "chat_send", "send_button", "send_image_button", "action_send"};
+
+        // 1. Exact label match on send keywords
+        for (String label : sendLabels) {
+            AccessibilityNodeInfo node = findMatchingClickableNode(root, label, true);
+            if (node != null) return node;
+        }
+        // 2. Partial label match
+        for (String label : sendLabels) {
+            AccessibilityNodeInfo node = findMatchingClickableNode(root, label, false);
+            if (node != null) return node;
+        }
+        // 3. Resource ID match
+        for (String idHint : sendIds) {
+            AccessibilityNodeInfo node = findMatchingNodeById(root, idHint);
+            if (node != null) return node;
+        }
+        // 4. Sibling detection: Clickable icon right of active EditText
+        AccessibilityNodeInfo editor = findActiveEditText(root);
+        if (editor != null) {
+            try {
+                Rect editBounds = new Rect();
+                editor.getBoundsInScreen(editBounds);
+                AccessibilityNodeInfo parent = editor.getParent();
+                if (parent != null) {
+                    try {
+                        int childCount = parent.getChildCount();
+                        for (int i = 0; i < childCount; i++) {
+                            AccessibilityNodeInfo sibling = parent.getChild(i);
+                            if (sibling == null) continue;
+                            try {
+                                if (sibling.isClickable() && !sibling.equals(editor)) {
+                                    Rect sibBounds = new Rect();
+                                    sibling.getBoundsInScreen(sibBounds);
+                                    if (sibBounds.left >= editBounds.right - 120 || sibBounds.centerX() > editBounds.centerX()) {
+                                        return AccessibilityNodeInfo.obtain(sibling);
+                                    }
+                                }
+                            } finally {
+                                sibling.recycle();
+                            }
+                        }
+                    } finally {
+                        parent.recycle();
+                    }
+                }
+            } finally {
+                editor.recycle();
+            }
+        }
+        return null;
+    }
+
+    private AccessibilityNodeInfo findActiveEditText(AccessibilityNodeInfo node) {
+        if (node == null) return null;
+        if (node.isEditable() || (node.getClassName() != null && node.getClassName().toString().toLowerCase(Locale.ROOT).contains("edittext"))) {
+            return AccessibilityNodeInfo.obtain(node);
+        }
+        int count = node.getChildCount();
+        for (int i = count - 1; i >= 0; i--) {
+            AccessibilityNodeInfo child = node.getChild(i);
+            if (child == null) continue;
+            try {
+                AccessibilityNodeInfo found = findActiveEditText(child);
+                if (found != null) return found;
+            } finally {
+                child.recycle();
+            }
+        }
+        return null;
     }
 
     private AccessibilityNodeInfo findMatchingNodeById(AccessibilityNodeInfo node, String id) {
@@ -856,6 +941,96 @@ public class CrewAccessibilityService extends AccessibilityService {
             }
         }
         return null;
+    }
+
+    // ── Native Background Wake Word Engine ──
+    public void startNativeWakeWordListener() {
+        if (wakeWordActive || NativeLiveService.isActive()) return;
+        mainHandler.post(new Runnable() {
+            @Override public void run() {
+                try {
+                    if (!android.speech.SpeechRecognizer.isRecognitionAvailable(CrewAccessibilityService.this)) return;
+                    if (wakeRecognizer != null) {
+                        try { wakeRecognizer.destroy(); } catch (Exception ignored) {}
+                        wakeRecognizer = null;
+                    }
+                    wakeRecognizer = android.speech.SpeechRecognizer.createSpeechRecognizer(CrewAccessibilityService.this);
+                    wakeRecognizerIntent = new Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
+                    wakeRecognizerIntent.putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
+                    wakeRecognizerIntent.putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE, "zh-TW");
+                    wakeRecognizerIntent.putExtra(android.speech.RecognizerIntent.EXTRA_PARTIAL_RESULTS, true);
+                    wakeRecognizerIntent.putExtra(android.speech.RecognizerIntent.EXTRA_MAX_RESULTS, 3);
+
+                    wakeRecognizer.setRecognitionListener(new android.speech.RecognitionListener() {
+                        @Override public void onReadyForSpeech(Bundle params) {}
+                        @Override public void onBeginningOfSpeech() {}
+                        @Override public void onRmsChanged(float rmsdB) {}
+                        @Override public void onBufferReceived(byte[] buffer) {}
+                        @Override public void onEndOfSpeech() {}
+                        @Override public void onError(int error) {
+                            if (!NativeLiveService.isActive() && isRunning) {
+                                mainHandler.postDelayed(new Runnable() {
+                                    @Override public void run() {
+                                        startNativeWakeWordListener();
+                                    }
+                                }, 1500);
+                            }
+                        }
+                        @Override public void onResults(Bundle results) {
+                            handleWakeResults(results);
+                            if (!NativeLiveService.isActive() && isRunning) {
+                                mainHandler.postDelayed(new Runnable() {
+                                    @Override public void run() {
+                                        startNativeWakeWordListener();
+                                    }
+                                }, 800);
+                            }
+                        }
+                        @Override public void onPartialResults(Bundle partialResults) {
+                            handleWakeResults(partialResults);
+                        }
+                        @Override public void onEvent(int eventType, Bundle params) {}
+                    });
+
+                    wakeRecognizer.startListening(wakeRecognizerIntent);
+                    wakeWordActive = true;
+                } catch (Exception ignored) {}
+            }
+        });
+    }
+
+    private void handleWakeResults(Bundle bundle) {
+        if (bundle == null || NativeLiveService.isActive()) return;
+        ArrayList<String> matches = bundle.getStringArrayList(android.speech.SpeechRecognizer.RESULTS_RECOGNITION);
+        if (matches == null) return;
+        for (String text : matches) {
+            if (text == null) continue;
+            String lower = text.trim().toLowerCase(Locale.ROOT).replace(" ", "");
+            if (lower.contains("嗨酷") || lower.contains("嘿酷") || lower.contains("heycrew") || lower.contains("hicrew") || lower.contains("開酷") || lower.contains("黑酷") || lower.contains("hellocrew") || lower.contains("嗨crew")) {
+                stopNativeWakeWordListener();
+                try {
+                    android.os.Vibrator v = (android.os.Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
+                    if (v != null) v.vibrate(new long[]{0, 40, 60, 40}, -1);
+                } catch (Exception ignored) {}
+                NativeLiveService.start(CrewAccessibilityService.this);
+                break;
+            }
+        }
+    }
+
+    public void stopNativeWakeWordListener() {
+        wakeWordActive = false;
+        mainHandler.post(new Runnable() {
+            @Override public void run() {
+                if (wakeRecognizer != null) {
+                    try {
+                        wakeRecognizer.stopListening();
+                        wakeRecognizer.destroy();
+                    } catch (Exception ignored) {}
+                    wakeRecognizer = null;
+                }
+            }
+        });
     }
 
     private AccessibilityNodeInfo findClickableAncestor(AccessibilityNodeInfo node) {
