@@ -236,6 +236,59 @@ public class FloatingBubbleManager {
         return instance;
     }
 
+    private static android.os.PowerManager.WakeLock appWakeLock = null;
+    private static boolean isKeepAwakeActive = false;
+
+    public static synchronized boolean isKeepAwakeActive() {
+        return isKeepAwakeActive;
+    }
+
+    public static synchronized boolean toggleKeepAwake(Context ctx) {
+        isKeepAwakeActive = !isKeepAwakeActive;
+        try {
+            if (isKeepAwakeActive) {
+                if (appWakeLock == null && ctx != null) {
+                    android.os.PowerManager pm = (android.os.PowerManager) ctx.getApplicationContext().getSystemService(Context.POWER_SERVICE);
+                    if (pm != null) {
+                        appWakeLock = pm.newWakeLock(
+                            android.os.PowerManager.SCREEN_BRIGHT_WAKE_LOCK | android.os.PowerManager.ON_AFTER_RELEASE,
+                            "CrewPocket:ScreenKeepAwake"
+                        );
+                        appWakeLock.setReferenceCounted(false);
+                    }
+                }
+                if (appWakeLock != null && !appWakeLock.isHeld()) {
+                    appWakeLock.acquire(4 * 60 * 60 * 1000L); // Max 4h safe limit
+                }
+            } else {
+                if (appWakeLock != null && appWakeLock.isHeld()) {
+                    appWakeLock.release();
+                }
+            }
+        } catch (Exception ignored) {}
+        return isKeepAwakeActive;
+    }
+
+    public void updateWakeButtonUi(TextView btn, boolean active) {
+        if (btn == null) return;
+        GradientDrawable bg = new GradientDrawable();
+        bg.setCornerRadius(dp(12));
+        if (active) {
+            bg.setColor(Color.parseColor("#F59E0B")); // High-contrast Solid Amber 500
+            bg.setStroke(dp(1.5f), Color.parseColor("#FEF08A")); // Yellow 200
+            btn.setText("☀️ 常亮 (ON)");
+            btn.setTextColor(Color.parseColor("#0F172A")); // Bold Slate 950
+            btn.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        } else {
+            bg.setColor(Color.parseColor("#1E293B")); // Slate 800
+            bg.setStroke(dp(1), Color.parseColor("#475569")); // Slate 600
+            btn.setText("☀️ 常亮 (OFF)");
+            btn.setTextColor(Color.parseColor("#94A3B8")); // Slate 400
+            btn.setTypeface(android.graphics.Typeface.DEFAULT);
+        }
+        btn.setBackground(bg);
+    }
+
     public Context getContext() {
         return context;
     }
@@ -774,14 +827,14 @@ public class FloatingBubbleManager {
 
                     voiceWakeButton = new TextView(context);
                     voiceWakeButton.setTextSize(11);
-                    voiceWakeButton.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
                     voiceWakeButton.setPadding(dp(8), dp(3), dp(8), dp(3));
+                    updateWakeButtonUi(voiceWakeButton, isKeepAwakeActive());
                     voiceWakeButton.setOnClickListener(new View.OnClickListener() {
                         @Override public void onClick(View v) {
-                            vibrateShort();
-                            boolean next = CrewAccessibilityService.toggleKeepAwake();
+                            vibrateSuccess();
+                            boolean next = toggleKeepAwake(context);
+                            updateWakeButtonUi(voiceWakeButton, next);
                             Toast.makeText(context, next ? "☀️ 螢幕常亮已開啟（防止休眠）" : "🌙 螢幕常亮已關閉", Toast.LENGTH_SHORT).show();
-                            refreshVoiceControls();
                         }
                     });
                     headerRow.addView(voiceWakeButton);
@@ -1005,21 +1058,7 @@ public class FloatingBubbleManager {
                 }
 
                 if (voiceWakeButton != null) {
-                    boolean isAwake = CrewAccessibilityService.isKeepAwakeActive();
-                    GradientDrawable wakeBg = new GradientDrawable();
-                    wakeBg.setCornerRadius(dp(12));
-                    if (isAwake) {
-                        wakeBg.setColor(Color.parseColor("#78350F")); // Amber 900
-                        wakeBg.setStroke(dp(1), Color.parseColor("#F59E0B")); // Amber 500
-                        voiceWakeButton.setText("☀️ 常亮中");
-                        voiceWakeButton.setTextColor(Color.parseColor("#FCD34D")); // Amber 300
-                    } else {
-                        wakeBg.setColor(Color.parseColor("#1E293B")); // Slate 800
-                        wakeBg.setStroke(dp(1), Color.parseColor("#475569")); // Slate 600
-                        voiceWakeButton.setText("☀️ 常亮");
-                        voiceWakeButton.setTextColor(Color.parseColor("#94A3B8")); // Slate 400
-                    }
-                    voiceWakeButton.setBackground(wakeBg);
+                    updateWakeButtonUi(voiceWakeButton, isKeepAwakeActive());
                 }
             }
         });
@@ -1092,25 +1131,14 @@ public class FloatingBubbleManager {
                     header.addView(spacer, new LinearLayout.LayoutParams(0, 1, 1f));
 
                     final TextView wakePill = new TextView(context);
-                    final boolean initialAwake = CrewAccessibilityService.isKeepAwakeActive();
-                    wakePill.setText(initialAwake ? "☀️ 常亮中" : "☀️ 常亮");
                     wakePill.setTextSize(10);
-                    wakePill.setTextColor(initialAwake ? Color.parseColor("#FCD34D") : Color.parseColor("#94A3B8"));
-                    wakePill.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
                     wakePill.setPadding(dp(8), dp(3), dp(8), dp(3));
-                    final GradientDrawable wakePillBg = new GradientDrawable();
-                    wakePillBg.setColor(initialAwake ? Color.parseColor("#78350F") : Color.parseColor("#1E293B"));
-                    wakePillBg.setCornerRadius(dp(10));
-                    wakePillBg.setStroke(dp(1), initialAwake ? Color.parseColor("#F59E0B") : Color.parseColor("#334155"));
-                    wakePill.setBackground(wakePillBg);
+                    updateWakeButtonUi(wakePill, isKeepAwakeActive());
                     wakePill.setOnClickListener(new View.OnClickListener() {
                         @Override public void onClick(View v) {
-                            vibrateShort();
-                            boolean next = CrewAccessibilityService.toggleKeepAwake();
-                            wakePill.setText(next ? "☀️ 常亮中" : "☀️ 常亮");
-                            wakePill.setTextColor(next ? Color.parseColor("#FCD34D") : Color.parseColor("#94A3B8"));
-                            wakePillBg.setColor(next ? Color.parseColor("#78350F") : Color.parseColor("#1E293B"));
-                            wakePillBg.setStroke(dp(1), next ? Color.parseColor("#F59E0B") : Color.parseColor("#334155"));
+                            vibrateSuccess();
+                            boolean next = toggleKeepAwake(context);
+                            updateWakeButtonUi(wakePill, next);
                             Toast.makeText(context, next ? "☀️ 螢幕常亮已開啟（防止休眠）" : "🌙 螢幕常亮已關閉", Toast.LENGTH_SHORT).show();
                         }
                     });

@@ -205,12 +205,12 @@ public class MainActivity extends Activity {
 
         // F. Screen Keep Awake Toggle Card
         root.addView(makeActionCard("☀️", "螢幕常亮開關 (Keep Awake)",
-            CrewAccessibilityService.isKeepAwakeActive() ? "狀態：已開啟 (防止休眠中) · 點擊關閉" : "狀態：已關閉 · 點擊開啟防止螢幕休眠",
+            FloatingBubbleManager.isKeepAwakeActive() ? "狀態：已開啟 (防止休眠中) · 點擊關閉" : "狀態：已關閉 · 點擊開啟防止螢幕休眠",
             CrewTheme.AMBER_400,
             new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
-                    boolean active = CrewAccessibilityService.toggleKeepAwake();
+                    boolean active = FloatingBubbleManager.toggleKeepAwake(MainActivity.this);
                     Toast.makeText(MainActivity.this, active ? "☀️ 螢幕常亮已開啟！" : "🌙 螢幕常亮已關閉！", Toast.LENGTH_SHORT).show();
                     // Recreate view to refresh status text
                     recreate();
