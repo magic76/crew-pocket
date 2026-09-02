@@ -836,7 +836,7 @@ public class CrewAccessibilityService extends AccessibilityService {
                 if (target == null) target = findMatchingClickableNode(root, label.trim(), false);
             }
             if (target == null) {
-                // If looking for send button and node not found, fallback to physical tap right of active EditText
+                // If looking for send button and node not found, fallback to physical tap at bottom right next to active EditText
                 String l = (label != null) ? label.trim().toLowerCase(Locale.ROOT) : "";
                 if (l.contains("送出") || l.contains("傳送") || l.contains("發送") || l.equals("send") || l.contains("submit")) {
                     AccessibilityNodeInfo editor = findActiveEditText(root);
@@ -845,7 +845,7 @@ public class CrewAccessibilityService extends AccessibilityService {
                             Rect editBounds = new Rect();
                             editor.getBoundsInScreen(editBounds);
                             android.util.DisplayMetrics metrics = getResources().getDisplayMetrics();
-                            int tapX = Math.min(metrics.widthPixels - 70, editBounds.right + 60);
+                            int tapX = metrics.widthPixels - 55;
                             int tapY = editBounds.centerY();
                             performTap(tapX, tapY);
                             return true;
@@ -857,17 +857,15 @@ public class CrewAccessibilityService extends AccessibilityService {
                 return false;
             }
             try {
-                if (target.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
-                    return true;
-                }
-                // If action click returned false, fallback to physical tap on node center
                 Rect bounds = new Rect();
                 target.getBoundsInScreen(bounds);
+                boolean clicked = target.performAction(AccessibilityNodeInfo.ACTION_CLICK);
+                // Dual dispatch: Physical tap ensures custom views and touch listeners receive the click
                 if (bounds.width() > 0 && bounds.height() > 0) {
                     performTap(bounds.centerX(), bounds.centerY());
                     return true;
                 }
-                return false;
+                return clicked;
             } finally { target.recycle(); }
         } catch (Exception ignored) {
             return false;
@@ -1172,6 +1170,12 @@ public class CrewAccessibilityService extends AccessibilityService {
                 android.os.Bundle args = new android.os.Bundle();
                 args.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text);
                 boolean success = target.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args);
+                try {
+                    android.os.Bundle selArgs = new android.os.Bundle();
+                    selArgs.putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_START_INT, text.length());
+                    selArgs.putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT, text.length());
+                    target.performAction(AccessibilityNodeInfo.ACTION_SET_SELECTION, selArgs);
+                } catch (Exception ignored) {}
                 target.recycle();
                 return success;
             }
