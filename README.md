@@ -15,7 +15,7 @@
 
 ---
 
-## ⚡ 1 秒極速安裝 (One-Line Quick Install)
+## ⚡ 最小安裝（One-Line Quick Install）
 
 打開 **Termux**，直接貼上並執行以下指令，即可完成所有依賴與環境設定：
 
@@ -23,7 +23,14 @@
 curl -fsSL https://raw.githubusercontent.com/magic76/crew-pocket/main/install.sh | bash
 ```
 
-安裝完成後，直接輸入 **`crew`** 即可啟動服務並自動開啟手機瀏覽器！✨
+安裝器只安裝核心執行環境（Node.js、Git、curl）與你選擇的 AI Provider；Python、Crew Helper 與瀏覽器 Extension 都是選配，不會阻塞基本文字對話。首次仍須親自完成 AI 帳號登入。
+
+完成後依序執行：
+
+```bash
+crew doctor  # 一次檢查 Node、Provider、儲存權限、Helper 與 Web 服務
+crew start   # 啟動服務並開啟 Crew Pocket
+```
 
 ---
 
@@ -78,9 +85,11 @@ termux-setup-storage
 # 2. 更新套件庫索引與系統套件
 pkg update && pkg upgrade -y
 
-# 3. 安裝 Node.js、Git、Python 與基礎工具
-pkg install -y git nodejs python curl gh
+# 3. 基本版只需要 Node.js、Git 與 curl
+pkg install -y git nodejs curl
 ```
+
+> Python 僅在需要本地 Python 程式沙盒時再安裝：`pkg install python`。
 
 ---
 
@@ -167,7 +176,7 @@ Extension、Web UI 與 AI API 統一走 `127.0.0.1:8000`；Android Crew Helper �
 cd ~/agy-web
 node server.js
 ```
-*或是建立背景啟動腳本執行：`bash ~/start-web.sh`*
+*或是使用安裝器建立的指令：`crew start`。*
 
 ### 2. 打開手機瀏覽器
 在手機瀏覽器輸入網址：
@@ -180,6 +189,14 @@ http://127.0.0.1:8000
 2. 點選瀏覽器選單（右上角或底部的 `⋮` / 分享按鈕）。
 3. 點擊 **「加到主畫面」 (Add to Home screen)** 或 **「安裝應用程式」**。
 4. 手機桌面即會產生 **Crew Pocket** 專屬圖標，點開即享沉浸式無邊框 App 體驗！🎉
+
+### 安裝後自我檢查
+
+```bash
+crew doctor
+```
+
+它會顯示 Node.js、Crew Pocket 目錄、agy/Codex 是否已安裝、儲存空間授權、選配 Crew Helper 連線與目前 Web 服務狀態。Provider 的帳號登入是外部 OAuth 流程，請依提示執行 `agy` 或 `codex login` 完成。
 
 ---
 
