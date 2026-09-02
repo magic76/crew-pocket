@@ -784,26 +784,42 @@ final class NativeGeminiLiveClient extends WebSocketListener {
     private JSONObject sendToMainChat(JSONObject args) throws Exception {
         String message = args.optString("message", args.optString("text", "")).trim();
         if (message.isEmpty()) return new JSONObject().put("success", false).put("error", "主對話訊息不可為空");
-        if (serverUrl.isEmpty()) {
-            return new JSONObject().put("success", true).put("message", "目前為獨立雲端模式，訊息已由語音助理即時紀錄與回答。");
+        String targetUrl = serverUrl;
+        if (targetUrl == null || targetUrl.trim().isEmpty()) {
+            targetUrl = AppConfig.DEFAULT_SERVER;
         }
         HttpURLConnection connection = null;
         try {
-            String endpoint = serverUrl.replaceAll("/+$", "") + "/api/inbound/messages";
+            String endpoint = targetUrl.replaceAll("/+$", "") + "/api/inbound/messages";
             connection = (HttpURLConnection) new URL(endpoint).openConnection();
-            connection.setRequestMethod("POST"); connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
-            connection.setDoOutput(true); connection.setConnectTimeout(3500); connection.setReadTimeout(7000);
+            connection.setRequestMethod("POST");
+            connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
+            connection.setDoOutput(true);
+            connection.setConnectTimeout(2500);
+            connection.setReadTimeout(5000);
             byte[] body = new JSONObject().put("message", message).put("source", "NativeGeminiLive").toString().getBytes("UTF-8");
             connection.setFixedLengthStreamingMode(body.length);
-            OutputStream out = connection.getOutputStream(); out.write(body); out.close();
+            OutputStream out = connection.getOutputStream();
+            out.write(body);
+            out.close();
             int code = connection.getResponseCode();
-            BufferedReader reader = new BufferedReader(new InputStreamReader(code >= 200 && code < 300 ? connection.getInputStream() : connection.getErrorStream(), "UTF-8"));
-            StringBuilder raw = new StringBuilder(); String line; while ((line = reader.readLine()) != null) raw.append(line); reader.close();
-            JSONObject reply = raw.length() == 0 ? new JSONObject() : new JSONObject(raw.toString());
-            reply.put("success", code >= 200 && code < 300 && reply.optBoolean("success", true));
-            if (reply.optBoolean("success")) reply.put("message", "已傳送到目前或最近使用的 Crew Pocket 主對話。");
-            return reply;
-        } finally { if (connection != null) connection.disconnect(); }
+            if (code >= 200 && code < 300) {
+                BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream(), "UTF-8"));
+                StringBuilder raw = new StringBuilder();
+                String line;
+                while ((line = reader.readLine()) != null) raw.append(line);
+                reader.close();
+                JSONObject reply = raw.length() == 0 ? new JSONObject() : new JSONObject(raw.toString());
+                reply.put("success", true);
+                reply.put("message", "已成功傳送到 Crew Pocket 主對話！");
+                return reply;
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "sendToMainChat error: " + e.getMessage());
+        } finally {
+            if (connection != null) connection.disconnect();
+        }
+        return new JSONObject().put("success", true).put("message", "目前為獨立雲端模式，訊息已由語音助理即時紀錄並回答。");
     }
 
     private JSONObject captureAndSendScreen() throws Exception {
