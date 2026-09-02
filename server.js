@@ -33,11 +33,14 @@ const { handleListFiles, handleReadFile, handleSaveFile, handleDeleteFile } = re
 const { handleListPublicAssets } = require('./lib/public-assets');
 const { handleGenerateTitle, getCachedTitle } = require('./lib/title');
 const { phoneAgent } = require('./lib/phone_agent');
+const { getDeviceAdapter } = require('./lib/device_adapter');
 const { readSkills, saveSkill } = require('./lib/phone_skills');
 const { createExtensionBridge } = require('./lib/extension_bridge');
 const { getStorageReport, deleteMediaItems, getMediaThumbnail } = require('./lib/storage');
 const { getConversationSettings, saveConversationSettings, saveConversationTitle, deleteConversationSettings } = require('./lib/conversation-settings');
 const { createTask, getTask, listTasks, updateTask } = require('./lib/tasks');
+
+const deviceAdapter = getDeviceAdapter();
 
 async function handleStorageReport(res) {
   try {
@@ -150,33 +153,41 @@ async function handlePhoneAction(req, res) {
     let result = { success: false };
 
     if (action === 'TAP_TEXT' || action === 'CLICK_TEXT') {
-      result = await phoneAgent.tapText(body.text || body.label);
+      result = await deviceAdapter.tap({ text: body.text || body.label });
     } else if (action === 'TAP_NODE' || action === 'CLICK_NODE') {
-      result = await phoneAgent.tapNode(body.id);
+      result = await deviceAdapter.tap({ id: body.id });
     } else if (action === 'SCROLL') {
-      result = await phoneAgent.scroll(body.direction, body.distance);
+      result = await deviceAdapter.scroll(body.direction, body.distance);
     } else if (action === 'SWIPE') {
       if (body.x1 !== undefined && body.y1 !== undefined && body.x2 !== undefined && body.y2 !== undefined) {
         result = await phoneAgent.swipeCoordinates(body.x1, body.y1, body.x2, body.y2, body.durationMs);
       } else {
-        result = await phoneAgent.swipe(body.direction, body.distance);
+        result = await deviceAdapter.swipe(body.direction, body.distance);
       }
     } else if (action === 'KEYEVENT' || action === 'KEY') {
-      result = await phoneAgent.pressKey(body.key);
+      result = await deviceAdapter.pressKey(body.key);
     } else if (action === 'TYPE') {
-      result = await phoneAgent.typeText(body.text, body.target, body.x, body.y);
+      result = await deviceAdapter.inputText(body.text, body.target);
     } else if (action === 'LAUNCH') {
-      result = await phoneAgent.launchApp(body.app || body.package, body.target);
+      result = await deviceAdapter.launchApp(body.app || body.package || body.name || body.target);
     } else if (action === 'OPEN_URL') {
-      result = await phoneAgent.openUrl(body.url);
+      result = await deviceAdapter.openUrl(body.url);
     } else if (action === 'WAIT_FOR') {
-      result = await phoneAgent.waitForElement(body.text, body.timeoutMs);
+      result = await deviceAdapter.waitFor({ text: body.text, id: body.id }, body.timeoutMs);
     } else if (action === 'TAP') {
-      result = await phoneAgent.tap(body.x, body.y);
-    } else if (action === 'SCREEN_INFO' || action === 'NODES') {
-      result = await phoneAgent.getCurrentScreen();
+      if (body.text || body.label || body.id) {
+        result = await deviceAdapter.tap({ text: body.text || body.label, id: body.id });
+      } else {
+        result = await phoneAgent.tap(body.x, body.y);
+      }
+    } else if (action === 'SCREEN_INFO' || action === 'NODES' || action === 'SCREEN') {
+      result = await deviceAdapter.getScreen();
     } else if (action === 'CURRENT_APP') {
-      result = await phoneAgent.getCurrentApp();
+      result = await deviceAdapter.getCurrentApp();
+    } else if (action === 'CAPABILITIES') {
+      result = { success: true, capabilities: deviceAdapter.getCapabilities() };
+    } else if (action === 'APPS' || action === 'INSTALLED_APPS') {
+      result = { success: true, apps: await deviceAdapter.getInstalledApps() };
     } else {
       result = { success: false, error: `未知的操作類型：${action}` };
     }

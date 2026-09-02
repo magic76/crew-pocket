@@ -2794,8 +2794,16 @@
             };
           } else {
             toolResult = { success: false, error: data?.error || '無法取得無障礙畫面節點，可能處於純畫布 (Canvas) 或特殊自訂 UI' };
-          }
           appendCardTranscript('system', `🔍 語音讀取畫面結構 (${toolResult.nodeCount || 0} 個元件)`);
+
+        } else if (name === 'get_device_capabilities') {
+          const res = await fetch('/api/phone/action', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'CAPABILITIES' })
+          });
+          toolResult = await res.json().catch(() => ({ success: true, capabilities: ['app_launch', 'accessibility', 'semantic_tap', 'semantic_scroll', 'text_input', 'home', 'back'] }));
+          appendCardTranscript('system', `📡 查詢裝置支援能力`);
 
         } else if (name === 'tap_element') {
           const targetText = args.text || args.label;
@@ -3267,18 +3275,10 @@
                       required: ["text"]
                     }
                   },
-                  // 📱 Tier 3: Vision / Coordinate Fallback
                   {
-                    name: "tap_coordinate",
-                    description: "Fallback pixel tap ONLY when semantic tap_element cannot find the element on Canvas, Unity, WebGL or custom game UI.",
-                    parameters: {
-                      type: "OBJECT",
-                      properties: {
-                        x: { type: "NUMBER", description: "X pixel coordinate" },
-                        y: { type: "NUMBER", description: "Y pixel coordinate" }
-                      },
-                      required: ["x", "y"]
-                    }
+                    name: "get_device_capabilities",
+                    description: "Discover currently supported device capabilities (e.g. app_launch, accessibility, notifications, semantic_tap, semantic_scroll, text_input).",
+                    parameters: { type: "OBJECT", properties: {} }
                   },
                   {
                     name: "draft_message",
