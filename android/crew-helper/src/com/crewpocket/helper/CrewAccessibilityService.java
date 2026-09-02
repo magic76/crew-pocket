@@ -495,29 +495,51 @@ public class CrewAccessibilityService extends AccessibilityService {
                 responseJson = "{\"success\":true,\"action\":\"TAP\",\"x\":" + x + ",\"y\":" + y + "}";
             } else if (path.startsWith("/click")) {
                 final String label = getJsonString(body, "label");
+                final String id = getJsonString(body, "id");
                 final boolean[] clickSuccess = new boolean[]{false};
                 final Object clickLock = new Object();
                 mainHandler.post(new Runnable() {
                     @Override public void run() {
-                        try { clickSuccess[0] = performClickByLabel(label); }
+                        try { clickSuccess[0] = performClickByTarget(label, id); }
                         finally { synchronized (clickLock) { clickLock.notify(); } }
                     }
                 });
                 synchronized (clickLock) { try { clickLock.wait(1500); } catch (Exception ignored) {} }
-                responseJson = "{\"success\":" + clickSuccess[0] + ",\"action\":\"NODE_CLICK\",\"label\":\"" + jsonEscape(label) + "\"}";
+                responseJson = "{\"success\":" + clickSuccess[0] + ",\"action\":\"NODE_CLICK\",\"label\":\"" + jsonEscape(label) + "\",\"id\":\"" + jsonEscape(id) + "\"}";
             } else if (path.startsWith("/scroll")) {
                 String direction = getJsonString(body, "direction");
-                final boolean forward = !"backward".equalsIgnoreCase(direction);
+                if (direction == null || direction.isEmpty()) direction = "up";
+                final String fDir = direction.toLowerCase(Locale.ROOT);
                 final boolean[] scrollSuccess = new boolean[]{false};
                 final Object scrollLock = new Object();
                 mainHandler.post(new Runnable() {
                     @Override public void run() {
-                        try { scrollSuccess[0] = performScrollAction(forward); }
-                        finally { synchronized (scrollLock) { scrollLock.notify(); } }
+                        try {
+                            if ("up".equals(fDir) || "forward".equals(fDir)) {
+                                scrollSuccess[0] = performScrollAction(true);
+                            } else if ("down".equals(fDir) || "backward".equals(fDir)) {
+                                scrollSuccess[0] = performScrollAction(false);
+                            }
+                            if (!scrollSuccess[0]) {
+                                // Fallback to proportional gesture swipe
+                                android.util.DisplayMetrics metrics = getResources().getDisplayMetrics();
+                                int w = metrics.widthPixels, h = metrics.heightPixels;
+                                float x1 = w * 0.5f, y1 = h * 0.72f, x2 = w * 0.5f, y2 = h * 0.28f;
+                                if ("down".equals(fDir) || "backward".equals(fDir)) {
+                                    y1 = h * 0.28f; y2 = h * 0.72f;
+                                } else if ("left".equals(fDir)) {
+                                    x1 = w * 0.85f; y1 = h * 0.5f; x2 = w * 0.15f; y2 = h * 0.5f;
+                                } else if ("right".equals(fDir)) {
+                                    x1 = w * 0.15f; y1 = h * 0.5f; x2 = w * 0.85f; y2 = h * 0.5f;
+                                }
+                                performSwipe(x1, y1, x2, y2, 320);
+                                scrollSuccess[0] = true;
+                            }
+                        } finally { synchronized (scrollLock) { scrollLock.notify(); } }
                     }
                 });
                 synchronized (scrollLock) { try { scrollLock.wait(1500); } catch (Exception ignored) {} }
-                responseJson = "{\"success\":" + scrollSuccess[0] + ",\"action\":\"NODE_SCROLL\",\"direction\":\"" + (forward ? "forward" : "backward") + "\"}";
+                responseJson = "{\"success\":" + scrollSuccess[0] + ",\"action\":\"SCROLL\",\"direction\":\"" + fDir + "\"}";
             } else if (path.startsWith("/swipe")) {
                 float x1 = 0, y1 = 0, x2 = 0, y2 = 0;
                 long duration = 300;
@@ -565,10 +587,13 @@ public class CrewAccessibilityService extends AccessibilityService {
                 responseJson = "{\"success\":" + typeSuccess[0] + ",\"action\":\"TYPE\",\"text\":\"" + fText.replace("\"", "\\\"") + "\"}";
             } else if (path.startsWith("/key")) {
                 String key = "HOME";
-                if (body.contains("\"HOME\"")) key = "HOME";
-                else if (body.contains("\"BACK\"")) key = "BACK";
+                if (body.contains("\"BACK\"")) key = "BACK";
                 else if (body.contains("\"RECENTS\"")) key = "RECENTS";
+                else if (body.contains("\"NOTIFICATIONS\"")) key = "NOTIFICATIONS";
+                else if (body.contains("\"QUICK_SETTINGS\"")) key = "QUICK_SETTINGS";
+                else if (body.contains("\"POWER_DIALOG\"")) key = "POWER_DIALOG";
                 else if (body.contains("\"SCREENSHOT\"")) key = "SCREENSHOT";
+                else if (body.contains("\"HOME\"")) key = "HOME";
 
                 final String fKey = key;
                 mainHandler.post(new Runnable() {
@@ -577,36 +602,58 @@ public class CrewAccessibilityService extends AccessibilityService {
                         if ("HOME".equalsIgnoreCase(fKey)) performGlobalAction(GLOBAL_ACTION_HOME);
                         else if ("BACK".equalsIgnoreCase(fKey)) performGlobalAction(GLOBAL_ACTION_BACK);
                         else if ("RECENTS".equalsIgnoreCase(fKey)) performGlobalAction(GLOBAL_ACTION_RECENTS);
+                        else if ("NOTIFICATIONS".equalsIgnoreCase(fKey)) performGlobalAction(GLOBAL_ACTION_NOTIFICATIONS);
+                        else if ("QUICK_SETTINGS".equalsIgnoreCase(fKey)) performGlobalAction(GLOBAL_ACTION_QUICK_SETTINGS);
+                        else if ("POWER_DIALOG".equalsIgnoreCase(fKey)) performGlobalAction(GLOBAL_ACTION_POWER_DIALOG);
                         else if ("SCREENSHOT".equalsIgnoreCase(fKey)) performGlobalAction(9);
                     }
                 });
                 responseJson = "{\"success\":true,\"action\":\"KEY\",\"key\":\"" + key + "\"}";
             } else if (path.startsWith("/launch")) {
+                final String appName = getJsonString(body, "app");
                 final String packageName = getJsonString(body, "package");
+                final String url = getJsonString(body, "url");
                 final String target = getJsonString(body, "target");
                 final boolean[] launchSuccess = new boolean[]{false};
+                final String[] resolvedPkg = new String[]{""};
                 final Object launchLock = new Object();
                 mainHandler.post(new Runnable() {
                     @Override public void run() {
                         try {
-                            Intent intent;
-                            if ("settings".equalsIgnoreCase(target)) {
+                            Intent intent = null;
+                            if (url != null && !url.trim().isEmpty()) {
+                                intent = new Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url.trim()));
+                            } else if ("settings".equalsIgnoreCase(target)) {
                                 intent = new Intent(Settings.ACTION_SETTINGS);
                             } else if (packageName != null && !packageName.trim().isEmpty()) {
                                 intent = getPackageManager().getLaunchIntentForPackage(packageName.trim());
-                                if (intent == null) throw new IllegalArgumentException("App 未安裝");
-                            } else {
-                                throw new IllegalArgumentException("缺少 App 套件名稱");
+                                resolvedPkg[0] = packageName.trim();
+                            } else if (appName != null && !appName.trim().isEmpty()) {
+                                Intent launcherIntent = new Intent(Intent.ACTION_MAIN, null);
+                                launcherIntent.addCategory(Intent.CATEGORY_LAUNCHER);
+                                List<ResolveInfo> results = getPackageManager().queryIntentActivities(launcherIntent, 0);
+                                String lowerApp = appName.trim().toLowerCase(Locale.ROOT);
+                                for (ResolveInfo info : results) {
+                                    String label = String.valueOf(info.loadLabel(getPackageManager()));
+                                    String pkg = info.activityInfo.packageName;
+                                    if (matchesAppQuery(label, pkg, lowerApp)) {
+                                        intent = getPackageManager().getLaunchIntentForPackage(pkg);
+                                        resolvedPkg[0] = pkg;
+                                        break;
+                                    }
+                                }
                             }
-                            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                            startActivity(intent);
-                            launchSuccess[0] = true;
+                            if (intent != null) {
+                                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                                startActivity(intent);
+                                launchSuccess[0] = true;
+                            }
                         } catch (Exception ignored) {}
                         finally { synchronized (launchLock) { launchLock.notify(); } }
                     }
                 });
                 synchronized (launchLock) { try { launchLock.wait(1500); } catch (Exception ignored) {} }
-                responseJson = "{\"success\":" + launchSuccess[0] + ",\"action\":\"LAUNCH\"}";
+                responseJson = "{\"success\":" + launchSuccess[0] + ",\"action\":\"LAUNCH\",\"package\":\"" + jsonEscape(resolvedPkg[0]) + "\"}";
             } else if (path.startsWith("/apps")) {
                 String query = getJsonString(body, "query");
                 String lowerQuery = query == null ? "" : query.trim().toLowerCase(Locale.ROOT);
@@ -620,18 +667,22 @@ public class CrewAccessibilityService extends AccessibilityService {
                         String label = String.valueOf(info.loadLabel(getPackageManager()));
                         String packageName = info.activityInfo.packageName;
                         if (!matchesAppQuery(label, packageName, lowerQuery)) continue;
-                        if (count++ >= 8) break;
+                        if (count++ >= 12) break;
                         if (count > 1) apps.append(',');
                         apps.append("{\"label\":\"").append(jsonEscape(label)).append("\",\"package\":\"").append(jsonEscape(packageName)).append("\"}");
                     }
                 } catch (Exception ignored) {}
                 apps.append("]}");
                 responseJson = apps.toString();
-            } else if (path.startsWith("/nodes")) {
+            } else if (path.startsWith("/nodes") || path.startsWith("/screen_info")) {
                 AccessibilityNodeInfo root = getRootInActiveWindow();
                 if (root != null) {
+                    CharSequence pkg = root.getPackageName();
+                    android.util.DisplayMetrics metrics = getResources().getDisplayMetrics();
                     StringBuilder sb = new StringBuilder();
-                    sb.append("{\"success\":true,\"nodes\":[");
+                    sb.append("{\"success\":true,\"package\":\"").append(pkg != null ? jsonEscape(pkg.toString()) : "").append("\",");
+                    sb.append("\"screenWidth\":").append(metrics.widthPixels).append(",\"screenHeight\":").append(metrics.heightPixels).append(",");
+                    sb.append("\"nodes\":[");
                     dumpNodesJson(root, sb);
                     if (sb.charAt(sb.length() - 1) == ',') sb.deleteCharAt(sb.length() - 1);
                     sb.append("]}");
@@ -723,21 +774,60 @@ public class CrewAccessibilityService extends AccessibilityService {
         dispatchGesture(builder.build(), null, null);
     }
 
-    private boolean performClickByLabel(String label) {
-        if (label == null || label.trim().isEmpty()) return false;
+    private boolean performClickByTarget(String label, String id) {
+        if ((label == null || label.trim().isEmpty()) && (id == null || id.trim().isEmpty())) return false;
         AccessibilityNodeInfo root = getRootInActiveWindow();
         if (root == null) return false;
         try {
-            AccessibilityNodeInfo target = findMatchingClickableNode(root, label.trim(), true);
-            if (target == null) target = findMatchingClickableNode(root, label.trim(), false);
+            AccessibilityNodeInfo target = null;
+            if (id != null && !id.trim().isEmpty()) {
+                target = findMatchingNodeById(root, id.trim());
+            }
+            if (target == null && label != null && !label.trim().isEmpty()) {
+                target = findMatchingClickableNode(root, label.trim(), true);
+                if (target == null) target = findMatchingClickableNode(root, label.trim(), false);
+            }
             if (target == null) return false;
-            try { return target.performAction(AccessibilityNodeInfo.ACTION_CLICK); }
-            finally { target.recycle(); }
+            try {
+                if (target.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
+                    return true;
+                }
+                // If action click returned false, fallback to physical tap on node center
+                Rect bounds = new Rect();
+                target.getBoundsInScreen(bounds);
+                if (bounds.width() > 0 && bounds.height() > 0) {
+                    performTap(bounds.centerX(), bounds.centerY());
+                    return true;
+                }
+                return false;
+            } finally { target.recycle(); }
         } catch (Exception ignored) {
             return false;
         } finally {
             root.recycle();
         }
+    }
+
+    private AccessibilityNodeInfo findMatchingNodeById(AccessibilityNodeInfo node, String id) {
+        if (node == null) return null;
+        CharSequence viewId = node.getViewIdResourceName();
+        if (viewId != null && viewId.toString().toLowerCase(Locale.ROOT).contains(id.toLowerCase(Locale.ROOT))) {
+            AccessibilityNodeInfo clickable = findClickableAncestor(node);
+            if (clickable != null) return clickable;
+            return AccessibilityNodeInfo.obtain(node);
+        }
+        int count = node.getChildCount();
+        for (int i = 0; i < count; i++) {
+            AccessibilityNodeInfo child = node.getChild(i);
+            if (child == null) continue;
+            try {
+                AccessibilityNodeInfo res = findMatchingNodeById(child, id);
+                if (res != null) return res;
+            } finally {
+                child.recycle();
+            }
+        }
+        return null;
     }
 
     private AccessibilityNodeInfo findMatchingClickableNode(AccessibilityNodeInfo node, String label, boolean exact) {
@@ -751,6 +841,7 @@ public class CrewAccessibilityService extends AccessibilityService {
         if (matched) {
             AccessibilityNodeInfo clickable = findClickableAncestor(node);
             if (clickable != null) return clickable;
+            return AccessibilityNodeInfo.obtain(node);
         }
         int count = node.getChildCount();
         for (int i = 0; i < count; i++) {
@@ -887,16 +978,24 @@ public class CrewAccessibilityService extends AccessibilityService {
         CharSequence desc = node.getContentDescription();
         CharSequence cls = node.getClassName();
         CharSequence viewId = node.getViewIdResourceName();
+        boolean clickable = node.isClickable();
+        boolean scrollable = node.isScrollable();
+        boolean editable = node.isEditable();
 
-        sb.append("{");
-        sb.append("\"class\":\"").append(cls != null ? cls.toString() : "").append("\",");
-        sb.append("\"text\":\"").append(text != null ? text.toString().replace("\"", "\\\"").replace("\n", " ") : "").append("\",");
-        sb.append("\"desc\":\"").append(desc != null ? desc.toString().replace("\"", "\\\"").replace("\n", " ") : "").append("\",");
-        sb.append("\"id\":\"").append(viewId != null ? viewId.toString() : "").append("\",");
-        sb.append("\"clickable\":").append(node.isClickable()).append(",");
-        sb.append("\"bounds\":{\"left\":").append(bounds.left).append(",\"top\":").append(bounds.top)
-          .append(",\"right\":").append(bounds.right).append(",\"bottom\":").append(bounds.bottom).append("}");
-        sb.append("},");
+        boolean hasContent = (text != null && text.length() > 0) || (desc != null && desc.length() > 0) || (viewId != null && viewId.length() > 0);
+        if (hasContent || clickable || scrollable || editable) {
+            sb.append("{");
+            sb.append("\"class\":\"").append(cls != null ? cls.toString() : "").append("\",");
+            sb.append("\"text\":\"").append(text != null ? jsonEscape(text.toString()) : "").append("\",");
+            sb.append("\"desc\":\"").append(desc != null ? jsonEscape(desc.toString()) : "").append("\",");
+            sb.append("\"id\":\"").append(viewId != null ? jsonEscape(viewId.toString()) : "").append("\",");
+            sb.append("\"clickable\":").append(clickable).append(",");
+            sb.append("\"scrollable\":").append(scrollable).append(",");
+            sb.append("\"editable\":").append(editable).append(",");
+            sb.append("\"bounds\":{\"left\":").append(bounds.left).append(",\"top\":").append(bounds.top)
+              .append(",\"right\":").append(bounds.right).append(",\"bottom\":").append(bounds.bottom).append("}");
+            sb.append("},");
+        }
 
         int count = node.getChildCount();
         for (int i = 0; i < count; i++) {

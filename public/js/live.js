@@ -2745,52 +2745,131 @@
         if (liveSessionMode === 'discussion' && !discussionToolAllowed) {
           toolResult = { success: false, error: '目前是語音討論模式，此工具被停用；只允許在使用者明確要求時把草稿填入主輸入框。' };
           appendCardTranscript('system', `🛡️ 討論模式已阻擋：${name}`);
-        } else if (name === 'swipe_screen') {
-          const dir = (args.direction || 'up').toLowerCase();
-          let x1 = 720, y1 = 1800, x2 = 720, y2 = 800, dur = 250;
-          if (dir === 'down') { x1 = 720; y1 = 800; x2 = 720; y2 = 1800; }
-          else if (dir === 'left') { x1 = 1100; y1 = 1500; x2 = 300; y2 = 1500; }
-          else if (dir === 'right') { x1 = 300; y1 = 1500; x2 = 1100; y2 = 1500; }
-
-          if (args.distance === 'long') {
-            if (dir === 'up') { y1 = 2200; y2 = 400; }
-            else if (dir === 'down') { y1 = 400; y2 = 2200; }
-          } else if (args.distance === 'short') {
-            if (dir === 'up') { y1 = 1600; y2 = 1200; }
-            else if (dir === 'down') { y1 = 1200; y2 = 1600; }
-          }
-
+        } else if (name === 'launch_app') {
+          const appName = String(args.app || args.name || args.package || '').trim();
           const res = await fetch('/api/phone/action', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'SWIPE', x1, y1, x2, y2, durationMs: dur })
+            body: JSON.stringify({ action: 'LAUNCH', app: appName, package: appName })
+          });
+          const data = await res.json().catch(() => ({ success: false, error: '啟動請求失敗' }));
+          toolResult = data.success ? { success: true, message: `已成功開啟 ${appName}`, package: data.package } : { success: false, error: `無法開啟 ${appName}，請確認 App 是否已安裝` };
+          if (navigator.vibrate) navigator.vibrate([20, 40]);
+          appendCardTranscript('system', `🚀 語音開啟 App：${appName}`);
+
+        } else if (name === 'open_url') {
+          const url = String(args.url || '').trim();
+          const res = await fetch('/api/phone/action', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'OPEN_URL', url })
+          });
+          toolResult = await res.json().catch(() => ({ success: false, error: '開啟網址失敗' }));
+          if (navigator.vibrate) navigator.vibrate(25);
+          appendCardTranscript('system', `🌐 語音開啟網址：${url}`);
+
+        } else if (name === 'get_screen_elements' || name === 'inspect_ui') {
+          const res = await fetch('/api/phone/screen');
+          const data = await res.json().catch(() => ({ success: false, error: '取得畫面節點失敗', nodes: [] }));
+          if (data && data.success && Array.isArray(data.nodes)) {
+            // Keep nodes compact for LLM context
+            const interactiveNodes = data.nodes.filter(n =>
+              (n.text && n.text.trim()) || (n.desc && n.desc.trim()) || n.clickable || n.scrollable || n.editable
+            ).map(n => ({
+              text: n.text || undefined,
+              desc: n.desc || undefined,
+              id: n.id ? n.id.split('/').pop() : undefined,
+              clickable: n.clickable || undefined,
+              scrollable: n.scrollable || undefined,
+              editable: n.editable || undefined,
+              bounds: n.bounds
+            }));
+            toolResult = {
+              success: true,
+              package: data.package,
+              screenWidth: data.screenWidth,
+              screenHeight: data.screenHeight,
+              nodeCount: interactiveNodes.length,
+              nodes: interactiveNodes.slice(0, 35) // Top 35 visible interactive nodes
+            };
+          } else {
+            toolResult = { success: false, error: data?.error || '無法取得無障礙畫面節點，可能處於純畫布 (Canvas) 或特殊自訂 UI' };
+          }
+          appendCardTranscript('system', `🔍 語音讀取畫面結構 (${toolResult.nodeCount || 0} 個元件)`);
+
+        } else if (name === 'tap_element') {
+          const targetText = args.text || args.label;
+          const targetId = args.id;
+          const res = await fetch('/api/phone/action', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'TAP_TEXT', text: targetText, id: targetId })
+          });
+          const data = await res.json().catch(() => ({ success: false, error: '點擊失敗' }));
+          toolResult = data.success ? { success: true, message: `已成功點擊「${targetText || targetId}」` } : { success: false, error: `找不到可點擊的「${targetText || targetId}」，請先 inspect_ui 重新確認畫面` };
+          if (navigator.vibrate) navigator.vibrate([20, 30]);
+          appendCardTranscript('system', `🎯 語音語意點擊：${targetText || targetId}`);
+
+        } else if (name === 'swipe_screen') {
+          const dir = (args.direction || 'up').toLowerCase();
+          const dist = (args.distance || 'normal').toLowerCase();
+          const res = await fetch('/api/phone/action', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'SWIPE', direction: dir, distance: dist })
           });
           toolResult = await res.json().catch(() => ({ success: true, action: 'swiped' }));
           if (navigator.vibrate) navigator.vibrate(25);
-          appendCardTranscript('system', `👆 語音觸發滑動：${dir}`);
+          appendCardTranscript('system', `👆 語音滑動：${dir} (${dist})`);
 
-        } else if (name === 'tap_screen') {
+        } else if (name === 'scroll_screen') {
+          const dir = (args.direction || 'up').toLowerCase();
+          const res = await fetch('/api/phone/action', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'SCROLL', direction: dir })
+          });
+          toolResult = await res.json().catch(() => ({ success: true, action: 'scrolled' }));
+          if (navigator.vibrate) navigator.vibrate(25);
+          appendCardTranscript('system', `📜 語音滾動：${dir}`);
+
+        } else if (name === 'type_text') {
+          const text = String(args.text || '').trim();
+          const target = args.target || args.hint || null;
+          const res = await fetch('/api/phone/action', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'TYPE', text, target })
+          });
+          toolResult = await res.json().catch(() => ({ success: false, error: '輸入文字失敗' }));
+          if (navigator.vibrate) navigator.vibrate([20, 30, 20]);
+          appendCardTranscript('system', `⌨️ 語音輸入文字：${text}`);
+
+        } else if (name === 'wait_for_element') {
+          const text = String(args.text || '').trim();
+          const timeoutSec = Number(args.timeout_seconds || 5);
+          const res = await fetch('/api/phone/action', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'WAIT_FOR', text, timeoutMs: timeoutSec * 1000 })
+          });
+          toolResult = await res.json().catch(() => ({ success: false, error: '等待元件失敗' }));
+          appendCardTranscript('system', `⏳ 等待畫面元件「${text}」：${toolResult.success ? '成功' : '逾時'}`);
+
+        } else if (name === 'tap_screen' || name === 'tap_coordinate') {
           let targetX = args.x;
           let targetY = args.y;
 
           if (args.label && (!targetX || !targetY)) {
-            try {
-              const nodeRes = await fetch('/api/phone/nodes');
-              const nodeData = await nodeRes.json();
-              if (nodeData.success && Array.isArray(nodeData.nodes)) {
-                const match = nodeData.nodes.find(n => 
-                  (n.text && n.text.toLowerCase().includes(args.label.toLowerCase())) ||
-                  (n.desc && n.desc.toLowerCase().includes(args.label.toLowerCase()))
-                );
-                if (match && match.bounds) {
-                  targetX = (match.bounds.left + match.bounds.right) / 2;
-                  targetY = (match.bounds.top + match.bounds.bottom) / 2;
-                }
-              }
-            } catch (e) {}
-          }
-
-          if (targetX && targetY) {
+            const res = await fetch('/api/phone/action', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ action: 'TAP_TEXT', text: args.label })
+            });
+            toolResult = await res.json().catch(() => ({ success: false, error: '點擊失敗' }));
+            if (navigator.vibrate) navigator.vibrate([20, 30]);
+            appendCardTranscript('system', `🎯 語音點擊：${args.label}`);
+          } else if (targetX && targetY) {
             const res = await fetch('/api/phone/action', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -2798,9 +2877,9 @@
             });
             toolResult = await res.json().catch(() => ({ success: true, action: 'tapped' }));
             if (navigator.vibrate) navigator.vibrate([20, 30]);
-            appendCardTranscript('system', `🎯 語音觸發點擊：(${Math.round(targetX)}, ${Math.round(targetY)}) ${args.label || ''}`);
+            appendCardTranscript('system', `🎯 語音座標點擊：(${Math.round(targetX)}, ${Math.round(targetY)})`);
           } else {
-            toolResult = { success: false, error: '找不到指定按鈕座標' };
+            toolResult = { success: false, error: '請提供按鈕文字 label 或 x, y 座標' };
           }
 
         } else if (name === 'press_key') {
@@ -3030,21 +3109,21 @@
         const voiceName = getSelectedVoice();
         const baseSystemPrompt = (typeof getCrewLocale === 'function' && getCrewLocale() === 'en')
           ? `You are Crew Pocket's live voice assistant.
-
-【Role】Be natural, accurate, and concise. Always give the final answer as AUDIO. Match the user's primary language naturally; Traditional Chinese is the default.
-【Conversation】Answer ordinary questions directly. If a name, number, command, or intent is unclear, inconsistent, or important, ask one short clarification instead of guessing. Do not treat a noisy transcript as fact.
-【Tool boundary】Use a tool only when it is necessary to fulfill an explicit request: phone UI/operation, live camera, workspace file, drafting into the main input, or delegating a task to the main chat. A screenshot, tap, swipe, or key press requires an explicit request in the user's latest utterance; past conversation, main-chat background, inference, or a normal question never authorizes it. Never call tools merely to verify a normal answer.
-【Vision】When continuous live-camera or live-screen-share frames are arriving, answer from the newest frame without requesting another capture. Call capture_camera_frame only when no current camera frame is available or high detail is needed. Call take_screenshot only when no current screen-share frame is available or a fresh high-detail phone screen is needed. Never substitute camera and phone-screen images for one another.
-【Main-chat delegation】Only when the user explicitly asks the main chat to handle a task: call prepare_main_task with a precise, clean task, then briefly read its summary. Wait for a clear semantic confirmation referring to that pending task (for example: 確認、好、可以、Sure, yes, confirmed) or the confirmation button. If the reply is ambiguous or unrelated, ask briefly instead. Then call confirm_main_task once; it confirms the single pending task automatically, so never invent an ID. After it returns, immediately speak the result and never confirm that task again.
-【Transcript】The client records transcripts. Never try to log the conversation yourself.`
+【Role】You are a high-level Planner and Intent Interpreter. Always respond via AUDIO. Match user language (Traditional Chinese default).
+【3-Tier Mobile Architecture】
+1. Tier 1 (Native First): Use launch_app(app='...') to open any app directly. Never swipe launcher icons. Use press_key(key='HOME'|'BACK'|'RECENTS'|'NOTIFICATIONS'|'QUICK_SETTINGS') for system keys. Use open_url for links.
+2. Tier 2 (Accessibility UI Executor): Use get_screen_elements to inspect UI nodes. Use tap_element(text='...') to click buttons. Use swipe_screen(direction='up'|'down'|'left'|'right', distance='short'|'normal'|'long') or scroll_screen for scrolling. Use type_text for input. Never guess pixel coordinates.
+3. Tier 3 (Vision Fallback): Only when accessibility tree cannot read elements (e.g. Canvas, Unity, WebGL, custom game UI), use take_screenshot and tap_coordinate(x, y).
+【Action Loop】Observe (get_screen_elements) -> Plan & Execute Semantic Action -> Verify screen state -> Advance. Max 5 steps per task.
+【Conversation】Answer normal questions directly. Only use mobile tools when the user explicitly requests a phone action.`
           : `你是 Crew Pocket 的即時語音助理。
-
-【角色】自然、準確、簡潔地回應；最終回答一律以 AUDIO 語音說出。預設使用繁體中文，並依使用者主要語言自然切換。
-【對話】一般知識、時間、閒聊或解釋直接回答。姓名、數字、指令或意圖聽不清楚、前後矛盾或影響結果時，先用一句話確認，不要猜測或把雜訊轉錄當成事實。
-【工具邊界】只有為了完成使用者明確要求的手機畫面／操作、Live 相機、工作區檔案、填入主輸入框草稿，或交辦主對話時才使用工具。手機截圖、點擊、滑動或按鍵只能由使用者本輪最新一句明確口令授權；過去對話、主對話背景、推測或一般問題都不能授權。一般問題不可為了確認而隨意調工具。
-【視覺】若持續 Live 相機或螢幕分享影格正在輸入，直接依最新影格回答，不必再要求或呼叫額外擷取；只有需要新的高細節相機影格或目前沒有相機影格時才使用 capture_camera_frame。只有目前沒有螢幕分享影格、或需要新的高細節手機畫面時才使用 take_screenshot。相機與手機螢幕不可互相替代。
-【交辦主對話】只有使用者明確要求主對話處理任務時，先以 prepare_main_task 建立乾淨、精確的任務，再念出短摘要。等待使用者針對該待交辦任務作出明確語意確認，例如「確認」「好」「可以」「Sure」「yes」「confirmed」，或按下確認按鈕；若回覆不明確或無關則簡短追問。確認後只呼叫一次 confirm_main_task；它會確認目前唯一任務，絕不編造 ID。工具回傳後立刻口語報告結果，同一任務不可再次確認。
-【逐字稿】逐字稿由前端處理，不要自行記錄對話。`;
+【角色定位】你是高階「規劃者 (Planner) 與意圖解讀者」，最終回答一律以 AUDIO 語音說出，預設使用繁體中文。
+【手機操作三層架構】
+1. 第一層（系統原生優先）：開啟 App（如「打開幣安」「開 Chrome」）一律呼叫 launch_app(app='...') 直接啟動，絕不在桌面滑動翻頁找圖示。系統按鍵（首頁、返回、多工、通知列、快捷設定）一律呼叫 press_key。網址一律呼叫 open_url。
+2. 第二層（Accessibility 語意執行）：一律以語意操作為主。點擊按鈕呼叫 tap_element(text='...') 或 tap_element(id='...')；滑動呼叫 swipe_screen(direction='up'|'down'|'left'|'right', distance='short'|'normal'|'long') 或 scroll_screen；輸入呼叫 type_text(text='...', target='...')；判斷畫面呼叫 get_screen_elements 或 wait_for_element。絕不自行計算猜測 (x, y) 像素座標。
+3. 第三層（Vision 視覺兜底）：只有在 accessibility tree 完全取不到有效節點（例如 Canvas 畫布、Unity、WebGL、遊戲自訂 UI）時，才呼叫 take_screenshot 截圖並以 tap_coordinate(x, y) 進行兜底點擊。
+【動作執行迴圈】遵守「取得畫面狀態 (get_screen_elements) → 決策語意動作 → 執行動作 → 再次檢查畫面驗證結果 → 推進下一步（最多5步）」。
+【工具邊界】普通問題直接回答；只有使用者本輪最新口令明確要求操作手機時才呼叫工具。相機影格與手機螢幕不可混淆。`;
         const discussionPrompt = liveSessionMode === 'discussion'
           ? "\n\n【討論模式】協助釐清需求、追問關鍵資訊並整理共識。不得操作手機、截圖或寫檔。只有使用者明確說要填入輸入框時才能使用 draft_message，而且不得自動送出；「好」「可以」不算傳送授權。"
           : "\n\n【操作模式】普通問題仍直接回答；不要為了確認答案而主動截圖、讀檔或操作手機。若本輪最新口令未明確要求手機動作，絕不可依先前對話執行截圖、點擊、滑動或按鍵。";
@@ -3066,22 +3145,72 @@
                 }
               }
             },
-            // Keep native-audio sessions alive beyond Gemini's default 15 min
-            // (audio) / 2 min (audio-video) context lifetime.
             contextWindowCompression: { slidingWindow: {} },
-            // The server sends a renewable handle; pass it back after GoAway
-            // so a new WebSocket continues the same logical conversation.
             sessionResumption: resumeHandle ? { handle: resumeHandle } : {},
-            // Request Gemini Live's native microphone transcription so the
-            // memo does not depend on model-generated user_text.
             inputAudioTranscription: {},
             outputAudioTranscription: {},
             tools: [
               {
                 functionDeclarations: [
+                  // 📱 Tier 1: Android Native Capabilities
+                  {
+                    name: "launch_app",
+                    description: "Launch an installed Android app by name (e.g. 'Binance', 'LINE', 'Chrome', 'Settings') or package name. Always use this instead of swiping the home launcher.",
+                    parameters: {
+                      type: "OBJECT",
+                      properties: {
+                        app: { type: "STRING", description: "The app name or package name to launch, e.g. 'Binance', 'Settings', 'Chrome'" }
+                      },
+                      required: ["app"]
+                    }
+                  },
+                  {
+                    name: "press_key",
+                    description: "Press an Android system physical key (HOME, BACK, RECENTS, NOTIFICATIONS, QUICK_SETTINGS, POWER_DIALOG).",
+                    parameters: {
+                      type: "OBJECT",
+                      properties: {
+                        key: {
+                          type: "STRING",
+                          description: "The key to press",
+                          enum: ["HOME", "BACK", "RECENTS", "NOTIFICATIONS", "QUICK_SETTINGS", "POWER_DIALOG"]
+                        }
+                      },
+                      required: ["key"]
+                    }
+                  },
+                  {
+                    name: "open_url",
+                    description: "Open a Web URL or Deep Link URI directly via Android Intent.",
+                    parameters: {
+                      type: "OBJECT",
+                      properties: {
+                        url: { type: "STRING", description: "Web URL (https://...) or deep link URI" }
+                      },
+                      required: ["url"]
+                    }
+                  },
+
+                  // 📱 Tier 2: AccessibilityService UI Executor (Semantic Actions)
+                  {
+                    name: "get_screen_elements",
+                    description: "Read the current Android accessibility UI tree. Returns structured visible labels, descriptions, IDs, clickable/scrollable states, bounds, and foreground package. Always call this before and after actions to observe and verify.",
+                    parameters: { type: "OBJECT", properties: {} }
+                  },
+                  {
+                    name: "tap_element",
+                    description: "Tap an interactive button, menu item, or text label on the screen using semantic text or resource ID. Prefer this over coordinate taps.",
+                    parameters: {
+                      type: "OBJECT",
+                      properties: {
+                        text: { type: "STRING", description: "Button text, label, or content description to tap (e.g. '確認', '設定', '搜尋')" },
+                        id: { type: "STRING", description: "Optional resource viewId (e.g. 'btn_submit')" }
+                      }
+                    }
+                  },
                   {
                     name: "swipe_screen",
-                    description: "Scroll or swipe the phone screen. Use 'up' to scroll down/read more content, 'down' to scroll up/go to top, 'left' or 'right' to flip cards/tabs.",
+                    description: "Scroll or swipe the phone screen. Use 'up' to scroll down/read more content, 'down' to scroll up, 'left' or 'right' to flip cards/tabs. Coordinates are calculated automatically from device screen dimensions.",
                     parameters: {
                       type: "OBJECT",
                       properties: {
@@ -3100,30 +3229,55 @@
                     }
                   },
                   {
-                    name: "tap_screen",
-                    description: "Tap on a button or coordinate on the phone screen. Provide label (e.g. '確認', '設定') or x, y pixel coordinates.",
+                    name: "scroll_screen",
+                    description: "Perform native accessibility container scroll (forward / backward).",
                     parameters: {
                       type: "OBJECT",
                       properties: {
-                        label: { type: "STRING", description: "The button label or text on screen to tap" },
-                        x: { type: "NUMBER", description: "X pixel coordinate" },
-                        y: { type: "NUMBER", description: "Y pixel coordinate" }
-                      }
+                        direction: {
+                          type: "STRING",
+                          description: "Direction: 'up' (forward), 'down' (backward), 'left', 'right'",
+                          enum: ["up", "down", "left", "right"]
+                        }
+                      },
+                      required: ["direction"]
                     }
                   },
                   {
-                    name: "press_key",
-                    description: "Press an Android system physical key (HOME, BACK, RECENTS).",
+                    name: "type_text",
+                    description: "Type text into an input box, search field, or message entry.",
                     parameters: {
                       type: "OBJECT",
                       properties: {
-                        key: {
-                          type: "STRING",
-                          description: "The key to press",
-                          enum: ["HOME", "BACK", "RECENTS"]
-                        }
+                        text: { type: "STRING", description: "The text to type into the field" },
+                        target: { type: "STRING", description: "Optional input field label or placeholder hint" }
                       },
-                      required: ["key"]
+                      required: ["text"]
+                    }
+                  },
+                  {
+                    name: "wait_for_element",
+                    description: "Wait until an element containing specified text appears on screen.",
+                    parameters: {
+                      type: "OBJECT",
+                      properties: {
+                        text: { type: "STRING", description: "Text or label to wait for" },
+                        timeout_seconds: { type: "NUMBER", description: "Timeout in seconds (default 5)" }
+                      },
+                      required: ["text"]
+                    }
+                  },
+                  // 📱 Tier 3: Vision / Coordinate Fallback
+                  {
+                    name: "tap_coordinate",
+                    description: "Fallback pixel tap ONLY when semantic tap_element cannot find the element on Canvas, Unity, WebGL or custom game UI.",
+                    parameters: {
+                      type: "OBJECT",
+                      properties: {
+                        x: { type: "NUMBER", description: "X pixel coordinate" },
+                        y: { type: "NUMBER", description: "Y pixel coordinate" }
+                      },
+                      required: ["x", "y"]
                     }
                   },
                   {

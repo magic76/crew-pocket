@@ -146,18 +146,41 @@ async function handlePhonePhoto(req, res) {
 async function handlePhoneAction(req, res) {
   try {
     const body = await parseJsonBody(req);
+    const action = String(body.action || '').toUpperCase();
     let result = { success: false };
-    if (body.action === 'TAP') {
-      result = await phoneAgent.tap(body.x, body.y);
-    } else if (body.action === 'SWIPE') {
-      result = await phoneAgent.swipe(body.x1, body.y1, body.x2, body.y2, body.durationMs);
-    } else if (body.action === 'KEYEVENT') {
+
+    if (action === 'TAP_TEXT' || action === 'CLICK_TEXT') {
+      result = await phoneAgent.tapText(body.text || body.label);
+    } else if (action === 'TAP_NODE' || action === 'CLICK_NODE') {
+      result = await phoneAgent.tapNode(body.id);
+    } else if (action === 'SCROLL') {
+      result = await phoneAgent.scroll(body.direction, body.distance);
+    } else if (action === 'SWIPE') {
+      if (body.x1 !== undefined && body.y1 !== undefined && body.x2 !== undefined && body.y2 !== undefined) {
+        result = await phoneAgent.swipeCoordinates(body.x1, body.y1, body.x2, body.y2, body.durationMs);
+      } else {
+        result = await phoneAgent.swipe(body.direction, body.distance);
+      }
+    } else if (action === 'KEYEVENT' || action === 'KEY') {
       result = await phoneAgent.pressKey(body.key);
-    } else if (body.action === 'TYPE') {
-      result = await phoneAgent.typeText(body.text);
-    } else if (body.action === 'LAUNCH') {
-      result = await phoneAgent.launchApp(body.package);
+    } else if (action === 'TYPE') {
+      result = await phoneAgent.typeText(body.text, body.target, body.x, body.y);
+    } else if (action === 'LAUNCH') {
+      result = await phoneAgent.launchApp(body.app || body.package, body.target);
+    } else if (action === 'OPEN_URL') {
+      result = await phoneAgent.openUrl(body.url);
+    } else if (action === 'WAIT_FOR') {
+      result = await phoneAgent.waitForElement(body.text, body.timeoutMs);
+    } else if (action === 'TAP') {
+      result = await phoneAgent.tap(body.x, body.y);
+    } else if (action === 'SCREEN_INFO' || action === 'NODES') {
+      result = await phoneAgent.getCurrentScreen();
+    } else if (action === 'CURRENT_APP') {
+      result = await phoneAgent.getCurrentApp();
+    } else {
+      result = { success: false, error: `未知的操作類型：${action}` };
     }
+
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(result));
   } catch (err) {
@@ -1494,10 +1517,19 @@ const server = http.createServer(async (req, res) => {
     return handlePhoneAction(req, res);
   } else if (pathname === '/api/phone/skills' && (req.method === 'GET' || req.method === 'POST')) {
     return handlePhoneSkills(req, res);
-  } else if (pathname === '/api/phone/nodes' && req.method === 'GET') {
-    const nodesResult = await phoneAgent.getNodes();
+  } else if ((pathname === '/api/phone/nodes' || pathname === '/api/phone/screen') && req.method === 'GET') {
+    const nodesResult = await phoneAgent.getScreenElements();
     res.writeHead(200, { 'Content-Type': 'application/json' });
     return res.end(JSON.stringify(nodesResult));
+  } else if (pathname === '/api/phone/current_app' && req.method === 'GET') {
+    const appResult = await phoneAgent.getCurrentApp();
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify(appResult));
+  } else if (pathname === '/api/phone/apps' && (req.method === 'GET' || req.method === 'POST')) {
+    const query = parsedUrl.query?.q || (req.method === 'POST' ? (await parseJsonBody(req)).query : '');
+    const appsResult = await phoneAgent.findApps(query);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify(appsResult));
   } else if (pathname === '/api/guidelines' && req.method === 'GET') {
     return handleGetGuidelines(res);
   } else if (pathname === '/api/guidelines/sync' && req.method === 'POST') {
