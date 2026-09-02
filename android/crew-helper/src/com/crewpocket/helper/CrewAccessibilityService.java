@@ -127,6 +127,21 @@ public class CrewAccessibilityService extends AccessibilityService {
         } catch (Exception ignored) {}
     }
 
+    public static boolean isKeepAwakeActive() {
+        CrewAccessibilityService service = instance;
+        return service != null && service.screenWakeLock != null && service.screenWakeLock.isHeld();
+    }
+
+    public static boolean toggleKeepAwake() {
+        CrewAccessibilityService service = instance;
+        if (service != null) {
+            boolean next = !isKeepAwakeActive();
+            service.setScreenKeepAwake(next);
+            return next;
+        }
+        return false;
+    }
+
     @Override
     public void onDestroy() {
         isRunning = false;

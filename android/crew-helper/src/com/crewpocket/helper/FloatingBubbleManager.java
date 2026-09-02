@@ -1210,6 +1210,35 @@ public class FloatingBubbleManager {
                     sendLp.setMargins(0, 0, dp(6), 0);
                     actions.addView(btnSend, sendLp);
 
+                    final Button btnAwake = new Button(context);
+                    final boolean isAwake = CrewAccessibilityService.isKeepAwakeActive();
+                    btnAwake.setText(isAwake ? "☀️ 常亮中" : "☀️ 常亮");
+                    btnAwake.setTextColor(isAwake ? Color.parseColor("#FDE047") : Color.parseColor("#94A3B8"));
+                    btnAwake.setTextSize(11);
+                    btnAwake.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+                    btnAwake.setAllCaps(false);
+                    btnAwake.setMinHeight(dp(38));
+                    btnAwake.setPadding(dp(4), 0, dp(4), 0);
+                    final GradientDrawable awakeBg = new GradientDrawable();
+                    awakeBg.setColor(isAwake ? Color.parseColor("#422006") : Color.parseColor("#1E293B"));
+                    awakeBg.setCornerRadius(dp(10));
+                    awakeBg.setStroke(dp(1), isAwake ? Color.parseColor("#EAB308") : Color.parseColor("#334155"));
+                    btnAwake.setBackground(awakeBg);
+                    btnAwake.setOnClickListener(new View.OnClickListener() {
+                        @Override public void onClick(View v) {
+                            vibrateShort();
+                            boolean next = CrewAccessibilityService.toggleKeepAwake();
+                            btnAwake.setText(next ? "☀️ 常亮中" : "☀️ 常亮");
+                            btnAwake.setTextColor(next ? Color.parseColor("#FDE047") : Color.parseColor("#94A3B8"));
+                            awakeBg.setColor(next ? Color.parseColor("#422006") : Color.parseColor("#1E293B"));
+                            awakeBg.setStroke(dp(1), next ? Color.parseColor("#EAB308") : Color.parseColor("#334155"));
+                            Toast.makeText(context, next ? "☀️ 螢幕常亮已開啟（防止休眠）" : "🌙 螢幕常亮已關閉", Toast.LENGTH_SHORT).show();
+                        }
+                    });
+                    LinearLayout.LayoutParams awakeLp = new LinearLayout.LayoutParams(0, dp(38), 1.0f);
+                    awakeLp.setMargins(0, 0, dp(6), 0);
+                    actions.addView(btnAwake, awakeLp);
+
                     Button btnOpen = new Button(context);
                     btnOpen.setText("🌐 開啟");
                     btnOpen.setTextColor(Color.parseColor("#A5B4FC"));
