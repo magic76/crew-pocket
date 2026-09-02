@@ -2489,6 +2489,29 @@
     return localStorage.getItem(VOICE_KEY) || DEFAULT_VOICE;
   }
 
+  function mapToSupportedLiveVoice(name) {
+    if (!name) return 'Puck';
+    const v = String(name).trim();
+    const valid = ['Puck', 'Charon', 'Kore', 'Fenrir', 'Aoede'];
+    if (valid.includes(v)) return v;
+
+    // Female personas
+    if (['Leda', 'Europa', 'Io', 'Tethys', 'Ariel', 'Sycorax', 'Titania', 'Despina', 'Autonoe', 'Callirrhoe', 'Erinome', 'Laomedeia', 'Pulcherrima', 'Vindemiatrix'].includes(v)) {
+      return 'Aoede';
+    }
+    // Male personas
+    if (['Zephyr', 'Hyperion', 'Enceladus', 'Mimas', 'Achird', 'Sadachbia', 'Sulafat'].includes(v)) {
+      return 'Puck';
+    }
+    if (['Orus', 'Ganymede', 'Iapetus', 'Aegaeon', 'Umbriel', 'Prospero', 'Algieba', 'Alnilam', 'Schedar', 'Gacrux', 'Zubenelgenubi', 'Sadaltager'].includes(v)) {
+      return 'Charon';
+    }
+    if (['Titan', 'Caliban', 'Algenib', 'Rasalgethi', 'Achernar'].includes(v)) {
+      return 'Fenrir';
+    }
+    return 'Kore';
+  }
+
   function getLiveVolumePercent() {
     const stored = Number.parseInt(localStorage.getItem(VOLUME_KEY), 10);
     return Number.isFinite(stored) ? Math.max(0, Math.min(100, stored)) : 100;
@@ -3297,7 +3320,7 @@
               speechConfig: {
                 voiceConfig: {
                   prebuiltVoiceConfig: {
-                    voiceName: voiceName
+                    voiceName: mapToSupportedLiveVoice(voiceName)
                   }
                 }
               }
