@@ -276,13 +276,13 @@ public class FloatingBubbleManager {
         if (active) {
             bg.setColor(Color.parseColor("#F59E0B")); // High-contrast Solid Amber 500
             bg.setStroke(dp(1.5f), Color.parseColor("#FEF08A")); // Yellow 200
-            btn.setText("☀️ 常亮 (ON)");
+            btn.setText(I18n.get(context, "☀️ 常亮 (ON)", "☀️ Awake (ON)"));
             btn.setTextColor(Color.parseColor("#0F172A")); // Bold Slate 950
             btn.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
         } else {
             bg.setColor(Color.parseColor("#1E293B")); // Slate 800
             bg.setStroke(dp(1), Color.parseColor("#475569")); // Slate 600
-            btn.setText("☀️ 常亮 (OFF)");
+            btn.setText(I18n.get(context, "☀️ 常亮 (OFF)", "☀️ Awake (OFF)"));
             btn.setTextColor(Color.parseColor("#94A3B8")); // Slate 400
             btn.setTypeface(android.graphics.Typeface.DEFAULT);
         }

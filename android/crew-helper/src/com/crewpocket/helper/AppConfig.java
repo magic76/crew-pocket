@@ -74,4 +74,17 @@ public class AppConfig {
         if (context == null) return;
         getPrefs(context).edit().putBoolean(KEY_LOCAL_BRIDGE, enabled).apply();
     }
+
+    // ── 5. App Language (Bilingual: "auto", "zh", "en") ──
+    public static final String KEY_LANGUAGE = "app_language";
+
+    public static String getLanguage(Context context) {
+        if (context == null) return "auto";
+        return getPrefs(context).getString(KEY_LANGUAGE, "auto");
+    }
+
+    public static void setLanguage(Context context, String lang) {
+        if (context == null) return;
+        getPrefs(context).edit().putString(KEY_LANGUAGE, lang == null ? "auto" : lang.trim()).apply();
+    }
 }

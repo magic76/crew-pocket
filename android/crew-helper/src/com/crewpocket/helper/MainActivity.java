@@ -90,7 +90,7 @@ public class MainActivity extends Activity {
         brandTextCol.addView(titleBadgeRow);
 
         TextView subtitle = new TextView(this);
-        subtitle.setText("隨身特工 AI 輔助核心 · 語音 & 自動化支援");
+        subtitle.setText(I18n.appSubtitle(this));
         subtitle.setTextSize(11);
         subtitle.setTextColor(CrewTheme.TEXT_SECONDARY);
         subtitle.setPadding(0, dp(2), 0, 0);
@@ -120,7 +120,7 @@ public class MainActivity extends Activity {
         statusTitleRow.addView(statusDot);
 
         statusText = new TextView(this);
-        statusText.setText("無障礙服務未連線");
+        statusText.setText(I18n.serviceStoppedTitle(this));
         statusText.setTextSize(13);
         statusText.setTypeface(Typeface.DEFAULT_BOLD);
         statusText.setTextColor(CrewTheme.TEXT_PRIMARY);
@@ -129,7 +129,7 @@ public class MainActivity extends Activity {
         statusCard.addView(statusTitleRow);
 
         statusDetail = new TextView(this);
-        statusDetail.setText("請點擊下方「無障礙服務」前往系統設定開啟，以啟用螢幕感知與觸控。");
+        statusDetail.setText(I18n.serviceStoppedDetail(this));
         statusDetail.setTextSize(11);
         statusDetail.setTextColor(CrewTheme.TEXT_SECONDARY);
         statusDetail.setPadding(dp(22), dp(4), 0, 0);
@@ -139,7 +139,7 @@ public class MainActivity extends Activity {
 
         // ── Section Label ──
         TextView sectionTitle = new TextView(this);
-        sectionTitle.setText("核心服務與控制");
+        sectionTitle.setText(I18n.sectionCoreServices(this));
         sectionTitle.setTextSize(12);
         sectionTitle.setTypeface(Typeface.DEFAULT_BOLD);
         sectionTitle.setTextColor(CrewTheme.INDIGO_400);
@@ -148,7 +148,7 @@ public class MainActivity extends Activity {
 
         // ── 3. Action Cards ──
         // A. Accessibility Service
-        root.addView(makeActionCard("⚙️", "開啟「無障礙服務」", "啟用跨 App 螢幕截圖、觸控點擊與跨應用操控", CrewTheme.INDIGO_500, new View.OnClickListener() {
+        root.addView(makeActionCard("⚙️", I18n.cardAccessibilityTitle(this), I18n.cardAccessibilityDesc(this), CrewTheme.INDIGO_500, new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 showAccessibilityDisclosureDialog();
@@ -156,7 +156,7 @@ public class MainActivity extends Activity {
         }));
 
         // B. Floating Voice Bubble
-        root.addView(makeActionCard("🫧", "啟用浮動語音泡泡", "短按開始/結束通話；長按開啟文字面板", CrewTheme.TEAL_400, new View.OnClickListener() {
+        root.addView(makeActionCard("🫧", I18n.cardBubbleTitle(this), I18n.cardBubbleDesc(this), CrewTheme.TEAL_400, new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 FloatingBubbleManager manager = FloatingBubbleManager.getInstance(MainActivity.this);
@@ -167,21 +167,21 @@ public class MainActivity extends Activity {
                     return;
                 }
                 manager.showBubble();
-                Toast.makeText(MainActivity.this, "🎙️ 浮動泡泡已啟用！短按錄音，長按展開", Toast.LENGTH_SHORT).show();
+                Toast.makeText(MainActivity.this, I18n.get(MainActivity.this, "🎙️ 浮動泡泡已啟用！短按錄音，長按展開", "🎙️ Floating Bubble Enabled! Tap to talk"), Toast.LENGTH_SHORT).show();
             }
         }));
 
         // C. Notification Controls
-        root.addView(makeActionCard("🔔", "開啟通知欄常駐控制", "由通知中心隨時呼叫 AI 語音與截圖", CrewTheme.CYAN_400, new View.OnClickListener() {
+        root.addView(makeActionCard("🔔", I18n.cardNotificationTitle(this), I18n.cardNotificationDesc(this), CrewTheme.CYAN_400, new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 FloatingBubbleManager.getInstance(MainActivity.this).showNotification();
-                Toast.makeText(MainActivity.this, "✅ 通知欄常駐面板已開啟！", Toast.LENGTH_SHORT).show();
+                Toast.makeText(MainActivity.this, I18n.get(MainActivity.this, "✅ 通知欄常駐面板已開啟！", "✅ Notification panel activated!"), Toast.LENGTH_SHORT).show();
             }
         }));
 
         // D. Native Gemini Live Test
-        root.addView(makeActionCard("🎙️", "原生 Gemini Live 測試", "無需瀏覽器 · Android 端到端即時語音對話", CrewTheme.EMERALD_400, new View.OnClickListener() {
+        root.addView(makeActionCard("🎙️", I18n.cardNativeLiveTitle(this), I18n.cardNativeLiveDesc(this), CrewTheme.EMERALD_400, new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 startActivity(new Intent(MainActivity.this, NativeLiveActivity.class));
@@ -189,28 +189,29 @@ public class MainActivity extends Activity {
         }));
 
         // E. Camera Permission
-        root.addView(makeActionCard("📸", "相機拍照權限", "允許 AI 即時辨識實體環境與物件", CrewTheme.AMBER_400, new View.OnClickListener() {
+        root.addView(makeActionCard("📸", I18n.cardCameraTitle(this), I18n.cardCameraDesc(this), CrewTheme.AMBER_400, new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                     if (checkSelfPermission(android.Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
                         requestPermissions(new String[]{android.Manifest.permission.CAMERA}, 101);
                     } else {
-                        Toast.makeText(MainActivity.this, "✅ 相機權限已就緒！", Toast.LENGTH_SHORT).show();
+                        Toast.makeText(MainActivity.this, I18n.get(MainActivity.this, "✅ 相機權限已就緒！", "✅ Camera permission ready!"), Toast.LENGTH_SHORT).show();
                     }
                 }
             }
         }));
 
         // F. Screen Keep Awake Toggle Card
-        root.addView(makeActionCard("☀️", "螢幕常亮開關 (Keep Awake)",
-            FloatingBubbleManager.isKeepAwakeActive() ? "狀態：已開啟 (防止休眠中) · 點擊關閉" : "狀態：已關閉 · 點擊開啟防止螢幕休眠",
+        boolean awakeActive = FloatingBubbleManager.isKeepAwakeActive();
+        root.addView(makeActionCard("☀️", I18n.cardKeepAwakeTitle(this),
+            I18n.cardKeepAwakeDesc(this, awakeActive),
             CrewTheme.AMBER_400,
             new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
                     boolean active = FloatingBubbleManager.toggleKeepAwake(MainActivity.this);
-                    Toast.makeText(MainActivity.this, active ? "☀️ 螢幕常亮已開啟！" : "🌙 螢幕常亮已關閉！", Toast.LENGTH_SHORT).show();
+                    Toast.makeText(MainActivity.this, active ? I18n.get(MainActivity.this, "☀️ 螢幕常亮已開啟！", "☀️ Screen Keep Awake ON!") : I18n.get(MainActivity.this, "🌙 螢幕常亮已關閉！", "🌙 Screen Keep Awake OFF!"), Toast.LENGTH_SHORT).show();
                     // Recreate view to refresh status text
                     recreate();
                 }
@@ -221,13 +222,21 @@ public class MainActivity extends Activity {
         boolean isStandalone = AppConfig.isStandaloneMode(this);
         String currentServer = AppConfig.getServerUrl(this);
         String modeSummary = isStandalone
-            ? "模式：☁️ 純獨立雲端模式 (直連 Gemini Live)"
-            : "模式：🔗 Crew Pocket 連線 (" + currentServer + ")";
+            ? I18n.get(this, "模式：☁️ 純獨立雲端模式 (直連 Gemini Live)", "Mode: ☁️ Standalone Cloud (Gemini Live)")
+            : I18n.get(this, "模式：🔗 Crew Pocket 連線 (" + currentServer + ")", "Mode: 🔗 Connected Server (" + currentServer + ")");
 
-        root.addView(makeActionCard("⚙️", "運作模式與 API 設定", modeSummary + " · 點擊配置", CrewTheme.CYAN_400, new View.OnClickListener() {
+        root.addView(makeActionCard("⚙️", I18n.cardSettingsTitle(this), modeSummary + " · " + I18n.get(this, "點擊配置", "Tap to configure"), CrewTheme.CYAN_400, new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 showSettingsDialog();
+            }
+        }));
+
+        // H. Language Switcher Card
+        root.addView(makeActionCard("🌐", I18n.cardLanguageTitle(this), I18n.cardLanguageDesc(this), CrewTheme.INDIGO_400, new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                showLanguageDialog();
             }
         }));
 
@@ -349,7 +358,7 @@ public class MainActivity extends Activity {
         layout.setBackgroundColor(CrewTheme.BG_PRIMARY);
 
         TextView titleView = new TextView(this);
-        titleView.setText("🛡️ 無障礙服務使用說明 (Prominent Disclosure)");
+        titleView.setText(I18n.get(this, "🛡️ 無障礙服務使用說明 (Prominent Disclosure)", "🛡️ Accessibility Service Prominent Disclosure"));
         titleView.setTextSize(15);
         titleView.setTypeface(Typeface.DEFAULT_BOLD);
         titleView.setTextColor(CrewTheme.TEXT_PRIMARY);
@@ -357,25 +366,32 @@ public class MainActivity extends Activity {
         layout.addView(titleView);
 
         TextView bodyView = new TextView(this);
-        bodyView.setText("本 App 使用 Android AccessibilityService API 提供語音助理操作與螢幕感知輔助：\n\n"
-                + "• 螢幕感知：讀取畫面上的按鈕標籤與文字，讓 AI 能理解畫面內容並回答您的提問。\n"
-                + "• 輔助點擊與滑動：依據您的明確語音指令（如『點擊送出』、『往下滑』），代替您執行點擊與滑動操作。\n"
-                + "• 隱私保證：本 App 絕不會記錄、儲存或傳輸任何密碼、信用卡號等機密金融資料與個人機密。\n"
-                + "• 隨時撤銷：您可以隨時在系統『設定 > 無障礙』中停用此服務。");
+        String bodyText = I18n.isEn(this)
+            ? "This App uses the Android AccessibilityService API to provide AI assistant automation and screen perception:\n\n"
+              + "• Screen Awareness: Reads on-screen button labels and text so the AI can understand what you see and answer questions.\n"
+              + "• Assisted Tapping & Scrolling: Performs taps, typing, or scrolling on your behalf based ONLY on your explicit voice commands.\n"
+              + "• Privacy Assurance: This App NEVER collects, logs, or transmits sensitive financial data, passwords, or OTP codes.\n"
+              + "• Full Control: You can revoke or disable this permission at any time in Android Settings > Accessibility."
+            : "本 App 使用 Android AccessibilityService API 提供語音助理操作與螢幕感知輔助：\n\n"
+              + "• 螢幕感知：讀取畫面上的按鈕標籤與文字，讓 AI 能理解畫面內容並回答您的提問。\n"
+              + "• 輔助點擊與滑動：依據您的明確語音指令（如『點擊送出』、『往下滑』），代替您執行點擊與滑動操作。\n"
+              + "• 隱私保證：本 App 絕不會記錄、儲存或傳輸任何密碼、信用卡號等機密金融資料與個人機密。\n"
+              + "• 隨時撤銷：您可以隨時在系統『設定 > 無障礙』中停用此服務。";
+        bodyView.setText(bodyText);
         bodyView.setTextSize(12);
         bodyView.setTextColor(CrewTheme.TEXT_SECONDARY);
         bodyView.setLineSpacing(dp(2), 1.15f);
         layout.addView(bodyView);
 
         builder.setView(layout);
-        builder.setPositiveButton("同意並前往設定", new android.content.DialogInterface.OnClickListener() {
+        builder.setPositiveButton(I18n.get(this, "同意並前往設定", "Agree & Open Settings"), new android.content.DialogInterface.OnClickListener() {
             @Override
             public void onClick(android.content.DialogInterface dialog, int which) {
                 Intent intent = new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS);
                 startActivity(intent);
             }
         });
-        builder.setNegativeButton("取消", null);
+        builder.setNegativeButton(I18n.get(this, "取消", "Cancel"), null);
         builder.show();
     }
 
@@ -387,7 +403,7 @@ public class MainActivity extends Activity {
         layout.setBackgroundColor(CrewTheme.BG_PRIMARY);
 
         TextView titleView = new TextView(this);
-        titleView.setText("⚙️ 運作模式與連線設定");
+        titleView.setText(I18n.get(this, "⚙️ 運作模式與連線設定", "⚙️ Operation Mode & Settings"));
         titleView.setTextSize(16);
         titleView.setTypeface(Typeface.DEFAULT_BOLD);
         titleView.setTextColor(CrewTheme.TEXT_PRIMARY);
@@ -396,14 +412,14 @@ public class MainActivity extends Activity {
 
         // 1. Gemini API Key (BYOK)
         TextView keyLabel = new TextView(this);
-        keyLabel.setText("1. Gemini API Key (BYOK 獨立雲端模式)");
+        keyLabel.setText(I18n.get(this, "1. Gemini API Key (BYOK 獨立雲端模式)", "1. Gemini API Key (BYOK Cloud Mode)"));
         keyLabel.setTextSize(12);
         keyLabel.setTypeface(Typeface.DEFAULT_BOLD);
         keyLabel.setTextColor(CrewTheme.TEAL_400);
         layout.addView(keyLabel);
 
         TextView keyHintLink = new TextView(this);
-        keyHintLink.setText("🔗 免費申請 Gemini API Key (aistudio.google.com) ↗");
+        keyHintLink.setText(I18n.get(this, "🔗 免費申請 Gemini API Key (aistudio.google.com) ↗", "🔗 Get Free Gemini API Key (aistudio.google.com) ↗"));
         keyHintLink.setTextSize(11);
         keyHintLink.setTextColor(CrewTheme.CYAN_400);
         keyHintLink.setPadding(0, dp(2), 0, dp(4));
@@ -419,7 +435,7 @@ public class MainActivity extends Activity {
         layout.addView(keyHintLink);
 
         final android.widget.EditText keyInput = new android.widget.EditText(this);
-        keyInput.setHint("請輸入 AIzaSy 開頭的 Gemini API Key");
+        keyInput.setHint(I18n.get(this, "請輸入 AIzaSy 開頭的 Gemini API Key", "Enter AIzaSy... Gemini API Key"));
         keyInput.setHintTextColor(CrewTheme.TEXT_MUTED);
         keyInput.setText(AppConfig.getGeminiApiKey(this));
         keyInput.setTextSize(12);
@@ -433,14 +449,14 @@ public class MainActivity extends Activity {
 
         // 2. Custom Server URL (Connected Mode)
         TextView serverLabel = new TextView(this);
-        serverLabel.setText("2. Crew Pocket 伺服器網址 (連線擴充模式)");
+        serverLabel.setText(I18n.get(this, "2. Crew Pocket 伺服器網址 (連線擴充模式)", "2. Custom Server URL (Connected Mode)"));
         serverLabel.setTextSize(12);
         serverLabel.setTypeface(Typeface.DEFAULT_BOLD);
         serverLabel.setTextColor(CrewTheme.INDIGO_400);
         layout.addView(serverLabel);
 
         final android.widget.EditText serverInput = new android.widget.EditText(this);
-        serverInput.setHint("留空為純獨立模式，或填 http://127.0.0.1:8000");
+        serverInput.setHint(I18n.get(this, "留空為純獨立模式，或填 http://127.0.0.1:8000", "Empty for standalone, or http://127.0.0.1:8000"));
         serverInput.setHintTextColor(CrewTheme.TEXT_MUTED);
         serverInput.setText(AppConfig.getServerUrl(this));
         serverInput.setTextSize(12);
@@ -452,18 +468,47 @@ public class MainActivity extends Activity {
         layout.addView(serverInput, serverLp);
 
         builder.setView(layout);
-        builder.setPositiveButton("儲存設定", new android.content.DialogInterface.OnClickListener() {
+        builder.setPositiveButton(I18n.get(this, "儲存設定", "Save Settings"), new android.content.DialogInterface.OnClickListener() {
             @Override
             public void onClick(android.content.DialogInterface dialog, int which) {
                 String newKey = keyInput.getText().toString().trim();
                 String newServer = serverInput.getText().toString().trim();
                 AppConfig.setGeminiApiKey(MainActivity.this, newKey);
                 AppConfig.setServerUrl(MainActivity.this, newServer);
-                Toast.makeText(MainActivity.this, "✅ 設定已儲存生效！", Toast.LENGTH_SHORT).show();
+                Toast.makeText(MainActivity.this, I18n.get(MainActivity.this, "✅ 設定已儲存生效！", "✅ Settings saved successfully!"), Toast.LENGTH_SHORT).show();
                 recreate();
             }
         });
-        builder.setNegativeButton("取消", null);
+        builder.setNegativeButton(I18n.get(this, "取消", "Cancel"), null);
+        builder.show();
+    }
+
+    private void showLanguageDialog() {
+        android.app.AlertDialog.Builder builder = new android.app.AlertDialog.Builder(this);
+        String[] languages = new String[]{
+            "🌐 跟隨系統 (System Default)",
+            "🇹🇼 繁體中文 (Traditional Chinese)",
+            "🇺🇸 English"
+        };
+        String current = AppConfig.getLanguage(this);
+        int checkedItem = "zh".equalsIgnoreCase(current) ? 1 : ("en".equalsIgnoreCase(current) ? 2 : 0);
+
+        builder.setTitle(I18n.get(this, "選擇介面語言", "Select App Language"));
+        builder.setSingleChoiceItems(languages, checkedItem, new android.content.DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(android.content.DialogInterface dialog, int which) {
+                if (which == 1) {
+                    AppConfig.setLanguage(MainActivity.this, "zh");
+                } else if (which == 2) {
+                    AppConfig.setLanguage(MainActivity.this, "en");
+                } else {
+                    AppConfig.setLanguage(MainActivity.this, "auto");
+                }
+                dialog.dismiss();
+                recreate();
+            }
+        });
+        builder.setNegativeButton(I18n.get(this, "取消", "Cancel"), null);
         builder.show();
     }
 
@@ -472,18 +517,18 @@ public class MainActivity extends Activity {
         super.onResume();
         if (CrewAccessibilityService.isServiceRunning()) {
             statusDot.setTextColor(CrewTheme.EMERALD_400);
-            statusText.setText("無障礙服務已在背景連線運行");
+            statusText.setText(I18n.serviceRunningTitle(this));
             statusText.setTextColor(CrewTheme.EMERALD_400);
-            statusDetail.setText("本地通訊 Port: 8766 · 跨 App 操控與語音助理已就緒");
+            statusDetail.setText(I18n.serviceRunningDetail(this));
             statusDetail.setTextColor(CrewTheme.TEXT_SECONDARY);
             statusCard.setBackground(CrewTheme.createCard(this, Color.parseColor("#14064E3B"), Color.parseColor("#33059669"), 16));
             FloatingBubbleManager manager = FloatingBubbleManager.getInstance(this);
             manager.showNotification();
         } else {
             statusDot.setTextColor(CrewTheme.ROSE_500);
-            statusText.setText("無障礙服務未連線");
+            statusText.setText(I18n.serviceStoppedTitle(this));
             statusText.setTextColor(CrewTheme.ROSE_400);
-            statusDetail.setText("請點擊上方「開啟無障礙服務」授權，以啟用完整隨身特工能力。");
+            statusDetail.setText(I18n.serviceStoppedDetail(this));
             statusDetail.setTextColor(CrewTheme.TEXT_SECONDARY);
             statusCard.setBackground(CrewTheme.createCard(this, Color.parseColor("#144C0519"), Color.parseColor("#33BE123C"), 16));
         }

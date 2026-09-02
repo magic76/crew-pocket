@@ -74,7 +74,7 @@ public class NativeLiveActivity extends Activity {
         headerRow.setGravity(Gravity.CENTER_VERTICAL);
 
         TextView backBtn = new TextView(this);
-        backBtn.setText("‹ 返回");
+        backBtn.setText(I18n.get(this, "‹ 返回", "‹ Back"));
         backBtn.setTextSize(14);
         backBtn.setTextColor(CrewTheme.INDIGO_400);
         backBtn.setTypeface(Typeface.DEFAULT_BOLD);
@@ -85,7 +85,7 @@ public class NativeLiveActivity extends Activity {
         headerRow.addView(backBtn);
 
         TextView title = new TextView(this);
-        title.setText("原生 Gemini Live");
+        title.setText(I18n.get(this, "原生 Gemini Live", "Native Gemini Live"));
         title.setTextSize(18);
         title.setTextColor(CrewTheme.TEXT_PRIMARY);
         title.setTypeface(Typeface.DEFAULT_BOLD);
@@ -94,7 +94,7 @@ public class NativeLiveActivity extends Activity {
         root.addView(headerRow);
 
         TextView note = new TextView(this);
-        note.setText("端到端低延遲 Web Audio PCM 直連通話（無須開啟瀏覽器）");
+        note.setText(I18n.get(this, "端到端低延遲 Web Audio PCM 直連通話（無須開啟瀏覽器）", "End-to-end low-latency direct voice chat (No browser needed)"));
         note.setTextSize(11);
         note.setTextColor(CrewTheme.TEXT_SECONDARY);
         note.setPadding(0, dp(4), 0, dp(18));
@@ -115,7 +115,7 @@ public class NativeLiveActivity extends Activity {
         statusBadge.addView(statusDot);
 
         statusText = new TextView(this);
-        statusText.setText("待命就緒");
+        statusText.setText(I18n.get(this, "待命就緒", "Ready"));
         statusText.setTextSize(12);
         statusText.setTextColor(CrewTheme.TEXT_PRIMARY);
         statusText.setTypeface(Typeface.MONOSPACE);
@@ -158,7 +158,7 @@ public class NativeLiveActivity extends Activity {
         apiKeyInput.setText(savedKey);
 
         TextView keyHint = new TextView(this);
-        keyHint.setText("🔗 免費申請 Gemini API Key (aistudio.google.com) ↗");
+        keyHint.setText(I18n.get(this, "🔗 免費申請 Gemini API Key (aistudio.google.com) ↗", "🔗 Get Free Gemini API Key (aistudio.google.com) ↗"));
         keyHint.setTextSize(11);
         keyHint.setTextColor(CrewTheme.CYAN_400);
         keyHint.setPadding(0, dp(6), 0, 0);
@@ -177,7 +177,7 @@ public class NativeLiveActivity extends Activity {
 
         // ── 4. Main Call Action Button ──
         callButton = new Button(this);
-        callButton.setText("🎙️ 開始原生 Live 通話");
+        callButton.setText(I18n.get(this, "🎙️ 開始原生 Live 通話", "🎙️ Start Native Live Call"));
         callButton.setTextSize(14);
         callButton.setTextColor(Color.WHITE);
         callButton.setTypeface(Typeface.DEFAULT_BOLD);
@@ -199,7 +199,7 @@ public class NativeLiveActivity extends Activity {
         textCard.setBackground(CrewTheme.createCard(this, CrewTheme.BG_SURFACE, CrewTheme.BORDER_SUBTLE, 16));
 
         textInput = new EditText(this);
-        textInput.setHint("文字輸入測試（例如：「看我現在螢幕上有什麼？」）");
+        textInput.setHint(I18n.get(this, "文字輸入測試（例如：「看我現在螢幕上有什麼？」）", "Type text command (e.g., 'What is on my screen?')"));
         textInput.setHintTextColor(CrewTheme.TEXT_MUTED);
         textInput.setTextColor(CrewTheme.TEXT_PRIMARY);
         textInput.setTextSize(12);
@@ -210,7 +210,7 @@ public class NativeLiveActivity extends Activity {
         textCard.addView(textInput);
 
         textSendButton = new Button(this);
-        textSendButton.setText("💬 傳送文字至 Live 通話");
+        textSendButton.setText(I18n.get(this, "💬 傳送文字至 Live 通話", "💬 Send Text to Live Session"));
         textSendButton.setTextSize(12);
         textSendButton.setTextColor(CrewTheme.TEXT_PRIMARY);
         textSendButton.setBackground(CrewTheme.createCard(this, CrewTheme.BG_ELEVATED, CrewTheme.BORDER_INDIGO, 10));
@@ -223,7 +223,7 @@ public class NativeLiveActivity extends Activity {
 
         // ── 6. Transcript Area ──
         TextView transcriptTitle = new TextView(this);
-        transcriptTitle.setText("即時逐字稿");
+        transcriptTitle.setText(I18n.get(this, "即時逐字稿", "Live Transcript"));
         transcriptTitle.setTextSize(12);
         transcriptTitle.setTypeface(Typeface.DEFAULT_BOLD);
         transcriptTitle.setTextColor(CrewTheme.TEAL_300);
@@ -231,7 +231,7 @@ public class NativeLiveActivity extends Activity {
         root.addView(transcriptTitle);
 
         transcript = new TextView(this);
-        transcript.setText("（通話中的語音辨識與 Gemini 即時回覆將動態顯示在這裡）");
+        transcript.setText(I18n.get(this, "（通話中的語音辨識與 Gemini 即時回覆將動態顯示在這裡）", "(Voice recognition and Gemini realtime replies will appear here)"));
         transcript.setTextSize(12);
         transcript.setTextColor(CrewTheme.TEXT_SECONDARY);
         transcript.setTypeface(Typeface.MONOSPACE);
@@ -251,22 +251,22 @@ public class NativeLiveActivity extends Activity {
         textSendButton.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) {
                 String text = textInput.getText().toString().trim();
-                if (text.isEmpty()) { updateStatus(CrewTheme.AMBER_400, "請先輸入測試文字"); return; }
-                if (client == null || !client.isRunning()) { updateStatus(CrewTheme.AMBER_400, "請先開始 Gemini Live 通話"); return; }
+                if (text.isEmpty()) { updateStatus(CrewTheme.AMBER_400, I18n.get(NativeLiveActivity.this, "請先輸入測試文字", "Please enter text first")); return; }
+                if (client == null || !client.isRunning()) { updateStatus(CrewTheme.AMBER_400, I18n.get(NativeLiveActivity.this, "請先開始 Gemini Live 通話", "Please start Live Call first")); return; }
                 if (client.sendText(text)) {
                     textInput.setText("");
-                    updateStatus(CrewTheme.TEAL_400, "文字已送出，等待回覆…");
-                } else updateStatus(CrewTheme.ROSE_500, "文字送出失敗，請確認連線");
+                    updateStatus(CrewTheme.TEAL_400, I18n.get(NativeLiveActivity.this, "文字已送出，等待回覆…", "Text sent, waiting for reply..."));
+                } else updateStatus(CrewTheme.ROSE_500, I18n.get(NativeLiveActivity.this, "文字送出失敗，請確認連線", "Failed to send text"));
             }
         });
     }
 
     private void updateCallButtonUi(boolean isCallActive) {
         if (isCallActive) {
-            callButton.setText("🛑 結束 Live 通話");
+            callButton.setText(I18n.get(this, "🛑 結束 Live 通話", "🛑 End Live Call"));
             callButton.setBackground(CrewTheme.createGradientButton(this, CrewTheme.ROSE_500, Color.parseColor("#9F1239"), 14));
         } else {
-            callButton.setText("🎙️ 開始原生 Live 通話");
+            callButton.setText(I18n.get(this, "🎙️ 開始原生 Live 通話", "🎙️ Start Native Live Call"));
             callButton.setBackground(CrewTheme.createGradientButton(this, CrewTheme.TEAL_500, CrewTheme.INDIGO_600, 14));
         }
     }
