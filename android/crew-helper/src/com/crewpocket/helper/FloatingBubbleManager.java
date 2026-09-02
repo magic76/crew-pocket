@@ -387,6 +387,14 @@ public class FloatingBubbleManager {
                         private int initialX, initialY;
                         private float initialTouchX, initialTouchY;
                         private long touchStartTime;
+                        private boolean longPressTriggered = false;
+                        private final Runnable longPressRunnable = new Runnable() {
+                            @Override public void run() {
+                                longPressTriggered = true;
+                                vibrateSuccess();
+                                toggleNativeLive();
+                            }
+                        };
 
                         @Override
                         public boolean onTouch(View v, MotionEvent event) {
@@ -404,6 +412,8 @@ public class FloatingBubbleManager {
                                     initialTouchX = event.getRawX();
                                     initialTouchY = event.getRawY();
                                     touchStartTime = System.currentTimeMillis();
+                                    longPressTriggered = false;
+                                    mainHandler.postDelayed(longPressRunnable, 450);
                                     if (isDocked) {
                                         wakeBubbleFromDock();
                                     } else {
@@ -412,6 +422,10 @@ public class FloatingBubbleManager {
                                     return true;
 
                                 case MotionEvent.ACTION_MOVE:
+                                    float moveDist = (float) Math.hypot(event.getRawX() - initialTouchX, event.getRawY() - initialTouchY);
+                                    if (moveDist > 18) {
+                                        mainHandler.removeCallbacks(longPressRunnable);
+                                    }
                                     int targetX = initialX + (int) (event.getRawX() - initialTouchX);
                                     int targetY = initialY + (int) (event.getRawY() - initialTouchY);
                                     bubbleParams.x = Math.max(leftLimit, Math.min(rightLimit, targetX));
@@ -422,12 +436,16 @@ public class FloatingBubbleManager {
                                     return true;
 
                                 case MotionEvent.ACTION_UP:
-                                    float dx = Math.abs(event.getRawX() - initialTouchX);
-                                    float dy = Math.abs(event.getRawY() - initialTouchY);
-                                    long duration = System.currentTimeMillis() - touchStartTime;
-                                    if (dx < 15 && dy < 15 && duration < 700) {
-                                        vibrateShort();
-                                        toggleVoiceControls();
+                                case MotionEvent.ACTION_CANCEL:
+                                    mainHandler.removeCallbacks(longPressRunnable);
+                                    if (!longPressTriggered) {
+                                        float dx = Math.abs(event.getRawX() - initialTouchX);
+                                        float dy = Math.abs(event.getRawY() - initialTouchY);
+                                        long duration = System.currentTimeMillis() - touchStartTime;
+                                        if (dx < 18 && dy < 18 && duration < 450) {
+                                            vibrateShort();
+                                            toggleVoiceControls();
+                                        }
                                     }
                                     snapBubbleToEdge();
                                     scheduleAutoDock();
