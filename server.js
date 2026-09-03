@@ -1558,7 +1558,8 @@ const server = http.createServer(async (req, res) => {
   } else if (pathname === '/api/prewarm' && req.method === 'POST') {
     const body = await parseJsonBody(req);
     const providerId = normalizeProviderId(body.provider);
-    const result = await getProvider(providerId).prewarm(body.model, body.effort);
+    const workspace = await resolveWorkspace(body.workspace);
+    const result = await getProvider(providerId).prewarm(body.model, body.effort, workspace);
     res.writeHead(200, { 'Content-Type': 'application/json' });
     return res.end(JSON.stringify({ success: true, prewarmed: true, prewarm: result || null, provider: providerId }));
   } else if (pathname === '/api/rename-conversation' && req.method === 'POST') {
