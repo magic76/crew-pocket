@@ -1099,7 +1099,7 @@ async function loadConversationHistory(convId) {
     // Conversations own their model choice. Restore it before rendering so the
     // header and the next message always agree with this thread.
     if (typeof window.applyConversationSettings === 'function') {
-      window.applyConversationSettings(data.conversation_settings);
+      window.applyConversationSettings(data.conversation_settings || { provider: currentProvider, workspace: '/data/data/com.termux/files/home' });
     }
     
     // 🧠 Update Top Context Usage Pill
@@ -1228,6 +1228,25 @@ async function loadConversations() {
 }
 
 let cachedConversations = [];
+const CONVERSATION_ROLE_META = {
+  lead: { icon: '✨', label: '開發主責' },
+  backend: { icon: '🧩', label: '後端工程' },
+  research: { icon: '🔎', label: '研究分析' },
+  debug: { icon: '🛠️', label: '除錯支援' },
+  ux: { icon: '🎨', label: '產品／UX' },
+  general: { icon: '💬', label: '一般助理' }
+};
+
+function conversationRelativeTime(timestamp) {
+  const value = Number(timestamp);
+  if (!Number.isFinite(value) || value <= 0) return '未記錄更新';
+  const elapsed = Math.max(0, Date.now() - value);
+  if (elapsed < 60 * 1000) return '剛剛更新';
+  if (elapsed < 60 * 60 * 1000) return `${Math.floor(elapsed / 60000)} 分鐘前`;
+  if (elapsed < 24 * 60 * 60 * 1000) return `${Math.floor(elapsed / 3600000)} 小時前`;
+  if (elapsed < 7 * 24 * 60 * 60 * 1000) return `${Math.floor(elapsed / 86400000)} 天前`;
+  return new Date(value).toLocaleDateString('zh-TW', { month: 'numeric', day: 'numeric' });
+}
 
 function renderConversationItems(conversations, filterQuery = '') {
   if (!convList) return;
@@ -1262,12 +1281,48 @@ function renderConversationItems(conversations, filterQuery = '') {
     return;
   }
 
+  const UNASSIGNED_WORKSPACE = '__crew-pocket-unassigned-workspace__';
+  const groupedByWorkspace = new Map();
   filtered.forEach(conv => {
+    const workspace = conv.workspace || UNASSIGNED_WORKSPACE;
+    if (!groupedByWorkspace.has(workspace)) groupedByWorkspace.set(workspace, []);
+    groupedByWorkspace.get(workspace).push(conv);
+  });
+  const workspaceGroups = [...groupedByWorkspace.entries()]
+    .map(([workspace, items]) => ({
+      workspace,
+      label: workspace === UNASSIGNED_WORKSPACE
+        ? '未指定工作區'
+        : (workspace === '/data/data/com.termux/files/home' ? 'Home' : workspace.split('/').filter(Boolean).pop()),
+      items: items.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)),
+      latest: Math.max(...items.map(item => item.updatedAt || 0))
+    }))
+    .sort((a, b) => {
+      const aCurrent = a.workspace === ((typeof currentWorkspace !== 'undefined') ? currentWorkspace : '');
+      const bCurrent = b.workspace === ((typeof currentWorkspace !== 'undefined') ? currentWorkspace : '');
+      if (aCurrent !== bCurrent) return aCurrent ? -1 : 1;
+      return b.latest - a.latest || a.label.localeCompare(b.label, 'zh-TW');
+    });
+
+  workspaceGroups.forEach(group => {
+    const groupHeader = document.createElement('div');
+    groupHeader.className = 'flex items-center gap-2 px-1.5 pt-3 pb-1 text-[10px] font-semibold text-slate-500';
+    groupHeader.innerHTML = `<span class="text-xs">${group.workspace === UNASSIGNED_WORKSPACE ? '⚪' : (group.workspace === '/data/data/com.termux/files/home' ? '🏠' : '📁')}</span><span class="truncate">${escapeHtml(group.label)}</span><span class="ml-auto text-[9px] font-mono text-slate-600">${group.items.length}</span>`;
+    convList.appendChild(groupHeader);
+
+    group.items.forEach(conv => {
     const conversationProvider = conv.provider || 'antigravity';
     const isCurrent = conv.id === currentConversationId && conversationProvider === currentProvider;
     const conversationProviderConfig = providerConfig(conversationProvider);
     const providerLabel = conversationProviderConfig.shortLabel || conversationProviderConfig.label;
     const providerBadgeClass = conversationProviderConfig.badgeClass || 'bg-slate-500/20 text-slate-300 border-slate-500/40';
+    const workspaceLabel = conv.workspace
+      ? (conv.workspace === '/data/data/com.termux/files/home'
+        ? 'Home'
+        : String(conv.workspace).split('/').filter(Boolean).pop())
+      : '';
+    const role = CONVERSATION_ROLE_META[conv.role] || CONVERSATION_ROLE_META.general;
+    const updateLabel = conversationRelativeTime(conv.updatedAt);
     const wrapper = document.createElement('div');
     wrapper.className = 'swipe-item-wrapper relative overflow-hidden rounded-xl mb-1.5 select-none transition-all duration-200';
     wrapper.style.maxHeight = '80px';
@@ -1294,13 +1349,16 @@ function renderConversationItems(conversations, filterQuery = '') {
       <div class="swipe-item-content relative z-10 p-2.5 rounded-xl cursor-pointer flex items-center justify-between text-xs transition-transform duration-75 touch-pan-y ${
         isCurrent ? 'bg-indigo-950 text-indigo-200 border border-indigo-500/60 shadow-md' : 'bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800'
       }">
-        <div class="flex flex-col truncate min-w-0 flex-1 pointer-events-none pr-1">
+        <div class="flex flex-col truncate min-w-0 flex-1 pointer-events-none pr-1 gap-0.5">
           <div class="flex items-center gap-1.5 truncate">
-            <svg class="w-3.5 h-3.5 shrink-0 ${isCurrent ? 'text-indigo-400' : 'text-slate-400'}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/>
-            </svg>
-            <span class="text-[9px] px-1 py-0.2 rounded border font-mono shrink-0 ${providerBadgeClass}">${providerLabel}</span>
+            <span class="w-4 text-center shrink-0">${role.icon}</span>
             <span class="truncate font-medium">${displayTitle}</span>
+          </div>
+          <div class="flex items-center gap-1.5 truncate pl-5 text-[9px] text-slate-500">
+            <span class="shrink-0 text-slate-400">${role.label}</span>
+            <span class="px-1 py-0.2 rounded border font-mono shrink-0 ${providerBadgeClass}">${providerLabel}</span>
+            ${workspaceLabel ? `<span class="max-w-[58px] truncate text-teal-300/80" title="${escapeHtml(conv.workspace || '')}">📁 ${escapeHtml(workspaceLabel)}</span>` : ''}
+            <span class="truncate">${isCurrent && isStreaming ? '● 回覆中' : updateLabel}</span>
           </div>
         </div>
         <div class="flex items-center gap-1 shrink-0 ml-1">
@@ -1435,7 +1493,8 @@ function renderConversationItems(conversations, filterQuery = '') {
       }
     });
 
-    convList.appendChild(wrapper);
+      convList.appendChild(wrapper);
+    });
   });
 }
 
@@ -1563,7 +1622,9 @@ async function sendBtwConcurrentSidecard(customText = null, customImgPath = null
         provider: currentProvider,
         model: currentModel,
         effort: 'low', // Fast low reasoning for instant 1s answers across Gemini & Codex
-        image_path: imgPath
+        image_path: imgPath,
+        workspace: (typeof currentWorkspace !== 'undefined') ? currentWorkspace : '/data/data/com.termux/files/home',
+        role: (typeof currentRole !== 'undefined') ? currentRole : 'general'
       }),
       signal: sideAbort.signal
     });
@@ -1971,7 +2032,9 @@ async function sendMessage(queuedMessage = null) {
         conversation_id: activeStreamConvId,
         image_path: imgPath,
         model: currentModel,
-        effort: (typeof currentEffort !== 'undefined') ? currentEffort : 'low'
+        effort: (typeof currentEffort !== 'undefined') ? currentEffort : 'low',
+        workspace: (typeof currentWorkspace !== 'undefined') ? currentWorkspace : '/data/data/com.termux/files/home',
+        role: (typeof currentRole !== 'undefined') ? currentRole : 'general'
       }),
       signal: streamAbortController.signal
     });

@@ -9,9 +9,9 @@
   <meta name="apple-mobile-web-app-title" content="Crew Pocket">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="application-name" content="Crew Pocket">
-  <link rel="manifest" href="/manifest.json?v=acd6c060c621">
-  <link rel="icon" type="image/jpeg" href="/icon.jpg">
-  <link rel="apple-touch-icon" href="/icon-192.jpg">
+  <link rel="manifest" href="/manifest.json?v=085e5d3a565e">
+  <link rel="icon" type="image/png" href="/icon.png">
+  <link rel="apple-touch-icon" href="/icon-192.png">
   <title>Crew Pocket</title>
   
   <!-- Tailwind CSS -->
@@ -64,7 +64,7 @@
       
       <!-- Quantum Center Icon with Neon Aura -->
       <div class="relative w-20 h-20 rounded-2xl bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 border border-indigo-500/60 p-1 shadow-2xl flex items-center justify-center splash-icon-glow">
-        <img src="/icon.jpg" class="w-full h-full object-cover rounded-xl shadow-inner" alt="Crew Pocket" onerror="this.src='/icon.svg'">
+        <img src="/icon.png" class="w-full h-full object-cover rounded-xl shadow-inner" alt="Crew Pocket" onerror="this.src='/icon.svg'">
       </div>
 
       <!-- App Title & Tagline -->
@@ -98,6 +98,11 @@
       <div class="flex flex-col min-w-0">
         <div class="flex items-center gap-1.5 min-w-0">
           <span id="network-dot" class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" title="網路連線正常 (可正常與 AI 對話)"></span>
+          <button id="workspace-selector-btn" type="button" class="flex max-w-[104px] items-center gap-1 rounded-md border border-teal-500/30 bg-teal-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-teal-200 transition hover:bg-teal-500/20 active:scale-95 shrink-0" title="切換目前對話的工作區">
+            <span id="workspace-icon" class="shrink-0">🏠</span><span id="workspace-label" class="truncate">Home</span>
+            <svg class="h-2.5 w-2.5 shrink-0 text-teal-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m6 9 6 6 6-6"/></svg>
+          </button>
+          <button id="role-selector-btn" type="button" class="flex h-6 w-6 items-center justify-center rounded-md border border-indigo-500/30 bg-indigo-500/10 text-sm transition hover:bg-indigo-500/20 active:scale-95 shrink-0" title="設定此對話的工作角色"><span id="role-icon">💬</span></button>
           <h1 id="header-title" class="font-semibold text-xs text-white truncate max-w-[110px] sm:max-w-[160px] cursor-pointer hover:text-indigo-300 transition" title="點擊修改對話標題">Crew Pocket</h1>
           <button id="header-rename-btn" type="button" title="修改當前對話標題" class="text-slate-400 hover:text-indigo-300 transition p-0.5 rounded active:scale-95 shrink-0">
             <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -286,6 +291,24 @@
       
     </div>
   </header>
+
+  <div id="workspace-modal" class="fixed inset-0 z-[70] hidden items-end justify-center bg-black/70 p-2 opacity-0 transition-opacity duration-150 sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-labelledby="workspace-modal-title">
+    <section class="w-full max-w-md overflow-hidden rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl">
+      <div class="flex items-start justify-between gap-3 border-b border-slate-800 p-3.5">
+        <div><h2 id="workspace-modal-title" class="text-sm font-bold text-slate-100">選擇工作區</h2><p class="mt-0.5 text-[10px] text-slate-400">AI 的相對路徑與專案規範會從此資料夾開始。</p></div>
+        <button id="close-workspace-modal-btn" type="button" class="min-h-9 min-w-9 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white">✕</button>
+      </div>
+      <div id="workspace-options" class="max-h-[52vh] space-y-1 overflow-y-auto p-2.5"><div class="p-5 text-center text-xs text-slate-400">載入工作區中…</div></div>
+      <div class="border-t border-slate-800 px-3.5 py-2.5 text-[10px] text-slate-500">既有對話切換後，下一回合會使用新工作區；歷史紀錄不變。</div>
+    </section>
+  </div>
+
+  <div id="role-modal" class="fixed inset-0 z-[71] hidden items-end justify-center bg-black/70 p-2 opacity-0 transition-opacity duration-150 sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-labelledby="role-modal-title">
+    <section class="w-full max-w-md overflow-hidden rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl">
+      <div class="flex items-start justify-between gap-3 border-b border-slate-800 p-3.5"><div><h2 id="role-modal-title" class="text-sm font-bold text-slate-100">設定對話角色</h2><p class="mt-0.5 text-[10px] text-slate-400">角色會顯示在側欄，幫你辨識每條工作線。</p></div><button id="close-role-modal-btn" type="button" class="min-h-9 min-w-9 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white">✕</button></div>
+      <div id="role-options" class="grid grid-cols-2 gap-2 p-3"></div>
+    </section>
+  </div>
 
   <!-- MAIN CHAT CONTAINER -->
   <div class="relative flex-1 flex min-h-0 w-full max-w-full overflow-hidden">
@@ -1283,13 +1306,13 @@
 
   <!-- Modular Scripts (Cache-busted v7.8) -->
   <script src="/js/i18n.js?v=658a42026ca6"></script>
-  <script src="/js/ui.js?v=82bde244088c"></script>
+  <script src="/js/ui.js?v=4c656832e5ba"></script>
   <script src="/js/tools.js?v=a1e169518419"></script>
   <script src="/js/storage.js?v=0e143c8da2fc"></script>
-  <script src="/js/chat.js?v=bd6b608f3f5d"></script>
+  <script src="/js/chat.js?v=0c66d5459e60"></script>
   <script src="/js/tasks.js?v=2e5e3f5e9e77"></script>
   <script src="/js/live.js?v=8bab54e07fcd"></script>
   <script src="/js/phone_agent.js?v=6346f686519a"></script>
-  <script src="/js/app.js?v=581e1ccb2265"></script>
+  <script src="/js/app.js?v=eb8d0660b462"></script>
 </body>
 </html>

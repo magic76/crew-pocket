@@ -31,10 +31,22 @@ let lastPrewarmKey = '';
 let lastPrewarmAt = 0;
 let prewarmRequest = null;
 let modelsCatalogRequest = null;
+const HOME_WORKSPACE = '/data/data/com.termux/files/home';
+let currentWorkspace = localStorage.getItem('crew_current_workspace') || HOME_WORKSPACE;
+let availableWorkspaces = [];
+const CONVERSATION_ROLES = {
+  lead: { icon: '✨', label: '開發主責' },
+  backend: { icon: '🧩', label: '後端工程' },
+  research: { icon: '🔎', label: '研究分析' },
+  debug: { icon: '🛠️', label: '除錯支援' },
+  ux: { icon: '🎨', label: '產品／UX' },
+  general: { icon: '💬', label: '一般助理' }
+};
+let currentRole = localStorage.getItem('crew_current_role') || 'general';
 
 // Coalesce boot/model/effort/new-chat prewarm requests into one provider call.
 window.requestProviderPrewarm = function(delay = 250) {
-  const payload = { provider: currentProvider, model: currentModel, effort: currentEffort };
+  const payload = { provider: currentProvider, model: currentModel, effort: currentEffort, workspace: currentWorkspace };
   const key = JSON.stringify(payload);
   if (prewarmTimer) clearTimeout(prewarmTimer);
   if (key === lastPrewarmKey && Date.now() - lastPrewarmAt < 10000) return prewarmRequest;
@@ -109,6 +121,17 @@ const notifyStatusSubtext = document.getElementById('notify-status-subtext');
 const toolsMenuBtn = document.getElementById('tools-menu-btn');
 const toolsMenuDropdown = document.getElementById('tools-menu-dropdown');
 const headerTitle = document.getElementById('header-title');
+const workspaceSelectorBtn = document.getElementById('workspace-selector-btn');
+const workspaceModal = document.getElementById('workspace-modal');
+const workspaceOptions = document.getElementById('workspace-options');
+const closeWorkspaceModalBtn = document.getElementById('close-workspace-modal-btn');
+const workspaceIcon = document.getElementById('workspace-icon');
+const workspaceLabel = document.getElementById('workspace-label');
+const roleSelectorBtn = document.getElementById('role-selector-btn');
+const roleModal = document.getElementById('role-modal');
+const roleOptions = document.getElementById('role-options');
+const closeRoleModalBtn = document.getElementById('close-role-modal-btn');
+const roleIcon = document.getElementById('role-icon');
 const slashMenu = document.getElementById('slash-menu');
 const lightbox = document.getElementById('lightbox');
 const lightboxImg = document.getElementById('lightbox-img');
@@ -493,6 +516,141 @@ function providerStorageKey(kind, providerId = currentProvider) {
   return `${providerConfig(providerId).storagePrefix || providerId}_${kind}`;
 }
 
+function workspaceMeta(workspace = currentWorkspace) {
+  return availableWorkspaces.find(item => item.path === workspace) || {
+    path: workspace,
+    label: workspace === HOME_WORKSPACE ? 'Home' : workspace.split('/').filter(Boolean).pop(),
+    icon: workspace === HOME_WORKSPACE ? '🏠' : '📁'
+  };
+}
+
+function updateWorkspaceUI() {
+  const meta = workspaceMeta();
+  if (workspaceIcon) workspaceIcon.textContent = meta.icon;
+  if (workspaceLabel) workspaceLabel.textContent = meta.label;
+  if (workspaceSelectorBtn) workspaceSelectorBtn.title = `工作區：${meta.path}`;
+}
+
+function roleMeta(role = currentRole) {
+  return CONVERSATION_ROLES[role] || CONVERSATION_ROLES.general;
+}
+
+function updateRoleUI() {
+  const meta = roleMeta();
+  if (roleIcon) roleIcon.textContent = meta.icon;
+  if (roleSelectorBtn) roleSelectorBtn.title = `對話角色：${meta.label}`;
+}
+
+function closeRoleModal() {
+  if (!roleModal) return;
+  roleModal.classList.add('opacity-0');
+  window.setTimeout(() => roleModal.classList.add('hidden'), 160);
+}
+
+function renderRoleOptions() {
+  if (!roleOptions) return;
+  roleOptions.innerHTML = Object.entries(CONVERSATION_ROLES).map(([id, role]) => `<button type="button" data-role="${id}" class="role-option flex min-h-16 items-center gap-2 rounded-xl border p-2.5 text-left transition active:scale-[0.99] ${id === currentRole ? 'border-indigo-400/70 bg-indigo-500/15' : 'border-slate-800 bg-slate-950/70 hover:bg-slate-800'}"><span class="text-lg">${role.icon}</span><span class="text-xs font-semibold text-slate-100">${role.label}</span>${id === currentRole ? '<span class="ml-auto text-xs text-indigo-300">✓</span>' : ''}</button>`).join('');
+  roleOptions.querySelectorAll('.role-option').forEach(button => button.addEventListener('click', () => selectConversationRole(button.dataset.role)));
+}
+
+async function selectConversationRole(role) {
+  if (!CONVERSATION_ROLES[role] || role === currentRole) return closeRoleModal();
+  if (isStreaming) return alert('目前正在回覆中，請完成後再切換角色。');
+  const previous = currentRole;
+  currentRole = role;
+  localStorage.setItem('crew_current_role', currentRole);
+  updateRoleUI();
+  try {
+    if (currentConversationId) {
+      const saved = await window.saveCurrentConversationSettings();
+      if (!saved) throw new Error('儲存對話角色失敗');
+      if (typeof loadConversations === 'function') loadConversations();
+    }
+    closeRoleModal();
+  } catch (error) {
+    currentRole = previous;
+    localStorage.setItem('crew_current_role', currentRole);
+    updateRoleUI();
+    alert(error.message || '切換角色失敗');
+  }
+}
+
+window.openRolePicker = function() {
+  if (!roleModal) return;
+  renderRoleOptions();
+  roleModal.classList.remove('hidden');
+  requestAnimationFrame(() => roleModal.classList.remove('opacity-0'));
+};
+window.closeRolePicker = closeRoleModal;
+
+async function loadWorkspaces() {
+  const response = await fetch('/api/workspaces');
+  if (!response.ok) throw new Error('無法讀取工作區');
+  const data = await response.json();
+  availableWorkspaces = Array.isArray(data.workspaces) ? data.workspaces : [];
+  updateWorkspaceUI();
+  return availableWorkspaces;
+}
+
+function closeWorkspaceModal() {
+  if (!workspaceModal) return;
+  workspaceModal.classList.add('opacity-0');
+  window.setTimeout(() => workspaceModal.classList.add('hidden'), 160);
+}
+
+function renderWorkspaceOptions() {
+  if (!workspaceOptions) return;
+  workspaceOptions.innerHTML = availableWorkspaces.map(item => {
+    const active = item.path === currentWorkspace;
+    return `<button type="button" data-workspace-path="${escapeHtml(item.path)}" class="workspace-option w-full flex items-center gap-3 rounded-xl border p-3 text-left transition active:scale-[0.99] ${active ? 'border-teal-400/70 bg-teal-500/15' : 'border-slate-800 bg-slate-950/70 hover:border-slate-700 hover:bg-slate-800'}">
+      <span class="text-lg shrink-0">${escapeHtml(item.icon || '📁')}</span>
+      <span class="min-w-0 flex-1"><span class="block truncate text-xs font-semibold text-slate-100">${escapeHtml(item.label)}</span><span class="block truncate pt-0.5 text-[10px] font-mono text-slate-400">${escapeHtml(item.detail || item.path)}</span></span>
+      ${active ? '<span class="text-xs font-bold text-teal-300">✓</span>' : ''}
+    </button>`;
+  }).join('') || '<div class="p-5 text-center text-xs text-slate-400">尚未找到專案工作區</div>';
+  workspaceOptions.querySelectorAll('.workspace-option').forEach(button => {
+    button.addEventListener('click', () => selectWorkspace(button.dataset.workspacePath));
+  });
+}
+
+async function selectWorkspace(workspace) {
+  if (!workspace || workspace === currentWorkspace) return closeWorkspaceModal();
+  if (isStreaming) return alert('目前正在回覆中，請完成後再切換工作區。');
+  const next = workspaceMeta(workspace);
+  if (currentConversationId && !window.confirm(`切換至「${next.label}」後，下一回合會從 ${next.path} 啟動 AI 工作 session。\n\n對話歷史會保留。是否切換？`)) return;
+  const previous = currentWorkspace;
+  currentWorkspace = workspace;
+  localStorage.setItem('crew_current_workspace', currentWorkspace);
+  updateWorkspaceUI();
+  try {
+    if (currentConversationId) {
+      const saved = await window.saveCurrentConversationSettings();
+      if (!saved) throw new Error('儲存工作區失敗');
+    }
+    closeWorkspaceModal();
+    window.requestProviderPrewarm?.(0);
+  } catch (error) {
+    currentWorkspace = previous;
+    localStorage.setItem('crew_current_workspace', currentWorkspace);
+    updateWorkspaceUI();
+    alert(error.message || '切換工作區失敗');
+  }
+}
+
+window.openWorkspacePicker = async function() {
+  if (!workspaceModal) return;
+  workspaceModal.classList.remove('hidden');
+  requestAnimationFrame(() => workspaceModal.classList.remove('opacity-0'));
+  if (workspaceOptions) workspaceOptions.innerHTML = '<div class="p-5 text-center text-xs text-slate-400">載入工作區中…</div>';
+  try {
+    await loadWorkspaces();
+    renderWorkspaceOptions();
+  } catch (error) {
+    if (workspaceOptions) workspaceOptions.innerHTML = `<div class="p-5 text-center text-xs text-rose-300">${escapeHtml(error.message)}</div>`;
+  }
+};
+window.closeWorkspacePicker = closeWorkspaceModal;
+
 async function loadProviderCatalog() {
   try {
     const res = await fetch('/api/providers');
@@ -585,6 +743,15 @@ function selectedModelConfig() {
 
 window.applyConversationSettings = function(settings) {
   if (!settings || settings.provider !== currentProvider) return false;
+  // A legacy conversation may predate workspace metadata. Never let it
+  // inherit the previous conversation's folder, which can silently send a
+  // follow-up task to the wrong project.
+  currentWorkspace = settings.workspace || HOME_WORKSPACE;
+  localStorage.setItem('crew_current_workspace', currentWorkspace);
+  updateWorkspaceUI();
+  currentRole = CONVERSATION_ROLES[settings.role] ? settings.role : 'general';
+  localStorage.setItem('crew_current_role', currentRole);
+  updateRoleUI();
   const providerModels = availableModels.filter(model => (model.provider || 'antigravity') === currentProvider);
   const selected = providerModels.find(model => model.id === settings.model);
   if (!selected) return false; // Model may have been removed from this device.
@@ -610,7 +777,9 @@ window.saveCurrentConversationSettings = function() {
       provider: currentProvider,
       conversation_id: currentConversationId,
       model: currentModel,
-      effort: currentEffort
+      effort: currentEffort,
+      workspace: currentWorkspace,
+      role: currentRole
     })
   }).then(res => {
     if (!res.ok) throw new Error('儲存對話模型設定失敗');

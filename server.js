@@ -37,8 +37,9 @@ const { getDeviceAdapter } = require('./lib/device_adapter');
 const { readSkills, saveSkill } = require('./lib/phone_skills');
 const { createExtensionBridge } = require('./lib/extension_bridge');
 const { getStorageReport, deleteMediaItems, getMediaThumbnail } = require('./lib/storage');
-const { getConversationSettings, saveConversationSettings, saveConversationTitle, deleteConversationSettings } = require('./lib/conversation-settings');
+const { getConversationSettings, getProviderConversationSettings, saveConversationSettings, saveConversationTitle, deleteConversationSettings } = require('./lib/conversation-settings');
 const { createTask, getTask, listTasks, updateTask } = require('./lib/tasks');
+const { listWorkspaces, resolveWorkspace } = require('./lib/workspaces');
 
 const deviceAdapter = getDeviceAdapter();
 
@@ -644,9 +645,16 @@ async function handleProviderConversations(parsedUrl, res) {
   try {
     const provider = getProvider(providerId);
     if (!provider.metadata.capabilities.history || typeof provider.listConversations !== 'function') throw new Error('Provider does not support conversation history');
-    const conversations = await provider.listConversations();
+    const [conversations, settingsByConversation] = await Promise.all([
+      provider.listConversations(),
+      getProviderConversationSettings(providerId)
+    ]);
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ conversations }));
+    res.end(JSON.stringify({ conversations: conversations.map(conversation => ({
+      ...conversation,
+      workspace: settingsByConversation.get(conversation.id)?.workspace || null,
+      role: settingsByConversation.get(conversation.id)?.role || 'general'
+    })) }));
   } catch (err) {
     res.writeHead(503, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: err.message, conversations: [] }));
@@ -762,14 +770,32 @@ async function handleConversationSettings(req, res) {
   try {
     const body = await parseJsonBody(req);
     const providerId = normalizeProviderId(body.provider);
+    const previous = await getConversationSettings(providerId, body.conversation_id);
+    const workspace = await resolveWorkspace(body.workspace || previous?.workspace);
     const settings = await saveConversationSettings(providerId, body.conversation_id, {
       model: body.model,
-      effort: body.effort
+      effort: body.effort,
+      workspace,
+      role: body.role || previous?.role
     });
+    if (previous?.workspace && previous.workspace !== workspace && providerId === 'antigravity') {
+      sessionManager.closeSession(body.conversation_id);
+    }
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ success: true, conversation_settings: settings }));
   } catch (err) {
     res.writeHead(400, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: err.message }));
+  }
+}
+
+async function handleWorkspaces(res) {
+  try {
+    const workspaces = await listWorkspaces();
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ workspaces }));
+  } catch (err) {
+    res.writeHead(500, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: err.message }));
   }
 }
@@ -1055,6 +1081,13 @@ async function handleChat(req, res) {
     res.writeHead(400, { 'Content-Type': 'application/json' });
     return res.end(JSON.stringify({ error: 'Prompt or image is required' }));
   }
+  let workspace;
+  try {
+    workspace = await resolveWorkspace(body.workspace);
+  } catch (err) {
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify({ error: err.message }));
+  }
 
   let finalPrompt = prompt || 'Analyze this image';
 
@@ -1192,6 +1225,8 @@ async function handleChat(req, res) {
       conversationId: conversation_id,
       model,
       effort,
+      workspace,
+      role: body.role || 'general',
       prompt: finalPrompt,
       imagePath: image_path,
       onAbort(handler) { abortTurn = handler; },
@@ -1203,7 +1238,9 @@ async function handleChat(req, res) {
           // immediately bound to their first model.
           saveConversationSettings(providerId, event.conversationId, {
             model: event.model || model,
-            effort: event.effort || effort || 'low'
+            effort: event.effort || effort || 'low',
+            workspace,
+            role: body.role || 'general'
           }).catch(err => console.warn('[Conversation Settings] Save failed:', err.message));
           sendEvent('init', { conversation_id: event.conversationId, provider: providerId, model: event.model, effort: event.effort });
         } else if (event.type === 'text_delta') {
@@ -1478,6 +1515,8 @@ const server = http.createServer(async (req, res) => {
     return handleProviderDelete(parsedUrl, res);
   } else if (pathname === '/api/conversation-settings' && req.method === 'POST') {
     return handleConversationSettings(req, res);
+  } else if (pathname === '/api/workspaces' && req.method === 'GET') {
+    return handleWorkspaces(res);
   } else if (pathname === '/api/storage' && req.method === 'GET') {
     return handleStorageReport(res);
   } else if (pathname === '/api/storage/media' && req.method === 'DELETE') {

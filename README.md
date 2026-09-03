@@ -2,10 +2,14 @@
 
 <div align="center">
 
+<img src="public/icon-512.png" width="104" alt="Crew Pocket App Icon">
+
 ![Crew Pocket Mobile AI Assistant](public/assets/hero_banner.jpg)
 
 **Flagship Tactical Mobile AI Assistant running on Android Termux.**  
 專為行動端量身打造的旗艦級隨身特工 AI 助理。
+
+深午夜藍、靛藍與青綠的「指揮框架」圖示，代表口袋中的 AI 編排與執行中樞。
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-emerald.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Android%20Termux-indigo.svg)](https://termux.dev/)

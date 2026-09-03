@@ -269,6 +269,16 @@ function initAppAndListeners() {
   if (menuBtn) menuBtn.addEventListener('click', () => toggleDrawer(true));
   if (closeDrawerBtn) closeDrawerBtn.addEventListener('click', () => toggleDrawer(false));
   if (drawerOverlay) drawerOverlay.addEventListener('click', () => toggleDrawer(false));
+  if (workspaceSelectorBtn) workspaceSelectorBtn.addEventListener('click', () => window.openWorkspacePicker?.());
+  if (closeWorkspaceModalBtn) closeWorkspaceModalBtn.addEventListener('click', () => window.closeWorkspacePicker?.());
+  if (workspaceModal) workspaceModal.addEventListener('click', event => {
+    if (event.target === workspaceModal) window.closeWorkspacePicker?.();
+  });
+  if (roleSelectorBtn) roleSelectorBtn.addEventListener('click', () => window.openRolePicker?.());
+  if (closeRoleModalBtn) closeRoleModalBtn.addEventListener('click', () => window.closeRolePicker?.());
+  if (roleModal) roleModal.addEventListener('click', event => {
+    if (event.target === roleModal) window.closeRolePicker?.();
+  });
   bindEdgeDrawerGesture();
   bindDrawerCloseGesture();
 
@@ -809,6 +819,8 @@ function initAppAndListeners() {
       if (modelsData.efforts) availableEfforts = modelsData.efforts;
       updateModelUI();
       updateEffortUI();
+      updateWorkspaceUI();
+      loadWorkspaces().catch(() => {});
       const savedConvId = localStorage.getItem(activeConversationStorageKey());
       const res = await fetch(`/api/conversations?${providerQuery()}`);
       const data = await res.json();

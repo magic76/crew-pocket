@@ -1,27 +1,27 @@
 // Crew Pocket app-shell cache.  Every deploy changes this revision, so an
 // activated Service Worker can never serve JavaScript from a previous build.
-const BUILD_REVISION = 'auto-027e33559975';
+const BUILD_REVISION = 'auto-3e7e0ce1d36c';
 const APP_SHELL_CACHE = `crew-pocket-shell-${BUILD_REVISION}`;
 const RUNTIME_CACHE = `crew-pocket-runtime-${BUILD_REVISION}`;
 const APP_SHELL = [
   "/",
-  "/manifest.json?v=acd6c060c621",
+  "/manifest.json?v=085e5d3a565e",
   "/css/style.css?v=b3d2fbdbe3c2",
   "/css/style-premium.css?v=d7f488f0e295",
   "/js/i18n.js?v=658a42026ca6",
-  "/js/ui.js?v=82bde244088c",
+  "/js/ui.js?v=4c656832e5ba",
   "/js/tools.js?v=a1e169518419",
   "/js/storage.js?v=0e143c8da2fc",
-  "/js/chat.js?v=bd6b608f3f5d",
+  "/js/chat.js?v=0c66d5459e60",
   "/js/tasks.js?v=2e5e3f5e9e77",
   "/js/live.js?v=8bab54e07fcd",
   "/js/phone_agent.js?v=6346f686519a",
-  "/js/app.js?v=581e1ccb2265",
+  "/js/app.js?v=eb8d0660b462",
   "/dompurify.min.js",
   "/heic2any.min.js",
-  "/icon-192.jpg",
-  "/icon-512.jpg",
-  "/icon.jpg",
+  "/icon-192.png",
+  "/icon-512.png",
+  "/icon.png",
   "https://cdn.tailwindcss.com",
   "https://cdn.jsdelivr.net/npm/marked/marked.min.js",
   "https://cdn.jsdelivr.net/npm/chart.js",
