@@ -1298,10 +1298,18 @@ function renderConversationItems(conversations, filterQuery = '') {
       latest: Math.max(...items.map(item => item.updatedAt || 0))
     }))
     .sort((a, b) => {
+      // 1. Unassigned workspace is strictly placed at the very end
+      const aUnassigned = a.workspace === UNASSIGNED_WORKSPACE;
+      const bUnassigned = b.workspace === UNASSIGNED_WORKSPACE;
+      if (aUnassigned !== bUnassigned) return aUnassigned ? 1 : -1;
+
+      // 2. Currently active workspace is placed at the top of assigned folders
       const aCurrent = a.workspace === ((typeof currentWorkspace !== 'undefined') ? currentWorkspace : '');
       const bCurrent = b.workspace === ((typeof currentWorkspace !== 'undefined') ? currentWorkspace : '');
       if (aCurrent !== bCurrent) return aCurrent ? -1 : 1;
-      return b.latest - a.latest || a.label.localeCompare(b.label, 'zh-TW');
+
+      // 3. Sort remaining folders by latest updated time, then folder name
+      return (b.latest - a.latest) || a.label.localeCompare(b.label, 'zh-TW');
     });
 
   workspaceGroups.forEach(group => {
