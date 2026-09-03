@@ -3654,12 +3654,7 @@
           if (audioPlayer) audioPlayer.setCaptureEnabled(!isMuted);
           flushPreSetupAudio();
           updateCardStatus('listening', '🎙️ 可以開始說話');
-          // The full card is useful while connecting, but should not obscure
-          // the app during an ordinary hands-free conversation.
-          setTimeout(minimizeLiveCardForHandsFree, 450);
-      // Browser SpeechRecognition may emit periodic start/stop beeps on
-      // mobile. Gemini Live audio remains fully functional without it.
-      // Transcript capture is handled by the Live audio/session turns.
+          // Keep the Live Card persistently visible so the user has full, clear control of status and transcripts.
           return;
         }
 
