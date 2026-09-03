@@ -613,11 +613,11 @@ function renderWorkspaceOptions() {
   });
 }
 
-async function selectWorkspace(workspace) {
-  if (!workspace || workspace === currentWorkspace) return closeWorkspaceModal();
+async function selectWorkspace(workspace, isCreatingNewChat = false) {
+  if (!workspace) return closeWorkspaceModal();
   if (isStreaming) return alert('目前正在回覆中，請完成後再切換工作區。');
   const next = workspaceMeta(workspace);
-  if (currentConversationId && !window.confirm(`切換至「${next.label}」後，下一回合會從 ${next.path} 啟動 AI 工作 session。\n\n對話歷史會保留。是否切換？`)) return;
+  if (!isCreatingNewChat && currentConversationId && workspace !== currentWorkspace && !window.confirm(`切換至「${next.label}」後，下一回合會從 ${next.path} 啟動 AI 工作 session。\n\n對話歷史會保留。是否切換？`)) return;
   const previous = currentWorkspace;
   currentWorkspace = workspace;
   localStorage.setItem('crew_current_workspace', currentWorkspace);
@@ -637,11 +637,42 @@ async function selectWorkspace(workspace) {
   }
 }
 
-window.openWorkspacePicker = async function() {
+async function handleCreateWorkspaceSubmit(e) {
+  if (e) e.preventDefault();
+  const input = document.getElementById('create-workspace-input');
+  const name = input ? input.value.trim() : '';
+  if (!name) return alert('請輸入欲建立的目錄名稱');
+
+  try {
+    const res = await fetch('/api/workspaces', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name })
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error || '建立目錄失敗');
+    
+    if (input) input.value = '';
+    await loadWorkspaces();
+    renderWorkspaceOptions();
+    await selectWorkspace(data.workspace.path);
+  } catch (err) {
+    alert(err.message || '建立目錄出錯');
+  }
+}
+
+window.openWorkspacePicker = async function(isNewChat = false) {
   if (!workspaceModal) return;
   workspaceModal.classList.remove('hidden');
   requestAnimationFrame(() => workspaceModal.classList.remove('opacity-0'));
   if (workspaceOptions) workspaceOptions.innerHTML = '<div class="p-5 text-center text-xs text-slate-400">載入工作區中…</div>';
+  
+  const form = document.getElementById('create-workspace-form');
+  if (form && !form.dataset.bound) {
+    form.dataset.bound = 'true';
+    form.addEventListener('submit', handleCreateWorkspaceSubmit);
+  }
+
   try {
     await loadWorkspaces();
     renderWorkspaceOptions();

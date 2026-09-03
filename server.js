@@ -38,8 +38,7 @@ const { readSkills, saveSkill } = require('./lib/phone_skills');
 const { createExtensionBridge } = require('./lib/extension_bridge');
 const { getStorageReport, deleteMediaItems, getMediaThumbnail } = require('./lib/storage');
 const { getConversationSettings, getProviderConversationSettings, saveConversationSettings, saveConversationTitle, deleteConversationSettings } = require('./lib/conversation-settings');
-const { createTask, getTask, listTasks, updateTask } = require('./lib/tasks');
-const { listWorkspaces, resolveWorkspace } = require('./lib/workspaces');
+const { listWorkspaces, resolveWorkspace, createWorkspace } = require('./lib/workspaces');
 
 const deviceAdapter = getDeviceAdapter();
 
@@ -282,6 +281,19 @@ function normalizeInboundMessage(body) {
   return message;
 }
 
+async function storeInboundImage(body) {
+  const encoded = typeof body?.image_base64 === 'string' ? body.image_base64.trim() : '';
+  if (!encoded) return;
+  if (encoded.length > 12 * 1024 * 1024) throw new Error('圖片資料過大');
+  const image = Buffer.from(encoded, 'base64');
+  if (image.length === 0 || image.length > 8 * 1024 * 1024) throw new Error('圖片資料無效或過大');
+  await fsPromises.mkdir(UPLOADS_DIR, { recursive: true });
+  const filename = `helper_${Date.now()}_${crypto.randomUUID().slice(0, 8)}.jpg`;
+  await fsPromises.writeFile(path.join(UPLOADS_DIR, filename), image, { mode: 0o600 });
+  body.image_path = `/uploads/${filename}`;
+  delete body.image_base64;
+}
+
 function writeInboundEvent(res, message) {
   res.write(`id: ${message.id}\nevent: inbound-message\ndata: ${JSON.stringify(message)}\n\n`);
 }
@@ -329,6 +341,7 @@ function handleInboundEvents(req, res) {
 async function handleInboundMessage(req, res) {
   try {
     const body = await parseJsonBody(req);
+    await storeInboundImage(body);
     const message = enqueueInboundMessage(body);
     if (!message) throw new Error('訊息不可為空');
     res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -797,6 +810,18 @@ async function handleWorkspaces(res) {
   } catch (err) {
     res.writeHead(500, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: err.message }));
+  }
+}
+
+async function handleCreateWorkspace(req, res) {
+  try {
+    const body = await parseJsonBody(req);
+    const workspace = await createWorkspace(body.name);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: true, workspace }));
+  } catch (err) {
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: false, error: err.message }));
   }
 }
 
@@ -1517,6 +1542,8 @@ const server = http.createServer(async (req, res) => {
     return handleConversationSettings(req, res);
   } else if (pathname === '/api/workspaces' && req.method === 'GET') {
     return handleWorkspaces(res);
+  } else if (pathname === '/api/workspaces' && req.method === 'POST') {
+    return handleCreateWorkspace(req, res);
   } else if (pathname === '/api/storage' && req.method === 'GET') {
     return handleStorageReport(res);
   } else if (pathname === '/api/storage/media' && req.method === 'DELETE') {

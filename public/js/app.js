@@ -621,6 +621,11 @@ function initAppAndListeners() {
       appendMessage('assistant', '你好！已為你開啟新對話。有什麼可以幫你的？');
       toggleDrawer(false);
 
+      // 📂 Prompt user to select/create directory for the new conversation
+      if (typeof window.openWorkspacePicker === 'function') {
+        window.openWorkspacePicker(true);
+      }
+
       // 🔥 Pre-warm standby resident process in background
       if (typeof window.requestProviderPrewarm === 'function') window.requestProviderPrewarm();
     });
