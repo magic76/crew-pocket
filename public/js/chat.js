@@ -1519,18 +1519,51 @@ function isBtwPrompt(text = getPromptText()) {
   return /^\s*\/btw\b/i.test(text);
 }
 
+let pendingQueuedMessage = null;
+
+function setPendingQueuedMessage(msg) {
+  pendingQueuedMessage = msg;
+  renderQueuedMessageCapsule();
+  updateSendButtonMode();
+}
+
+function clearPendingQueuedMessage() {
+  pendingQueuedMessage = null;
+  renderQueuedMessageCapsule();
+  updateSendButtonMode();
+}
+
+function renderQueuedMessageCapsule() {
+  const capsule = document.getElementById('queued-msg-capsule');
+  const preview = document.getElementById('queued-msg-preview');
+  if (!capsule) return;
+
+  if (pendingQueuedMessage && pendingQueuedMessage.text) {
+    if (preview) {
+      preview.textContent = pendingQueuedMessage.text;
+    }
+    capsule.classList.remove('hidden');
+  } else {
+    capsule.classList.add('hidden');
+  }
+}
+
 function updateBtwQueueStatus() {
   const status = document.getElementById('btw-queue-status');
   if (status) status.classList.add('hidden');
 }
 
-// ⚡ While a main response is active, /btw becomes an instant parallel side-question action!
+// ⚡ While a main response is active, typing text turns the action into "Queue Message" (Amber)
 function updateSendButtonMode() {
   if (!sendBtn || !sendIcon || !stopIcon) return;
+  const queueIcon = document.getElementById('queue-icon');
   const srLabel = document.getElementById('send-btn-sr-label');
+  const hasInputText = promptInput ? promptInput.value.trim().length > 0 : false;
+
   sendBtn.classList.remove(
     'bg-indigo-600', 'hover:bg-indigo-500', 'active:bg-indigo-700', 'shadow-indigo-600/30',
     'bg-rose-600', 'hover:bg-rose-500', 'active:bg-rose-700', 'shadow-rose-600/30',
+    'bg-amber-600', 'hover:bg-amber-500', 'active:bg-amber-700', 'shadow-amber-600/30',
     'bg-teal-600', 'hover:bg-teal-500', 'active:bg-teal-700', 'shadow-teal-600/30'
   );
 
@@ -1538,20 +1571,34 @@ function updateSendButtonMode() {
     sendBtn.classList.add('bg-teal-600', 'hover:bg-teal-500', 'active:bg-teal-700', 'shadow-teal-600/30');
     sendIcon.classList.remove('hidden');
     stopIcon.classList.add('hidden');
+    if (queueIcon) queueIcon.classList.add('hidden');
     sendBtn.title = '⚡ 即時並行快問快答 /btw';
     sendBtn.setAttribute('aria-label', '⚡ 即時並行快問快答 /btw');
     if (srLabel) srLabel.textContent = '即時並行發送';
+  } else if (isStreaming && hasInputText) {
+    // 📥 User is typing while AI is streaming -> Queue Mode
+    sendBtn.classList.add('bg-amber-600', 'hover:bg-amber-500', 'active:bg-amber-700', 'shadow-amber-600/30');
+    sendIcon.classList.add('hidden');
+    stopIcon.classList.add('hidden');
+    if (queueIcon) queueIcon.classList.remove('hidden');
+    sendBtn.title = '📥 排隊發送（等 AI 回應完自動送出）';
+    sendBtn.setAttribute('aria-label', '📥 排隊發送');
+    if (srLabel) srLabel.textContent = '排隊發送';
   } else if (isStreaming) {
+    // 🛑 No input text -> Stop / Interrupt active generation
     sendBtn.classList.add('bg-rose-600', 'hover:bg-rose-500', 'active:bg-rose-700', 'shadow-rose-600/30');
     sendIcon.classList.add('hidden');
     stopIcon.classList.remove('hidden');
+    if (queueIcon) queueIcon.classList.add('hidden');
     sendBtn.title = '中斷生成';
     sendBtn.setAttribute('aria-label', '中斷生成');
     if (srLabel) srLabel.textContent = '中斷生成';
   } else {
+    // 💬 Normal Send Mode
     sendBtn.classList.add('bg-indigo-600', 'hover:bg-indigo-500', 'active:bg-indigo-700', 'shadow-indigo-600/30');
     sendIcon.classList.remove('hidden');
     stopIcon.classList.add('hidden');
+    if (queueIcon) queueIcon.classList.add('hidden');
     sendBtn.title = '發送訊息';
     sendBtn.setAttribute('aria-label', '發送訊息');
     if (srLabel) srLabel.textContent = '發送訊息';
@@ -1681,8 +1728,18 @@ async function sendBtwConcurrentSidecard(customText = null, customImgPath = null
   }
 }
 
-function flushQueuedBtwMessage() {}
-function clearQueuedBtwMessages() {}
+function flushQueuedBtwMessage() {
+  if (pendingQueuedMessage && !isStreaming) {
+    const nextMsg = pendingQueuedMessage;
+    clearPendingQueuedMessage();
+    setTimeout(() => {
+      sendMessage(nextMsg);
+    }, 150);
+  }
+}
+function clearQueuedBtwMessages() {
+  clearPendingQueuedMessage();
+}
 
 // Toggle Send / Stop button appearance & state
 function setStreamingState(streaming) {
@@ -2358,6 +2415,25 @@ function handleSendClick(e) {
   }
 
   if (isStreaming) {
+    const rawText = getPromptText();
+    const imgPath = uploadedImagePath;
+
+    if (rawText || imgPath) {
+      // 📥 User submitted input while streaming -> Queue this message!
+      promptInput.value = '';
+      promptInput.style.height = 'auto';
+      uploadedImagePath = null;
+      if (cameraInput) cameraInput.value = '';
+      if (typeof attachInput !== 'undefined' && attachInput) attachInput.value = '';
+      if (imagePreviewContainer) imagePreviewContainer.classList.add('hidden');
+      if (slashMenu) slashMenu.classList.add('hidden');
+      if (typeof window.haptic === 'function') window.haptic([20, 20]);
+      
+      setPendingQueuedMessage({ text: rawText, imagePath: imgPath });
+      return;
+    }
+
+    // 🛑 No input text -> Stop / Interrupt active generation
     if (Date.now() - streamingStartedAt > 500) {
       if (navigator.vibrate) navigator.vibrate([40, 40, 40]);
       stopGeneration();
@@ -2448,9 +2524,60 @@ document.addEventListener('click', (e) => {
   }
 });
 
-// Window Exports for Context Usage & Modals
+// Window Exports for Context Usage, Modals & Queued Messages
 window.showContextModal = showContextModal;
 window.hideContextModal = hideContextModal;
 window.updateContextPill = updateContextPill;
 window.startLowContextContinuation = startLowContextContinuation;
 window.getCachedConversations = () => cachedConversations;
+window.setPendingQueuedMessage = setPendingQueuedMessage;
+window.clearPendingQueuedMessage = clearPendingQueuedMessage;
+window.getPendingQueuedMessage = () => pendingQueuedMessage;
+
+// ⏳ Queued Message Capsule Event Listeners
+document.addEventListener('DOMContentLoaded', () => {
+  const queuedBody = document.getElementById('queued-msg-body');
+  const queuedCancelBtn = document.getElementById('queued-msg-cancel-btn');
+  const queuedInterruptBtn = document.getElementById('queued-msg-interrupt-btn');
+
+  // Click Body -> Call message back to textarea for editing
+  if (queuedBody) {
+    queuedBody.addEventListener('click', () => {
+      if (!pendingQueuedMessage) return;
+      const text = pendingQueuedMessage.text || '';
+      clearPendingQueuedMessage();
+      if (promptInput) {
+        promptInput.value = text;
+        promptInput.focus();
+        promptInput.style.height = 'auto';
+        promptInput.style.height = Math.min(promptInput.scrollHeight, 120) + 'px';
+        updateSendButtonMode();
+      }
+      if (typeof window.haptic === 'function') window.haptic('light');
+    });
+  }
+
+  // Click Cancel -> Drop queued message
+  if (queuedCancelBtn) {
+    queuedCancelBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      clearPendingQueuedMessage();
+      if (typeof window.haptic === 'function') window.haptic([15, 15]);
+    });
+  }
+
+  // Click Interrupt & Send Now -> Stop current stream immediately and send queued message
+  if (queuedInterruptBtn) {
+    queuedInterruptBtn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      if (!pendingQueuedMessage) return;
+      const msgToSend = pendingQueuedMessage;
+      clearPendingQueuedMessage();
+      if (typeof window.haptic === 'function') window.haptic('heavy');
+      await stopGeneration();
+      setTimeout(() => {
+        sendMessage(msgToSend);
+      }, 200);
+    });
+  }
+});
