@@ -38,6 +38,7 @@ const { readSkills, saveSkill } = require('./lib/phone_skills');
 const { createExtensionBridge } = require('./lib/extension_bridge');
 const { getStorageReport, deleteMediaItems, getMediaThumbnail } = require('./lib/storage');
 const { getConversationSettings, getProviderConversationSettings, saveConversationSettings, saveConversationTitle, deleteConversationSettings } = require('./lib/conversation-settings');
+const { createTask, getTask, listTasks, updateTask } = require('./lib/tasks');
 const { listWorkspaces, resolveWorkspace, createWorkspace } = require('./lib/workspaces');
 
 const deviceAdapter = getDeviceAdapter();
