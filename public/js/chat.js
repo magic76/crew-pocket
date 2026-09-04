@@ -2453,3 +2453,4 @@ window.showContextModal = showContextModal;
 window.hideContextModal = hideContextModal;
 window.updateContextPill = updateContextPill;
 window.startLowContextContinuation = startLowContextContinuation;
+window.getCachedConversations = () => cachedConversations;

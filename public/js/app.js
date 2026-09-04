@@ -502,14 +502,110 @@ function initAppAndListeners() {
     }
   }
 
-  // Prompt Input Auto-resize & Slash Menu
+  // @ Conversation Mention Popover & Slash Menu
+  const mentionMenu = document.getElementById('mention-menu');
+  const mentionMenuItems = document.getElementById('mention-menu-items');
+
+  function renderMentionMenu(filterQuery = '') {
+    if (!mentionMenuItems) return;
+    const conversations = (typeof window.getCachedConversations === 'function')
+      ? window.getCachedConversations()
+      : [];
+    
+    const currentId = (typeof currentConversationId !== 'undefined') ? currentConversationId : null;
+    const query = filterQuery.toLowerCase().trim();
+    
+    const targetConvs = conversations.filter(c => {
+      if (c.id === currentId) return false; // Exclude current conversation
+      if (!query) return true;
+      const title = (c.title || '').toLowerCase();
+      const workspace = (c.workspace || '').toLowerCase();
+      return title.includes(query) || workspace.includes(query) || c.id.toLowerCase().includes(query);
+    }).slice(0, 8); // Top 8 matches
+
+    if (targetConvs.length === 0) {
+      mentionMenuItems.innerHTML = '<div class="p-3 text-center text-xs text-slate-400">查無其他符合對話</div>';
+      return;
+    }
+
+    mentionMenuItems.innerHTML = targetConvs.map(c => {
+      const displayTitle = c.title || '未命名對話';
+      const safeTitle = displayTitle.replace(/"/g, '&quot;');
+      const workspaceName = c.workspace ? (c.workspace === '/data/data/com.termux/files/home' ? 'Home' : c.workspace.split('/').filter(Boolean).pop()) : '一般';
+      const providerLabel = c.provider === 'codex' ? 'Codex' : 'AGY';
+      return `
+        <button type="button" class="mention-item w-full text-left p-2 rounded-xl hover:bg-indigo-600/20 hover:text-indigo-300 flex items-center justify-between text-slate-200 transition group cursor-pointer" data-id="${c.id}" data-title="${safeTitle}">
+          <div class="flex items-center gap-2 min-w-0">
+            <span class="text-sm shrink-0">💬</span>
+            <div class="flex flex-col min-w-0">
+              <span class="font-bold text-xs truncate text-slate-200 group-hover:text-indigo-300 font-sans">${escapeHtml(displayTitle)}</span>
+              <span class="text-[10px] text-slate-500 font-mono truncate">📁 ${escapeHtml(workspaceName)} · ID: ${c.id.slice(0, 8)}</span>
+            </div>
+          </div>
+          <span class="text-[9px] px-1.5 py-0.5 rounded border border-indigo-500/40 bg-indigo-500/20 text-indigo-300 font-mono shrink-0 ml-1.5">${providerLabel}</span>
+        </button>
+      `;
+    }).join('');
+
+    mentionMenuItems.querySelectorAll('.mention-item').forEach(item => {
+      item.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const convId = item.dataset.id;
+        const convTitle = item.dataset.title;
+        if (!promptInput) return;
+
+        const text = promptInput.value;
+        const cursorPos = promptInput.selectionStart || text.length;
+        const beforeCursor = text.slice(0, cursorPos);
+        const afterCursor = text.slice(cursorPos);
+        const lastAtIdx = beforeCursor.lastIndexOf('@');
+
+        if (lastAtIdx !== -1) {
+          const mentionTag = `[@${convTitle}](conversation://${convId}) `;
+          promptInput.value = beforeCursor.slice(0, lastAtIdx) + mentionTag + afterCursor;
+          const nextPos = lastAtIdx + mentionTag.length;
+          promptInput.setSelectionRange(nextPos, nextPos);
+        } else {
+          promptInput.value = `[@${convTitle}](conversation://${convId}) ` + promptInput.value;
+        }
+
+        if (mentionMenu) mentionMenu.classList.add('hidden');
+        promptInput.focus();
+        promptInput.style.height = 'auto';
+        promptInput.style.height = Math.min(promptInput.scrollHeight, 120) + 'px';
+        if (typeof updateSendButtonMode === 'function') updateSendButtonMode();
+        if (typeof window.haptic === 'function') window.haptic('light');
+      });
+    });
+  }
+
+  // Prompt Input Auto-resize, @ Mention & Slash Menu
   if (promptInput) {
     promptInput.addEventListener('input', () => {
       promptInput.style.height = 'auto';
       promptInput.style.height = Math.min(promptInput.scrollHeight, 120) + 'px';
       if (typeof updateSendButtonMode === 'function') updateSendButtonMode();
-      const val = promptInput.value.trim();
-      if (val.startsWith('/') && !val.includes(' ')) {
+      
+      const val = promptInput.value;
+      const cursorPos = promptInput.selectionStart || val.length;
+      const beforeCursor = val.slice(0, cursorPos);
+
+      // Check @ Mention Trigger
+      const lastAtIdx = beforeCursor.lastIndexOf('@');
+      if (lastAtIdx !== -1 && (lastAtIdx === 0 || /\s/.test(beforeCursor[lastAtIdx - 1]))) {
+        const query = beforeCursor.slice(lastAtIdx + 1);
+        if (!query.includes(' ') && !query.includes('\n')) {
+          renderMentionMenu(query);
+          if (mentionMenu) mentionMenu.classList.remove('hidden');
+          if (slashMenu) slashMenu.classList.add('hidden');
+          return;
+        }
+      }
+      if (mentionMenu) mentionMenu.classList.add('hidden');
+
+      // Check Slash Command Trigger
+      const trimmed = val.trim();
+      if (trimmed.startsWith('/') && !trimmed.includes(' ')) {
         if (slashMenu) slashMenu.classList.remove('hidden');
       } else {
         if (slashMenu) slashMenu.classList.add('hidden');
@@ -522,6 +618,7 @@ function initAppAndListeners() {
       if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
         e.preventDefault();
         if (slashMenu) slashMenu.classList.add('hidden');
+        if (mentionMenu) mentionMenu.classList.add('hidden');
         handleSendClick(e);
       }
     });

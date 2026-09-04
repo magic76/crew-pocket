@@ -414,6 +414,17 @@
   <footer class="bg-slate-950/85 backdrop-blur-xl border-t border-slate-800/80 p-2 sm:p-3 shrink-0 z-10 w-full max-w-full">
     <div class="max-w-2xl mx-auto flex flex-col gap-1.5 relative w-full">
       
+      <!-- @ Conversation Mention Autocomplete Popover -->
+      <div id="mention-menu" class="hidden absolute bottom-full left-0 mb-2 w-72 sm:w-80 bg-slate-900/95 backdrop-blur border border-indigo-500/60 rounded-2xl shadow-2xl p-1.5 z-30 space-y-1 font-mono text-xs max-h-60 overflow-y-auto">
+        <div class="px-2 py-1 text-[10px] text-indigo-300 font-sans font-bold border-b border-slate-800 flex items-center justify-between sticky top-0 bg-slate-900/95 backdrop-blur">
+          <span class="flex items-center gap-1"><span>💬</span><span>標記並傳訊至其他對話</span></span>
+          <span class="text-slate-500 font-normal">點擊自動引用</span>
+        </div>
+        <div id="mention-menu-items" class="space-y-1 p-0.5">
+          <!-- Dynamically loaded conversation list -->
+        </div>
+      </div>
+
       <!-- Slash Command Autocomplete Popover -->
       <div id="slash-menu" class="hidden absolute bottom-full left-0 mb-2 w-72 bg-slate-900/95 backdrop-blur border border-slate-700/80 rounded-2xl shadow-2xl p-1.5 z-30 space-y-1 font-mono text-xs max-h-60 overflow-y-auto">
         <div class="px-2 py-1 text-[10px] text-slate-400 font-sans font-bold border-b border-slate-800 flex items-center justify-between sticky top-0 bg-slate-900/95 backdrop-blur">
@@ -1323,10 +1334,10 @@
   <script src="/js/ui.js?v=f3e6467243ff"></script>
   <script src="/js/tools.js?v=a1e169518419"></script>
   <script src="/js/storage.js?v=0e143c8da2fc"></script>
-  <script src="/js/chat.js?v=0c66d5459e60"></script>
+  <script src="/js/chat.js?v=d65702ce8ffe"></script>
   <script src="/js/tasks.js?v=2e5e3f5e9e77"></script>
   <script src="/js/live.js?v=42a1deb1ed79"></script>
   <script src="/js/phone_agent.js?v=6346f686519a"></script>
-  <script src="/js/app.js?v=0e959aea3224"></script>
+  <script src="/js/app.js?v=d09867829da4"></script>
 </body>
 </html>
