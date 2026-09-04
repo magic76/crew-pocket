@@ -1109,6 +1109,9 @@ async function loadConversationHistory(convId) {
       updateContextPill(null);
     }
 
+    // ⏳ Re-evaluate queue capsule visibility for this specific conversation
+    renderQueuedMessageCapsule();
+
     if (data.messages && data.messages.length > 0) {
       const firstUserMsg = data.messages.find(m => m.role === 'user');
       if (headerTitle) {
@@ -1522,7 +1525,11 @@ function isBtwPrompt(text = getPromptText()) {
 let pendingQueuedMessage = null;
 
 function setPendingQueuedMessage(msg) {
-  pendingQueuedMessage = msg;
+  pendingQueuedMessage = {
+    ...msg,
+    conversationId: currentConversationId,
+    provider: currentProvider
+  };
   renderQueuedMessageCapsule();
   updateSendButtonMode();
 }
@@ -1538,7 +1545,13 @@ function renderQueuedMessageCapsule() {
   const preview = document.getElementById('queued-msg-preview');
   if (!capsule) return;
 
-  if (pendingQueuedMessage && pendingQueuedMessage.text) {
+  // 🛡️ Only show queue capsule if user is currently inside the exact conversation where it was queued
+  const isMatch = pendingQueuedMessage &&
+    pendingQueuedMessage.text &&
+    pendingQueuedMessage.conversationId === currentConversationId &&
+    pendingQueuedMessage.provider === currentProvider;
+
+  if (isMatch) {
     if (preview) {
       preview.textContent = pendingQueuedMessage.text;
     }
