@@ -1187,6 +1187,7 @@ async function loadConversationHistory(convId) {
                     if (currentConversationId === convId && renderVersion === historyRenderVersion) {
                       loadConversationHistory(convId);
                     }
+                    setTimeout(flushQueuedBtwMessage, 300);
                   }
                 }
               } catch (e) {}
@@ -1742,12 +1743,31 @@ async function sendBtwConcurrentSidecard(customText = null, customImgPath = null
 }
 
 function flushQueuedBtwMessage() {
-  if (pendingQueuedMessage && !isStreaming) {
-    const nextMsg = pendingQueuedMessage;
+  let msgToSend = pendingQueuedMessage;
+  if (!msgToSend && promptInput && promptInput.value.trim() && !isBtwPrompt()) {
+    const rawText = getPromptText();
+    if (rawText) {
+      msgToSend = {
+        text: rawText,
+        imagePath: uploadedImagePath,
+        conversationId: currentConversationId,
+        provider: currentProvider
+      };
+      promptInput.value = '';
+      promptInput.style.height = 'auto';
+      uploadedImagePath = null;
+      if (cameraInput) cameraInput.value = '';
+      if (typeof attachInput !== 'undefined' && attachInput) attachInput.value = '';
+      if (imagePreviewContainer) imagePreviewContainer.classList.add('hidden');
+    }
+  }
+
+  if (msgToSend) {
     clearPendingQueuedMessage();
     setTimeout(() => {
-      sendMessage(nextMsg);
-    }, 150);
+      setStreamingState(false);
+      sendMessage(msgToSend);
+    }, 120);
   }
 }
 function clearQueuedBtwMessages() {
