@@ -1017,12 +1017,25 @@
                 <span class="w-2 h-2 rounded-full bg-amber-400 animate-ping"></span>
                 <span>正在等待您在瀏覽器完成授權...</span>
               </div>
+
+              <!-- ChatGPT Security Setting Helper Tip -->
+              <div class="p-2.5 rounded-xl bg-slate-950/90 border border-indigo-500/30 text-[11px] text-slate-300 space-y-1.5">
+                <div class="font-bold text-indigo-300 flex items-center gap-1.5">
+                  <span>💡</span>
+                  <span>若網頁提示「請在 ChatGPT 安全性設定中啟用」：</span>
+                </div>
+                <ol class="list-decimal list-inside space-y-1 text-slate-400 pl-0.5 leading-relaxed">
+                  <li>前往 <a href="https://chatgpt.com/#settings/Security" target="_blank" rel="noopener noreferrer" class="text-indigo-400 underline hover:text-indigo-300">ChatGPT 設定 ➔ 安全性 (Security)</a></li>
+                  <li>開啟 <span class="text-amber-300 font-semibold">「Codex 裝置代碼授權」</span> (Device Code Login)</li>
+                  <li>完成後回到本頁面點擊重新認證即可！</li>
+                </ol>
+              </div>
             </div>
 
             <!-- Foldable API Key Section -->
             <details class="group text-[11px]">
               <summary class="cursor-pointer text-slate-400 hover:text-slate-200 py-1 transition list-none flex items-center gap-1 font-mono">
-                <span>⚙️ 或手動輸入 OpenAI API Key 登入</span>
+                <span>⚙️ 或手動輸入 OpenAI API Key 登入 (免 ChatGPT 設定)</span>
                 <span class="text-[9px] group-open:rotate-180 transition-transform">▼</span>
               </summary>
               <div class="pt-2 space-y-1.5">
