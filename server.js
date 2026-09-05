@@ -1527,7 +1527,9 @@ async function handleGetAuthStatus(res) {
 
 async function handleCodexDeviceStart(req, res) {
   try {
-    const session = await auth.startCodexDeviceLogin();
+    const body = await parseJsonBody(req).catch(() => ({}));
+    const mode = body?.mode || 'oauth';
+    const session = await auth.startCodexLogin(mode);
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ success: true, ...session }));
   } catch (err) {

@@ -980,36 +980,37 @@
             載入狀態中...
           </p>
 
-          <!-- Device Auth Action -->
+          <!-- Auth Action Buttons -->
           <div class="space-y-2">
-            <button id="codex-device-start-btn" type="button" class="w-full py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-950/40 cursor-pointer transition" onclick="startCodexDeviceFlow()">
-              <span>🔑</span>
-              <span>一鍵 Device Auth 快速登入 (免打指令)</span>
+            <!-- 1. Primary: Browser One-Click OAuth Login -->
+            <button id="codex-device-start-btn" type="button" class="w-full py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-950/40 cursor-pointer transition" onclick="startCodexOAuthFlow()">
+              <span>🌐</span>
+              <span>瀏覽器一鍵快速登入 (推薦・免設定開關)</span>
             </button>
 
             <!-- Device Flow Step Display (Initially hidden) -->
-            <div id="codex-device-step-container" class="hidden space-y-2 p-3 rounded-xl bg-slate-900 border border-emerald-500/50 animate-fadeIn">
-              <div class="text-[11px] font-semibold text-emerald-300 flex items-center justify-between">
-                <span>📱 步驟 1：複製授權驗證碼</span>
-                <span class="text-[10px] text-slate-400 font-mono">有效時間 15 分鐘</span>
-              </div>
+            <div id="codex-device-step-container" class="hidden space-y-2.5 p-3 rounded-xl bg-slate-900 border border-emerald-500/50 animate-fadeIn">
               
-              <!-- Code Display & Copy -->
-              <div class="flex items-center gap-2">
-                <div id="codex-device-code" class="flex-1 bg-black/60 border border-emerald-500/60 rounded-xl py-2 px-3 text-center font-mono font-extrabold text-emerald-300 text-base tracking-widest select-all">
-                  ----
+              <!-- Code Display & Copy (Only shown in device mode) -->
+              <div id="codex-device-code-box-wrapper" class="hidden space-y-1.5">
+                <div class="text-[11px] font-semibold text-emerald-300 flex items-center justify-between">
+                  <span>📱 複製授權驗證碼</span>
+                  <span class="text-[10px] text-slate-400 font-mono">有效時間 15 分鐘</span>
                 </div>
-                <button id="codex-copy-code-btn" type="button" class="py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 font-semibold text-xs border border-slate-700 shrink-0 cursor-pointer transition" onclick="copyCodexUserCode()">
-                  📋 複製代碼
-                </button>
+                <div class="flex items-center gap-2">
+                  <div id="codex-device-code" class="flex-1 bg-black/60 border border-emerald-500/60 rounded-xl py-2 px-3 text-center font-mono font-extrabold text-emerald-300 text-base tracking-widest select-all">
+                    ----
+                  </div>
+                  <button id="codex-copy-code-btn" type="button" class="py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 font-semibold text-xs border border-slate-700 shrink-0 cursor-pointer transition" onclick="copyCodexUserCode()">
+                    📋 複製代碼
+                  </button>
+                </div>
               </div>
 
-              <!-- Step 2 Link Button -->
-              <div class="text-[11px] font-semibold text-emerald-300 pt-1">
-                <span>🌐 步驟 2：開啟官方驗證頁貼上代碼</span>
-              </div>
-              <a id="codex-device-link-btn" href="https://auth.openai.com/codex/device" target="_blank" rel="noopener noreferrer" class="w-full py-2 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-md transition">
-                <span>↗️ 開啟 OpenAI 授權頁面</span>
+              <!-- Open Auth Page Button -->
+              <a id="codex-device-link-btn" href="#" target="_blank" rel="noopener noreferrer" class="w-full py-2.5 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-md transition">
+                <span>🔗</span>
+                <span>前往 OpenAI 授權登入 (點擊開啟)</span>
               </a>
 
               <!-- Live Status Detector Indicator -->
@@ -1017,25 +1018,19 @@
                 <span class="w-2 h-2 rounded-full bg-amber-400 animate-ping"></span>
                 <span>正在等待您在瀏覽器完成授權...</span>
               </div>
+            </div>
 
-              <!-- ChatGPT Security Setting Helper Tip -->
-              <div class="p-2.5 rounded-xl bg-slate-950/90 border border-indigo-500/30 text-[11px] text-slate-300 space-y-1.5">
-                <div class="font-bold text-indigo-300 flex items-center gap-1.5">
-                  <span>💡</span>
-                  <span>若網頁提示「請在 ChatGPT 安全性設定中啟用」：</span>
-                </div>
-                <ol class="list-decimal list-inside space-y-1 text-slate-400 pl-0.5 leading-relaxed">
-                  <li>前往 <a href="https://chatgpt.com/#settings/Security" target="_blank" rel="noopener noreferrer" class="text-indigo-400 underline hover:text-indigo-300">ChatGPT 設定 ➔ 安全性 (Security)</a></li>
-                  <li>開啟 <span class="text-amber-300 font-semibold">「Codex 裝置代碼授權」</span> (Device Code Login)</li>
-                  <li>完成後回到本頁面點擊重新認證即可！</li>
-                </ol>
-              </div>
+            <!-- Alternative Login Options (Device Code & API Key) -->
+            <div class="flex items-center justify-between pt-1">
+              <button type="button" class="text-[11px] text-slate-400 hover:text-slate-200 transition font-mono flex items-center gap-1 cursor-pointer" onclick="startCodexDeviceFlow()">
+                <span>🔑 使用設備碼 (Device Auth)</span>
+              </button>
             </div>
 
             <!-- Foldable API Key Section -->
             <details class="group text-[11px]">
               <summary class="cursor-pointer text-slate-400 hover:text-slate-200 py-1 transition list-none flex items-center gap-1 font-mono">
-                <span>⚙️ 或手動輸入 OpenAI API Key 登入 (免 ChatGPT 設定)</span>
+                <span>⚙️ 或手動輸入 OpenAI API Key 登入</span>
                 <span class="text-[9px] group-open:rotate-180 transition-transform">▼</span>
               </summary>
               <div class="pt-2 space-y-1.5">
@@ -1523,7 +1518,7 @@
   <script src="/js/tasks.js?v=2e5e3f5e9e77"></script>
   <script src="/js/live.js?v=42a1deb1ed79"></script>
   <script src="/js/phone_agent.js?v=6346f686519a"></script>
-  <script src="/js/auth.js?v=17cc370307c2"></script>
+  <script src="/js/auth.js?v=fc7f99aa4eef"></script>
   <script src="/js/app.js?v=4e4f36adad19"></script>
 </body>
 </html>

@@ -64,12 +64,70 @@ async function refreshAuthStatus() {
   }
 }
 
+async function startCodexOAuthFlow() {
+  const stepContainer = document.getElementById('codex-device-step-container');
+  const startBtn = document.getElementById('codex-device-start-btn');
+  const linkBtn = document.getElementById('codex-device-link-btn');
+  const liveStatus = document.getElementById('codex-device-live-status');
+  const codeBoxWrapper = document.getElementById('codex-device-code-box-wrapper');
+
+  if (startBtn) {
+    startBtn.disabled = true;
+    startBtn.innerHTML = '<span class="inline-block w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin"></span> 正在產生登入連結...';
+  }
+
+  try {
+    const res = await fetch('/api/auth/codex/device-start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode: 'oauth' })
+    });
+    const data = await res.json();
+
+    if (!data.success || !data.url) {
+      throw new Error(data.error || '無法取得 OpenAI 登入連結');
+    }
+
+    currentAuthSessionId = data.sessionId;
+
+    if (codeBoxWrapper) codeBoxWrapper.classList.add('hidden');
+    if (linkBtn) {
+      linkBtn.href = data.url;
+      linkBtn.target = '_blank';
+      linkBtn.innerHTML = '<span>🔗</span><span>前往 OpenAI 授權登入 (點擊開啟)</span>';
+    }
+
+    if (stepContainer) stepContainer.classList.remove('hidden');
+    if (startBtn) startBtn.classList.add('hidden');
+    if (liveStatus) {
+      liveStatus.className = 'text-xs text-amber-300 flex items-center justify-center gap-2 p-2 rounded-xl bg-amber-950/40 border border-amber-500/30';
+      liveStatus.innerHTML = '<span class="w-2 h-2 rounded-full bg-amber-400 animate-ping"></span><span>請點擊上方按鈕前往 OpenAI 完成登入，系統將自動偵測回調...</span>';
+    }
+
+    if (typeof window.haptic === 'function') window.haptic([30, 50, 30]);
+
+    // Automatically try to open login window
+    try {
+      window.open(data.url, '_blank');
+    } catch (_) {}
+
+    pollCodexDeviceStatus(data.sessionId);
+  } catch (err) {
+    alert('啟動登入失敗：' + err.message);
+    if (startBtn) {
+      startBtn.disabled = false;
+      startBtn.innerHTML = '🌐 瀏覽器一鍵快速登入 (推薦)';
+    }
+  }
+}
+
 async function startCodexDeviceFlow() {
   const stepContainer = document.getElementById('codex-device-step-container');
   const startBtn = document.getElementById('codex-device-start-btn');
   const codeEl = document.getElementById('codex-device-code');
   const linkBtn = document.getElementById('codex-device-link-btn');
   const liveStatus = document.getElementById('codex-device-live-status');
+  const codeBoxWrapper = document.getElementById('codex-device-code-box-wrapper');
 
   if (startBtn) {
     startBtn.disabled = true;
@@ -77,7 +135,11 @@ async function startCodexDeviceFlow() {
   }
 
   try {
-    const res = await fetch('/api/auth/codex/device-start', { method: 'POST' });
+    const res = await fetch('/api/auth/codex/device-start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode: 'device' })
+    });
     const data = await res.json();
 
     if (!data.success || !data.userCode) {
@@ -86,26 +148,28 @@ async function startCodexDeviceFlow() {
 
     currentAuthSessionId = data.sessionId;
 
+    if (codeBoxWrapper) codeBoxWrapper.classList.remove('hidden');
     if (codeEl) codeEl.textContent = data.userCode;
     if (linkBtn) {
       linkBtn.href = data.url || 'https://auth.openai.com/codex/device';
       linkBtn.target = '_blank';
+      linkBtn.innerHTML = '<span>↗️</span><span>開啟 OpenAI 設備碼頁面貼上代碼</span>';
     }
 
     if (stepContainer) stepContainer.classList.remove('hidden');
     if (startBtn) startBtn.classList.add('hidden');
     if (liveStatus) {
       liveStatus.className = 'text-xs text-amber-300 flex items-center justify-center gap-2 p-2 rounded-xl bg-amber-950/40 border border-amber-500/30';
-      liveStatus.innerHTML = '<span class="w-2 h-2 rounded-full bg-amber-400 animate-ping"></span><span>請點擊上方按鈕複製代碼並完成網頁授權，系統將自動偵測完成...</span>';
+      liveStatus.innerHTML = '<span class="w-2 h-2 rounded-full bg-amber-400 animate-ping"></span><span>請複製代碼後點擊上方按鈕前往貼上授權...</span>';
     }
 
     if (typeof window.haptic === 'function') window.haptic([30, 50, 30]);
     pollCodexDeviceStatus(data.sessionId);
   } catch (err) {
-    alert('啟動登入失敗：' + err.message);
+    alert('啟動 Device Auth 失敗：' + err.message);
     if (startBtn) {
       startBtn.disabled = false;
-      startBtn.innerHTML = '🔑 重新啟動 Device Auth 驗證';
+      startBtn.innerHTML = '🌐 瀏覽器一鍵快速登入 (推薦)';
     }
   }
 }
@@ -138,7 +202,7 @@ function pollCodexDeviceStatus(sessionId) {
           if (startBtn) {
             startBtn.classList.remove('hidden');
             startBtn.disabled = false;
-            startBtn.innerHTML = '🔑 再次重新登入 Codex';
+            startBtn.innerHTML = '🌐 再次重新登入 Codex';
           }
         }, 3500);
 
@@ -146,12 +210,12 @@ function pollCodexDeviceStatus(sessionId) {
         stopDeviceAuthPolling();
         if (liveStatus) {
           liveStatus.className = 'text-xs text-rose-300 flex items-center justify-center gap-1.5 p-2 rounded-xl bg-rose-950/40 border border-rose-500/40';
-          liveStatus.textContent = '⚠️ 驗證逾時或失敗：' + (data.error || '請重新產生代碼重試');
+          liveStatus.textContent = '⚠️ 驗證逾時或失敗：' + (data.error || '請重新啟動登入');
         }
         if (startBtn) {
           startBtn.classList.remove('hidden');
           startBtn.disabled = false;
-          startBtn.innerHTML = '🔄 重新產生驗證碼';
+          startBtn.innerHTML = '🔄 重新登入';
         }
       }
     } catch (_) {}
@@ -332,6 +396,7 @@ window.isAuthErrorMessage = isAuthErrorMessage;
 window.openAuthModal = openAuthModal;
 window.closeAuthModal = closeAuthModal;
 window.refreshAuthStatus = refreshAuthStatus;
+window.startCodexOAuthFlow = startCodexOAuthFlow;
 window.startCodexDeviceFlow = startCodexDeviceFlow;
 window.copyCodexUserCode = copyCodexUserCode;
 window.saveCodexApiKey = saveCodexApiKey;
