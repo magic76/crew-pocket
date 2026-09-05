@@ -601,7 +601,7 @@ function buildEmptyTurnFallbackHtml(promptHint = '') {
         AI 剛才已完成程式碼與檔案調研。點擊下方按鈕可立即指示 AI 接續執行後續動作與回覆。
       </p>
       <div class="pt-0.5 flex items-center gap-2">
-        <button type="button" class="px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white font-semibold flex items-center gap-1.5 shadow-md shadow-indigo-900/40 cursor-pointer text-xs transition" onclick="triggerResumeTurn('${safeHint}')">
+        <button type="button" class="px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white font-semibold flex items-center gap-1.5 shadow-md shadow-indigo-900/40 cursor-pointer text-xs transition" onclick="triggerResumeTurn('${safeHint}', this)">
           <span>⚡</span>
           <span>一鍵讓 AI 繼續完成</span>
         </button>
@@ -610,11 +610,16 @@ function buildEmptyTurnFallbackHtml(promptHint = '') {
   `;
 }
 
-function triggerResumeTurn(customPrompt) {
+function triggerResumeTurn(customPrompt, btnElement = null) {
   if (typeof window.haptic === 'function') window.haptic('light');
+  const btn = btnElement || (window.event ? window.event.currentTarget : null);
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span class="inline-block w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin"></span><span>正在指示 AI 繼續...</span>';
+  }
   const msgText = customPrompt || '請繼續根據剛才查詢的內容與進度，完成後續任務與修改。';
   if (typeof sendMessage === 'function') {
-    sendMessage(msgText);
+    sendMessage({ text: msgText });
   }
 }
 window.buildEmptyTurnFallbackHtml = buildEmptyTurnFallbackHtml;
@@ -1836,8 +1841,18 @@ async function stopGeneration() {
 
 // Send Message with Live Streaming, Tools Logging, and Abort Support
 async function sendMessage(queuedMessage = null) {
-  const text = queuedMessage ? queuedMessage.text : getPromptText();
-  const imgPath = queuedMessage ? queuedMessage.imagePath : uploadedImagePath;
+  let text = '';
+  let imgPath = null;
+
+  if (typeof queuedMessage === 'string') {
+    text = queuedMessage.trim();
+  } else if (queuedMessage && typeof queuedMessage === 'object') {
+    text = (queuedMessage.text || '').trim();
+    imgPath = queuedMessage.imagePath || null;
+  } else {
+    text = getPromptText();
+    imgPath = uploadedImagePath;
+  }
 
   if (!text && !imgPath) {
     if (promptInput) {
