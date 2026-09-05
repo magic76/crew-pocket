@@ -300,7 +300,8 @@ function initAppAndListeners() {
       }
     });
 
-    [newChatBtn, filesBtn, storageBtn, usageBtn, cheatSheetBtn, notifyBtn, exportExtBtn].forEach(btn => {
+    const authMenuBtn = document.getElementById('auth-menu-btn');
+    [newChatBtn, filesBtn, storageBtn, authMenuBtn, usageBtn, cheatSheetBtn, notifyBtn, exportExtBtn].forEach(btn => {
       if (btn) btn.addEventListener('click', () => {
         if (typeof window.haptic === 'function') window.haptic('light');
         toolsMenuDropdown.classList.add('hidden');
