@@ -301,7 +301,8 @@ function initAppAndListeners() {
     });
 
     const authMenuBtn = document.getElementById('auth-menu-btn');
-    [newChatBtn, filesBtn, storageBtn, authMenuBtn, usageBtn, cheatSheetBtn, notifyBtn, exportExtBtn].forEach(btn => {
+    const clearChatBtn = document.getElementById('clear-chat-btn');
+    [newChatBtn, clearChatBtn, filesBtn, storageBtn, authMenuBtn, usageBtn, cheatSheetBtn, notifyBtn, exportExtBtn].forEach(btn => {
       if (btn) btn.addEventListener('click', () => {
         if (typeof window.haptic === 'function') window.haptic('light');
         toolsMenuDropdown.classList.add('hidden');
@@ -637,7 +638,11 @@ function initAppAndListeners() {
           promptInput.style.height = 'auto';
         }
         if (slashMenu) slashMenu.classList.add('hidden');
-        if (newChatBtn) newChatBtn.click();
+        if (typeof clearAndResetCurrentConversation === 'function') {
+          clearAndResetCurrentConversation();
+        } else if (newChatBtn) {
+          newChatBtn.click();
+        }
         if (navigator.vibrate) navigator.vibrate([20, 20]);
         return;
       }
@@ -726,6 +731,16 @@ function initAppAndListeners() {
 
       // 🔥 Pre-warm standby resident process in background
       if (typeof window.requestProviderPrewarm === 'function') window.requestProviderPrewarm();
+    });
+  }
+
+  // 🧹 Clear All / Reset Current Conversation
+  const clearChatBtn = document.getElementById('clear-chat-btn');
+  if (clearChatBtn) {
+    clearChatBtn.addEventListener('click', () => {
+      if (typeof clearAndResetCurrentConversation === 'function') {
+        clearAndResetCurrentConversation();
+      }
     });
   }
 
