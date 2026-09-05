@@ -2073,10 +2073,19 @@ async function sendMessage(queuedMessage = null) {
       currentConversationId = targetDoneConvId;
       localStorage.setItem(activeConversationStorageKey(), currentConversationId);
     }
-    if (doneData?.error) accumulatedText = `⚠️ ${doneData.error}`;
-    else if (doneData?.response && !accumulatedText) accumulatedText = doneData.response;
-
-    contentElem.innerHTML = formatMessageContent(accumulatedText);
+    if (doneData?.error) {
+      if (typeof isAuthErrorMessage === 'function' && isAuthErrorMessage(doneData.error) && typeof renderAuthRecoveryCard === 'function') {
+        renderAuthRecoveryCard(contentElem, streamProvider, doneData.error, { text, imagePath: imgPath });
+      } else {
+        accumulatedText = `⚠️ ${doneData.error}`;
+        contentElem.innerHTML = formatMessageContent(accumulatedText);
+      }
+    } else if (doneData?.response && !accumulatedText) {
+      accumulatedText = doneData.response;
+      contentElem.innerHTML = formatMessageContent(accumulatedText);
+    } else {
+      contentElem.innerHTML = formatMessageContent(accumulatedText);
+    }
     queueLiveToolsRender(true);
     if (liveThinking) {
       thinkingContainerElem.innerHTML = buildThinkingBlockHtml(liveThinking);
@@ -2419,12 +2428,16 @@ async function sendMessage(queuedMessage = null) {
           setTimeout(checkHistory, 1200);
         }
       } else {
-        contentElem.innerHTML = `
-          <div class="p-2 rounded-lg bg-rose-950/40 border border-rose-800/60 text-xs text-rose-300 flex items-center justify-between">
-            <span>連線中斷（${escapeHtml(err.message)}）</span>
-            <button type="button" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-[10px]" onclick="sendMessage()">重試</button>
-          </div>
-        `;
+        if (typeof isAuthErrorMessage === 'function' && isAuthErrorMessage(err.message) && typeof renderAuthRecoveryCard === 'function') {
+          renderAuthRecoveryCard(contentElem, streamProvider, err.message, { text, imagePath: imgPath });
+        } else {
+          contentElem.innerHTML = `
+            <div class="p-2 rounded-lg bg-rose-950/40 border border-rose-800/60 text-xs text-rose-300 flex items-center justify-between">
+              <span>連線中斷（${escapeHtml(err.message)}）</span>
+              <button type="button" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-[10px]" onclick="sendMessage()">重試</button>
+            </div>
+          `;
+        }
       }
 
       if (typeof enhanceCodeBlocks === 'function') enhanceCodeBlocks(assistantMsgDiv);

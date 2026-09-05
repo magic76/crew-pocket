@@ -40,6 +40,7 @@ const { getStorageReport, deleteMediaItems, getMediaThumbnail } = require('./lib
 const { getConversationSettings, getProviderConversationSettings, saveConversationSettings, saveConversationTitle, deleteConversationSettings } = require('./lib/conversation-settings');
 const { createTask, getTask, listTasks, updateTask } = require('./lib/tasks');
 const { listWorkspaces, resolveWorkspace, createWorkspace } = require('./lib/workspaces');
+const auth = require('./lib/auth');
 
 const deviceAdapter = getDeviceAdapter();
 
@@ -1513,6 +1514,71 @@ async function handleSaveVoiceprint(req, res) {
   }
 }
 
+async function handleGetAuthStatus(res) {
+  try {
+    const status = await auth.getAuthStatus();
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(status));
+  } catch (err) {
+    res.writeHead(500, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: err.message }));
+  }
+}
+
+async function handleCodexDeviceStart(req, res) {
+  try {
+    const session = await auth.startCodexDeviceLogin();
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: true, ...session }));
+  } catch (err) {
+    res.writeHead(500, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: false, error: err.message }));
+  }
+}
+
+function handleCodexDeviceStatus(parsedUrl, res) {
+  const sessionId = parsedUrl.query?.sessionId;
+  const status = auth.getCodexDeviceLoginStatus(sessionId);
+  res.writeHead(200, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify(status));
+}
+
+async function handleCodexDeviceCancel(req, res) {
+  try {
+    const body = await parseJsonBody(req);
+    const result = auth.cancelCodexDeviceLogin(body?.sessionId);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(result));
+  } catch (err) {
+    res.writeHead(500, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: err.message }));
+  }
+}
+
+async function handleCodexApiKey(req, res) {
+  try {
+    const body = await parseJsonBody(req);
+    const result = await auth.loginCodexWithApiKey(body.apiKey);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(result));
+  } catch (err) {
+    res.writeHead(500, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: err.message }));
+  }
+}
+
+async function handleAgyToken(req, res) {
+  try {
+    const body = await parseJsonBody(req);
+    const result = await auth.setAgyToken(body.token);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(result));
+  } catch (err) {
+    res.writeHead(500, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: err.message }));
+  }
+}
+
 // 🌐 HTTP Server Request Dispatcher
 const server = http.createServer(async (req, res) => {
   const origin = req.headers.origin;
@@ -1596,6 +1662,18 @@ const server = http.createServer(async (req, res) => {
     return handleGetModels(res);
   } else if (pathname === '/api/providers' && req.method === 'GET') {
     return handleGetProviders(res);
+  } else if (pathname === '/api/auth/status' && req.method === 'GET') {
+    return handleGetAuthStatus(res);
+  } else if (pathname === '/api/auth/codex/device-start' && req.method === 'POST') {
+    return handleCodexDeviceStart(req, res);
+  } else if (pathname === '/api/auth/codex/device-status' && req.method === 'GET') {
+    return handleCodexDeviceStatus(parsedUrl, res);
+  } else if (pathname === '/api/auth/codex/device-cancel' && req.method === 'POST') {
+    return handleCodexDeviceCancel(req, res);
+  } else if (pathname === '/api/auth/codex/api-key' && req.method === 'POST') {
+    return handleCodexApiKey(req, res);
+  } else if (pathname === '/api/auth/agy/token' && req.method === 'POST') {
+    return handleAgyToken(req, res);
   } else if (pathname === '/api/session-status' && req.method === 'GET') {
     return handleSessionStatus(parsedUrl, res);
   } else if (pathname === '/api/usage' && req.method === 'GET') {

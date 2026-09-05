@@ -200,6 +200,15 @@
           <div class="flex flex-col min-w-0"><span class="font-semibold text-slate-100 group-hover:text-amber-300">儲存空間管理</span><span class="text-[10px] text-slate-400">掃描、選擇後才刪除</span></div>
         </button>
 
+        <!-- Provider Auth / Login Management -->
+        <button id="auth-menu-btn" type="button" class="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-xs text-slate-200 hover:bg-slate-800/90 hover:text-emerald-300 transition text-left group" title="管理 Codex 與 AGY 登入授權">
+          <div class="w-6 h-6 rounded-lg bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-300 group-hover:scale-105 transition shrink-0">🔐</div>
+          <div class="flex flex-col min-w-0">
+            <span class="font-semibold text-slate-100 group-hover:text-emerald-300">Provider 帳號認證</span>
+            <span class="text-[10px] text-slate-400">Codex 設備碼 / AGY 授權狀態</span>
+          </div>
+        </button>
+
         <details class="group">
           <summary class="flex items-center justify-between px-2 py-1.5 rounded-xl cursor-pointer text-[10px] font-bold tracking-wider text-slate-400 hover:bg-slate-800/70 hover:text-slate-200 transition list-none">
             <span>更多工具</span>
@@ -894,6 +903,14 @@
 
       <!-- Agent Provider (Dynamically rendered based on installed CLI tools) -->
       <div id="provider-section" class="p-3 border-b border-slate-800 bg-slate-950/70 shrink-0">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-[11px] font-bold text-slate-300 flex items-center gap-1">
+            <span>⚙️</span><span>AI 核心 (Provider)</span>
+          </span>
+          <button type="button" class="text-[10px] text-emerald-400 hover:text-emerald-300 font-mono flex items-center gap-1 cursor-pointer" onclick="openAuthModal()">
+            <span>🔐 認證管理</span>
+          </button>
+        </div>
         <div class="grid grid-cols-2 gap-2" id="provider-options-container">
           <!-- Loaded dynamically: Antigravity, Codex, etc. -->
         </div>
@@ -929,6 +946,132 @@
       <div class="px-4 py-3 border-b border-slate-800 flex items-center justify-between bg-slate-950/60 shrink-0"><div class="flex items-center gap-2"><span class="text-lg">💾</span><div><h2 class="text-xs font-bold text-white">儲存空間管理</h2><div id="storage-subtitle" class="text-[10px] text-slate-400">掃描中…</div></div></div><button id="close-storage-btn" class="min-w-10 min-h-10 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition text-xs font-mono">✕</button></div>
       <div id="storage-list" class="p-3 overflow-y-auto flex-1 space-y-3 text-xs"><div class="text-center text-slate-500 py-8">正在掃描本機資料…</div></div>
       <div class="p-3 border-t border-slate-800 bg-slate-950/60 flex gap-2 shrink-0"><button id="refresh-storage-btn" class="min-h-11 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold">重新掃描</button><button id="delete-storage-btn" class="min-h-11 flex-1 px-3 rounded-xl bg-rose-600/80 hover:bg-rose-500 disabled:opacity-40 text-white text-xs font-bold">刪除已選項目</button></div>
+    </div>
+  <!-- 🔐 PROVIDER AUTHENTICATION & LOGIN MANAGEMENT MODAL -->
+  <div id="auth-modal" class="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-3 opacity-0 pointer-events-none transition-opacity duration-200 select-none hidden" role="dialog" aria-modal="true" aria-labelledby="auth-modal-title">
+    <div class="bg-slate-900 border border-slate-700/80 rounded-3xl w-full max-w-md max-h-[88dvh] flex flex-col shadow-2xl overflow-hidden">
+      <!-- Header -->
+      <div class="px-4 py-3 border-b border-slate-800 flex items-center justify-between bg-slate-950/70 shrink-0">
+        <div class="flex items-center gap-2.5">
+          <div class="w-8 h-8 rounded-xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400 text-base">🔐</div>
+          <div>
+            <h2 id="auth-modal-title" class="text-xs sm:text-sm font-bold text-white tracking-wide">Provider 帳號認證與登入</h2>
+            <div class="text-[10px] text-slate-400">管理 OpenAI Codex 與 AGY 授權狀態</div>
+          </div>
+        </div>
+        <button id="close-auth-modal-btn" type="button" class="min-w-9 min-h-9 flex items-center justify-center text-slate-400 hover:text-white rounded-xl hover:bg-slate-800 transition text-xs font-mono">✕</button>
+      </div>
+
+      <!-- Content Body -->
+      <div class="p-3.5 space-y-3.5 overflow-y-auto flex-1 text-xs">
+        
+        <!-- 1. OpenAI Codex Card -->
+        <div class="p-3 rounded-2xl bg-slate-950/80 border border-emerald-500/30 space-y-2.5">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <span class="text-base">🧩</span>
+              <span class="font-bold text-slate-100">OpenAI Codex</span>
+            </div>
+            <span id="auth-status-codex" class="px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-slate-800 text-slate-400">檢查中...</span>
+          </div>
+          <p id="auth-desc-codex" class="text-[11px] text-slate-400 leading-relaxed">
+            載入狀態中...
+          </p>
+
+          <!-- Device Auth Action -->
+          <div class="space-y-2">
+            <button id="codex-device-start-btn" type="button" class="w-full py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-950/40 cursor-pointer transition" onclick="startCodexDeviceFlow()">
+              <span>🔑</span>
+              <span>一鍵 Device Auth 快速登入 (免打指令)</span>
+            </button>
+
+            <!-- Device Flow Step Display (Initially hidden) -->
+            <div id="codex-device-step-container" class="hidden space-y-2 p-3 rounded-xl bg-slate-900 border border-emerald-500/50 animate-fadeIn">
+              <div class="text-[11px] font-semibold text-emerald-300 flex items-center justify-between">
+                <span>📱 步驟 1：複製授權驗證碼</span>
+                <span class="text-[10px] text-slate-400 font-mono">有效時間 15 分鐘</span>
+              </div>
+              
+              <!-- Code Display & Copy -->
+              <div class="flex items-center gap-2">
+                <div id="codex-device-code" class="flex-1 bg-black/60 border border-emerald-500/60 rounded-xl py-2 px-3 text-center font-mono font-extrabold text-emerald-300 text-base tracking-widest select-all">
+                  ----
+                </div>
+                <button id="codex-copy-code-btn" type="button" class="py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 font-semibold text-xs border border-slate-700 shrink-0 cursor-pointer transition" onclick="copyCodexUserCode()">
+                  📋 複製代碼
+                </button>
+              </div>
+
+              <!-- Step 2 Link Button -->
+              <div class="text-[11px] font-semibold text-emerald-300 pt-1">
+                <span>🌐 步驟 2：開啟官方驗證頁貼上代碼</span>
+              </div>
+              <a id="codex-device-link-btn" href="https://auth.openai.com/codex/device" target="_blank" rel="noopener noreferrer" class="w-full py-2 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-md transition">
+                <span>↗️ 開啟 OpenAI 授權頁面</span>
+              </a>
+
+              <!-- Live Status Detector Indicator -->
+              <div id="codex-device-live-status" class="text-xs text-amber-300 flex items-center justify-center gap-2 p-2 rounded-xl bg-amber-950/40 border border-amber-500/30">
+                <span class="w-2 h-2 rounded-full bg-amber-400 animate-ping"></span>
+                <span>正在等待您在瀏覽器完成授權...</span>
+              </div>
+            </div>
+
+            <!-- Foldable API Key Section -->
+            <details class="group text-[11px]">
+              <summary class="cursor-pointer text-slate-400 hover:text-slate-200 py-1 transition list-none flex items-center gap-1 font-mono">
+                <span>⚙️ 或手動輸入 OpenAI API Key 登入</span>
+                <span class="text-[9px] group-open:rotate-180 transition-transform">▼</span>
+              </summary>
+              <div class="pt-2 space-y-1.5">
+                <input id="codex-api-key-input" type="password" placeholder="sk-..." class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-emerald-500 font-mono">
+                <button id="codex-api-key-submit-btn" type="button" class="w-full py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 font-semibold text-xs border border-slate-700 cursor-pointer" onclick="saveCodexApiKey()">
+                  儲存並登入
+                </button>
+              </div>
+            </details>
+          </div>
+        </div>
+
+        <!-- 2. Google Antigravity (AGY) Card -->
+        <div class="p-3 rounded-2xl bg-slate-950/80 border border-indigo-500/30 space-y-2.5">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <span class="text-base">✨</span>
+              <span class="font-bold text-slate-100">Google Antigravity (AGY)</span>
+            </div>
+            <span id="auth-status-agy" class="px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-slate-800 text-slate-400">檢查中...</span>
+          </div>
+          <p id="auth-desc-agy" class="text-[11px] text-slate-400 leading-relaxed">
+            載入狀態中...
+          </p>
+
+          <!-- Foldable AGY Token JSON Section -->
+          <details class="group text-[11px]">
+            <summary class="cursor-pointer text-indigo-300 hover:text-indigo-200 py-1 transition list-none flex items-center gap-1 font-mono">
+              <span>📋 貼上更新 Google OAuth Token JSON</span>
+              <span class="text-[9px] group-open:rotate-180 transition-transform">▼</span>
+            </summary>
+            <div class="pt-2 space-y-1.5">
+              <textarea id="agy-token-input" rows="3" placeholder='{"token": "...", "auth_method": "consumer"}' class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2 text-[11px] text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500 font-mono"></textarea>
+              <button id="agy-token-submit-btn" type="button" class="w-full py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white font-semibold text-xs cursor-pointer" onclick="saveAgyToken()">
+                儲存憑證
+              </button>
+            </div>
+          </details>
+        </div>
+
+      </div>
+
+      <!-- Footer -->
+      <div class="p-3 border-t border-slate-800 bg-slate-950/70 flex items-center justify-between shrink-0">
+        <button type="button" class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-300 text-xs font-semibold flex items-center gap-1.5 cursor-pointer" onclick="refreshAuthStatus()">
+          <span>🔄</span><span>重新整理狀態</span>
+        </button>
+        <button type="button" class="px-4 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-95 text-white text-xs font-semibold cursor-pointer" onclick="closeAuthModal()">
+          關閉
+        </button>
+      </div>
     </div>
   </div>
 
@@ -1361,10 +1504,11 @@
   <script src="/js/ui.js?v=f3e6467243ff"></script>
   <script src="/js/tools.js?v=a1e169518419"></script>
   <script src="/js/storage.js?v=0e143c8da2fc"></script>
-  <script src="/js/chat.js?v=6b656075b907"></script>
+  <script src="/js/chat.js?v=9873754d22fa"></script>
   <script src="/js/tasks.js?v=2e5e3f5e9e77"></script>
   <script src="/js/live.js?v=42a1deb1ed79"></script>
   <script src="/js/phone_agent.js?v=6346f686519a"></script>
+  <script src="/js/auth.js?v=107637499d1c"></script>
   <script src="/js/app.js?v=d09867829da4"></script>
 </body>
 </html>
