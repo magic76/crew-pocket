@@ -585,6 +585,41 @@ function shortenConversationTitle(text, maxLength = 18) {
   return firstLine.length > maxLength ? `${firstLine.slice(0, maxLength)}…` : firstLine;
 }
 
+// 💡 Empty Turn Recovery Card (For when AI completed tool calls but returned empty text)
+function buildEmptyTurnFallbackHtml(promptHint = '') {
+  const safeHint = typeof escapeHtml === 'function' ? escapeHtml(promptHint || '') : (promptHint || '');
+  return `
+    <div class="empty-turn-fallback-card p-3 rounded-2xl bg-indigo-950/40 border border-indigo-500/40 text-xs text-slate-200 space-y-2.5 my-1.5 animate-fadeIn select-none">
+      <div class="flex items-center justify-between border-b border-indigo-500/20 pb-1.5">
+        <div class="flex items-center gap-1.5 font-bold text-indigo-300">
+          <span class="text-sm">💡</span>
+          <span>已完成背景工具調研，尚未輸出文字</span>
+        </div>
+        <span class="text-[10px] px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-mono">狀態就緒</span>
+      </div>
+      <p class="text-slate-300 leading-relaxed text-[11px]">
+        AI 剛才已完成程式碼與檔案調研。點擊下方按鈕可立即指示 AI 接續執行後續動作與回覆。
+      </p>
+      <div class="pt-0.5 flex items-center gap-2">
+        <button type="button" class="px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white font-semibold flex items-center gap-1.5 shadow-md shadow-indigo-900/40 cursor-pointer text-xs transition" onclick="triggerResumeTurn('${safeHint}')">
+          <span>⚡</span>
+          <span>一鍵讓 AI 繼續完成</span>
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+function triggerResumeTurn(customPrompt) {
+  if (typeof window.haptic === 'function') window.haptic('light');
+  const msgText = customPrompt || '請繼續根據剛才查詢的內容與進度，完成後續任務與修改。';
+  if (typeof sendMessage === 'function') {
+    sendMessage(msgText);
+  }
+}
+window.buildEmptyTurnFallbackHtml = buildEmptyTurnFallbackHtml;
+window.triggerResumeTurn = triggerResumeTurn;
+
 // Append Message to UI
 function appendMessage(role, content, timestamp, tools = [], thinking = '', isBtw = false, renderOptions = {}) {
   const isUser = role === 'user';
@@ -703,23 +738,19 @@ function appendMessage(role, content, timestamp, tools = [], thinking = '', isBt
           <span class="text-indigo-400 font-bold">🤖 Crew Pocket</span>
           ${isBtw ? '<span class="px-1.5 py-0.2 rounded bg-teal-500/20 text-teal-300 border border-teal-500/40 text-[9px] font-mono">順帶一提</span>' : ''}
         </div>
-        <div class="flex items-center gap-2">
-          <button type="button" class="tts-btn px-1.5 py-0.5 rounded hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition flex items-center gap-1 active:scale-95 text-[10px]" title="語音朗讀">
-            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"/>
-            </svg>
-            <span>朗讀</span>
-          </button>
-          <span class="text-[10px] text-slate-500 font-mono">${timeStr}</span>
-        </div>
       </div>
     `;
+
+    const isBlankContent = !content || !String(content).trim();
+    const formattedHtml = isBlankContent
+      ? buildEmptyTurnFallbackHtml()
+      : formatMessageContent(content);
 
     bodyHtml = `
       ${assistantHeader}
       <div class="thinking-container">${thinkingHtml}</div>
       <div class="tools-container">${toolsHtml}</div>
-      <div class="btw-content msg-content leading-relaxed min-w-0">${formatMessageContent(content)}</div>
+      <div class="btw-content msg-content leading-relaxed min-w-0">${formattedHtml}</div>
     `;
   }
 
@@ -2083,6 +2114,8 @@ async function sendMessage(queuedMessage = null) {
     } else if (doneData?.response && !accumulatedText) {
       accumulatedText = doneData.response;
       contentElem.innerHTML = formatMessageContent(accumulatedText);
+    } else if (!accumulatedText || !String(accumulatedText).trim()) {
+      contentElem.innerHTML = buildEmptyTurnFallbackHtml();
     } else {
       contentElem.innerHTML = formatMessageContent(accumulatedText);
     }
