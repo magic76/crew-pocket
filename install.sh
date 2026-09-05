@@ -136,7 +136,15 @@ start_server() {
     [ -f "$TARGET_DIR/server.js" ] || { echo "找不到 Crew Pocket：$TARGET_DIR"; exit 1; }
     cd "$TARGET_DIR"
     node scripts/prepare-pwa-cache.js
-    pkill -f 'node server.js' 2>/dev/null || true
+    pkill -f 'node.*server\.js' 2>/dev/null || true
+    for i in 1 2 3 4 5; do
+        if ! pgrep -f "node.*server\.js" >/dev/null 2>&1; then
+            break
+        fi
+        sleep 0.2
+    done
+    pkill -9 -f 'node.*server\.js' 2>/dev/null || true
+    sleep 0.2
     setsid node server.js </dev/null >> "$HOME/.agy-web.log" 2>&1 &
     local server_pid=$!
     sleep 1
@@ -154,10 +162,10 @@ case "${1:-start}" in
         start_server
         ;;
     stop)
-        pkill -f 'node server.js' 2>/dev/null || echo "Crew Pocket 未在執行"
+        pkill -f 'node.*server\.js' 2>/dev/null || echo "Crew Pocket 未在執行"
         ;;
     status)
-        pgrep -af 'node server.js' || echo "Crew Pocket 目前已停止"
+        pgrep -af 'node.*server\.js' || echo "Crew Pocket 目前已停止"
         ;;
     doctor) doctor ;;
     update)
