@@ -12,7 +12,7 @@ function openAuthModal() {
   const toolsMenuDropdown = document.getElementById('tools-menu-dropdown');
   if (toolsMenuDropdown) toolsMenuDropdown.classList.add('hidden');
   if (!authModal) return;
-  authModal.classList.remove('opacity-0', 'pointer-events-none', 'hidden');
+  authModal.classList.remove('opacity-0', 'pointer-events-none');
   if (typeof window.haptic === 'function') window.haptic('light');
   refreshAuthStatus();
 }
@@ -21,7 +21,6 @@ function closeAuthModal() {
   const authModal = document.getElementById('auth-modal');
   if (!authModal) return;
   authModal.classList.add('opacity-0', 'pointer-events-none');
-  setTimeout(() => authModal.classList.add('hidden'), 200);
   stopDeviceAuthPolling();
 }
 
