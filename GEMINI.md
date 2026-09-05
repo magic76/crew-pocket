@@ -36,6 +36,7 @@ Crew Pocket is the mobile-first PWA and local Node.js service in this repository
 - Do not web-search to explain Crew Pocket itself; this repository is the primary source of truth.
 - Screen inspection uses `POST http://127.0.0.1:8000/api/phone/screenshot`; camera inspection uses `POST http://127.0.0.1:8000/api/phone/photo`. Only inspect a newly successful capture.
 - Interactive tools require a complete self-contained HTML sandbox. Charts use Chart.js. Maps use Google Maps links.
+- When the user asks to install or update an Android APK, run `termux-open <path-to-apk>` (or `~/install-apk.sh <path-to-apk>`) to directly trigger the Android native package installer dialog on their screen, without requiring ADB wireless debugging.
 - When the user mentions another conversation using `[@Title](conversation://<conversation-id>)` with an instruction to delegate or transfer a message/task to it:
   1. Inspect the referenced conversation's transcripts under `/data/data/com.termux/files/home/.gemini/antigravity-cli/brain/<conversation-id>/.system_generated/logs/transcript.jsonl` if context is needed.
   2. You can delegate or enqueue the task to the target conversation via HTTP `POST http://127.0.0.1:8000/api/tasks` with `{ action: "create", conversation_id: "<conversation-id>", task: "<task message>" }`, or spawn a subagent referencing that conversation ID.

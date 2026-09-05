@@ -278,6 +278,37 @@
 
   let screenWakeLock = null;
 
+  async function acquireScreenWakeLock() {
+    try {
+      if ('wakeLock' in navigator && !screenWakeLock) {
+        screenWakeLock = await navigator.wakeLock.request('screen');
+        screenWakeLock.addEventListener('release', () => {
+          screenWakeLock = null;
+        });
+        console.log('[Gemini Live] Screen WakeLock acquired (screen will stay awake during call)');
+      }
+    } catch (err) {
+      console.warn('[Gemini Live] Screen WakeLock request failed:', err);
+    }
+  }
+
+  function releaseScreenWakeLock() {
+    if (screenWakeLock) {
+      try {
+        screenWakeLock.release();
+      } catch (_) {}
+      screenWakeLock = null;
+      console.log('[Gemini Live] Screen WakeLock released');
+    }
+  }
+
+  // Re-acquire WakeLock if browser tab returns to foreground during an ongoing live call
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && (isConnected || (ws && ws.readyState !== WebSocket.CLOSED))) {
+      acquireScreenWakeLock();
+    }
+  });
+
   function setMediaSessionActive(active) {
     if (active) {
       // 1. MediaSession Lock
@@ -299,22 +330,15 @@
         } catch (e) {}
       }
 
-      // 2. Screen WakeLock (prevent deep sleep during call)
-      if ('wakeLock' in navigator) {
-        navigator.wakeLock.request('screen').then(wl => {
-          screenWakeLock = wl;
-        }).catch(() => {});
-      }
+      // 2. Screen WakeLock (prevent screen timeout & sleep during call)
+      acquireScreenWakeLock();
     } else {
       if ('mediaSession' in navigator) {
         try {
           navigator.mediaSession.playbackState = 'none';
         } catch (e) {}
       }
-      if (screenWakeLock) {
-        try { screenWakeLock.release(); } catch (e) {}
-        screenWakeLock = null;
-      }
+      releaseScreenWakeLock();
     }
   }
 
@@ -4320,6 +4344,7 @@
     stopVisualizer();
     stopWakeWordListener();
     stopSpeechRecognition();
+    try { setMediaSessionActive(false); } catch (_) {}
 
     if (cameraInterval) clearInterval(cameraInterval);
     cameraInterval = null;
