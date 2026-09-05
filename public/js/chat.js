@@ -1116,6 +1116,19 @@ async function loadConversationHistory(convId) {
   messagesContainer.innerHTML = '<div class="p-5 text-center text-xs text-slate-400 animate-pulse">正在載入對話紀錄…</div>';
   toggleDrawer(false);
 
+  // 🎯 Instantly sync workspace & role from cachedConversations if available so there is 0ms window for cross-session pollution!
+  if (Array.isArray(cachedConversations)) {
+    const cached = cachedConversations.find(c => c.id === convId);
+    if (cached) {
+      if (cached.workspace && typeof window.setConversationWorkspaceDirect === 'function') {
+        window.setConversationWorkspaceDirect(cached.workspace);
+      }
+      if (cached.role && typeof window.setConversationRoleDirect === 'function') {
+        window.setConversationRoleDirect(cached.role);
+      }
+    }
+  }
+
   // 🔄 Reset input box and Send/Stop button to initial idle state
   if (promptInput) {
     promptInput.value = '';

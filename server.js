@@ -786,14 +786,15 @@ async function handleConversationSettings(req, res) {
     const body = await parseJsonBody(req);
     const providerId = normalizeProviderId(body.provider);
     const previous = await getConversationSettings(providerId, body.conversation_id);
-    const workspace = await resolveWorkspace(body.workspace || previous?.workspace);
+    const targetWorkspace = body.workspace || previous?.workspace;
+    const workspace = targetWorkspace ? await resolveWorkspace(targetWorkspace) : null;
     const settings = await saveConversationSettings(providerId, body.conversation_id, {
-      model: body.model,
-      effort: body.effort,
-      workspace,
-      role: body.role || previous?.role
+      model: body.model || previous?.model || 'gemini-3.7-flash',
+      effort: body.effort || previous?.effort || 'low',
+      ...(workspace ? { workspace } : {}),
+      role: body.role || previous?.role || 'general'
     });
-    if (previous?.workspace && previous.workspace !== workspace && providerId === 'antigravity') {
+    if (previous?.workspace && workspace && previous.workspace !== workspace && providerId === 'antigravity') {
       sessionManager.closeSession(body.conversation_id);
     }
     res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -1108,9 +1109,28 @@ async function handleChat(req, res) {
     res.writeHead(400, { 'Content-Type': 'application/json' });
     return res.end(JSON.stringify({ error: 'Prompt or image is required' }));
   }
+  // 🛡️ Resolve workspace:
+  // For an existing conversation, lock to the conversation's saved workspace from database,
+  // preventing accidental workspace hijacking from stale frontend state.
   let workspace;
   try {
-    workspace = await resolveWorkspace(body.workspace);
+    if (conversation_id) {
+      const savedSettings = await getConversationSettings(providerId, conversation_id);
+      if (savedSettings?.workspace) {
+        workspace = await resolveWorkspace(savedSettings.workspace);
+      } else {
+        workspace = await resolveWorkspace(body.workspace);
+        // Backfill workspace in settings so this conversation remains locked to it
+        saveConversationSettings(providerId, conversation_id, {
+          model: model || savedSettings?.model || 'gemini-3.7-flash',
+          effort: effort || savedSettings?.effort || 'low',
+          workspace,
+          role: body.role || savedSettings?.role || 'general'
+        }).catch(() => {});
+      }
+    } else {
+      workspace = await resolveWorkspace(body.workspace);
+    }
   } catch (err) {
     res.writeHead(400, { 'Content-Type': 'application/json' });
     return res.end(JSON.stringify({ error: err.message }));

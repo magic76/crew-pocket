@@ -541,6 +541,20 @@ function updateRoleUI() {
   if (roleSelectorBtn) roleSelectorBtn.title = `對話角色：${meta.label}`;
 }
 
+window.setConversationWorkspaceDirect = function(workspace) {
+  if (!workspace) return;
+  currentWorkspace = workspace;
+  localStorage.setItem('crew_current_workspace', currentWorkspace);
+  updateWorkspaceUI();
+};
+
+window.setConversationRoleDirect = function(role) {
+  if (!role || !CONVERSATION_ROLES[role]) return;
+  currentRole = role;
+  localStorage.setItem('crew_current_role', currentRole);
+  updateRoleUI();
+};
+
 function closeRoleModal() {
   if (!roleModal) return;
   roleModal.classList.add('opacity-0');
@@ -562,7 +576,7 @@ async function selectConversationRole(role) {
   updateRoleUI();
   try {
     if (currentConversationId) {
-      const saved = await window.saveCurrentConversationSettings();
+      const saved = await window.saveCurrentConversationSettings({ role: currentRole });
       if (!saved) throw new Error('儲存對話角色失敗');
       if (typeof loadConversations === 'function') loadConversations();
     }
@@ -624,8 +638,9 @@ async function selectWorkspace(workspace, isCreatingNewChat = false) {
   updateWorkspaceUI();
   try {
     if (currentConversationId) {
-      const saved = await window.saveCurrentConversationSettings();
+      const saved = await window.saveCurrentConversationSettings({ workspace: currentWorkspace });
       if (!saved) throw new Error('儲存工作區失敗');
+      if (typeof loadConversations === 'function') loadConversations();
     }
     closeWorkspaceModal();
     window.requestProviderPrewarm?.(0);
@@ -773,45 +788,52 @@ function selectedModelConfig() {
 }
 
 window.applyConversationSettings = function(settings) {
-  if (!settings || settings.provider !== currentProvider) return false;
-  // A legacy conversation may predate workspace metadata. Never let it
-  // inherit the previous conversation's folder, which can silently send a
-  // follow-up task to the wrong project.
-  currentWorkspace = settings.workspace || HOME_WORKSPACE;
-  localStorage.setItem('crew_current_workspace', currentWorkspace);
-  updateWorkspaceUI();
-  currentRole = CONVERSATION_ROLES[settings.role] ? settings.role : 'general';
-  localStorage.setItem('crew_current_role', currentRole);
-  updateRoleUI();
+  if (!settings) return false;
+  if (settings.provider && settings.provider !== currentProvider) {
+    currentProvider = settings.provider;
+    localStorage.setItem('crew_current_provider', currentProvider);
+    renderProviderOptions();
+  }
+  if (settings.workspace) {
+    currentWorkspace = settings.workspace;
+    localStorage.setItem('crew_current_workspace', currentWorkspace);
+    updateWorkspaceUI();
+  }
+  if (settings.role && CONVERSATION_ROLES[settings.role]) {
+    currentRole = settings.role;
+    localStorage.setItem('crew_current_role', currentRole);
+    updateRoleUI();
+  }
   const providerModels = availableModels.filter(model => (model.provider || 'antigravity') === currentProvider);
   const selected = providerModels.find(model => model.id === settings.model);
-  if (!selected) return false; // Model may have been removed from this device.
-
-  currentModel = selected.id;
-  const supported = selected.supportedReasoningEfforts || ['low', 'medium', 'high'];
-  currentEffort = supported.includes(settings.effort)
-    ? settings.effort
-    : (selected.defaultReasoningEffort || supported[0] || 'low');
-  localStorage.setItem(providerStorageKey('current_model'), currentModel);
-  localStorage.setItem(providerStorageKey('current_effort'), currentEffort);
-  updateModelUI();
-  updateEffortUI();
+  if (selected) {
+    currentModel = selected.id;
+    const supported = selected.supportedReasoningEfforts || ['low', 'medium', 'high'];
+    currentEffort = supported.includes(settings.effort)
+      ? settings.effort
+      : (selected.defaultReasoningEffort || supported[0] || 'low');
+    localStorage.setItem(providerStorageKey('current_model'), currentModel);
+    localStorage.setItem(providerStorageKey('current_effort'), currentEffort);
+    updateModelUI();
+    updateEffortUI();
+  }
   return true;
 };
 
-window.saveCurrentConversationSettings = function() {
+window.saveCurrentConversationSettings = function(overrides = {}) {
   if (!currentConversationId) return Promise.resolve(null);
+  const payload = {
+    provider: currentProvider,
+    conversation_id: currentConversationId,
+    model: overrides.model !== undefined ? overrides.model : currentModel,
+    effort: overrides.effort !== undefined ? overrides.effort : currentEffort,
+    workspace: overrides.workspace !== undefined ? overrides.workspace : currentWorkspace,
+    role: overrides.role !== undefined ? overrides.role : currentRole
+  };
   return fetch('/api/conversation-settings', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      provider: currentProvider,
-      conversation_id: currentConversationId,
-      model: currentModel,
-      effort: currentEffort,
-      workspace: currentWorkspace,
-      role: currentRole
-    })
+    body: JSON.stringify(payload)
   }).then(res => {
     if (!res.ok) throw new Error('儲存對話模型設定失敗');
     return res.json();
@@ -912,7 +934,7 @@ window.selectModel = function(modelId) {
   toggleModelModal(false);
   if (navigator.vibrate) navigator.vibrate(20);
   console.log(`🤖 已切換 AI 核心模型至: ${currentModel}`);
-  window.saveCurrentConversationSettings();
+  window.saveCurrentConversationSettings({ model: currentModel, effort: currentEffort });
   window.requestProviderPrewarm();
 };
 
@@ -923,7 +945,7 @@ window.selectEffort = function(effortId) {
   renderEffortOptions();
   if (navigator.vibrate) navigator.vibrate(20);
   console.log(`🧠 已切換思考強度至: ${currentEffort}`);
-  window.saveCurrentConversationSettings();
+  window.saveCurrentConversationSettings({ effort: currentEffort });
   window.requestProviderPrewarm();
 };
 
