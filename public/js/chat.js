@@ -1779,25 +1779,7 @@ async function sendBtwConcurrentSidecard(customText = null, customImgPath = null
 }
 
 function flushQueuedBtwMessage() {
-  let msgToSend = pendingQueuedMessage;
-  if (!msgToSend && promptInput && promptInput.value.trim() && !isBtwPrompt()) {
-    const rawText = getPromptText();
-    if (rawText) {
-      msgToSend = {
-        text: rawText,
-        imagePath: uploadedImagePath,
-        conversationId: currentConversationId,
-        provider: currentProvider
-      };
-      promptInput.value = '';
-      promptInput.style.height = 'auto';
-      uploadedImagePath = null;
-      if (cameraInput) cameraInput.value = '';
-      if (typeof attachInput !== 'undefined' && attachInput) attachInput.value = '';
-      if (imagePreviewContainer) imagePreviewContainer.classList.add('hidden');
-    }
-  }
-
+  const msgToSend = pendingQueuedMessage;
   if (msgToSend) {
     clearPendingQueuedMessage();
     setTimeout(() => {

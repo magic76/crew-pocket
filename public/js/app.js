@@ -415,6 +415,15 @@ function initAppAndListeners() {
       runCompactFromContext('/compact-max');
     }
   });
+  const modalTriggerClearBtn = document.getElementById('modal-trigger-clear-btn');
+  if (modalTriggerClearBtn) {
+    modalTriggerClearBtn.addEventListener('click', () => {
+      if (typeof window.hideContextModal === 'function') window.hideContextModal();
+      if (typeof clearAndResetCurrentConversation === 'function') {
+        clearAndResetCurrentConversation();
+      }
+    });
+  }
 
   // Model & Effort Selector listeners
   if (modelSelectorBtn) modelSelectorBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleModelModal(true); });
