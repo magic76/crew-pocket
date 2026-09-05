@@ -78,6 +78,73 @@ async function handleStorageThumbnail(parsedUrl, res) {
   }
 }
 
+// 🔌 Central ADB Wireless Debugging Handlers (~/.adb_port)
+const ADB_PORT_FILE = path.join(os.homedir(), '.adb_port');
+
+async function handleAdbStatus(res) {
+  try {
+    let target = '';
+    try {
+      target = (await fsPromises.readFile(ADB_PORT_FILE, 'utf-8')).trim();
+    } catch (_) {}
+
+    let connected = false;
+    let devicesOutput = '';
+    try {
+      const { stdout } = await execFileAsync('adb', ['devices', '-l']);
+      devicesOutput = stdout;
+      if (target) {
+        connected = stdout.includes(target) && stdout.includes('device');
+      } else {
+        connected = stdout.split('\n').slice(1).some(line => line.includes('device '));
+      }
+    } catch (_) {}
+
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ target, connected, devices: devicesOutput.trim() }));
+  } catch (err) {
+    res.writeHead(500, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: err.message }));
+  }
+}
+
+async function handleAdbUpdate(req, res) {
+  try {
+    const body = await parseJsonBody(req);
+    let target = (body.target || body.port || '').toString().trim();
+    if (!target) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({ success: false, error: 'Port or target is required' }));
+    }
+    if (/^\d+$/.test(target)) {
+      target = `127.0.0.1:${target}`;
+    }
+    await fsPromises.writeFile(ADB_PORT_FILE, target + '\n', 'utf-8');
+
+    let connectOutput = '';
+    let connected = false;
+    try {
+      const { stdout, stderr } = await execFileAsync('adb', ['connect', target]);
+      connectOutput = (stdout + '\n' + stderr).trim();
+      const devices = await execFileAsync('adb', ['devices', '-l']);
+      connected = devices.stdout.includes(target) && devices.stdout.includes('device');
+    } catch (e) {
+      connectOutput = e.message;
+    }
+
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      success: true,
+      target,
+      connected,
+      output: connectOutput
+    }));
+  } catch (err) {
+    res.writeHead(500, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: false, error: err.message }));
+  }
+}
+
 // 📱 Phone Agent (Wireless ADB / Screen & Touch Control) API Handlers
 async function handlePhoneStatus(res) {
   const status = await phoneAgent.getStatus();
@@ -1721,6 +1788,10 @@ const server = http.createServer(async (req, res) => {
     return handleInboundMessage(req, res);
   } else if (pathname.startsWith('/api/extension/')) {
     return extensionBridge.handle(req, res, pathname);
+  } else if (pathname === '/api/adb' && req.method === 'GET') {
+    return handleAdbStatus(res);
+  } else if (pathname === '/api/adb' && req.method === 'POST') {
+    return handleAdbUpdate(req, res);
   } else if (pathname === '/api/phone/status' && req.method === 'GET') {
     return handlePhoneStatus(res);
   } else if (pathname === '/api/phone/connect' && req.method === 'POST') {
