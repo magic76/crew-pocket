@@ -16,3 +16,4 @@ android/crew-helper/*.keystore
 
 # Local custom HTML tools, available at /extra/ but never committed.
 public/extra/
+*.apk

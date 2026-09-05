@@ -366,7 +366,7 @@ function initAppAndListeners() {
   if (usageBtn) usageBtn.addEventListener('click', () => toggleUsageModal(true));
   if (openUsageChip) openUsageChip.addEventListener('click', () => toggleUsageModal(true));
   if (closeUsageBtn) closeUsageBtn.addEventListener('click', () => toggleUsageModal(false));
-  if (refreshUsageBtn) refreshUsageBtn.addEventListener('click', loadUsageData);
+  if (refreshUsageBtn) refreshUsageBtn.addEventListener('click', () => loadUsageData(true));
   if (usageModal) usageModal.addEventListener('click', (e) => { if (e.target === usageModal) toggleUsageModal(false); });
 
   // Context Usage Modal listeners
@@ -414,6 +414,15 @@ function initAppAndListeners() {
       runCompactFromContext('/compact-max');
     }
   });
+  const modalTriggerClearBtn = document.getElementById('modal-trigger-clear-btn');
+  if (modalTriggerClearBtn) {
+    modalTriggerClearBtn.addEventListener('click', () => {
+      if (typeof window.hideContextModal === 'function') window.hideContextModal();
+      if (typeof clearAndResetCurrentConversation === 'function') {
+        clearAndResetCurrentConversation();
+      }
+    });
+  }
 
   // Model & Effort Selector listeners
   if (modelSelectorBtn) modelSelectorBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleModelModal(true); });

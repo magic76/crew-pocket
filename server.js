@@ -1785,7 +1785,7 @@ const server = http.createServer(async (req, res) => {
   } else if (pathname === '/api/session-status' && req.method === 'GET') {
     return handleSessionStatus(parsedUrl, res);
   } else if (pathname === '/api/usage' && req.method === 'GET') {
-    return handleUsage(res);
+    return handleUsage(res, parsedUrl);
   } else if (pathname === '/api/files' && req.method === 'GET') {
     return handleListFiles(parsedUrl, res);
   } else if (pathname === '/api/public-assets' && req.method === 'GET') {

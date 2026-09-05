@@ -458,8 +458,15 @@ async function loadUsageData() {
   `;
 
   try {
-    const res = await fetch(usage.endpoint);
+    const fetchUrl = force ? `${usage.endpoint}?refresh=1` : usage.endpoint;
+    const res = await fetch(fetchUrl);
     const data = await res.json();
+
+    if (data.warning && usageModalSubtitle) {
+      usageModalSubtitle.textContent = `⚠️ ${data.warning}`;
+    } else if (data.cached && usageModalSubtitle) {
+      usageModalSubtitle.textContent = `快取配額 (${data.cacheAgeSec || 0} 秒前)`;
+    }
 
     if (data.quotas && data.quotas.length > 0) {
       usageBarsContainer.innerHTML = data.quotas.map(q => {
