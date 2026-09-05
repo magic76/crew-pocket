@@ -641,6 +641,14 @@ async function selectWorkspace(workspace, isCreatingNewChat = false) {
       const saved = await window.saveCurrentConversationSettings({ workspace: currentWorkspace });
       if (!saved) throw new Error('儲存工作區失敗');
       if (typeof loadConversations === 'function') loadConversations();
+    } else {
+      // New chat mode: update greeting message with selected workspace info
+      if (typeof messagesContainer !== 'undefined' && messagesContainer && messagesContainer.children.length <= 1) {
+        messagesContainer.innerHTML = '';
+        if (typeof appendMessage === 'function') {
+          appendMessage('assistant', `✨ 已為你開啟新對話（工作區：${next.label}）。\n\n原本的歷史對話已安全保存在左側選單中。有什麼可以幫你的？`);
+        }
+      }
     }
     closeWorkspaceModal();
     window.requestProviderPrewarm?.(0);

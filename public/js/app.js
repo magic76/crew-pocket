@@ -717,7 +717,7 @@ function initAppAndListeners() {
       }
       if (typeof clearQueuedBtwMessages === 'function') clearQueuedBtwMessages();
       currentConversationId = null;
-      localStorage.removeItem(activeConversationStorageKey());
+      localStorage.setItem(activeConversationStorageKey(), '__new__');
       revokeAllBlobUrls();
       if (typeof setStreamingState === 'function') setStreamingState(false);
       if (promptInput) {
@@ -949,13 +949,19 @@ function initAppAndListeners() {
       updateWorkspaceUI();
       loadWorkspaces().catch(() => {});
       const savedConvId = localStorage.getItem(activeConversationStorageKey());
-      const res = await fetch(`/api/conversations?${providerQuery()}`);
-      const data = await res.json();
-      if (data.conversations && data.conversations.length > 0) {
-        const targetId = (savedConvId && data.conversations.some(c => c.id === savedConvId))
-          ? savedConvId
-          : data.conversations[0].id;
-        loadConversationHistory(targetId);
+      if (savedConvId === '__new__') {
+        currentConversationId = null;
+        if (headerTitle) headerTitle.textContent = '新對話';
+        loadConversations().catch(() => {});
+      } else {
+        const res = await fetch(`/api/conversations?${providerQuery()}`);
+        const data = await res.json();
+        if (data.conversations && data.conversations.length > 0) {
+          const targetId = (savedConvId && data.conversations.some(c => c.id === savedConvId))
+            ? savedConvId
+            : data.conversations[0].id;
+          loadConversationHistory(targetId);
+        }
       }
     } catch (e) {
       console.error('Init load error:', e);
