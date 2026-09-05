@@ -1862,69 +1862,6 @@ async function sendMessage(queuedMessage = null) {
     return;
   }
 
-// 🧹 Clear All / Reset Conversation Initialization
-async function clearAndResetCurrentConversation(skipConfirm = false) {
-  if (currentAbortController) {
-    try { currentAbortController.abort(); } catch(e) {}
-    currentAbortController = null;
-  }
-
-  if (!skipConfirm && currentConversationId) {
-    const title = headerTitle ? headerTitle.textContent : '當前對話';
-    const confirmed = window.confirm(`確定要清空並初始化「${title}」的紀錄嗎？\n\n所有對話歷史將重置，所選工作區與模型設定會完整保留。`);
-    if (!confirmed) return false;
-  }
-
-  const oldConvId = currentConversationId;
-  const targetProvider = currentProvider;
-
-  if (oldConvId) {
-    fetch(`/api/conversation?id=${encodeURIComponent(oldConvId)}&provider=${encodeURIComponent(targetProvider)}`, {
-      method: 'DELETE'
-    }).catch(() => {});
-  }
-
-  currentConversationId = null;
-  localStorage.removeItem(activeConversationStorageKey());
-  revokeAllBlobUrls();
-  if (typeof clearQueuedBtwMessages === 'function') clearQueuedBtwMessages();
-  if (typeof setStreamingState === 'function') setStreamingState(false);
-  if (typeof updateContextPill === 'function') updateContextPill(null);
-
-  if (promptInput) {
-    promptInput.value = '';
-    promptInput.style.height = 'auto';
-  }
-  uploadedImagePath = null;
-  if (cameraInput) cameraInput.value = '';
-  if (typeof attachInput !== 'undefined' && attachInput) attachInput.value = '';
-  if (imagePreviewContainer) imagePreviewContainer.classList.add('hidden');
-
-  if (headerTitle) headerTitle.textContent = '新對話';
-  if (messagesContainer) messagesContainer.innerHTML = '';
-  appendMessage('assistant', '你好！已為你清空並初始化此對話。有什麼可以幫你的？');
-
-  const toolsDropdown = document.getElementById('tools-menu-dropdown');
-  if (toolsDropdown) toolsDropdown.classList.add('hidden');
-
-  if (typeof loadConversations === 'function') {
-    loadConversations();
-  }
-
-  if (typeof window.haptic === 'function') {
-    window.haptic([25, 50, 25]);
-  }
-
-  return true;
-}
-window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
-
-  const lowerText = text.toLowerCase();
-  if (lowerText === '/clear' || lowerText === '/clear-all' || lowerText === '/reset' || lowerText === '/init') {
-    await clearAndResetCurrentConversation(true);
-    return;
-  }
-
   // 📦 /compact and /compact-max - Memory Compaction & Context Pruning
   if (/^\/compact\b/i.test(text)) {
     promptInput.value = '';

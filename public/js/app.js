@@ -301,8 +301,7 @@ function initAppAndListeners() {
     });
 
     const authMenuBtn = document.getElementById('auth-menu-btn');
-    const clearChatBtn = document.getElementById('clear-chat-btn');
-    [newChatBtn, clearChatBtn, filesBtn, storageBtn, authMenuBtn, usageBtn, cheatSheetBtn, notifyBtn, exportExtBtn].forEach(btn => {
+    [newChatBtn, filesBtn, storageBtn, authMenuBtn, usageBtn, cheatSheetBtn, notifyBtn, exportExtBtn].forEach(btn => {
       if (btn) btn.addEventListener('click', () => {
         if (typeof window.haptic === 'function') window.haptic('light');
         toolsMenuDropdown.classList.add('hidden');
@@ -415,15 +414,6 @@ function initAppAndListeners() {
       runCompactFromContext('/compact-max');
     }
   });
-  const modalTriggerClearBtn = document.getElementById('modal-trigger-clear-btn');
-  if (modalTriggerClearBtn) {
-    modalTriggerClearBtn.addEventListener('click', () => {
-      if (typeof window.hideContextModal === 'function') window.hideContextModal();
-      if (typeof clearAndResetCurrentConversation === 'function') {
-        clearAndResetCurrentConversation();
-      }
-    });
-  }
 
   // Model & Effort Selector listeners
   if (modelSelectorBtn) modelSelectorBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleModelModal(true); });
@@ -638,23 +628,7 @@ function initAppAndListeners() {
   // Slash Command Buttons
   document.querySelectorAll('.slash-item').forEach(btn => {
     btn.addEventListener('click', () => {
-      const action = btn.dataset.action;
       const cmd = btn.dataset.cmd;
-
-      if (action === 'clear' || cmd === '/clear') {
-        if (promptInput) {
-          promptInput.value = '';
-          promptInput.style.height = 'auto';
-        }
-        if (slashMenu) slashMenu.classList.add('hidden');
-        if (typeof clearAndResetCurrentConversation === 'function') {
-          clearAndResetCurrentConversation();
-        } else if (newChatBtn) {
-          newChatBtn.click();
-        }
-        if (navigator.vibrate) navigator.vibrate([20, 20]);
-        return;
-      }
 
       if (promptInput) {
         promptInput.value = cmd;
@@ -740,16 +714,6 @@ function initAppAndListeners() {
 
       // 🔥 Pre-warm standby resident process in background
       if (typeof window.requestProviderPrewarm === 'function') window.requestProviderPrewarm();
-    });
-  }
-
-  // 🧹 Clear All / Reset Current Conversation
-  const clearChatBtn = document.getElementById('clear-chat-btn');
-  if (clearChatBtn) {
-    clearChatBtn.addEventListener('click', () => {
-      if (typeof clearAndResetCurrentConversation === 'function') {
-        clearAndResetCurrentConversation();
-      }
     });
   }
 

@@ -133,7 +133,7 @@
     '2. Python / Bash 後端即時直譯執行 (Termux 算力)': '2. Run Python / Bash in Termux',
     '3. Google 地圖導航與景點卡片': '3. Google Maps navigation cards',
     '4. 手機硬體原生整合 (GPS / 震動 / 雙向語音 / 相機)': '4. Native phone integration (GPS / vibration / voice / camera)',
-    '5. 專業快捷指令 (/compact, /btw, /plan, /goal, /clear)': '5. Professional shortcuts (/compact, /btw, /plan, /goal, /clear)',
+    '5. 專業快捷指令 (/compact, /btw, /plan, /goal)': '5. Professional shortcuts (/compact, /btw, /plan, /goal)',
     '6. 滿版極致視野 ＆ 賽博朋克思考跑馬燈': '6. Full-width view and live thinking ticker',
     '請 AI 製作互動小工具、數據圖表或遊戲，系統會': 'Ask AI for an interactive tool, chart, or game and Crew Pocket will',
     '直接在對話氣泡內滿版動態渲染': 'render it interactively inside the conversation',
