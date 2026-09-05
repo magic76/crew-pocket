@@ -2040,6 +2040,118 @@ async function sendMessage(queuedMessage = null) {
     toolRenderTimer = setTimeout(renderLiveTools, 120);
   };
 
+  let turnFinalized = false;
+  function finalizeTurn(doneData = null) {
+    if (turnFinalized) return;
+    turnFinalized = true;
+
+    clearInterval(liveTimerInterval);
+    liveStatusElem.style.display = 'none';
+
+    const targetDoneConvId = doneData?.conversation_id || streamConversationId;
+    if (targetDoneConvId && (currentConversationId === streamConversationId || currentConversationId === null)) {
+      currentConversationId = targetDoneConvId;
+      localStorage.setItem(activeConversationStorageKey(), currentConversationId);
+    }
+    if (doneData?.error) accumulatedText = `⚠️ ${doneData.error}`;
+    else if (doneData?.response && !accumulatedText) accumulatedText = doneData.response;
+
+    contentElem.innerHTML = formatMessageContent(accumulatedText);
+    queueLiveToolsRender(true);
+    if (liveThinking) {
+      thinkingContainerElem.innerHTML = buildThinkingBlockHtml(liveThinking);
+    }
+
+    // 🧠 Refresh Context Usage Stats
+    if (targetDoneConvId) {
+      fetch(`/api/history?id=${targetDoneConvId}&provider=${encodeURIComponent(streamProvider)}`).then(r => r.json()).then(hData => {
+        if (hData.context_stats && currentConversationId === targetDoneConvId) updateContextPill(hData.context_stats);
+        loadConversations();
+      }).catch(() => {});
+    }
+
+    const totalSec = ((performance.now() - startTs) / 1000).toFixed(1);
+    const estTokens = Math.round(accumulatedText.length / 2);
+    const avgSpeed = Math.round(estTokens / Math.max(0.5, totalSec));
+
+    if (isBtwQuery) {
+      let btwHeader = assistantMsgDiv.querySelector('.btw-header');
+      const cardEl = assistantMsgDiv.querySelector('.btw-card');
+      if (!btwHeader && cardEl) {
+        btwHeader = document.createElement('div');
+        btwHeader.className = 'btw-header flex items-center justify-between border-b border-teal-800/60 pb-1.5 mb-2 select-none';
+        btwHeader.innerHTML = `
+          <span class="px-2 py-0.5 rounded-full bg-teal-500/20 text-teal-300 border border-teal-500/40 text-[10px] font-mono font-semibold flex items-center gap-1">
+            <span class="w-1.5 h-1.5 rounded-full bg-teal-400 animate-pulse"></span>
+            💬 順帶一提 · 支線解答
+          </span>
+          <button type="button" class="btw-toggle-btn text-[10px] text-teal-400 hover:text-teal-200 font-mono transition px-1.5 py-0.5 rounded hover:bg-teal-900/40">收合 ▲</button>
+        `;
+        cardEl.insertBefore(btwHeader, cardEl.firstChild);
+        const toggleBtn = btwHeader.querySelector('.btw-toggle-btn');
+        toggleBtn.addEventListener('click', () => {
+          const isCollapsed = cardEl.classList.toggle('collapsed');
+          toggleBtn.textContent = isCollapsed ? '展開 ▼' : '收合 ▲';
+        });
+      }
+    }
+
+    const bubbleEl = assistantMsgDiv.querySelector('.btw-card') || assistantMsgDiv.querySelector('.bg-slate-900');
+    if (bubbleEl && !isBtwQuery && !assistantMsgDiv.querySelector('.assistant-top-header')) {
+      const header = document.createElement('div');
+      header.className = 'assistant-top-header flex items-center justify-between gap-2 mb-2 pb-1.5 border-b border-slate-800/90 text-[11px] text-slate-400 select-none';
+      header.innerHTML = `
+        <div class="flex items-center gap-1.5 font-semibold text-slate-200">
+          <span class="text-indigo-400 font-bold">🤖 Crew Pocket</span>
+          <span class="text-[10px] text-slate-400 font-mono font-normal">(${escapeHtml(modelLabel)})</span>
+        </div>
+        <span class="text-[10px] text-slate-500 font-mono">⏱️ ${totalSec}s</span>
+      `;
+      bubbleEl.insertBefore(header, bubbleEl.firstChild);
+    }
+
+    // Append Action Footer with Stats, TTS and Copy All
+    let footer = assistantMsgDiv.querySelector('.msg-footer');
+    if (!footer) {
+      footer = document.createElement('div');
+      footer.className = 'msg-footer mt-2.5 pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400 select-none';
+      const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      footer.innerHTML = `
+        <div class="flex items-center gap-2">
+          <button type="button" class="tts-btn px-2 py-0.5 rounded-md hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition flex items-center gap-1 active:scale-95">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"/>
+            </svg>
+            <span class="text-[10px]">朗讀</span>
+          </button>
+        </div>
+        <div class="flex items-center gap-1.5 text-[10px] text-slate-500 font-mono">
+          <span class="text-slate-400">⏱️ ${totalSec}s</span>
+          ${avgSpeed > 0 ? `<span class="text-indigo-400/80">· ⚡ ${avgSpeed} t/s</span>` : ''}
+          <span>· ${timeStr}</span>
+        </div>
+      `;
+      const bubbleEl = assistantMsgDiv.querySelector('.btw-card') || assistantMsgDiv.querySelector('.bg-slate-900');
+      if (bubbleEl) bubbleEl.appendChild(footer);
+      const ttsBtn = footer.querySelector('.tts-btn');
+      ttsBtn.addEventListener('click', () => toggleSpeech(accumulatedText, ttsBtn));
+    }
+
+    if (typeof enhanceCodeBlocks === 'function') enhanceCodeBlocks(assistantMsgDiv);
+    prepareDeferredImages(assistantMsgDiv);
+
+    if (document.hidden) {
+      triggerDoneNotification(accumulatedText);
+    }
+
+    if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+
+    // 🏷️ Auto-generate AI conversation title for new conversations
+    if (isNewConversation && targetDoneConvId && text) {
+      generateConversationTitle(targetDoneConvId, text, accumulatedText);
+    }
+  }
+
   scrollToBottom();
 
   function updateLiveTicker(rawText, prefix = '') {
@@ -2207,120 +2319,16 @@ async function sendMessage(queuedMessage = null) {
 
               if (liveThinking) thinkingContainerElem.innerHTML = buildThinkingBlockHtml(liveThinking, false);
             } else if (currentEvent === 'done') {
-              clearInterval(liveTimerInterval);
-              liveStatusElem.style.display = 'none';
-
-              const targetDoneConvId = data.conversation_id || streamConversationId;
-              if (targetDoneConvId && (currentConversationId === streamConversationId || currentConversationId === null)) {
-                currentConversationId = targetDoneConvId;
-                localStorage.setItem(activeConversationStorageKey(), currentConversationId);
-              }
-              if (data.error) accumulatedText = `⚠️ ${data.error}`;
-              else if (data.response) accumulatedText = data.response;
-              contentElem.innerHTML = formatMessageContent(accumulatedText);
-              queueLiveToolsRender(true);
-              if (liveThinking) {
-                thinkingContainerElem.innerHTML = buildThinkingBlockHtml(liveThinking);
-              }
-
-              // 🧠 Refresh Context Usage Stats
-              if (targetDoneConvId) {
-                fetch(`/api/history?id=${targetDoneConvId}&provider=${encodeURIComponent(streamProvider)}`).then(r => r.json()).then(hData => {
-                  if (hData.context_stats && currentConversationId === targetDoneConvId) updateContextPill(hData.context_stats);
-                  loadConversations();
-                }).catch(() => {});
-              }
-
-              const totalSec = ((performance.now() - startTs) / 1000).toFixed(1);
-              const estTokens = Math.round(accumulatedText.length / 2);
-              const avgSpeed = Math.round(estTokens / Math.max(0.5, totalSec));
-
-              if (isBtwQuery) {
-                let btwHeader = assistantMsgDiv.querySelector('.btw-header');
-                const cardEl = assistantMsgDiv.querySelector('.btw-card');
-                if (!btwHeader && cardEl) {
-                  btwHeader = document.createElement('div');
-                  btwHeader.className = 'btw-header flex items-center justify-between border-b border-teal-800/60 pb-1.5 mb-2 select-none';
-                  btwHeader.innerHTML = `
-                    <span class="px-2 py-0.5 rounded-full bg-teal-500/20 text-teal-300 border border-teal-500/40 text-[10px] font-mono font-semibold flex items-center gap-1">
-                      <span class="w-1.5 h-1.5 rounded-full bg-teal-400 animate-pulse"></span>
-                      💬 順帶一提 · 支線解答
-                    </span>
-                    <button type="button" class="btw-toggle-btn text-[10px] text-teal-400 hover:text-teal-200 font-mono transition px-1.5 py-0.5 rounded hover:bg-teal-900/40">收合 ▲</button>
-                  `;
-                  cardEl.insertBefore(btwHeader, cardEl.firstChild);
-                  const toggleBtn = btwHeader.querySelector('.btw-toggle-btn');
-                  toggleBtn.addEventListener('click', () => {
-                    const isCollapsed = cardEl.classList.toggle('collapsed');
-                    toggleBtn.textContent = isCollapsed ? '展開 ▼' : '收合 ▲';
-                  });
-                }
-              }
-
-              const bubbleEl = assistantMsgDiv.querySelector('.btw-card') || assistantMsgDiv.querySelector('.bg-slate-900');
-              if (bubbleEl && !isBtwQuery && !assistantMsgDiv.querySelector('.assistant-top-header')) {
-                const header = document.createElement('div');
-                header.className = 'assistant-top-header flex items-center justify-between gap-2 mb-2 pb-1.5 border-b border-slate-800/90 text-[11px] text-slate-400 select-none';
-                header.innerHTML = `
-                  <div class="flex items-center gap-1.5 font-semibold text-slate-200">
-                    <span class="text-indigo-400 font-bold">🤖 Crew Pocket</span>
-                    <span class="text-[10px] text-slate-400 font-mono font-normal">(${escapeHtml(modelLabel)})</span>
-                  </div>
-                  <span class="text-[10px] text-slate-500 font-mono">⏱️ ${totalSec}s</span>
-                `;
-                bubbleEl.insertBefore(header, bubbleEl.firstChild);
-              }
-
-              // Append Action Footer with Stats, TTS and Copy All
-              let footer = assistantMsgDiv.querySelector('.msg-footer');
-              if (!footer) {
-                footer = document.createElement('div');
-                footer.className = 'msg-footer mt-2.5 pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400 select-none';
-                const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                footer.innerHTML = `
-                  <div class="flex items-center gap-2">
-                    <button type="button" class="tts-btn px-2 py-0.5 rounded-md hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition flex items-center gap-1 active:scale-95">
-                      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"/>
-                      </svg>
-                      <span class="text-[10px]">朗讀</span>
-                    </button>
-                  </div>
-                  <div class="flex items-center gap-1.5 text-[10px] text-slate-500 font-mono">
-                    <span class="text-slate-400">⏱️ ${totalSec}s</span>
-                    ${avgSpeed > 0 ? `<span class="text-indigo-400/80">· ⚡ ${avgSpeed} t/s</span>` : ''}
-                    <span>· ${timeStr}</span>
-                  </div>
-                `;
-                const bubbleEl = assistantMsgDiv.querySelector('.btw-card') || assistantMsgDiv.querySelector('.bg-slate-900');
-                if (bubbleEl) bubbleEl.appendChild(footer);
-                const ttsBtn = footer.querySelector('.tts-btn');
-                ttsBtn.addEventListener('click', () => toggleSpeech(accumulatedText, ttsBtn));
-              }
-
-              if (typeof enhanceCodeBlocks === 'function') enhanceCodeBlocks(assistantMsgDiv);
-              prepareDeferredImages(assistantMsgDiv);
-
-              if (document.hidden) {
-                triggerDoneNotification(accumulatedText);
-              }
-
-              if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
-
-              // 🏷️ Auto-generate AI conversation title for new conversations
-              if (isNewConversation && targetDoneConvId && text) {
-                generateConversationTitle(targetDoneConvId, text, accumulatedText);
-              }
+              finalizeTurn(data);
             }
           } catch (e) {}
         }
       }
     }
   } catch (err) {
-    clearInterval(liveTimerInterval);
-    liveStatusElem.style.display = 'none';
     if (err.name === 'AbortError') {
       abortedHandled = true;
+      finalizeTurn();
       const abortBadge = document.createElement('div');
       abortBadge.className = 'mt-2 pt-1.5 border-t border-slate-800 text-[11px] text-amber-400 font-mono flex items-center gap-1';
       abortBadge.innerHTML = `<svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg><span>[已手動中斷生成]</span>`;
@@ -2370,6 +2378,7 @@ async function sendMessage(queuedMessage = null) {
                     `;
                     setTimeout(() => recoveryBadge.remove(), 4000);
                     if (typeof enhanceCodeBlocks === 'function') enhanceCodeBlocks(assistantMsgDiv);
+                    finalizeTurn();
                     return;
                   }
                 }
