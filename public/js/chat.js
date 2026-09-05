@@ -1767,7 +1767,7 @@ async function sendBtwConcurrentSidecard(customText = null, customImgPath = null
               accumulated += parsed.delta;
               contentElem.innerHTML = formatMessageContent(accumulated);
               scrollToBottom();
-            } else if (parsed.response && !accumulated) {
+            } else if (parsed.response) {
               accumulated = parsed.response;
               contentElem.innerHTML = formatMessageContent(accumulated);
             }
@@ -2106,7 +2106,7 @@ async function sendMessage(queuedMessage = null) {
         accumulatedText = `⚠️ ${doneData.error}`;
         contentElem.innerHTML = formatMessageContent(accumulatedText);
       }
-    } else if (doneData?.response && !accumulatedText) {
+    } else if (doneData?.response) {
       accumulatedText = doneData.response;
       contentElem.innerHTML = formatMessageContent(accumulatedText);
     } else if (!accumulatedText || !String(accumulatedText).trim()) {

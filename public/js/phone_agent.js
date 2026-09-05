@@ -244,7 +244,49 @@
       sendAction({ action: "SWIPE", x1: midX, y1: startY, x2: midX, y2: endY, durationMs: 250 });
     });
 
+    // 🫧 Floating Bubble Toggle on Home Page Header and Tools Menu
+    const floatingBubbleBtn = document.getElementById("floating-bubble-btn");
+    const menuFloatingBubbleBtn = document.getElementById("menu-floating-bubble-btn");
+
+    if (floatingBubbleBtn) {
+      floatingBubbleBtn.addEventListener("click", toggleFloatingBubble);
+    }
+    if (menuFloatingBubbleBtn) {
+      menuFloatingBubbleBtn.addEventListener("click", () => {
+        toggleFloatingBubble();
+        const toolsMenu = document.getElementById("tools-menu-dropdown");
+        if (toolsMenu) toolsMenu.classList.add("hidden");
+      });
+    }
   }
+
+  async function toggleFloatingBubble() {
+    if (typeof window.haptic === "function") window.haptic("medium");
+    const headerBtn = document.getElementById("floating-bubble-btn");
+    const menuBtn = document.getElementById("menu-floating-bubble-btn");
+
+    if (headerBtn) headerBtn.classList.add("scale-110", "bg-cyan-500/40");
+    if (menuBtn) menuBtn.classList.add("opacity-70");
+
+    try {
+      const res = await fetch("/api/phone/bubble", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "toggle" })
+      });
+      const data = await res.json();
+      console.log("[Floating Bubble]", data);
+    } catch (e) {
+      console.warn("[Floating Bubble Error]", e);
+    } finally {
+      setTimeout(() => {
+        if (headerBtn) headerBtn.classList.remove("scale-110", "bg-cyan-500/40");
+        if (menuBtn) menuBtn.classList.remove("opacity-70");
+      }, 300);
+    }
+  }
+
+  window.toggleFloatingBubble = toggleFloatingBubble;
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", () => {
