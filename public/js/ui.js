@@ -415,8 +415,9 @@ function toggleUsageModal(open) {
   }
 }
 
-async function loadUsageData() {
+async function loadUsageData(force = false) {
   if (!usageBarsContainer) return;
+  const isForce = (force === true);
   const provider = providerConfig();
   const usage = provider.capabilities?.usage || { mode: 'unsupported' };
   const isEnglish = typeof getCrewLocale === 'function' && getCrewLocale() === 'en';
@@ -458,7 +459,7 @@ async function loadUsageData() {
   `;
 
   try {
-    const fetchUrl = force ? `${usage.endpoint}?refresh=1` : usage.endpoint;
+    const fetchUrl = isForce ? `${usage.endpoint}?refresh=1` : usage.endpoint;
     const res = await fetch(fetchUrl);
     const data = await res.json();
 
