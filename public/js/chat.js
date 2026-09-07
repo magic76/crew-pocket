@@ -1095,7 +1095,7 @@ function renderHistoryMessages(messages, convId, renderVersion, options = {}) {
 }
 
 // Load History for a Conversation
-async function loadConversationHistory(convId) {
+async function loadConversationHistory(convId, { preserveComposer = false } = {}) {
   if (typeof window.isLiveSessionActive === 'function' && window.isLiveSessionActive()) {
     alert('🎙️ 目前仍在語音通話中，請先按紅色掛斷，完成備忘錄保存後再切換歷史對話。');
     return false;
@@ -1104,6 +1104,10 @@ async function loadConversationHistory(convId) {
   // background response. It must not append into a newer history render.
   stopBackgroundHistoryPoll();
   const renderVersion = ++historyRenderVersion;
+  const historyProvider = currentProvider;
+  const isCurrentHistory = () => renderVersion === historyRenderVersion
+    && currentConversationId === convId && currentProvider === historyProvider;
+  const historyQuery = `id=${encodeURIComponent(convId)}&provider=${encodeURIComponent(historyProvider)}`;
   const loadOverlay = showHistoryLoadOverlay();
   historyPageState = null;
   // Do not abort another conversation's stream. Its detached DOM can finish
@@ -1130,20 +1134,22 @@ async function loadConversationHistory(convId) {
   }
 
   // 🔄 Reset input box and Send/Stop button to initial idle state
-  if (promptInput) {
-    promptInput.value = '';
-    promptInput.style.height = 'auto';
+  if (!preserveComposer) {
+    if (promptInput) {
+      promptInput.value = '';
+      promptInput.style.height = 'auto';
+    }
+    uploadedImagePath = null;
+    if (cameraInput) cameraInput.value = '';
+    if (typeof attachInput !== 'undefined' && attachInput) attachInput.value = '';
+    if (imagePreviewContainer) imagePreviewContainer.classList.add('hidden');
   }
-  uploadedImagePath = null;
-  if (cameraInput) cameraInput.value = '';
-  if (typeof attachInput !== 'undefined' && attachInput) attachInput.value = '';
-  if (imagePreviewContainer) imagePreviewContainer.classList.add('hidden');
   setStreamingState(false);
 
   try {
-    const res = await fetch(`/api/history?id=${convId}&${providerQuery()}`);
+    const res = await fetch(`/api/history?${historyQuery}`);
     const data = await res.json();
-    if (renderVersion !== historyRenderVersion || currentConversationId !== convId) return;
+    if (!isCurrentHistory()) return;
 
     // Conversations own their model choice. Restore it before rendering so the
     // header and the next message always agree with this thread.
@@ -1193,9 +1199,10 @@ async function loadConversationHistory(convId) {
 
     // ⚡ Check if this conversation is actively generating in background and auto-resume loading UI
     try {
-      const statusRes = await fetch(`/api/session-status?id=${convId}&${providerQuery()}`);
+      const statusRes = await fetch(`/api/session-status?${historyQuery}`);
       if (statusRes.ok) {
         const statusData = await statusRes.json();
+        if (!isCurrentHistory()) return;
         if (statusData.isBusy) {
           setStreamingState(true);
           const existingLive = document.getElementById('resumed-live-card');
@@ -1220,21 +1227,22 @@ async function loadConversationHistory(convId) {
             const poll = { convId, renderVersion, interval: null };
             backgroundHistoryPoll = poll;
             poll.interval = setInterval(async () => {
-              if (backgroundHistoryPoll !== poll || currentConversationId !== convId || renderVersion !== historyRenderVersion) {
+              if (backgroundHistoryPoll !== poll || !isCurrentHistory()) {
                 if (backgroundHistoryPoll === poll) stopBackgroundHistoryPoll();
                 return;
               }
               try {
-                const checkRes = await fetch(`/api/session-status?id=${convId}&${providerQuery()}`);
+                const checkRes = await fetch(`/api/session-status?${historyQuery}`);
                 if (checkRes.ok) {
                   const checkData = await checkRes.json();
+                  if (backgroundHistoryPoll !== poll || !isCurrentHistory()) return;
                   if (!checkData.isBusy) {
                     stopBackgroundHistoryPoll();
                     setStreamingState(false);
                     const card = document.getElementById('resumed-live-card');
                     if (card) card.remove();
                     if (currentConversationId === convId && renderVersion === historyRenderVersion) {
-                      loadConversationHistory(convId);
+                      loadConversationHistory(convId, { preserveComposer: true });
                     }
                     setTimeout(flushQueuedBtwMessage, 300);
                   }
@@ -1251,6 +1259,7 @@ async function loadConversationHistory(convId) {
   } catch (err) {
     hideHistoryLoadOverlay(loadOverlay);
     console.error(err);
+    if (!isCurrentHistory()) return;
     messagesContainer.innerHTML = `<div class="p-4 text-center text-xs text-rose-400">載入歷史對話失敗：${err.message}</div>`;
   }
 }
@@ -1939,6 +1948,10 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
     }
 
     const targetConvId = currentConversationId;
+    const compactProvider = currentProvider;
+    const compactRenderVersion = historyRenderVersion;
+    const isCompactVisible = () => currentConversationId === targetConvId
+      && currentProvider === compactProvider && historyRenderVersion === compactRenderVersion;
     const compactMode = /^\/compact-max\b/i.test(text) ? 'max' : 'continue';
     const isMaxCompact = compactMode === 'max';
     // Codex native compact keeps the same thread. Its max variant therefore
@@ -1976,7 +1989,7 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
           conversation_id: targetConvId,
           focus: focusText,
           mode: compactMode,
-          provider: currentProvider,
+          provider: compactProvider,
           locale: typeof getCrewLocale === 'function' ? getCrewLocale() : 'zh-TW'
         })
       });
@@ -1984,7 +1997,7 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
       if (compactingMsgDiv.parentNode) compactingMsgDiv.remove();
 
       // 🛡️ Cross-Session Guard: Only update active DOM if user is STILL in the same conversation!
-      if (currentConversationId === targetConvId) {
+      if (isCompactVisible()) {
         if (data.success && data.summary) {
           // 🌟 Visual Persistence: Do not wipe screen! Append glowing checkpoint divider
           const divider = buildCheckpointDividerHtml(data.summary, new Date().toISOString());
@@ -2006,7 +2019,7 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
       }
     } catch (e) {
       if (compactingMsgDiv.parentNode) compactingMsgDiv.remove();
-      if (currentConversationId === targetConvId) {
+      if (isCompactVisible()) {
         appendMessage('assistant', `⚠️ 壓縮請求失敗：${e.message}`);
       }
     }
@@ -2118,7 +2131,7 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
   const liveTickerTextElem = assistantMsgDiv.querySelector('.live-ticker-text');
   const thinkingContainerElem = assistantMsgDiv.querySelector('.thinking-container');
   const toolsContainerElem = assistantMsgDiv.querySelector('.tools-container');
-  const isStreamVisible = () => assistantMsgDiv.isConnected
+  const isStreamVisible = () => assistantMsgDiv.isConnected && currentProvider === streamProvider
     && (!streamConversationId ? currentConversationId === null : currentConversationId === streamConversationId);
 
   let toolRenderTimer = null;
@@ -2153,7 +2166,7 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
     liveStatusElem.style.display = 'none';
 
     const targetDoneConvId = doneData?.conversation_id || streamConversationId;
-    if (targetDoneConvId && (currentConversationId === streamConversationId || currentConversationId === null)) {
+    if (targetDoneConvId && isStreamVisible()) {
       currentConversationId = targetDoneConvId;
       localStorage.setItem(activeConversationStorageKey(), currentConversationId);
     }
@@ -2180,7 +2193,7 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
     // 🧠 Refresh Context Usage Stats
     if (targetDoneConvId) {
       fetch(`/api/history?id=${targetDoneConvId}&provider=${encodeURIComponent(streamProvider)}`).then(r => r.json()).then(hData => {
-        if (hData.context_stats && currentConversationId === targetDoneConvId) updateContextPill(hData.context_stats);
+        if (hData.context_stats && currentProvider === streamProvider && currentConversationId === targetDoneConvId) updateContextPill(hData.context_stats);
         loadConversations();
       }).catch(() => {});
     }
@@ -2370,7 +2383,8 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
             if (currentEvent === 'init' && data.conversation_id) {
               streamConversationId = data.conversation_id;
               // 🛡️ Only update global currentConversationId if user hasn't switched to another conversation
-              if (currentConversationId === activeStreamConvId || currentConversationId === null) {
+              if (assistantMsgDiv.isConnected && currentProvider === streamProvider
+                && currentConversationId === activeStreamConvId) {
                 currentConversationId = data.conversation_id;
                 localStorage.setItem(activeConversationStorageKey(), currentConversationId);
               }

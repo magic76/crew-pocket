@@ -17,16 +17,8 @@ if (typeof marked !== 'undefined') {
 
 // 2. Service Worker Registration (Offline & Push Notifications)
 if ('serviceWorker' in navigator) {
-  let reloadingForNewServiceWorker = false;
-  navigator.serviceWorker.addEventListener('controllerchange', () => {
-    // The new worker has already precached this build. Reload once so this tab
-    // cannot continue executing an old in-memory JS bundle after an update.
-    if (!reloadingForNewServiceWorker) {
-      reloadingForNewServiceWorker = true;
-      window.location.reload();
-    }
-  });
-
+  // Activation must not navigate an open tab: users may already be typing,
+  // streaming, or in a Live call. The next navigation loads the updated shell.
   navigator.serviceWorker.register('/sw.js?v=20260829-pwa2', { updateViaCache: 'none' }).then(reg => {
     swRegistration = reg;
     reg.update().catch(() => {});
