@@ -1550,15 +1550,12 @@ function renderConversationItems(conversations, filterQuery = '') {
     contentEl.addEventListener('click', (e) => {
       if (e.target.closest('.rename-conv-btn')) return;
       if (!isDeleted && Math.abs(currentDiffX) < 10) {
-        if (conversationProvider !== currentProvider) {
-          currentProvider = conversationProvider;
-          localStorage.setItem('crew_current_provider', currentProvider);
-          const providerModels = availableModels.filter(model => (model.provider || 'antigravity') === currentProvider);
-          const modelKey = providerStorageKey('current_model');
-          currentModel = localStorage.getItem(modelKey) || (providerModels[0] && providerModels[0].id) || 'gemini-3.7-flash';
-          renderProviderOptions();
-          updateModelUI();
-        }
+        window.applyConversationSettings({
+          provider: conversationProvider,
+          model: conv.model,
+          effort: conv.effort,
+          loadingModel: !conv.model
+        });
         loadConversationHistory(conv.id);
       }
     });
@@ -1885,7 +1882,9 @@ async function clearAndResetCurrentConversation(skipConfirm = false) {
   if (oldConvId) {
     fetch(`/api/conversation?id=${encodeURIComponent(oldConvId)}&provider=${encodeURIComponent(targetProvider)}`, {
       method: 'DELETE'
-    }).catch(() => {});
+    }).then(response => {
+      if (!response.ok) throw new Error(`清空${targetProvider === 'codex' ? ' Codex' : ''} 對話失敗`);
+    }).catch(error => console.warn('[Conversation clear]', error.message));
   }
 
   currentConversationId = null;

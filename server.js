@@ -484,14 +484,16 @@ for d in [src, tgt]:
 
 // 🤖 List Available Models & Thinking Efforts
 async function handleGetModels(res) {
-  const modelGroups = await Promise.all(listProviders().map(async provider => {
+  const discoverModels = async (provider) => {
     if (!provider.metadata.capabilities.models || typeof provider.listModels !== 'function') return [];
-    try { return await provider.listModels(); }
+    const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('model discovery timed out')), 2000));
+    try { return await Promise.race([provider.listModels(), timeout]); }
     catch (err) {
       console.warn(`[${provider.id} Models] Discovery failed:`, err.message);
       return provider.fallbackModels || [];
     }
-  }));
+  };
+  const modelGroups = await Promise.all(listProviders().map(discoverModels));
   res.writeHead(200, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({ models: modelGroups.flat(), efforts: THINKING_EFFORTS }));
 }
@@ -753,7 +755,9 @@ async function handleProviderConversations(parsedUrl, res) {
     res.end(JSON.stringify({ conversations: conversations.map(conversation => ({
       ...conversation,
       workspace: settingsByConversation.get(conversation.id)?.workspace || null,
-      role: settingsByConversation.get(conversation.id)?.role || 'general'
+      role: settingsByConversation.get(conversation.id)?.role || 'general',
+      model: settingsByConversation.get(conversation.id)?.model || null,
+      effort: settingsByConversation.get(conversation.id)?.effort || null
     })) }));
   } catch (err) {
     res.writeHead(503, { 'Content-Type': 'application/json' });

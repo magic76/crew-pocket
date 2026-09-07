@@ -10,7 +10,13 @@ let currentConversationId = null;
 let currentProvider = localStorage.getItem('crew_current_provider') || 'antigravity';
 let currentModel = localStorage.getItem('agy_current_model') || 'gemini-3.7-flash';
 let currentEffort = localStorage.getItem(providerStorageKey('current_effort')) || 'low';
-let availableModels = [];
+const BUILTIN_MODEL_FALLBACKS = [
+  { id: 'gpt-6-astra', provider: 'codex', name: 'GPT-6 Astra', desc: '最強旗艦 · 複雜多步開發與代理任務', icon: '✦', badge: '旗艦', badgeColor: 'bg-violet-500/20 text-violet-200 border-violet-400/40', isDefault: false, defaultReasoningEffort: 'medium', supportedReasoningEfforts: ['low', 'medium', 'high', 'xhigh', 'max'] },
+  { id: 'gpt-5.6-sol', provider: 'codex', name: 'GPT-5.6 Sol', desc: '旗艦能力 · 複雜推理與大型開發任務', icon: '☀️', badge: 'Sol', badgeColor: 'bg-orange-500/20 text-orange-200 border-orange-400/40', isDefault: false, defaultReasoningEffort: 'medium', supportedReasoningEfforts: ['low', 'medium', 'high', 'xhigh', 'max'] },
+  { id: 'gpt-5.6-terra', provider: 'codex', name: 'GPT-5.6 Terra', desc: '能力與速度平衡 · 日常開發推薦', icon: '🌍', badge: '預設', badgeColor: 'bg-amber-500/20 text-amber-300 border-amber-500/40', isDefault: true, defaultReasoningEffort: 'medium', supportedReasoningEfforts: ['low', 'medium', 'high', 'xhigh', 'max'] },
+  { id: 'gpt-5.6-luna', provider: 'codex', name: 'GPT-5.6 Luna', desc: '快速省資源 · 高頻輕量工作', icon: '🌙', badge: 'Luna', badgeColor: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40', isDefault: false, defaultReasoningEffort: 'medium', supportedReasoningEfforts: ['low', 'medium', 'high', 'xhigh', 'max'] }
+];
+let availableModels = [...BUILTIN_MODEL_FALLBACKS];
 let availableEfforts = [
   { id: 'low', name: 'Low (極速)', desc: '⚡ 0~1s 秒回 · 日常對話', icon: '⚡', color: 'emerald' },
   { id: 'medium', name: 'Medium (平衡)', desc: '⚖️ 基礎推理 · 平衡模式', icon: '⚖️', color: 'amber' },
@@ -31,6 +37,7 @@ let lastPrewarmKey = '';
 let lastPrewarmAt = 0;
 let prewarmRequest = null;
 let modelsCatalogRequest = null;
+let modelsCatalogLoaded = false;
 const HOME_WORKSPACE = '/data/data/com.termux/files/home';
 let currentWorkspace = localStorage.getItem('crew_current_workspace') || HOME_WORKSPACE;
 let availableWorkspaces = [];
@@ -65,19 +72,26 @@ window.requestProviderPrewarm = function(delay = 250) {
 };
 
 async function loadModelsCatalog() {
-  if (availableModels.length > 0) return { models: availableModels, efforts: availableEfforts };
+  if (modelsCatalogLoaded) return { models: availableModels, efforts: availableEfforts };
   if (!modelsCatalogRequest) {
-    modelsCatalogRequest = fetch('/api/models')
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 2500);
+    modelsCatalogRequest = fetch('/api/models', { signal: controller.signal })
       .then(res => {
         if (!res.ok) throw new Error('模型清單載入失敗');
         return res.json();
       })
       .then(data => {
-        availableModels = Array.isArray(data.models) ? data.models : [];
+        if (Array.isArray(data.models) && data.models.length > 0) {
+          availableModels = data.models;
+          modelsCatalogLoaded = true;
+        }
         if (Array.isArray(data.efforts) && data.efforts.length > 0) availableEfforts = data.efforts;
-        return data;
+        return { models: availableModels, efforts: availableEfforts };
       })
+      .catch(() => ({ models: availableModels, efforts: availableEfforts }))
       .finally(() => {
+        clearTimeout(timeout);
         modelsCatalogRequest = null;
       });
   }
@@ -780,6 +794,11 @@ window.selectProvider = async function(providerId) {
 
 // Model & Thinking Effort Handlers
 function updateModelUI() {
+  if (!currentModel) {
+    if (modelBadgeIcon) modelBadgeIcon.textContent = '⌛';
+    if (modelDisplayName) modelDisplayName.textContent = '載入對話模型…';
+    return;
+  }
   const found = availableModels.find(m => m.id === currentModel);
   if (found) {
     if (modelBadgeIcon) modelBadgeIcon.textContent = found.icon;
@@ -821,13 +840,20 @@ window.applyConversationSettings = function(settings) {
     updateRoleUI();
   }
   const providerModels = availableModels.filter(model => (model.provider || 'antigravity') === currentProvider);
+  if (!settings.model && settings.loadingModel) {
+    currentModel = null;
+    updateModelUI();
+    return true;
+  }
+  if (!settings.model) return true;
   const selected = providerModels.find(model => model.id === settings.model);
-  if (selected) {
-    currentModel = selected.id;
-    const supported = selected.supportedReasoningEfforts || ['low', 'medium', 'high'];
+  const modelToApply = selected || providerModels.find(model => model.isDefault) || providerModels[0];
+  if (modelToApply) {
+    currentModel = modelToApply.id;
+    const supported = modelToApply.supportedReasoningEfforts || ['low', 'medium', 'high'];
     currentEffort = supported.includes(settings.effort)
       ? settings.effort
-      : (selected.defaultReasoningEffort || supported[0] || 'low');
+      : (modelToApply.defaultReasoningEffort || supported[0] || 'low');
     localStorage.setItem(providerStorageKey('current_model'), currentModel);
     localStorage.setItem(providerStorageKey('current_effort'), currentEffort);
     updateModelUI();
