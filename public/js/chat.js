@@ -2602,6 +2602,17 @@ function handleSendClick(e) {
 
 // 🏷️ Auto-generate AI conversation title (fires in background, non-blocking)
 async function generateConversationTitle(convId, userMessage, assistantResponse) {
+  if (currentProvider === 'antigravity') {
+    const workspaceTitle = typeof workspaceMeta === 'function'
+      ? workspaceMeta(currentWorkspace).label
+      : String(currentWorkspace || '').split('/').filter(Boolean).pop();
+    const title = workspaceTitle || 'Home';
+    if (headerTitle) headerTitle.textContent = title;
+    renameConversationSilently(convId, title).catch((error) => {
+      console.warn('[Workspace Title] Failed to persist:', error.message);
+    });
+    return;
+  }
   if (providerConfig().capabilities?.autoTitle === false) {
     const shortTitle = shortenConversationTitle(userMessage, 18);
     if (headerTitle) headerTitle.textContent = shortTitle;

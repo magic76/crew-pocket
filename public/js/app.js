@@ -435,6 +435,29 @@ function initAppAndListeners() {
   if (openFilesChip) openFilesChip.addEventListener('click', () => toggleFilesModal(true));
   if (closeFilesBtn) closeFilesBtn.addEventListener('click', () => toggleFilesModal(false));
   if (refreshFilesBtn) refreshFilesBtn.addEventListener('click', () => loadDirectory(currentExplorerPath));
+  if (filesDownloadBtn) filesDownloadBtn.addEventListener('click', () => loadDirectory('storage/shared/Download'));
+  if (filesTransferCopyBtn) filesTransferCopyBtn.addEventListener('click', () => {
+    if (!pendingExplorerTransfer) return;
+    pendingExplorerTransfer.action = 'copy';
+    renderExplorerTransferBar();
+  });
+  if (filesTransferMoveBtn) filesTransferMoveBtn.addEventListener('click', () => {
+    if (!pendingExplorerTransfer) return;
+    pendingExplorerTransfer.action = 'move';
+    renderExplorerTransferBar();
+  });
+  if (filesTransferDeleteBtn) filesTransferDeleteBtn.addEventListener('click', async () => {
+    if (!pendingExplorerTransfer) return;
+    const transfer = pendingExplorerTransfer;
+    pendingExplorerTransfer = null;
+    renderExplorerTransferBar();
+    await confirmExplorerDelete(transfer.relPath, transfer.name, transfer.isDirectory);
+  });
+  if (filesTransferPasteBtn) filesTransferPasteBtn.addEventListener('click', pasteExplorerTransfer);
+  if (filesTransferCancelBtn) filesTransferCancelBtn.addEventListener('click', () => {
+    pendingExplorerTransfer = null;
+    renderExplorerTransferBar();
+  });
   if (filesModal) filesModal.addEventListener('click', (e) => { if (e.target === filesModal) toggleFilesModal(false); });
   if (closePreviewPaneBtn) closePreviewPaneBtn.addEventListener('click', () => { if (filePreviewPane) filePreviewPane.classList.add('hidden'); });
   if (previewSendAiBtn) previewSendAiBtn.addEventListener('click', () => sendPathToAI(currentPreviewFullPath, currentPreviewFileName));

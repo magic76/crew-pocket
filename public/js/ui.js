@@ -2,7 +2,7 @@
 
 // Global State
 const DEFAULT_PROVIDERS = [
-  { id: 'antigravity', label: 'Antigravity', shortLabel: 'AGY', icon: '✨', storagePrefix: 'agy', badgeClass: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40', greeting: '你好！已為你開啟新對話。有什麼可以幫你的？', capabilities: { history: true, rewind: true, autoTitle: true, compact: 'checkpoint', usage: { mode: 'endpoint', endpoint: '/api/usage' } } },
+  { id: 'antigravity', label: 'Antigravity', shortLabel: 'AGY', icon: '✨', storagePrefix: 'agy', badgeClass: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40', greeting: '你好！已為你開啟新對話。有什麼可以幫你的？', capabilities: { history: true, rewind: true, autoTitle: false, compact: 'checkpoint', usage: { mode: 'endpoint', endpoint: '/api/usage' } } },
   { id: 'codex', label: 'OpenAI Codex', shortLabel: 'Codex', icon: '🧩', storagePrefix: 'codex', badgeClass: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40', greeting: '你好！Codex provider 已就緒。有什麼開發任務？', capabilities: { history: true, rewind: false, autoTitle: false, compact: 'native', usage: { mode: 'external-link', url: 'https://chatgpt.com/codex/settings/usage' } } }
 ];
 let availableProviders = DEFAULT_PROVIDERS;
@@ -183,8 +183,17 @@ const openFilesChip = document.getElementById('open-files-chip');
 const filesModal = document.getElementById('files-modal');
 const closeFilesBtn = document.getElementById('close-files-btn');
 const refreshFilesBtn = document.getElementById('refresh-files-btn');
+const filesDownloadBtn = document.getElementById('files-download-btn');
 const filesBreadcrumb = document.getElementById('files-breadcrumb');
 const filesListContainer = document.getElementById('files-list-container');
+const filesTransferBar = document.getElementById('files-transfer-bar');
+const filesTransferLabel = document.getElementById('files-transfer-label');
+const filesTransferActions = document.getElementById('files-transfer-actions');
+const filesTransferCopyBtn = document.getElementById('files-transfer-copy-btn');
+const filesTransferMoveBtn = document.getElementById('files-transfer-move-btn');
+const filesTransferDeleteBtn = document.getElementById('files-transfer-delete-btn');
+const filesTransferPasteBtn = document.getElementById('files-transfer-paste-btn');
+const filesTransferCancelBtn = document.getElementById('files-transfer-cancel-btn');
 const filePreviewPane = document.getElementById('file-preview-pane');
 const previewFileIcon = document.getElementById('preview-file-icon');
 const previewFileName = document.getElementById('preview-file-name');
@@ -1054,6 +1063,7 @@ function updateNotifyBtnUI() {
 // 📁 Termux Local Files Explorer Logic
 // ==========================================
 let currentExplorerPath = '';
+let pendingExplorerTransfer = null;
 let currentPreviewFullPath = '';
 let currentPreviewFileName = '';
 const FILE_SWIPE_REVEAL_PX = 88;
@@ -1126,6 +1136,7 @@ async function loadDirectory(relPath = '', showLoading = true) {
 
     if (filesBasePath) filesBasePath.textContent = `~/${data.currentPath || ''}`;
     if (filesCountBadge) filesCountBadge.textContent = `${data.entries ? data.entries.length : 0} 個項目`;
+    renderExplorerTransferBar();
 
     // Render Breadcrumbs
     renderBreadcrumbs(data.currentPath);
@@ -1155,6 +1166,7 @@ async function loadDirectory(relPath = '', showLoading = true) {
       const safeRelPath = encodeURIComponent(item.relPath);
       const safeName = encodeURIComponent(item.name);
       const deleteAction = `<div class="absolute inset-0 bg-rose-600 text-white flex items-center justify-end pr-7"><button type="button" class="file-swipe-delete min-w-12 min-h-12 hover:bg-rose-500 active:bg-rose-700 rounded-xl text-[11px] font-bold flex flex-col items-center justify-center gap-1" data-file-path="${safeRelPath}" data-file-name="${safeName}" data-file-directory="${item.isDirectory}"><span class="text-base leading-none">🗑️</span><span>刪除</span></button></div>`;
+      const actionButton = `<button type="button" class="file-transfer-action min-w-10 min-h-10 rounded-lg bg-slate-800 text-slate-300 active:bg-slate-700 text-base" data-file-path="${safeRelPath}" data-file-name="${safeName}" data-file-directory="${item.isDirectory}" title="複製或移動">⋮</button>`;
       if (item.isDirectory) {
         itemsHtml += `
           <div class="file-swipe-row relative overflow-hidden rounded-xl" data-file-path="${safeRelPath}">
@@ -1162,9 +1174,9 @@ async function loadDirectory(relPath = '', showLoading = true) {
             <div class="file-swipe-content relative p-2 rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-800/80 transition flex items-center justify-between cursor-pointer group select-none touch-pan-y" onclick="loadDirectory('${escapeHtml(item.relPath)}')">
               <div class="flex items-center gap-2 min-w-0">
                 <span class="text-base shrink-0">${item.icon}</span>
-                <span class="font-bold text-slate-200 font-mono truncate">${escapeHtml(item.name)}/</span>
+                <div class="min-w-0"><div class="font-bold text-slate-200 font-mono truncate">${escapeHtml(item.name)}/</div><div class="text-[10px] text-slate-500 font-mono">${item.sizeFormatted || '計算大小中…'}</div></div>
               </div>
-              <span class="text-[10px] text-slate-500 font-mono group-hover:text-emerald-400 transition">進入 ▸</span>
+              <div class="flex items-center gap-1"><span class="text-[10px] text-slate-500 font-mono group-hover:text-emerald-400 transition">進入 ▸</span>${actionButton}</div>
             </div>
           </div>
         `;
@@ -1181,6 +1193,7 @@ async function loadDirectory(relPath = '', showLoading = true) {
                 </div>
               </div>
               <div class="flex items-center gap-1 shrink-0">
+                ${actionButton}
                 <button type="button" class="px-2 py-1 rounded-lg bg-indigo-600/80 hover:bg-indigo-500 active:bg-indigo-700 text-white text-[10px] font-medium flex items-center gap-1 transition active:scale-95 shadow-sm" onclick="sendPathToAI('${escapeHtml(item.fullPath)}', '${escapeHtml(item.name)}')">
                   <span>💬 傳給 AI</span>
                 </button>
@@ -1196,9 +1209,60 @@ async function loadDirectory(relPath = '', showLoading = true) {
 
     filesListContainer.innerHTML = itemsHtml;
     bindExplorerSwipeDelete();
+    bindExplorerTransferActions();
 
   } catch (err) {
     filesListContainer.innerHTML = `<div class="p-3 text-rose-400 text-xs">請求異常：${escapeHtml(err.message)}</div>`;
+  }
+}
+
+function renderExplorerTransferBar() {
+  if (!filesTransferBar) return;
+  const transfer = pendingExplorerTransfer;
+  filesTransferBar.classList.toggle('hidden', !transfer);
+  if (!transfer) return;
+  const choosingAction = !transfer.action;
+  if (filesTransferLabel) filesTransferLabel.textContent = choosingAction
+    ? `已選「${transfer.name}」：選擇操作`
+    : `已選「${transfer.name}」：瀏覽到目標資料夾後，按「貼到這裡」`;
+  if (filesTransferActions) filesTransferActions.classList.toggle('hidden', !choosingAction);
+  if (filesTransferActions) filesTransferActions.classList.toggle('flex', choosingAction);
+  if (filesTransferPasteBtn) filesTransferPasteBtn.classList.toggle('hidden', choosingAction);
+  if (filesTransferPasteBtn) filesTransferPasteBtn.textContent = transfer.action === 'move' ? '移到這裡' : '複製到這裡';
+}
+
+function bindExplorerTransferActions() {
+  if (!filesListContainer) return;
+  filesListContainer.querySelectorAll('.file-transfer-action').forEach(button => {
+    button.addEventListener('click', event => {
+      event.preventDefault();
+      event.stopPropagation();
+      const relPath = decodeURIComponent(button.dataset.filePath || '');
+      const name = decodeURIComponent(button.dataset.fileName || '');
+      pendingExplorerTransfer = { action: null, relPath, name, isDirectory: button.dataset.fileDirectory === 'true' };
+      renderExplorerTransferBar();
+      if (navigator.vibrate) navigator.vibrate(20);
+    });
+  });
+}
+
+async function pasteExplorerTransfer() {
+  const transfer = pendingExplorerTransfer;
+  if (!transfer) return;
+  if (transfer.action === 'move' && !window.confirm(`確定將「${transfer.name}」移到目前資料夾？`)) return;
+  try {
+    const res = await fetch('/api/file/transfer', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: transfer.action, sourcePath: transfer.relPath, destinationPath: currentExplorerPath })
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) throw new Error(data.error || '檔案操作失敗');
+    pendingExplorerTransfer = null;
+    renderExplorerTransferBar();
+    if (navigator.vibrate) navigator.vibrate([25, 30, 25]);
+    await loadDirectory(currentExplorerPath);
+  } catch (error) {
+    window.alert(`操作失敗：${error.message}`);
   }
 }
 

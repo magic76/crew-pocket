@@ -29,7 +29,7 @@ const { handleLiveSync, handleLiveTranscribe, handleQuickTranscribe } = require(
 const { generateCompactedSummary, buildCompactionSource } = require('./lib/compact');
 const { handleRunCode } = require('./lib/sandbox');
 const { handleUsage } = require('./lib/usage');
-const { handleListFiles, handleReadFile, handleSaveFile, handleDeleteFile } = require('./lib/files');
+const { handleListFiles, handleReadFile, handleSaveFile, handleDeleteFile, handleTransferFile } = require('./lib/files');
 const { handleListPublicAssets } = require('./lib/public-assets');
 const { handleGenerateTitle, getCachedTitle } = require('./lib/title');
 const { phoneAgent } = require('./lib/phone_agent');
@@ -1118,6 +1118,25 @@ const CREW_POCKET_SYSTEM_GUIDE = `[Context: You are the core intelligence of "Cr
 
 4. 🎯 Tone & Precision:
    - Be concise, direct, helpful, and sharp. Avoid boilerplate disclaimers.]`;
+const CREW_POCKET_CAPABILITY_INDEX = '[Crew Pocket：支援互動 HTML、Chart.js 圖表、Google Maps、Android APK 與本機檔案；依使用者需求套用對應規則。]';
+
+function capabilityContextForPrompt(prompt) {
+  const text = String(prompt || '').toLowerCase();
+  const rules = [];
+  if (/(html|互動|預覽|計算機|calculator|遊戲|game|widget|dashboard|動畫|animation|converter|工具頁|網頁工具)/i.test(text)) {
+    rules.push('若建立或更新互動工具，輸出完整、自包含的 ```html```；純 HTML 區塊不得混入說明文字。明確要求可重複使用的本機工具頁時，寫入 /data/data/com.termux/files/home/agy-web/public/extra/<safe-name>.html。');
+  }
+  if (/(chart|圖表|統計圖|趨勢圖|visuali[sz]ation)/i.test(text)) {
+    rules.push('若建立資料圖表，輸出含 Chart.js CDN 與 <canvas id="chart"> 的完整 HTML。');
+  }
+  if (/(map|地圖|路線|導航|地點|地址|location)/i.test(text)) {
+    rules.push('提及地點時，使用 Markdown Google Maps 連結：https://www.google.com/maps/search/?api=1&query=...。');
+  }
+  if (/(\bapk\b|android.*(?:build|install|test)|(?:建置|安裝|測試).*(?:apk|安卓|android))/i.test(text)) {
+    rules.push('建置、安裝或測試 Android APK 時，執行 ~/install-apk.sh <path-to-apk>；若失敗，說明 Wireless Debugging 需重新開啟或設定目前 Port。');
+  }
+  return rules.length > 0 ? `[Crew Pocket Capability Rules]\n${rules.join('\n')}` : '';
+}
 
 function stripLegacyLanguageInstruction(content) {
   if (typeof content !== 'string') return content;
@@ -1232,7 +1251,10 @@ async function handleChat(req, res) {
   if (!conversation_id) {
     finalPrompt = `${CREW_POCKET_SYSTEM_GUIDE}\n\n[User Request]:\n${finalPrompt}`;
   } else {
-    finalPrompt = `[Context: Operating in Crew Pocket Mobile. Proactively provide complete \`\`\`html sandbox cards for interactive UI requests, Chart.js for data, and Google Maps links for locations. For an explicitly requested reusable local custom HTML page, create or update /data/data/com.termux/files/home/agy-web/public/extra/<safe-name>.html; it appears under the HTML 頁面 menu at /extra/<safe-name>.html, is Git-ignored, and must not be used for core app files.]\n\n${finalPrompt}`;
+    const capabilityContext = capabilityContextForPrompt(finalPrompt);
+    finalPrompt = capabilityContext
+      ? `${CREW_POCKET_CAPABILITY_INDEX}\n${capabilityContext}\n\n${finalPrompt}`
+      : `${CREW_POCKET_CAPABILITY_INDEX}\n\n${finalPrompt}`;
   }
 
   if (image_path) {
@@ -1800,6 +1822,8 @@ const server = http.createServer(async (req, res) => {
     return handleSaveFile(req, res);
   } else if (pathname === '/api/file/delete' && req.method === 'POST') {
     return handleDeleteFile(req, res);
+  } else if (pathname === '/api/file/transfer' && req.method === 'POST') {
+    return handleTransferFile(req, res);
   } else if (pathname === '/api/image' && req.method === 'GET') {
     return handleImageProxy(parsedUrl, res);
   } else if (pathname === '/api/export-extension' && req.method === 'POST') {

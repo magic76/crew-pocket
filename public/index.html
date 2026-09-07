@@ -1112,6 +1112,18 @@
         <button id="refresh-files-btn" class="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition shrink-0 active:scale-95" title="重新整理目錄">
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
         </button>
+        <button id="files-download-btn" class="min-h-10 px-2 rounded-lg bg-slate-800 text-slate-200 text-[10px] font-bold shrink-0 active:scale-95" title="開啟 Android Download">⬇ Download</button>
+      </div>
+
+      <div id="files-transfer-bar" class="hidden px-3 py-2 border-b border-teal-900/70 bg-teal-950/30 flex items-center gap-2 text-[11px] shrink-0">
+        <span id="files-transfer-label" class="min-w-0 flex-1 truncate text-teal-200"></span>
+        <div id="files-transfer-actions" class="hidden items-center gap-1 shrink-0">
+          <button id="files-transfer-copy-btn" class="min-h-10 px-2 rounded-lg bg-indigo-600 text-white font-bold active:scale-95">複製</button>
+          <button id="files-transfer-move-btn" class="min-h-10 px-2 rounded-lg bg-amber-600 text-white font-bold active:scale-95">移動</button>
+          <button id="files-transfer-delete-btn" class="min-h-10 px-2 rounded-lg bg-rose-600 text-white font-bold active:scale-95">刪除</button>
+        </div>
+        <button id="files-transfer-paste-btn" class="min-h-10 px-3 rounded-lg bg-teal-600 text-white font-bold active:scale-95">貼到這裡</button>
+        <button id="files-transfer-cancel-btn" class="min-h-10 px-2 rounded-lg text-slate-300 active:bg-slate-800">取消</button>
       </div>
 
       <!-- File List Container -->
@@ -1516,14 +1528,14 @@
 
   <!-- Modular Scripts (Cache-busted v7.8) -->
   <script src="/js/i18n.js?v=43acb0dc5acc"></script>
-  <script src="/js/ui.js?v=69f3b6361426"></script>
+  <script src="/js/ui.js?v=46b13aaa9fbb"></script>
   <script src="/js/tools.js?v=a1e169518419"></script>
   <script src="/js/storage.js?v=0e143c8da2fc"></script>
-  <script src="/js/chat.js?v=f4cc663c243e"></script>
+  <script src="/js/chat.js?v=411ee713254a"></script>
   <script src="/js/tasks.js?v=2e5e3f5e9e77"></script>
   <script src="/js/live.js?v=c357ccb82e17"></script>
   <script src="/js/phone_agent.js?v=6346f686519a"></script>
   <script src="/js/auth.js?v=fc7f99aa4eef"></script>
-  <script src="/js/app.js?v=5543989e8075"></script>
+  <script src="/js/app.js?v=f44ee5f2b518"></script>
 </body>
 </html>
