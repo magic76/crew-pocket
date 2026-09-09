@@ -1,6 +1,29 @@
 // Antigravity Web UI - Tools (GPS, Sandbox Runners, Code Highlighter, Image Compressor, TTS)
 
 // ⚡ Fast Client-Side Image Compression (Max 1280px, ~120KB JPEG, HEIC/HEIF supported for AI Vision)
+let heicConverterLoadPromise = null;
+
+function loadHeicConverter() {
+  if (typeof window.heic2any === 'function') return Promise.resolve(window.heic2any);
+  if (heicConverterLoadPromise) return heicConverterLoadPromise;
+
+  heicConverterLoadPromise = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = '/heic2any.min.js';
+    script.async = true;
+    script.onload = () => typeof window.heic2any === 'function'
+      ? resolve(window.heic2any)
+      : reject(new Error('HEIC converter loaded without an available API'));
+    script.onerror = () => reject(new Error('HEIC converter could not be loaded'));
+    document.head.appendChild(script);
+  }).catch((error) => {
+    heicConverterLoadPromise = null;
+    throw error;
+  });
+
+  return heicConverterLoadPromise;
+}
+
 async function compressImageFile(file, maxWidth = 1280, quality = 0.8) {
   let sourceBlob = file;
 
@@ -9,20 +32,17 @@ async function compressImageFile(file, maxWidth = 1280, quality = 0.8) {
                  file.type === 'image/heic' || file.type === 'image/heif';
 
   if (isHeic) {
-    if (typeof heic2any !== 'undefined') {
-      try {
-        console.log('[ImageCompressor] 🍏 Converting HEIC/HEIF to JPEG...');
-        const conversionResult = await heic2any({
-          blob: file,
-          toType: 'image/jpeg',
-          quality: 0.85
-        });
-        sourceBlob = Array.isArray(conversionResult) ? conversionResult[0] : conversionResult;
-      } catch (err) {
-        console.warn('[ImageCompressor] HEIC conversion warning:', err);
-      }
-    } else {
-      console.warn('[ImageCompressor] heic2any library not loaded, attempting standard decode');
+    try {
+      const heic2any = await loadHeicConverter();
+      console.log('[ImageCompressor] 🍏 Converting HEIC/HEIF to JPEG...');
+      const conversionResult = await heic2any({
+        blob: file,
+        toType: 'image/jpeg',
+        quality: 0.85
+      });
+      sourceBlob = Array.isArray(conversionResult) ? conversionResult[0] : conversionResult;
+    } catch (err) {
+      console.warn('[ImageCompressor] HEIC conversion unavailable, attempting standard decode:', err.message);
     }
   }
 

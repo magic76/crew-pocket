@@ -15,7 +15,7 @@
         <h1 class="mt-1 text-xl font-bold text-white">HTML 頁面</h1>
         <p id="status" class="mt-1 text-xs text-slate-400">正在掃描 public/extra/ 中的自訂 HTML 頁面…</p>
       </div>
-      <a href="/" class="min-h-10 rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-xs font-medium text-slate-200 active:scale-95">回主對話</a>
+      <button id="back-to-chat" type="button" class="min-h-10 rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-xs font-medium text-slate-200 active:scale-95">← 返回</button>
     </header>
 
     <div class="sticky top-0 z-10 -mx-4 border-y border-slate-800 bg-slate-950/95 px-4 py-3 backdrop-blur">
@@ -40,6 +40,16 @@
     const preview = document.getElementById('preview');
     const previewFrame = document.getElementById('preview-frame');
     const previewTitle = document.getElementById('preview-title');
+
+    // This page is opened from Crew Pocket's tools menu. Returning through
+    // history restores the already-live chat page instead of navigating to /.
+    document.getElementById('back-to-chat').addEventListener('click', () => {
+      if (window.history.length > 1) {
+        window.history.back();
+      } else {
+        window.location.replace('/');
+      }
+    });
 
     function escapeHtml(value) {
       return String(value).replace(/[&<>'"]/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[character]);

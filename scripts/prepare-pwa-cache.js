@@ -34,7 +34,6 @@ function buildServiceWorker(source, indexHtml) {
     '/',
     ...versionedAssets,
     '/dompurify.min.js',
-    '/heic2any.min.js',
     '/icon-192.png',
     '/icon-512.png',
     '/icon.png',

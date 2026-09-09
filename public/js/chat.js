@@ -691,6 +691,8 @@ function appendMessage(role, content, timestamp, tools = [], thinking = '', isBt
     msgDiv.setAttribute('data-turn-index', userTurnIndex);
 
     let userText = (content || '')
+      .replace(/^\[Crew Pocket：支援互動 HTML、Chart\.js 圖表、Google Maps、Android APK 與本機檔案；依使用者需求套用對應規則。\]\s*/u, '')
+      .replace(/^\[Crew Pocket Capability Rules\]\s*[\s\S]*?\n\n/u, '')
       .replace(/\[Context:[\s\S]*?\]/g, '')
       .replace(/<USER_REQUEST>[\s\S]*?<\/USER_REQUEST>/g, (m, g) => g || m)
       .trim();
@@ -1278,7 +1280,7 @@ async function loadConversations() {
         return [];
       }
     }));
-    cachedConversations = results.flat().sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+    cachedConversations = results.flat().sort((a, b) => (a.title || '').localeCompare(b.title || '', 'zh-TW') || String(a.id).localeCompare(String(b.id)));
     
     const searchInput = document.getElementById('conv-search-input');
     const query = searchInput ? searchInput.value : '';
@@ -1356,8 +1358,7 @@ function renderConversationItems(conversations, filterQuery = '') {
       label: workspace === UNASSIGNED_WORKSPACE
         ? '未指定工作區'
         : (workspace === '/data/data/com.termux/files/home' ? 'Home' : workspace.split('/').filter(Boolean).pop()),
-      items: items.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)),
-      latest: Math.max(...items.map(item => item.updatedAt || 0))
+      items: items.sort((a, b) => (a.title || '').localeCompare(b.title || '', 'zh-TW') || String(a.id).localeCompare(String(b.id)))
     }))
     .sort((a, b) => {
       // 1. Unassigned workspace is strictly placed at the very end
@@ -1370,8 +1371,8 @@ function renderConversationItems(conversations, filterQuery = '') {
       const bCurrent = b.workspace === ((typeof currentWorkspace !== 'undefined') ? currentWorkspace : '');
       if (aCurrent !== bCurrent) return aCurrent ? -1 : 1;
 
-      // 3. Sort remaining folders by latest updated time, then folder name
-      return (b.latest - a.latest) || a.label.localeCompare(b.label, 'zh-TW');
+      // 3. Keep remaining folders in a stable name order.
+      return a.label.localeCompare(b.label, 'zh-TW');
     });
 
   workspaceGroups.forEach(group => {
@@ -2273,9 +2274,9 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
 
     if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
 
-    // 🏷️ Auto-generate AI conversation title for new conversations
+    // 🏷️ Set a local title for new conversations without another AI request.
     if (isNewConversation && targetDoneConvId && text) {
-      generateConversationTitle(targetDoneConvId, text, accumulatedText);
+      applyInitialConversationTitle(targetDoneConvId, text);
     }
   }
 
@@ -2600,81 +2601,21 @@ function handleSendClick(e) {
   }
 }
 
-// 🏷️ Auto-generate AI conversation title (fires in background, non-blocking)
-async function generateConversationTitle(convId, userMessage, assistantResponse) {
-  if (currentProvider === 'antigravity') {
-    const workspaceTitle = typeof workspaceMeta === 'function'
+// 🏷️ Persist a deterministic initial title; never spend another AI turn on it.
+function applyInitialConversationTitle(convId, userMessage) {
+  const isAgyConversation = currentProvider === 'antigravity';
+  const workspaceTitle = isAgyConversation
+    ? (typeof workspaceMeta === 'function'
       ? workspaceMeta(currentWorkspace).label
-      : String(currentWorkspace || '').split('/').filter(Boolean).pop();
-    const title = workspaceTitle || 'Home';
-    if (headerTitle) headerTitle.textContent = title;
-    renameConversationSilently(convId, title).catch((error) => {
-      console.warn('[Workspace Title] Failed to persist:', error.message);
-    });
-    return;
-  }
-  if (providerConfig().capabilities?.autoTitle === false) {
-    const shortTitle = shortenConversationTitle(userMessage, 18);
-    if (headerTitle) headerTitle.textContent = shortTitle;
-    renameConversationSilently(convId, shortTitle).catch((error) => {
-      console.warn('[AutoTitle] Failed to persist short title:', error.message);
-    });
-    return;
-  }
-  try {
-    // Show a temporary shimmer on the header title
-    if (headerTitle) {
-      headerTitle.innerHTML = `<span class="inline-flex items-center gap-1 text-slate-400"><span class="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse"></span> 標題生成中...</span>`;
-    }
-
-    const res = await fetch('/api/generate-title', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        conversation_id: convId,
-        user_message: userMessage,
-        assistant_response: assistantResponse,
-        locale: typeof getCrewLocale === 'function' ? getCrewLocale() : 'zh-TW'
-      })
-    });
-
-    const data = await res.json();
-    if (data.success && data.title) {
-      // Update header title
-      if (headerTitle) {
-        headerTitle.textContent = data.title;
-      }
-
-      // Update sidebar entry if visible
-      if (convList) {
-        const sidebarEntries = convList.querySelectorAll('div');
-        sidebarEntries.forEach(entry => {
-          const titleSpan = entry.querySelector('.truncate');
-          if (titleSpan && entry.textContent.includes(convId.slice(0, 8))) {
-            titleSpan.textContent = data.title;
-          }
-        });
-      }
-
-      // Also refresh sidebar to ensure consistency
-      if (typeof loadConversations === 'function') {
-        loadConversations();
-      }
-
-      console.log(`[AutoTitle] Generated: "${data.title}" (cached: ${data.cached})`);
-    } else {
-      // Fallback: use first 18 chars of user message
-      if (headerTitle) {
-        headerTitle.textContent = userMessage.slice(0, 18) + (userMessage.length > 18 ? '...' : '');
-      }
-    }
-  } catch (err) {
-    console.warn('[AutoTitle] Failed:', err.message);
-    // Fallback
-    if (headerTitle) {
-      headerTitle.textContent = userMessage.slice(0, 18) + (userMessage.length > 18 ? '...' : '');
-    }
-  }
+      : String(currentWorkspace || '').split('/').filter(Boolean).pop())
+    : '';
+  const title = isAgyConversation
+    ? (workspaceTitle || 'Home')
+    : (shortenConversationTitle(userMessage, 18) || '新對話');
+  if (headerTitle) headerTitle.textContent = title;
+  renameConversationSilently(convId, title).catch((error) => {
+    console.warn('[Conversation Title] Failed to persist:', error.message);
+  });
 }
 
 // 🌐 Global Link Interceptor: Guarantee all links in messages open in new tab with security attributes
