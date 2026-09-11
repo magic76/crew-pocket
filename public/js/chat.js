@@ -1282,9 +1282,7 @@ async function loadConversations() {
     }));
     cachedConversations = results.flat().sort((a, b) => (a.title || '').localeCompare(b.title || '', 'zh-TW') || String(a.id).localeCompare(String(b.id)));
     
-    const searchInput = document.getElementById('conv-search-input');
-    const query = searchInput ? searchInput.value : '';
-    renderConversationItems(cachedConversations, query);
+    renderConversationItems(cachedConversations);
   } catch (err) {
     console.error('Failed to load conversations:', err);
     if (convList) convList.innerHTML = '<div class="p-4 text-center text-xs text-rose-400">無法載入歷史紀錄</div>';
@@ -1312,36 +1310,14 @@ function conversationRelativeTime(timestamp) {
   return new Date(value).toLocaleDateString('zh-TW', { month: 'numeric', day: 'numeric' });
 }
 
-function renderConversationItems(conversations, filterQuery = '') {
+function renderConversationItems(conversations) {
   if (!convList) return;
   convList.innerHTML = '';
 
-  const cleanQuery = (filterQuery || '').trim().toLowerCase();
-  const searchCountEl = document.getElementById('conv-search-count');
-  const searchClearBtn = document.getElementById('conv-search-clear');
+  const filtered = conversations || [];
 
-  if (searchClearBtn) {
-    searchClearBtn.classList.toggle('hidden', !cleanQuery);
-  }
-
-  let filtered = conversations || [];
-  if (cleanQuery) {
-    filtered = filtered.filter(c => (c.title || '').toLowerCase().includes(cleanQuery));
-    if (searchCountEl) {
-      searchCountEl.classList.remove('hidden');
-      searchCountEl.textContent = `找到 ${filtered.length} 個符合對話`;
-    }
-  } else {
-    if (searchCountEl) {
-      searchCountEl.classList.add('hidden');
-      searchCountEl.textContent = '';
-    }
-  }
-
-  if (!filtered || filtered.length === 0) {
-    convList.innerHTML = cleanQuery
-      ? `<div class="p-6 text-center text-xs text-slate-400 space-y-1"><div>🔍 無符合「${escapeHtml(cleanQuery)}」的對話</div><div class="text-[10px] text-slate-500">嘗試搜尋其他關鍵字</div></div>`
-      : '<div class="p-4 text-center text-xs text-slate-500">尚無歷史對話</div>';
+  if (filtered.length === 0) {
+    convList.innerHTML = '<div class="p-4 text-center text-xs text-slate-500">尚無歷史對話</div>';
     return;
   }
 
@@ -1398,12 +1374,7 @@ function renderConversationItems(conversations, filterQuery = '') {
     wrapper.className = 'swipe-item-wrapper relative overflow-hidden rounded-xl mb-1.5 select-none transition-all duration-200';
     wrapper.style.maxHeight = '80px';
 
-    // Highlight search match in title
-    let displayTitle = escapeHtml(conv.title);
-    if (cleanQuery) {
-      const regex = new RegExp(`(${cleanQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
-      displayTitle = displayTitle.replace(regex, '<mark class="bg-indigo-500/40 text-white rounded px-0.5 font-bold">$1</mark>');
-    }
+    const displayTitle = escapeHtml(conv.title);
 
     wrapper.innerHTML = `
       <!-- Delete background revealed when swiping left -->
