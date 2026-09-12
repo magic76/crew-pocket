@@ -4,11 +4,10 @@ Crew Pocket is the mobile-first PWA and local Node.js service in this repository
 
 ## Scope and Architecture
 
-- `server.js` owns HTTP/SSE routes, provider dispatch, local bridge integration, and persistence entry points.
-- `lib/` contains providers, resident sessions, conversation settings, history, device adapters, and storage helpers.
+- `server.js` owns HTTP/SSE routes, provider dispatch, and persistence entry points.
+- `lib/` contains providers, resident sessions, conversation settings, history, and storage helpers.
 - `public/index.html` is the shell. `public/js/` owns client UI, chat/history, Live voice, tools, and PWA behavior.
 - `public/manifest.json`, `public/sw.js`, and `scripts/prepare-pwa-cache.js` must stay in sync for deployable PWA changes.
-- `crew-helper` is an independent project. Do not edit, stage, or assume its files unless the user explicitly asks.
 
 ## Required Behavior
 
@@ -34,7 +33,6 @@ Crew Pocket is the mobile-first PWA and local Node.js service in this repository
 ## Crew Pocket-Specific Capabilities
 
 - Do not web-search to explain Crew Pocket itself; this repository is the primary source of truth.
-- Screen inspection uses `POST http://127.0.0.1:8000/api/phone/screenshot`; camera inspection uses `POST http://127.0.0.1:8000/api/phone/photo`. Only inspect a newly successful capture.
 - Interactive tools require a complete self-contained HTML sandbox. Charts use Chart.js. Maps use Google Maps links.
 - When the user asks to install, update, or test an Android APK: ALWAYS execute `~/install-apk.sh <path-to-apk>`. APK management strictly uses Wireless Debugging (ADB) for silent, background installation and real-time logcat debugging. If `~/install-apk.sh` exits with an error (ADB offline / not configured), immediately inform the user that Wireless Debugging is closed or the Port changed, and ask the user to turn on Wireless Debugging in Developer Options and provide the current Port (or run `~/set-adb.sh <port>`).
 - When the user mentions another conversation using `[@Title](conversation://<conversation-id>)` with an instruction to delegate or transfer a message/task to it:

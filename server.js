@@ -31,9 +31,6 @@ const { handleRunCode } = require('./lib/sandbox');
 const { handleUsage } = require('./lib/usage');
 const { handleListFiles, handleReadFile, handleSaveFile, handleDeleteFile, handleTransferFile } = require('./lib/files');
 const { handleListPublicAssets } = require('./lib/public-assets');
-const { phoneAgent } = require('./lib/phone_agent');
-const { getDeviceAdapter } = require('./lib/device_adapter');
-const { readSkills, saveSkill } = require('./lib/phone_skills');
 const { createExtensionBridge } = require('./lib/extension_bridge');
 const { getStorageReport, deleteMediaItems, getMediaThumbnail } = require('./lib/storage');
 const { getConversationSettings, getProviderConversationSettings, saveConversationSettings, saveConversationTitle, deleteConversationSettings } = require('./lib/conversation-settings');
@@ -41,7 +38,6 @@ const { createTask, getTask, listTasks, updateTask } = require('./lib/tasks');
 const { listWorkspaces, resolveWorkspace, createWorkspace } = require('./lib/workspaces');
 const auth = require('./lib/auth');
 
-const deviceAdapter = getDeviceAdapter();
 
 async function handleStorageReport(res) {
   try {
@@ -144,205 +140,7 @@ async function handleAdbUpdate(req, res) {
   }
 }
 
-// 📱 Phone Agent (Wireless ADB / Screen & Touch Control) API Handlers
-async function handlePhoneStatus(res) {
-  const status = await phoneAgent.getStatus();
-  res.writeHead(200, { 'Content-Type': 'application/json' });
-  res.end(JSON.stringify(status));
-}
-
-async function handlePhoneConnect(req, res) {
-  try {
-    const body = await parseJsonBody(req);
-    const result = await phoneAgent.connectWireless(body.port, body.host || '127.0.0.1');
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify(result));
-  } catch (err) {
-    res.writeHead(400, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ success: false, error: err.message }));
-  }
-}
-
-async function handlePhonePair(req, res) {
-  try {
-    const body = await parseJsonBody(req);
-    const result = await phoneAgent.pairWireless(body.port, body.pairingCode, body.host || '127.0.0.1');
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify(result));
-  } catch (err) {
-    res.writeHead(400, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ success: false, error: err.message }));
-  }
-}
-
-async function handlePhoneScreenshot(res) {
-  const result = await phoneAgent.takeScreenshot();
-  res.writeHead(200, { 'Content-Type': 'application/json' });
-  res.end(JSON.stringify(result));
-}
-
-async function handlePhoneVolume(req, res) {
-  try {
-    let result;
-    if (req.method === 'POST') {
-      const body = await parseJsonBody(req);
-      result = await phoneAgent.setMediaVolume(body.percent);
-    } else {
-      result = await phoneAgent.getMediaVolume();
-    }
-    res.writeHead(result?.success === false ? 503 : 200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify(result));
-  } catch (err) {
-    res.writeHead(400, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ success: false, error: err.message }));
-  }
-}
-
-async function handlePhonePhoto(req, res) {
-  try {
-    let facing = 'back';
-    if (req.method === 'POST') {
-      const body = await parseJsonBody(req).catch(() => ({}));
-      if (body && body.camera) facing = body.camera;
-    }
-    const result = await phoneAgent.takePhoto(facing);
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify(result));
-  } catch (err) {
-    res.writeHead(400, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ success: false, error: err.message }));
-  }
-}
-
-async function handlePhoneBubble(req, res) {
-  try {
-    let action = 'toggle';
-    if (req.method === 'POST') {
-      const body = await parseJsonBody(req).catch(() => ({}));
-      if (body && body.action) action = body.action;
-    }
-    const result = await phoneAgent.showBubble(action);
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify(result));
-  } catch (err) {
-    res.writeHead(400, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ success: false, error: err.message }));
-  }
-}
-
-async function handlePhoneAction(req, res) {
-  try {
-    const body = await parseJsonBody(req);
-    const action = String(body.action || '').toUpperCase();
-    let result = { success: false };
-
-    if (action === 'TAP_TEXT' || action === 'CLICK_TEXT') {
-      result = await deviceAdapter.tap({ text: body.text || body.label });
-    } else if (action === 'TAP_NODE' || action === 'CLICK_NODE') {
-      result = await deviceAdapter.tap({ id: body.id });
-    } else if (action === 'SCROLL') {
-      result = await deviceAdapter.scroll(body.direction, body.distance);
-    } else if (action === 'SWIPE') {
-      if (body.x1 !== undefined && body.y1 !== undefined && body.x2 !== undefined && body.y2 !== undefined) {
-        result = await phoneAgent.swipeCoordinates(body.x1, body.y1, body.x2, body.y2, body.durationMs);
-      } else {
-        result = await deviceAdapter.swipe(body.direction, body.distance);
-      }
-    } else if (action === 'KEYEVENT' || action === 'KEY') {
-      result = await deviceAdapter.pressKey(body.key);
-    } else if (action === 'TYPE') {
-      result = await deviceAdapter.inputText(body.text, body.target);
-    } else if (action === 'LAUNCH') {
-      result = await deviceAdapter.launchApp(body.app || body.package || body.name || body.target);
-    } else if (action === 'OPEN_URL') {
-      result = await deviceAdapter.openUrl(body.url);
-    } else if (action === 'WAIT_FOR') {
-      result = await deviceAdapter.waitFor({ text: body.text, id: body.id }, body.timeoutMs);
-    } else if (action === 'TAP') {
-      if (body.text || body.label || body.id) {
-        result = await deviceAdapter.tap({ text: body.text || body.label, id: body.id });
-      } else {
-        result = await phoneAgent.tap(body.x, body.y);
-      }
-    } else if (action === 'SCREEN_INFO' || action === 'NODES' || action === 'SCREEN') {
-      result = await deviceAdapter.getScreen();
-    } else if (action === 'CURRENT_APP') {
-      result = await deviceAdapter.getCurrentApp();
-    } else if (action === 'CAPABILITIES') {
-      result = { success: true, capabilities: deviceAdapter.getCapabilities() };
-    } else if (action === 'APPS' || action === 'INSTALLED_APPS') {
-      result = { success: true, apps: await deviceAdapter.getInstalledApps() };
-    } else if (action === 'SCHEDULE_CREATE' || action === 'SCHEDULE') {
-      try {
-        const helperRes = await fetch('http://127.0.0.1:8766/schedule/create', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body)
-        });
-        result = await helperRes.json();
-      } catch (e) {
-        result = { success: false, error: '小幫手服務未啟動：' + e.message };
-      }
-    } else if (action === 'SCHEDULE_LIST' || action === 'SCHEDULES') {
-      try {
-        const helperRes = await fetch('http://127.0.0.1:8766/schedule/list');
-        result = await helperRes.json();
-      } catch (e) {
-        result = { success: false, error: '小幫手服務未啟動：' + e.message };
-      }
-    } else if (action === 'SCHEDULE_CANCEL') {
-      try {
-        const helperRes = await fetch('http://127.0.0.1:8766/schedule/cancel', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body)
-        });
-        result = await helperRes.json();
-      } catch (e) {
-        result = { success: false, error: '小幫手服務未啟動：' + e.message };
-      }
-    } else if (action === 'KEEP_AWAKE' || action === 'SET_KEEP_AWAKE') {
-      try {
-        const helperRes = await fetch('http://127.0.0.1:8766/keep_awake', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body)
-        });
-        result = await helperRes.json();
-      } catch (e) {
-        result = { success: false, error: '小幫手服務未啟動：' + e.message };
-      }
-    } else if (action === 'BUBBLE' || action === 'SHOW_BUBBLE' || action === 'TOGGLE_BUBBLE' || action === 'HIDE_BUBBLE') {
-      result = await phoneAgent.showBubble(body.action || (action === 'HIDE_BUBBLE' ? 'hide' : (action === 'SHOW_BUBBLE' ? 'show' : 'toggle')));
-    } else {
-      result = { success: false, error: `未知的操作類型：${action}` };
-    }
-
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify(result));
-  } catch (err) {
-    res.writeHead(400, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ success: false, error: err.message }));
-  }
-}
-
-async function handlePhoneSkills(req, res) {
-  try {
-    if (req.method === 'GET') {
-      const skills = await readSkills();
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      return res.end(JSON.stringify({ success: true, skills }));
-    }
-    const skill = await saveSkill(await parseJsonBody(req));
-    res.writeHead(201, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ success: true, skill }));
-  } catch (err) {
-    res.writeHead(400, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ success: false, error: err.message }));
-  }
-}
-
-// Unified inbound message broker for CrewHelper and Browser Extension.
+// Unified inbound message broker for Browser Extension and other external clients.
 const pendingInboundMessages = [];
 const inboundEventClients = new Set();
 const INBOUND_QUEUE_LIMIT = 50;
@@ -1124,39 +922,6 @@ function stripLegacyLanguageInstruction(content) {
     .replace(/\[Response Language: Reply in clear, natural English unless the user explicitly asks for another language\.\]\s*/g, '');
 }
 
-// 🔔 Real-time Notify Helper for Crew Floating Bubble (Haptics, Pulse Glow, Mini Pill)
-function notifyCompanionService(state, rawText = '') {
-  try {
-    let clean = '';
-    if (rawText) {
-      // The helper keeps the collapsed notification concise itself, while the
-      // expanded BigText notification shows this complete, readable response.
-      clean = rawText
-        .replace(/<[^>]+>/g, '')
-        .replace(/[#*`_]/g, '')
-        .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
-        .replace(/\n{3,}/g, '\n\n')
-        .trim();
-      if (clean.length > 3500) clean = clean.slice(0, 3497) + '...';
-    }
-    const data = JSON.stringify({ state, text: clean });
-    const req = http.request({
-      hostname: '127.0.0.1',
-      port: 8766,
-      path: '/notify',
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(data)
-      },
-      timeout: 800
-    });
-    req.on('error', () => {});
-    req.write(data);
-    req.end();
-  } catch (e) {}
-}
-
 function stableToolSerialize(value) {
   if (value === null || typeof value !== 'object') return JSON.stringify(value);
   if (Array.isArray(value)) return '[' + value.map(stableToolSerialize).join(',') + ']';
@@ -1237,7 +1002,6 @@ async function handleChat(req, res) {
     finalPrompt = `[Uploaded Image: ${image_path}]\n${finalPrompt}`;
   }
 
-  notifyCompanionService('THINKING', prompt || '正在分析圖片');
 
   // Set SSE Headers
   const origin = req.headers.origin;
@@ -1254,7 +1018,6 @@ async function handleChat(req, res) {
     res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
   };
 
-  let stopCompanionHeartbeat = () => {};
   try {
     const provider = getProvider(providerId);
     const requestId = crypto.randomUUID();
@@ -1263,13 +1026,6 @@ async function handleChat(req, res) {
     let metricsLogged = false;
     let ended = false;
     let abortTurn = () => {};
-    // CrewHelper uses a 40s failsafe to avoid a stuck "AI 回覆中" status.
-    // A long SSE turn can legitimately be quiet for longer than that, so keep
-    // the companion state alive while this specific turn is still active.
-    const companionHeartbeat = setInterval(() => {
-      if (!ended) notifyCompanionService('THINKING');
-    }, 15000);
-    stopCompanionHeartbeat = () => clearInterval(companionHeartbeat);
     const getToolMetrics = () => {
       let executions = 0;
       let polls = 0;
@@ -1328,18 +1084,12 @@ async function handleChat(req, res) {
     const finish = (payload) => {
       if (ended) return;
       ended = true;
-      stopCompanionHeartbeat();
       const finalPayload = {
         ...(payload || {}),
         request_id: requestId,
         tool_metrics: getToolMetrics()
       };
       logToolMetrics(finalPayload.error ? 'error' : 'completed');
-      if (finalPayload.error) {
-        notifyCompanionService('ERROR', finalPayload.error);
-      } else {
-        notifyCompanionService('DONE', finalPayload.response || '任務已完成');
-      }
       sendEvent('done', finalPayload);
       res.end();
     };
@@ -1349,9 +1099,7 @@ async function handleChat(req, res) {
     res.on('close', () => {
       if (!ended && !res.writableEnded) {
         ended = true;
-        stopCompanionHeartbeat();
         abortTurn();
-        notifyCompanionService('IDLE');
         logToolMetrics('client_closed');
       }
     });
@@ -1386,10 +1134,6 @@ async function handleChat(req, res) {
           sendEvent('thought', { fullThinking: event.thinking });
         } else if (event.type === 'tool') {
           const tracking = recordToolEvent(event);
-          const toolLabel = event.name || event.tool_name || '工具';
-          if (tracking.shouldNotify) {
-            notifyCompanionService('TOOL', '正在執行：' + toolLabel);
-          }
           sendEvent('tool', {
             request_id: requestId,
             state: event.state,
@@ -1406,7 +1150,6 @@ async function handleChat(req, res) {
         } else if (event.type === 'context_usage') {
           sendEvent('context', event.stats);
         } else if (event.type === 'error') {
-          notifyCompanionService('ERROR', event.message || '執行失敗');
           finish({ error: event.message, provider: providerId, conversation_id });
         } else if (event.type === 'turn_completed') {
           finish({ response: event.response, conversation_id: event.conversationId, provider: providerId, status: event.status });
@@ -1416,8 +1159,6 @@ async function handleChat(req, res) {
 
   } catch (err) {
     console.error('[Chat Error]', err);
-    stopCompanionHeartbeat();
-    notifyCompanionService('ERROR', err.message || '執行失敗');
     if (!res.writableEnded && !res.destroyed) {
       sendEvent('done', { error: err.message });
       res.end();
@@ -1812,37 +1553,6 @@ const server = http.createServer(async (req, res) => {
     return handleAdbStatus(res);
   } else if (pathname === '/api/adb' && req.method === 'POST') {
     return handleAdbUpdate(req, res);
-  } else if (pathname === '/api/phone/status' && req.method === 'GET') {
-    return handlePhoneStatus(res);
-  } else if (pathname === '/api/phone/connect' && req.method === 'POST') {
-    return handlePhoneConnect(req, res);
-  } else if (pathname === '/api/phone/pair' && req.method === 'POST') {
-    return handlePhonePair(req, res);
-  } else if (pathname === '/api/phone/screenshot' && req.method === 'POST') {
-    return handlePhoneScreenshot(res);
-  } else if (pathname === '/api/phone/volume' && (req.method === 'GET' || req.method === 'POST')) {
-    return handlePhoneVolume(req, res);
-  } else if (pathname === '/api/phone/photo') {
-    return handlePhonePhoto(req, res);
-  } else if (pathname === '/api/phone/bubble' && (req.method === 'GET' || req.method === 'POST')) {
-    return handlePhoneBubble(req, res);
-  } else if (pathname === '/api/phone/action' && req.method === 'POST') {
-    return handlePhoneAction(req, res);
-  } else if (pathname === '/api/phone/skills' && (req.method === 'GET' || req.method === 'POST')) {
-    return handlePhoneSkills(req, res);
-  } else if ((pathname === '/api/phone/nodes' || pathname === '/api/phone/screen') && req.method === 'GET') {
-    const nodesResult = await phoneAgent.getScreenElements();
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    return res.end(JSON.stringify(nodesResult));
-  } else if (pathname === '/api/phone/current_app' && req.method === 'GET') {
-    const appResult = await phoneAgent.getCurrentApp();
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    return res.end(JSON.stringify(appResult));
-  } else if (pathname === '/api/phone/apps' && (req.method === 'GET' || req.method === 'POST')) {
-    const query = parsedUrl.query?.q || (req.method === 'POST' ? (await parseJsonBody(req)).query : '');
-    const appsResult = await phoneAgent.findApps(query);
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    return res.end(JSON.stringify(appsResult));
   } else if (pathname === '/api/guidelines' && req.method === 'GET') {
     return handleGetGuidelines(res);
   } else if (pathname === '/api/guidelines/sync' && req.method === 'POST') {

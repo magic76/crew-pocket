@@ -119,15 +119,13 @@ has() { command -v "$1" >/dev/null 2>&1; }
 state() { printf '%-14s %s\n' "$1" "$2"; }
 
 doctor() {
-    local failed=0 helper="未安裝或未啟動"
+    local failed=0
     printf 'Crew Pocket 環境檢查\n\n'
     if has node; then state "Node.js" "✓ $(node --version)"; else state "Node.js" "✗ 未安裝"; failed=1; fi
     if [ -f "$TARGET_DIR/server.js" ]; then state "Crew Pocket" "✓ $TARGET_DIR"; else state "Crew Pocket" "✗ 找不到專案"; failed=1; fi
     if has agy; then state "agy" "✓ 已安裝（首次請執行 agy 完成登入）"; else state "agy" "— 未安裝"; fi
     if has codex; then state "Codex" "✓ 已安裝（首次請執行 codex login）"; else state "Codex" "— 未安裝"; fi
     if [ -d "$HOME/storage" ]; then state "儲存空間" "✓ 已授權"; else state "儲存空間" "! 未授權：執行 termux-setup-storage"; fi
-    if has curl && curl -fsS --connect-timeout 1 http://127.0.0.1:8766/health >/dev/null 2>&1; then helper="✓ Crew Helper 已連線"; fi
-    state "Crew Helper" "$helper（選用：語音、相機、截圖）"
     if pgrep -f 'node server.js' >/dev/null 2>&1; then state "Web 服務" "✓ http://127.0.0.1:8000"; else state "Web 服務" "— 未啟動"; fi
     [ "$failed" -eq 0 ] || exit 1
 }
@@ -173,11 +171,8 @@ case "${1:-start}" in
         node "$TARGET_DIR/scripts/prepare-pwa-cache.js"
         echo "更新完成；請在需要時執行 crew start 套用新版服務。"
         ;;
-    apk)
-        termux-open-url 'https://github.com/magic76/crew-helper/releases/latest' 2>/dev/null || true
-        ;;
     *)
-        echo "用法：crew [start|stop|status|doctor|update|apk]"
+        echo "用法：crew [start|stop|status|doctor|update]"
         exit 1
         ;;
 esac

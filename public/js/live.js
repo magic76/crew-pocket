@@ -39,10 +39,6 @@
   let cameraInterval = null;
   let visionDialogueEnabled = false;
   let visionDialogueSending = false;
-  let screenShareInterval = null;
-  let isScreenSharing = false;
-  let screenShareSending = false;
-  let screenFrameSequence = 0;
   let analyser = null;
   let animFrameId = null;
   let audioSendBuffer = [];
@@ -112,8 +108,6 @@
   });
   let livePhase = LIVE_PHASE.IDLE;
   let voicePreviewSource = null;
-  let mediaVolumeUpdateTimer = null;
-  let mediaVolumeRequestSequence = 0;
   const voicePreviewCache = new Map();
   let lastVoicePreviewAt = 0;
   const AI_ECHO_GUARD_MS = 300;
@@ -1338,7 +1332,6 @@
     if (cardVolumeSlider) {
       cardVolumeSlider.addEventListener('input', () => applyLiveVolume(cardVolumeSlider.value));
       cardVolumeSlider.addEventListener('change', () => applyLiveVolume(cardVolumeSlider.value, true));
-      syncSystemMediaVolume();
     }
 
     const taskConfirmBtn = card.querySelector('#live-main-task-confirm-btn');
@@ -2042,11 +2035,9 @@
     const dockMuteBtn = document.getElementById('live-dock-mute-btn');
     const dockMuteContainer = document.getElementById('live-dock-mute-icon-container');
     const dockCameraBtn = document.getElementById('live-dock-camera-btn');
-    const dockScreenBtn = document.getElementById('live-dock-screen-btn');
     const dockExpandBtn = document.getElementById('live-dock-expand-btn');
     const dockExpandIcon = document.getElementById('live-dock-expand-icon');
     const cardCameraState = document.getElementById('live-card-camera-state');
-    const cardScreenState = document.getElementById('live-card-screen-state');
 
     if (dockExpandBtn) {
       dockExpandBtn.title = liveCardExpanded ? '收合通話面板' : '展開通話面板';
@@ -2057,7 +2048,6 @@
       }
     }
     if (cardCameraState) cardCameraState.classList.toggle('hidden', !isCameraOn);
-    if (cardScreenState) cardScreenState.classList.toggle('hidden', !isScreenSharing);
 
     const isAiSpeaking = isAiResponding || (audioPlayer && audioPlayer.activeSources.length > 0);
 
@@ -2121,15 +2111,6 @@
       }
     }
 
-    if (dockScreenBtn) {
-      dockScreenBtn.className = isScreenSharing
-        ? 'flex-1 max-w-[56px] h-12 rounded-2xl bg-cyan-600 hover:bg-cyan-500 active:scale-95 border border-cyan-300 text-white flex items-center justify-center transition shadow-lg shadow-cyan-950/60 shrink-0'
-        : 'flex-1 max-w-[56px] h-12 rounded-2xl bg-slate-800/90 hover:bg-slate-700 active:scale-95 border border-slate-700 text-slate-200 flex items-center justify-center transition shadow-lg shrink-0';
-      dockScreenBtn.title = isScreenSharing ? '停止分享螢幕' : '開始分享螢幕（每 2 秒）';
-      dockScreenBtn.innerHTML = isScreenSharing
-        ? '<svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="13" rx="2" stroke-width="2"/><path d="M8 21h8m-4-4v4" stroke-width="2" stroke-linecap="round"/><circle cx="18" cy="7" r="1.5" fill="currentColor" stroke="none"/></svg>'
-        : '<svg class="w-6 h-6 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="13" rx="2" stroke-width="2"/><path d="M8 21h8m-4-4v4" stroke-width="2" stroke-linecap="round"/></svg>';
-    }
   }
 
   function toggleMute() {
@@ -2297,7 +2278,7 @@
     visionDialogueEnabled = true;
     updateCameraBadge(false, '👁️ 持續視覺對話：最多 1 FPS');
     cameraInterval = setInterval(async () => {
-      if (!visionDialogueEnabled || visionDialogueSending || !isCameraOn || isScreenSharing) return;
+      if (!visionDialogueEnabled || visionDialogueSending || !isCameraOn) return;
       visionDialogueSending = true;
       try {
         await captureCameraFrame({
@@ -2310,81 +2291,6 @@
     }, 1000);
   }
 
-  function stopScreenShare({ notice = false } = {}) {
-    if (screenShareInterval) clearInterval(screenShareInterval);
-    screenShareInterval = null;
-    const wasSharing = isScreenSharing;
-    isScreenSharing = false;
-    screenShareSending = false;
-    updateDockControls();
-    if (isCameraOn) updateCameraBadge(false, '👁️ 持續視覺對話：最多 1 FPS');
-    if (notice && wasSharing) appendCardTranscript('system', '🖥️ 已停止分享螢幕；相機視覺串流恢復。');
-  }
-
-  function imageDataUrlToJpeg(dataUrl, quality = 0.72) {
-    return new Promise((resolve, reject) => {
-      const image = new Image();
-      image.onload = () => {
-        try {
-          const canvas = document.createElement('canvas');
-          canvas.width = image.naturalWidth || image.width;
-          canvas.height = image.naturalHeight || image.height;
-          const context = canvas.getContext('2d');
-          context.drawImage(image, 0, 0, canvas.width, canvas.height);
-          resolve(canvas.toDataURL('image/jpeg', quality));
-        } catch (error) { reject(error); }
-      };
-      image.onerror = () => reject(new Error('螢幕畫面轉碼失敗'));
-      image.src = dataUrl;
-    });
-  }
-
-  async function sendScreenShareFrame() {
-    if (!isScreenSharing || screenShareSending || !isConnected || !ws || ws.readyState !== WebSocket.OPEN) return false;
-    screenShareSending = true;
-    try {
-      const response = await fetch('/api/phone/screenshot', { method: 'POST' });
-      const shot = await response.json().catch(() => ({ success: false, error: '截圖失敗' }));
-      if (!shot?.success || !shot.base64) throw new Error(shot?.error || '無法取得目前螢幕');
-      const jpegDataUrl = await imageDataUrlToJpeg(shot.base64, 0.72);
-      ws.send(JSON.stringify({
-        realtimeInput: {
-          video: {
-            mimeType: 'image/jpeg',
-            data: jpegDataUrl.replace(/^data:image\/\w+;base64,/, '')
-          }
-        }
-      }));
-      const frameId = `screen_frame_${++screenFrameSequence}`;
-      console.debug('[Gemini Live Screen Frame]', { frameId, capturedAt: new Date().toISOString() });
-      return true;
-    } catch (error) {
-      console.warn('[Live Screen Share Error]', error.message);
-      appendCardTranscript('system', `⚠️ 螢幕分享失敗：${error.message}`);
-      stopScreenShare();
-      return false;
-    } finally {
-      screenShareSending = false;
-    }
-  }
-
-  async function toggleScreenShare() {
-    if (isScreenSharing) {
-      stopScreenShare({ notice: true });
-      return;
-    }
-    if (!isConnected || !ws || ws.readyState !== WebSocket.OPEN) {
-      appendCardTranscript('system', '⚠️ Live 連線未就緒，無法分享螢幕。');
-      return;
-    }
-    isScreenSharing = true;
-    updateDockControls();
-    if (isCameraOn) updateCameraBadge(false, '🖥️ 螢幕分享中（相機串流暫停）');
-    appendCardTranscript('system', '🖥️ 開始分享手機螢幕：每 2 秒更新一次。');
-    await sendScreenShareFrame();
-    if (isScreenSharing) screenShareInterval = setInterval(sendScreenShareFrame, 2000);
-    if (typeof window.haptic === 'function') window.haptic('medium');
-  }
 
   async function flipCamera() {
     cameraFacingMode = cameraFacingMode === 'environment' ? 'user' : 'environment';
@@ -2539,46 +2445,9 @@
     return percent;
   }
 
-  async function syncSystemMediaVolume() {
-    const requestSequence = ++mediaVolumeRequestSequence;
-    try {
-      const response = await fetch('/api/phone/volume', { cache: 'no-store' });
-      const result = await response.json();
-      if (requestSequence === mediaVolumeRequestSequence && result.success === true && Number.isFinite(Number(result.percent))) {
-        renderLiveVolume(result.percent);
-        if (audioPlayer) audioPlayer.setVolume(result.percent);
-      }
-    } catch (error) {
-      console.debug('[Live Volume] CrewHelper volume sync unavailable:', error.message);
-    }
-  }
-
-  function applyLiveVolume(value, immediate = false) {
+  function applyLiveVolume(value) {
     const percent = renderLiveVolume(value);
-    if (audioPlayer) {
-      audioPlayer.setVolume(percent);
-    }
-    const requestSequence = ++mediaVolumeRequestSequence;
-    if (mediaVolumeUpdateTimer) clearTimeout(mediaVolumeUpdateTimer);
-    const update = async () => {
-      mediaVolumeUpdateTimer = null;
-      try {
-        const response = await fetch('/api/phone/volume', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ percent })
-        });
-        const result = await response.json();
-        if (requestSequence === mediaVolumeRequestSequence && result.success === true && Number.isFinite(Number(result.percent))) {
-          renderLiveVolume(result.percent);
-          if (audioPlayer) audioPlayer.setVolume(result.percent);
-        }
-      } catch (error) {
-        console.warn('[Live Volume] Unable to set Android media volume:', error.message);
-      }
-    };
-    if (immediate) update();
-    else mediaVolumeUpdateTimer = setTimeout(update, 80);
+    if (audioPlayer) audioPlayer.setVolume(percent);
   }
 
   function getSelectedModel() {
@@ -2851,10 +2720,6 @@
     isModelTurnComplete = true;
     isMuted = false;
     isCameraOn = false;
-    stopScreenShare();
-    isScreenSharing = false;
-    screenShareSending = false;
-    screenFrameSequence = 0;
     cameraModeStartTs = 0;
     isGoAwayClosing = false;
     isLiveResuming = isResuming;
@@ -2876,152 +2741,6 @@
         if (liveSessionMode === 'discussion' && !discussionToolAllowed) {
           toolResult = { success: false, error: '目前是語音討論模式，此工具被停用；只允許在使用者明確要求時把草稿填入主輸入框。' };
           appendCardTranscript('system', `🛡️ 討論模式已阻擋：${name}`);
-        } else if (name === 'launch_app') {
-          const appName = String(args.app || args.name || args.package || '').trim();
-          const res = await fetch('/api/phone/action', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'LAUNCH', app: appName, package: appName })
-          });
-          const data = await res.json().catch(() => ({ success: false, error: '啟動請求失敗' }));
-          toolResult = data.success ? { success: true, message: `已成功開啟 ${appName}`, package: data.package } : { success: false, error: `無法開啟 ${appName}，請確認 App 是否已安裝` };
-          if (navigator.vibrate) navigator.vibrate([20, 40]);
-          appendCardTranscript('system', `🚀 語音開啟 App：${appName}`);
-
-        } else if (name === 'open_url') {
-          const url = String(args.url || '').trim();
-          const res = await fetch('/api/phone/action', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'OPEN_URL', url })
-          });
-          toolResult = await res.json().catch(() => ({ success: false, error: '開啟網址失敗' }));
-          if (navigator.vibrate) navigator.vibrate(25);
-          appendCardTranscript('system', `🌐 語音開啟網址：${url}`);
-
-        } else if (name === 'get_screen_elements' || name === 'inspect_ui') {
-          const res = await fetch('/api/phone/screen');
-          const data = await res.json().catch(() => ({ success: false, error: '取得畫面節點失敗', nodes: [] }));
-          if (data && data.success && Array.isArray(data.nodes)) {
-            // Keep nodes compact for LLM context
-            const interactiveNodes = data.nodes.filter(n =>
-              (n.text && n.text.trim()) || (n.desc && n.desc.trim()) || n.clickable || n.scrollable || n.editable
-            ).map(n => ({
-              text: n.text || undefined,
-              desc: n.desc || undefined,
-              id: n.id ? n.id.split('/').pop() : undefined,
-              clickable: n.clickable || undefined,
-              scrollable: n.scrollable || undefined,
-              editable: n.editable || undefined,
-              bounds: n.bounds
-            }));
-            toolResult = {
-              success: true,
-              package: data.package,
-              screenWidth: data.screenWidth,
-              screenHeight: data.screenHeight,
-              nodeCount: interactiveNodes.length,
-              nodes: interactiveNodes.slice(0, 35) // Top 35 visible interactive nodes
-            };
-          } else {
-            toolResult = { success: false, error: data?.error || '無法取得無障礙畫面節點，可能處於純畫布 (Canvas) 或特殊自訂 UI' };
-          }
-          appendCardTranscript('system', `🔍 語音讀取畫面結構 (${toolResult.nodeCount || 0} 個元件)`);
-
-        } else if (name === 'get_device_capabilities') {
-          const res = await fetch('/api/phone/action', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'CAPABILITIES' })
-          });
-          toolResult = await res.json().catch(() => ({ success: true, capabilities: ['app_launch', 'accessibility', 'semantic_tap', 'semantic_scroll', 'text_input', 'home', 'back'] }));
-          appendCardTranscript('system', `📡 查詢裝置支援能力`);
-
-        } else if (name === 'tap_element') {
-          const targetText = args.text || args.label;
-          const targetId = args.id;
-          const res = await fetch('/api/phone/action', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'TAP_TEXT', text: targetText, id: targetId })
-          });
-          const data = await res.json().catch(() => ({ success: false, error: '點擊失敗' }));
-          toolResult = data.success ? { success: true, message: `已成功點擊「${targetText || targetId}」` } : { success: false, error: `找不到可點擊的「${targetText || targetId}」，請先 inspect_ui 重新確認畫面` };
-          if (navigator.vibrate) navigator.vibrate([20, 30]);
-          appendCardTranscript('system', `🎯 語音語意點擊：${targetText || targetId}`);
-
-        } else if (name === 'swipe_screen') {
-          const dir = (args.direction || 'up').toLowerCase();
-          const dist = (args.distance || 'normal').toLowerCase();
-          const res = await fetch('/api/phone/action', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'SWIPE', direction: dir, distance: dist })
-          });
-          toolResult = await res.json().catch(() => ({ success: true, action: 'swiped' }));
-          if (navigator.vibrate) navigator.vibrate(25);
-          appendCardTranscript('system', `👆 語音滑動：${dir} (${dist})`);
-
-        } else if (name === 'scroll_screen') {
-          const dir = (args.direction || 'up').toLowerCase();
-          const res = await fetch('/api/phone/action', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'SCROLL', direction: dir })
-          });
-          toolResult = await res.json().catch(() => ({ success: true, action: 'scrolled' }));
-          if (navigator.vibrate) navigator.vibrate(25);
-          appendCardTranscript('system', `📜 語音滾動：${dir}`);
-
-        } else if (name === 'type_text') {
-          const text = String(args.text || '').trim();
-          const target = args.target || args.hint || null;
-          const res = await fetch('/api/phone/action', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'TYPE', text, target })
-          });
-          toolResult = await res.json().catch(() => ({ success: false, error: '輸入文字失敗' }));
-          if (navigator.vibrate) navigator.vibrate([20, 30, 20]);
-          appendCardTranscript('system', `⌨️ 語音輸入文字：${text}`);
-
-        } else if (name === 'wait_for_element') {
-          const text = String(args.text || '').trim();
-          const timeoutSec = Number(args.timeout_seconds || 5);
-          const res = await fetch('/api/phone/action', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'WAIT_FOR', text, timeoutMs: timeoutSec * 1000 })
-          });
-          toolResult = await res.json().catch(() => ({ success: false, error: '等待元件失敗' }));
-          appendCardTranscript('system', `⏳ 等待畫面元件「${text}」：${toolResult.success ? '成功' : '逾時'}`);
-
-        } else if (name === 'tap_screen' || name === 'tap_coordinate') {
-          let targetX = args.x;
-          let targetY = args.y;
-
-          if (args.label && (!targetX || !targetY)) {
-            const res = await fetch('/api/phone/action', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ action: 'TAP_TEXT', text: args.label })
-            });
-            toolResult = await res.json().catch(() => ({ success: false, error: '點擊失敗' }));
-            if (navigator.vibrate) navigator.vibrate([20, 30]);
-            appendCardTranscript('system', `🎯 語音點擊：${args.label}`);
-          } else if (targetX && targetY) {
-            const res = await fetch('/api/phone/action', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ action: 'TAP', x: targetX, y: targetY })
-            });
-            toolResult = await res.json().catch(() => ({ success: true, action: 'tapped' }));
-            if (navigator.vibrate) navigator.vibrate([20, 30]);
-            appendCardTranscript('system', `🎯 語音座標點擊：(${Math.round(targetX)}, ${Math.round(targetY)})`);
-          } else {
-            toolResult = { success: false, error: '請提供按鈕文字 label 或 x, y 座標' };
-          }
-
         } else if (name === 'end_voice_session') {
           toolResult = { success: true, message: '語音通話即將結束，已停止交談。' };
           if (navigator.vibrate) navigator.vibrate([40, 80]);
@@ -3029,65 +2748,6 @@
           setTimeout(() => {
             stopLiveSession();
           }, 1200);
-
-        } else if (name === 'schedule_reminder') {
-          const delaySec = Number(args.delay_seconds || 60);
-          const message = String(args.message || args.label || '時間到了');
-          const label = String(args.label || `${delaySec}秒後提醒`);
-          const res = await fetch('/api/phone/action', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'SCHEDULE_CREATE', type: 'reminder', delay_seconds: delaySec, message, label })
-          });
-          toolResult = await res.json().catch(() => ({ success: false, error: '建立計時器失敗' }));
-          if (navigator.vibrate) navigator.vibrate(30);
-          appendCardTranscript('system', `⏰ 已設定計時提醒：${label}`);
-
-        } else if (name === 'start_screen_monitor') {
-          const intervalSec = Number(args.interval_seconds || 60);
-          const durationMin = Number(args.duration_minutes || 10);
-          const condition = String(args.target_condition || '');
-          const label = String(args.label || (condition ? `等待「${condition}」` : `每${intervalSec}秒檢查畫面`));
-          const res = await fetch('/api/phone/action', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'SCHEDULE_CREATE', type: 'screen_monitor', interval_seconds: intervalSec, duration_minutes: durationMin, condition, label, speech: true })
-          });
-          toolResult = await res.json().catch(() => ({ success: false, error: '啟動畫面巡檢失敗' }));
-          if (navigator.vibrate) navigator.vibrate(30);
-          appendCardTranscript('system', `👀 已啟動畫面巡檢：${label}`);
-
-        } else if (name === 'list_active_schedules') {
-          const res = await fetch('/api/phone/action', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'SCHEDULE_LIST' })
-          });
-          toolResult = await res.json().catch(() => ({ success: false, error: '取得排程清單失敗' }));
-          appendCardTranscript('system', `📋 查詢排程任務：${toolResult.summary || '目前無排程'}`);
-
-        } else if (name === 'cancel_schedule') {
-          const cancelAll = Boolean(args.cancel_all);
-          const taskId = String(args.task_id || args.label_hint || '');
-          const res = await fetch('/api/phone/action', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'SCHEDULE_CANCEL', all: cancelAll, id: taskId })
-          });
-          toolResult = await res.json().catch(() => ({ success: false, error: '取消排程失敗' }));
-          if (navigator.vibrate) navigator.vibrate(30);
-          appendCardTranscript('system', `🗑️ 取消排程：${toolResult.message || '已處理'}`);
-
-        } else if (name === 'press_key') {
-          const key = (args.key || 'HOME').toUpperCase();
-          const res = await fetch('/api/phone/action', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'KEYEVENT', key })
-          });
-          toolResult = await res.json().catch(() => ({ success: true, action: 'keyed' }));
-          if (navigator.vibrate) navigator.vibrate(30);
-          appendCardTranscript('system', `🏠 語音觸發按鍵：${key}`);
 
         } else if (name === 'prepare_main_task') {
           toolResult = prepareMainTask(args);
@@ -3134,29 +2794,6 @@
           } else {
             toolResult = frame;
             appendCardTranscript('system', `⚠️ 無法取得最新相機畫面：${frame.error}`);
-          }
-
-        } else if (name === 'take_screenshot') {
-          const res = await fetch('/api/phone/screenshot', { method: 'POST' });
-          const shotData = await res.json().catch(() => ({ success: false, error: '截圖失敗' }));
-          if (shotData && shotData.success && shotData.base64) {
-            // 📸 Inject screenshot frame directly into Gemini Live's realtime multimodal vision pipeline!
-            const jpegDataUrl = await imageDataUrlToJpeg(shotData.base64, 0.76);
-            const cleanBase64 = jpegDataUrl.replace(/^data:image\/\w+;base64,/, '');
-            const imageMsg = {
-              realtimeInput: {
-                video: {
-                  mimeType: "image/jpeg",
-                  data: cleanBase64
-                }
-              }
-            };
-            ws.send(JSON.stringify(imageMsg));
-            toolResult = { success: true, message: "螢幕截圖已成功傳送至即時視覺管道，請直接根據最新傳送的畫面為使用者進行多模態辨識。" };
-            if (navigator.vibrate) navigator.vibrate([20, 40]);
-            appendCardTranscript('system', `📸 語音截取螢幕並注入即時視覺感知管道`);
-          } else {
-            toolResult = { success: false, error: shotData?.error || '截圖失敗' };
           }
 
         } else if (name === 'write_file') {
@@ -3304,24 +2941,8 @@
 
         const voiceName = getSelectedVoice();
         const baseSystemPrompt = (typeof getCrewLocale === 'function' && getCrewLocale() === 'en')
-          ? `You are Crew Pocket's live voice assistant.
-【Role】You are a high-level Planner and Intent Interpreter. Always respond via AUDIO. Match user language (Traditional Chinese default).
-【3-Tier Mobile Architecture】
-1. Tier 1 (Native First): Use launch_app(app='...') to open any app directly. Never swipe launcher icons. Use press_key(key='HOME'|'BACK'|'RECENTS'|'NOTIFICATIONS'|'QUICK_SETTINGS') for system keys. Use open_url for links.
-2. Tier 2 (Accessibility UI Executor): Use get_screen_elements to inspect UI nodes. Use tap_element(text='...') to click buttons. Use swipe_screen(direction='up'|'down'|'left'|'right', distance='short'|'normal'|'long') or scroll_screen for scrolling. Use type_text for input. Never guess pixel coordinates.
-3. Tier 3 (Vision Fallback): Only when accessibility tree cannot read elements (e.g. Canvas, Unity, WebGL, custom game UI), use take_screenshot and tap_coordinate(x, y).
-【Action Loop】Observe (get_screen_elements) -> Plan & Execute Semantic Action -> Verify screen state -> Advance. Max 5 steps per task.
-【Conversation】Answer normal questions directly. Only use mobile tools when the user explicitly requests a phone action.`
-          : `你是 Crew Pocket 的即時語音助理。
-【角色定位】你是高階「規劃者 (Planner) 與意圖解讀者」，最終回答一律以 AUDIO 語音說出，預設使用繁體中文。
-【工具邊界與授權】普通問題直接回答；只有使用者本輪最新一句明確口令要求操作手機時才可呼叫手機工具，過去對話、推測或一般問題絕不可授權。
-【安全防護】絕對禁止刪除、付款、購買、修改帳戶、輸入密碼、OTP、簡訊或驗證碼；遇到此類敏感操作一律停止並語音提示使用者自行操作。
-【手機操作三層架構】
-1. 第一層（系統原生優先）：開啟 App（如「打開幣安」「開 Chrome」）一律呼叫 launch_app(app='...') 直接啟動，絕不在桌面滑動翻頁找圖示。系統按鍵（首頁、返回、多工、通知列、快捷設定）一律呼叫 press_key。網址一律呼叫 open_url。
-2. 第二層（Accessibility 語意執行）：一律以語意操作為主。點擊按鈕呼叫 tap_element(text='...') 或 tap_element(id='...')；滑動呼叫 swipe_screen(direction='up'|'down'|'left'|'right', distance='short'|'normal'|'long') 或 scroll_screen；輸入呼叫 type_text(text='...', target='...')；判斷畫面呼叫 get_screen_elements 或 wait_for_element。絕不自行計算猜測 (x, y) 像素座標。
-3. 第三層（Vision 視覺兜底）：只有在 accessibility tree 完全取不到有效節點（例如 Canvas 畫布、Unity、WebGL、遊戲自訂 UI）時，才呼叫 take_screenshot 截圖並以 tap_coordinate(x, y) 進行兜底點擊。
-【結束通話】當使用者說「關閉」、「掛斷」、「結束通話」、「退下」、「先這樣」或「再見」時，先簡短道別一句（如「好的，先為您關閉，隨時喊我！」），並一律呼叫 end_voice_session 工具以自動結束通話。
-【動作執行迴圈】遵守「取得畫面狀態 (get_screen_elements) → 決策語意動作 → 執行動作 → 再次檢查畫面驗證結果 → 推進下一步（最多5步）」。相機影格與手機螢幕不可混淆。`;
+          ? `You are Crew Pocket's live voice assistant. Always respond via AUDIO and match the user's language (Traditional Chinese by default). Answer normal questions directly. You can only use tools for the current Crew Pocket session: draft_message, prepare_main_task, confirm_main_task, capture_camera_frame, read_file, and write_file. Only use a tool when the user's latest utterance explicitly requests it.`
+          : `你是 Crew Pocket 的即時語音助理，最終回答一律以 AUDIO 語音說出，預設使用繁體中文。普通問題直接回答。你只可使用目前 Crew Pocket 對話內的工具：draft_message、prepare_main_task、confirm_main_task、capture_camera_frame、read_file、write_file；只有使用者本輪最新一句明確要求時才能呼叫工具。`;
         const discussionPrompt = liveSessionMode === 'discussion'
           ? "\n\n【討論模式】協助釐清需求、追問關鍵資訊並整理共識。不得操作手機、截圖或寫檔。只有使用者明確說要填入輸入框時才能使用 draft_message，而且不得自動送出；「好」「可以」不算傳送授權。"
           : "\n\n【操作模式】普通問題仍直接回答；不要為了確認答案而主動截圖、讀檔或操作手機。若本輪最新口令未明確要求手機動作，絕不可依先前對話執行截圖、點擊、滑動或按鍵。";
@@ -3350,126 +2971,6 @@
             tools: [
               {
                 functionDeclarations: [
-                  // 📱 Tier 1: Android Native Capabilities
-                  {
-                    name: "launch_app",
-                    description: "Launch an installed Android app by name (e.g. 'Binance', 'LINE', 'Chrome', 'Settings') or package name. Always use this instead of swiping the home launcher.",
-                    parameters: {
-                      type: "OBJECT",
-                      properties: {
-                        app: { type: "STRING", description: "The app name or package name to launch, e.g. 'Binance', 'Settings', 'Chrome'" }
-                      },
-                      required: ["app"]
-                    }
-                  },
-                  {
-                    name: "press_key",
-                    description: "Press an Android system physical key (HOME, BACK, RECENTS, NOTIFICATIONS, QUICK_SETTINGS, POWER_DIALOG).",
-                    parameters: {
-                      type: "OBJECT",
-                      properties: {
-                        key: {
-                          type: "STRING",
-                          description: "The key to press",
-                          enum: ["HOME", "BACK", "RECENTS", "NOTIFICATIONS", "QUICK_SETTINGS", "POWER_DIALOG"]
-                        }
-                      },
-                      required: ["key"]
-                    }
-                  },
-                  {
-                    name: "open_url",
-                    description: "Open a Web URL or Deep Link URI directly via Android Intent.",
-                    parameters: {
-                      type: "OBJECT",
-                      properties: {
-                        url: { type: "STRING", description: "Web URL (https://...) or deep link URI" }
-                      },
-                      required: ["url"]
-                    }
-                  },
-
-                  // 📱 Tier 2: AccessibilityService UI Executor (Semantic Actions)
-                  {
-                    name: "get_screen_elements",
-                    description: "Read the current Android accessibility UI tree. Returns structured visible labels, descriptions, IDs, clickable/scrollable states, bounds, and foreground package. Always call this before and after actions to observe and verify.",
-                    parameters: { type: "OBJECT", properties: {} }
-                  },
-                  {
-                    name: "tap_element",
-                    description: "Tap an interactive button, menu item, or text label on the screen using semantic text or resource ID. Prefer this over coordinate taps.",
-                    parameters: {
-                      type: "OBJECT",
-                      properties: {
-                        text: { type: "STRING", description: "Button text, label, or content description to tap (e.g. '確認', '設定', '搜尋')" },
-                        id: { type: "STRING", description: "Optional resource viewId (e.g. 'btn_submit')" }
-                      }
-                    }
-                  },
-                  {
-                    name: "swipe_screen",
-                    description: "Scroll or swipe the phone screen. Use 'up' to scroll down/read more content, 'down' to scroll up, 'left' or 'right' to flip cards/tabs. Coordinates are calculated automatically from device screen dimensions.",
-                    parameters: {
-                      type: "OBJECT",
-                      properties: {
-                        direction: {
-                          type: "STRING",
-                          description: "Direction of scroll: 'up' (scroll down), 'down' (scroll up), 'left', 'right'",
-                          enum: ["up", "down", "left", "right"]
-                        },
-                        distance: {
-                          type: "STRING",
-                          description: "Scroll distance: 'short', 'normal', 'long', 'page'",
-                          enum: ["short", "normal", "long", "page"]
-                        }
-                      },
-                      required: ["direction"]
-                    }
-                  },
-                  {
-                    name: "scroll_screen",
-                    description: "Perform native accessibility container scroll (forward / backward).",
-                    parameters: {
-                      type: "OBJECT",
-                      properties: {
-                        direction: {
-                          type: "STRING",
-                          description: "Direction: 'up' (forward), 'down' (backward), 'left', 'right'",
-                          enum: ["up", "down", "left", "right"]
-                        }
-                      },
-                      required: ["direction"]
-                    }
-                  },
-                  {
-                    name: "type_text",
-                    description: "Type text into an input box, search field, or message entry.",
-                    parameters: {
-                      type: "OBJECT",
-                      properties: {
-                        text: { type: "STRING", description: "The text to type into the field" },
-                        target: { type: "STRING", description: "Optional input field label or placeholder hint" }
-                      },
-                      required: ["text"]
-                    }
-                  },
-                  {
-                    name: "wait_for_element",
-                    description: "Wait until an element containing specified text appears on screen.",
-                    parameters: {
-                      type: "OBJECT",
-                      properties: {
-                        text: { type: "STRING", description: "Text or label to wait for" },
-                        timeout_seconds: { type: "NUMBER", description: "Timeout in seconds (default 5)" }
-                      },
-                      required: ["text"]
-                    }
-                  },
-                  {
-                    name: "get_device_capabilities",
-                    description: "Discover currently supported device capabilities (e.g. app_launch, accessibility, notifications, semantic_tap, semantic_scroll, text_input).",
-                    parameters: { type: "OBJECT", properties: {} }
-                  },
                   {
                     name: "end_voice_session",
                     description: "End or close the voice session immediately when the user asks to hang up, close, stop talking, or says goodbye (e.g. '關閉', '掛斷', '結束通話', '退下', '再見', '先這樣').",
@@ -3478,64 +2979,6 @@
                       properties: {
                         reason: { type: "STRING", description: "Reason for ending session (e.g. user_requested, completed)" }
                       }
-                    }
-                  },
-                  {
-                    name: "schedule_reminder",
-                    description: "Set a countdown timer or reminder in seconds (e.g. 300 for 5 minutes). When time is up, the assistant vibrates and announces the reminder message.",
-                    parameters: {
-                      type: "OBJECT",
-                      properties: {
-                        delay_seconds: { type: "NUMBER", description: "Delay in seconds, e.g. 300 for 5 minutes" },
-                        message: { type: "STRING", description: "Reminder message to announce when timer expires" },
-                        label: { type: "STRING", description: "Short descriptive label for this timer" }
-                      },
-                      required: ["delay_seconds"]
-                    }
-                  },
-                  {
-                    name: "start_screen_monitor",
-                    description: "Start periodic background screen checks or wait until a specific condition/text appears on screen.",
-                    parameters: {
-                      type: "OBJECT",
-                      properties: {
-                        interval_seconds: { type: "NUMBER", description: "Interval between checks in seconds (default 60)" },
-                        duration_minutes: { type: "NUMBER", description: "Total monitoring duration in minutes (default 10)" },
-                        target_condition: { type: "STRING", description: "Optional target text to wait for (e.g. '已送達', '完成')" },
-                        label: { type: "STRING", description: "Short descriptive task name" }
-                      },
-                      required: ["interval_seconds"]
-                    }
-                  },
-                  {
-                    name: "list_active_schedules",
-                    description: "List all currently active timers, background screen monitors, and countdowns with their remaining time.",
-                    parameters: { type: "OBJECT", properties: {} }
-                  },
-                  {
-                    name: "cancel_schedule",
-                    description: "Cancel one or all active timers/screen monitors.",
-                    parameters: {
-                      type: "OBJECT",
-                      properties: {
-                        task_id: { type: "STRING", description: "Optional task ID to cancel, e.g. 'timer_1'" },
-                        label_hint: { type: "STRING", description: "Optional keyword/label of the timer to cancel" },
-                        cancel_all: { type: "BOOLEAN", description: "Set true to cancel all active timers and monitors" }
-                      }
-                    }
-                  },
-
-                  // 📱 Tier 3: Vision / Coordinate Fallback
-                  {
-                    name: "tap_coordinate",
-                    description: "Fallback pixel tap ONLY when semantic tap_element cannot find the element on Canvas, Unity, WebGL or custom game UI.",
-                    parameters: {
-                      type: "OBJECT",
-                      properties: {
-                        x: { type: "NUMBER", description: "X pixel coordinate" },
-                        y: { type: "NUMBER", description: "Y pixel coordinate" }
-                      },
-                      required: ["x", "y"]
                     }
                   },
                   {
@@ -3571,17 +3014,13 @@
                   },
                   {
                     name: "capture_camera_frame",
-                    description: "Capture a brand-new high-detail frame from the currently open Gemini Live camera only when no current realtime camera frame is available or fine details, text, numbers, or small objects require it. If continuous camera frames are arriving, answer from the newest frame without this call. Never substitute take_screenshot.",
+                    description: "Capture a brand-new high-detail frame from the currently open Gemini Live camera only when no current realtime camera frame is available or fine details, text, numbers, or small objects require it. If continuous camera frames are arriving, answer from the newest frame without this call.",
                     parameters: {
                       type: "OBJECT",
                       properties: {
                         detail: { type: "STRING", enum: ["standard", "high"], description: "Use high only for text, numbers, small objects, or fine details." }
                       }
                     }
-                  },
-                  {
-                    name: "take_screenshot",
-                    description: "Capture the current PHONE DISPLAY only when the user's latest utterance explicitly asks to see, capture, or inspect the current screen, app UI, button, or on-screen content, and no current continuous screen-share frame is available or high detail is needed. Past conversation and general questions never authorize it. Never use this for the Live camera, lens, surroundings, or what is physically in front of the user."
                   },
                   {
                     name: "write_file",
@@ -4348,15 +3787,12 @@
 
     if (cameraInterval) clearInterval(cameraInterval);
     cameraInterval = null;
-    stopScreenShare();
     stopTracks(cameraStream);
     cameraStream = null;
     isCameraOn = false;
     visionDialogueEnabled = false;
     visionDialogueSending = false;
 
-    if (mediaVolumeUpdateTimer) clearTimeout(mediaVolumeUpdateTimer);
-    mediaVolumeUpdateTimer = null;
     if (voicePreviewSource) {
       try { voicePreviewSource.stop(); } catch (_) {}
       try { voicePreviewSource.disconnect(); } catch (_) {}
@@ -4687,13 +4123,6 @@
     });
   }
 
-  const dockScreenBtn = document.getElementById('live-dock-screen-btn');
-  if (dockScreenBtn) {
-    dockScreenBtn.addEventListener('click', () => {
-      if (!isScreenSharing) toggleLiveCardExpanded();
-      toggleScreenShare();
-    });
-  }
 
   const dockExpandBtn = document.getElementById('live-dock-expand-btn');
   if (dockExpandBtn) dockExpandBtn.addEventListener('click', toggleLiveCardExpanded);

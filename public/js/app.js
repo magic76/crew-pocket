@@ -933,7 +933,7 @@ function initAppAndListeners() {
     }
   })();
 
-  // 🌐 Unified real-time intake from CrewHelper and Browser Extension.
+  // 🌐 Unified real-time intake from Browser Extension and other external clients.
   const inboundQueue = [];
   const handledInboundIds = new Set();
   const handledInboundOrder = [];
@@ -963,9 +963,7 @@ function initAppAndListeners() {
 
   const formatInboundPrompt = (msg) => {
     let prefix = '[External] ';
-    if (msg.source === 'FloatingBubble') prefix = '[Bubble] ';
-    else if (msg.source === 'CrewHelper') prefix = '[Helper] ';
-    else if (msg.source === 'BrowserExtension') prefix = '[Web] ';
+    if (msg.source === 'BrowserExtension') prefix = '[Web] ';
     const sourceInfo = msg.url ? `\nURL: ${msg.url}` : '';
     return `${prefix}${msg.text}${sourceInfo}`;
   };

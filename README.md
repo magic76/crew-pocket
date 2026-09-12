@@ -27,7 +27,7 @@
 curl -fsSL https://raw.githubusercontent.com/magic76/crew-pocket/main/install.sh | bash
 ```
 
-安裝器只安裝核心執行環境（Node.js、Git、curl）與你選擇的 AI Provider；Python、Crew Helper 與瀏覽器 Extension 都是選配，不會阻塞基本文字對話。首次仍須親自完成 AI 帳號登入。
+安裝器只安裝核心執行環境（Node.js、Git、curl）與你選擇的 AI Provider；Python 與瀏覽器 Extension 都是選配，不會阻塞基本文字對話。首次仍須親自完成 AI 帳號登入。
 
 完成後依序執行：
 
@@ -37,11 +37,6 @@ crew start   # 啟動服務並開啟 Crew Pocket
 ```
 
 ---
-
-## 📱 隨身語音與無障礙操作助手 (Crew Helper APK)
-
-專屬的 Android 隨身浮動球、Gemini Live 即時雙向語音通話與無障礙手指觸控輔助 App 已獨立為專用專案：
-👉 **[Crew Helper Android APK 專案庫](https://github.com/magic76/crew-helper)**（可直接下載最新版 APK 安裝）
 
 ---
 
@@ -156,20 +151,13 @@ agy
 
 規範包含 Termux 執行安全、Mobile-first UI、HTML 沙盒、Chart.js、手機裝置能力，以及子代理協作規則（任務拆分、唯讀優先、避免同檔衝突、主代理統一整合與 commit／push）與工具效率規範（無明確要求不使用外部搜尋、批次讀取、單次修改與集中測試）等專案慣例；請保留在 fork 或部署副本中，避免 AI 修改時忽略 Crew Pocket 的既有行為。
 
-### 步驟 4.2：安裝 Android Crew Helper (隨身語音與觸控助理)
-
-Android 隨身浮動球、相機、螢幕分享與無障礙服務的原始碼已獨立為專屬專案：
-👉 **[Crew Helper 開源倉庫 (magic76/crew-helper)](https://github.com/magic76/crew-helper)**
-
-您可以直接前往該倉庫的 [Releases 頁面](https://github.com/magic76/crew-helper/releases/latest) 下載最新已簽署的 APK 進行安裝。
-
-### 步驟 4.3：Crew Pocket Browser Extension
+### 步驟 4.2：Crew Pocket Browser Extension
 
 `extensions/crew-pocket-bridge/` 是 Crew Pocket 的瀏覽器橋接套件，適用於 Lemur Browser 等支援 Chromium Extension 的 Android 瀏覽器。它能把目前網頁的 DOM、截圖、網路請求與除錯資訊送到 Crew Pocket，並透過本機 Bridge Server 接收 AI 指令。
 
 套件壓縮檔位於 [`extensions/crew-pocket-bridge/crew-pocket-bridge.zip`](extensions/crew-pocket-bridge/crew-pocket-bridge.zip)。在瀏覽器的擴充功能頁面匯入或解壓後載入此目錄即可；Bridge 已整合進 Crew Pocket 主服務，啟動 `node ~/agy-web/server.js` 後會自動提供 `ws://127.0.0.1:8000/api/extension/ws`。
 
-Extension、Web UI 與 AI API 統一走 `127.0.0.1:8000`；Android Crew Helper 的 `8766` 僅作為 Crew Pocket 的內部本機服務，不需手動操作，也不會對區網開放。
+Extension、Web UI 與 AI API 統一走 `127.0.0.1:8000`。
 
 ---
 
@@ -200,7 +188,7 @@ http://127.0.0.1:8000
 crew doctor
 ```
 
-它會顯示 Node.js、Crew Pocket 目錄、agy/Codex 是否已安裝、儲存空間授權、選配 Crew Helper 連線與目前 Web 服務狀態。Provider 的帳號登入是外部 OAuth 流程，請依提示執行 `agy` 或 `codex login` 完成。
+它會顯示 Node.js、Crew Pocket 目錄、agy/Codex 是否已安裝、儲存空間授權與目前 Web 服務狀態。Provider 的帳號登入是外部 OAuth 流程，請依提示執行 `agy` 或 `codex login` 完成。
 
 ---
 
