@@ -1,3 +1,36 @@
+// Crew Pocket API security bootstrap
+(function configureCrewPocketApiAuth() {
+  const params = new URLSearchParams(window.location.search);
+  const queryToken = params.get('token');
+  if (queryToken) {
+    localStorage.setItem('crewApiToken', queryToken);
+    params.delete('token');
+    const remaining = params.toString();
+    const cleanUrl = `${window.location.pathname}${remaining ? `?${remaining}` : ''}${window.location.hash || ''}`;
+    window.history.replaceState(window.history.state, '', cleanUrl);
+  }
+
+  const apiToken = localStorage.getItem('crewApiToken') || '';
+  if (!apiToken) return;
+  const nativeFetch = window.fetch.bind(window);
+  window.fetch = function crewAuthenticatedFetch(input, init = {}) {
+    try {
+      const sourceUrl = input instanceof Request ? input.url : String(input);
+      const targetUrl = new URL(sourceUrl, window.location.href);
+      if (targetUrl.origin === window.location.origin && targetUrl.pathname.startsWith('/api/')) {
+        const headers = new Headers(input instanceof Request ? input.headers : undefined);
+        new Headers(init.headers || {}).forEach((value, key) => headers.set(key, value));
+        headers.set('X-Crew-Pocket-Token', apiToken);
+        if (input instanceof Request) {
+          return nativeFetch(new Request(input, { ...init, headers }));
+        }
+        return nativeFetch(input, { ...init, headers });
+      }
+    } catch (_) {}
+    return nativeFetch(input, init);
+  };
+})();
+
 // Antigravity Web UI - Main Application Entrypoint & Bootstrap
 
 // 1. Marked.js configuration (Table Responsive Wrapper)
