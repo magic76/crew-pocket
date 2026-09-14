@@ -889,33 +889,32 @@ async function handleLiveCameraSnapshot(req, res) {
 
 
 
-// 🏷️ Crew Pocket System Guide & Capability Manifest
-const CREW_POCKET_SYSTEM_GUIDE = `[Context: You are the core intelligence of "Crew Pocket (口袋指揮 2.0)", a specialized mobile AI assistant running locally on Android Termux.
+// 🏷️ Crew Pocket capability guidance
+// Keep the base prompt small. Detailed delivery constraints are only attached
+// to a new conversation when the first request actually needs that capability.
+const CREW_POCKET_CAPABILITY_INDEX = '[Crew Pocket：支援互動 HTML、Chart.js 圖表、Google Maps、Android APK 與本機檔案；依使用者需求套用對應規則。]';
 
-⚡ FRONTEND RENDERING & CAPABILITY MANIFEST:
-1. 🌐 Interactive Web & UI Sandbox:
-   - When the user asks to build, test, preview, or see an interactive tool (e.g. calculator, game, widget, dashboard, animation, converter):
-     * ALWAYS output a COMPLETE, self-contained \`\`\`html code block (including <!DOCTYPE html>, <html>, <head>, <style> or Tailwind CDN <script src="https://cdn.tailwindcss.com"></script>, <body>, and <script>).
-     * IMPORTANT: Keep the \`\`\`html block strictly pure HTML code. NEVER mix ASCII border frames (┌─┐, ═══) or explanatory text inside the \`\`\`html block.
-     * Crew Pocket automatically intercepts complete \`\`\`html and \`\`\`svg blocks and transforms them into an interactive Action Card with "[🌐 開啟預覽]" (full-screen sandbox) and "[📱 內嵌小視窗]" (collapsible inline iframe).
-     * The user can interact with buttons, forms, touch events, Canvas, and audio directly!
-     * To load an existing Termux asset without embedding it, use its absolute local path directly in src, href, poster, srcset, or CSS url(), e.g. /data/data/com.termux/files/home/pocket-game/public/assets/tile.webp. Crew Pocket safely proxies approved local assets into the Action Card; do not use file:// URLs or assume relative paths point at another project.
-   - 🔄 When modifying or iterating on an interactive tool (e.g. "change color", "add button", "fix bug"):
-     * Output the UPDATED COMPLETE \`\`\`html code block so the user can immediately click the new preview card to test the updated version with 0 manual copying.
-     * Accompany the code with 1-2 concise bullet points highlighting the specific changes made.
-   - 📁 Persistent custom tool pages: when the user explicitly asks to create or maintain a reusable local HTML page, write it under \`/data/data/com.termux/files/home/agy-web/public/extra/<safe-name>.html\` (never the \`public/\` root). These local pages are listed from the upper-right 「HTML 頁面」 menu and open at \`/extra/<safe-name>.html\`. The directory is intentionally Git-ignored; do not use it for core app files.
+const CAPABILITY_RULES = {
+  html: `[Crew Pocket Capability Rules]
+若建立或更新互動工具，輸出完整、自包含的 \`\`\`html\`\`\`；純 HTML 區塊不得混入說明文字。需要載入本機資產時使用絕對路徑，不用 file://。明確要求可重複使用的本機工具頁時，寫入 /data/data/com.termux/files/home/agy-web/public/extra/<safe-name>.html。`,
+  chart: `[Crew Pocket Capability Rules]
+若建立資料圖表，輸出含 Chart.js CDN 與 <canvas id="chart"> 的完整 HTML。獨立向量圖或流程圖使用 SVG 或 Mermaid。`,
+  maps: `[Crew Pocket Capability Rules]
+提及地點、路線或地圖時，使用 Markdown Google Maps 連結：https://www.google.com/maps/search/?api=1&query=...。`,
+  apk: `[Crew Pocket Capability Rules]
+建置、安裝或測試 Android APK 時，執行 ~/install-apk.sh <path-to-apk>；若失敗，說明 Wireless Debugging 需重新開啟或設定目前 Port。`
+};
 
-2. 📊 Charts & Data Visualization:
-   - For data charts, output an HTML block containing Chart.js CDN (<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>) and a <canvas id="chart"></canvas>.
-   - For standalone vector diagrams and flowcharts, output standalone \`\`\`svg or Mermaid blocks.
+function buildCapabilityGuide(userPrompt) {
+  const text = String(userPrompt || '').toLowerCase();
+  const rules = [];
+  if (/(互動|html|網頁|web\s*(?:app|tool|ui)?|小工具|計算機|遊戲|widget|dashboard|儀表板|動畫|animation|preview|預覽)/i.test(text)) rules.push(CAPABILITY_RULES.html);
+  if (/(圖表|chart|統計|趨勢|比較|分布|distribution)/i.test(text)) rules.push(CAPABILITY_RULES.chart);
+  if (/(地點|地址|餐廳|景點|路線|導航|地圖|google\s*maps?|\bmaps?\b)/i.test(text)) rules.push(CAPABILITY_RULES.maps);
+  if (/(\bapk\b|android.{0,24}(?:建置|編譯|安裝|測試|build|install|test)|(?:建置|編譯|安裝|測試|build|install|test).{0,24}android)/i.test(text)) rules.push(CAPABILITY_RULES.apk);
+  return `${CREW_POCKET_CAPABILITY_INDEX}${rules.length ? `\n${rules.join('\n')}` : ''}`;
+}
 
-3. 📱 Mobile First, Touch & Link Standards:
-   - Touch targets must be at least 40-48px with clear feedback.
-   - For locations, routes, and maps, format Google Maps links as markdown: [地點名稱](https://www.google.com/maps/search/?api=1&query=...) (Crew Pocket automatically opens all external links in a new tab).
-   - When building, installing, or testing an Android APK: ALWAYS execute \`~/install-apk.sh <path-to-apk>\`. APK management strictly relies on Wireless Debugging (ADB) for silent installation and real-time logcat debugging. If \`~/install-apk.sh\` fails (ADB offline/not configured), immediately inform the user that Wireless Debugging is closed or the Port changed, and ask the user to turn on Wireless Debugging in Developer Options and provide the current Port (or run \`~/set-adb.sh <port>\`).
-
-4. 🎯 Tone & Precision:
-   - Be concise, direct, helpful, and sharp. Avoid boilerplate disclaimers.]`;
 function stripLegacyLanguageInstruction(content) {
   if (typeof content !== 'string') return content;
   return content
@@ -996,7 +995,7 @@ async function handleChat(req, res) {
   // byte-for-byte user-authored so internal capability guidance never appears
   // in conversation history or is mistaken for user input.
   if (!conversation_id) {
-    finalPrompt = `${CREW_POCKET_SYSTEM_GUIDE}\n\n[User Request]:\n${finalPrompt}`;
+    finalPrompt = `${buildCapabilityGuide(finalPrompt)}\n\n[User Request]:\n${finalPrompt}`;
   }
 
   if (image_path) {
