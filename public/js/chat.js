@@ -625,10 +625,20 @@ function triggerResumeTurn(customPrompt, btnElement = null) {
 window.buildEmptyTurnFallbackHtml = buildEmptyTurnFallbackHtml;
 window.triggerResumeTurn = triggerResumeTurn;
 
+function formatMessageTimestamp(timestamp = Date.now()) {
+  if (typeof timestamp === 'string' && /^\d{1,2}:\d{2}/.test(timestamp)) return timestamp;
+  const date = timestamp instanceof Date ? timestamp : new Date(timestamp);
+  if (Number.isNaN(date.getTime())) return '';
+  return new Intl.DateTimeFormat('zh-TW', {
+    month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false
+  }).format(date);
+}
+
 // Append Message to UI
 function appendMessage(role, content, timestamp, tools = [], thinking = '', isBtw = false, renderOptions = {}) {
   const isUser = role === 'user';
   const targetContainer = renderOptions.container || messagesContainer;
+  const messageTime = formatMessageTimestamp(timestamp);
 
   // 🌟 1. If this is a persisted Call Memo from Live Voice Session, render the full interactive Memo Card!
   if (!isUser && content && typeof content === 'string' && content.includes('<!-- CALL_MEMO_DATA:')) {
@@ -645,8 +655,17 @@ function appendMessage(role, content, timestamp, tools = [], thinking = '', isBt
             `history-memo-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
             memoData.summary || []
           );
-          targetContainer.appendChild(card);
-          if (typeof enhanceCodeBlocks === 'function') enhanceCodeBlocks(card);
+          const memoWrap = document.createElement('div');
+          memoWrap.className = 'w-full max-w-2xl mx-auto min-w-0';
+          memoWrap.appendChild(card);
+          if (messageTime) {
+            const timeLabel = document.createElement('div');
+            timeLabel.className = 'mt-1 text-right text-[10px] text-slate-500 font-mono select-none';
+            timeLabel.textContent = `🕒 ${messageTime}`;
+            memoWrap.appendChild(timeLabel);
+          }
+          targetContainer.appendChild(memoWrap);
+          if (typeof enhanceCodeBlocks === 'function') enhanceCodeBlocks(memoWrap);
           if (typeof scrollToBottom === 'function') scrollToBottom(true);
           return;
         }
@@ -719,7 +738,10 @@ function appendMessage(role, content, timestamp, tools = [], thinking = '', isBt
           ${isUserBtw ? '<span class="px-1.5 py-0.2 rounded bg-teal-400/30 border border-teal-300/50 text-[9px] font-mono font-bold text-teal-100">💬 順帶一提</span>' : ''}
           <span class="font-mono text-[9px] opacity-70">#${userTurnIndex + 1}</span>
         </span>
-        ${editRewindBtn}
+        <div class="flex items-center gap-2">
+          <span class="font-mono text-[9px] opacity-75">🕒 ${messageTime}</span>
+          ${editRewindBtn}
+        </div>
       </div>
     `;
 
@@ -729,22 +751,13 @@ function appendMessage(role, content, timestamp, tools = [], thinking = '', isBt
       <div class="whitespace-pre-wrap leading-relaxed break-words">${escapeHtml(userText)}</div>
     `;
   } else {
-    let timeStr = '';
-    if (timestamp) {
-      if (typeof timestamp === 'string' && /^\d{1,2}:\d{2}/.test(timestamp)) {
-        timeStr = timestamp;
-      } else {
-        const d = new Date(timestamp);
-        timeStr = isNaN(d.getTime()) ? '' : d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      }
-    }
-    
     const assistantHeader = `
       <div class="flex items-center justify-between gap-2 mb-2 pb-1.5 border-b border-slate-800/90 text-[11px] text-slate-400 select-none">
         <div class="flex items-center gap-1.5 font-semibold text-slate-200">
           <span class="text-indigo-400 font-bold">🤖 Crew Pocket</span>
           ${isBtw ? '<span class="px-1.5 py-0.2 rounded bg-teal-500/20 text-teal-300 border border-teal-500/40 text-[9px] font-mono">順帶一提</span>' : ''}
         </div>
+        <span class="font-mono text-[10px] text-slate-500">🕒 ${messageTime}</span>
       </div>
     `;
 
@@ -2184,7 +2197,10 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
             <span class="w-1.5 h-1.5 rounded-full bg-teal-400 animate-pulse"></span>
             💬 順帶一提 · 支線解答
           </span>
-          <button type="button" class="btw-toggle-btn text-[10px] text-teal-400 hover:text-teal-200 font-mono transition px-1.5 py-0.5 rounded hover:bg-teal-900/40">收合 ▲</button>
+          <div class="flex items-center gap-2">
+            <span class="text-[10px] text-slate-500 font-mono">🕒 ${formatMessageTimestamp()}</span>
+            <button type="button" class="btw-toggle-btn text-[10px] text-teal-400 hover:text-teal-200 font-mono transition px-1.5 py-0.5 rounded hover:bg-teal-900/40">收合 ▲</button>
+          </div>
         `;
         cardEl.insertBefore(btwHeader, cardEl.firstChild);
         const toggleBtn = btwHeader.querySelector('.btw-toggle-btn');
@@ -2204,7 +2220,7 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
           <span class="text-indigo-400 font-bold">🤖 Crew Pocket</span>
           <span class="text-[10px] text-slate-400 font-mono font-normal">(${escapeHtml(modelLabel)})</span>
         </div>
-        <span class="text-[10px] text-slate-500 font-mono">⏱️ ${totalSec}s</span>
+        <span class="text-[10px] text-slate-500 font-mono">🕒 ${formatMessageTimestamp()} · ⏱️ ${totalSec}s</span>
       `;
       bubbleEl.insertBefore(header, bubbleEl.firstChild);
     }
