@@ -37,7 +37,7 @@ const { getConversationSettings, getProviderConversationSettings, saveConversati
 const { createTask, getTask, listTasks, updateTask } = require('./lib/tasks');
 const { listWorkspaces, resolveWorkspace, createWorkspace } = require('./lib/workspaces');
 const auth = require('./lib/auth');
-const { applyCors, authorizeApiRequest, securityStatus } = require('./lib/http-security');
+const { applyCors, authorizeApiRequest, maybeSetAuthCookie, securityStatus } = require('./lib/http-security');
 
 
 async function handleStorageReport(res) {
@@ -1445,6 +1445,7 @@ async function handleAgyToken(req, res) {
 const server = http.createServer(async (req, res) => {
   const parsedUrl = url.parse(req.url, true);
   const pathname = parsedUrl.pathname;
+  maybeSetAuthCookie(res, parsedUrl);
   applyCors(req, res);
 
   if (req.method === 'OPTIONS') {
