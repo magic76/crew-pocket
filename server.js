@@ -37,6 +37,7 @@ const { getConversationSettings, getProviderConversationSettings, saveConversati
 const { createTask, getTask, listTasks, updateTask } = require('./lib/tasks');
 const { listWorkspaces, resolveWorkspace, createWorkspace } = require('./lib/workspaces');
 const auth = require('./lib/auth');
+const { applyCors, authorizeApiRequest, maybeSetAuthCookie, securityStatus } = require('./lib/http-security');
 
 
 async function handleStorageReport(res) {
@@ -1171,12 +1172,22 @@ async function handleStop(req, res) {
   try {
     const body = await parseJsonBody(req);
     const providerId = normalizeProviderId(body.provider);
-    console.log(`[Stop Request] Aborting active ${providerId} generation sessions...`);
-    await getProvider(providerId).stop();
+    const conversationId = String(body.conversation_id || '').trim();
+    if (conversationId && !/^[a-zA-Z0-9_-]+$/.test(conversationId)) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({ error: 'Invalid conversation_id' }));
+    }
+    console.log(`[Stop Request] Aborting ${providerId} generation${conversationId ? ` for ${conversationId}` : 's'}...`);
+    const result = await getProvider(providerId).stop(conversationId || null);
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ success: true, message: 'All generations interrupted' }));
+    res.end(JSON.stringify({
+      success: true,
+      conversation_id: conversationId || null,
+      stopped: result?.stopped !== false,
+      message: conversationId ? 'Generation interrupted' : 'All generations interrupted'
+    }));
   } catch (err) {
-    res.writeHead(500, { 'Content-Type': 'application/json' });
+    res.writeHead(err.statusCode || 500, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: err.message }));
   }
 }
@@ -1432,23 +1443,28 @@ async function handleAgyToken(req, res) {
 
 // 🌐 HTTP Server Request Dispatcher
 const server = http.createServer(async (req, res) => {
-  const origin = req.headers.origin;
-  if (origin && /^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/.test(origin)) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
-  } else if (req.method === 'GET') {
-    res.setHeader('Access-Control-Allow-Origin', '*');
-  }
-
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  const parsedUrl = url.parse(req.url, true);
+  const pathname = parsedUrl.pathname;
+  maybeSetAuthCookie(res, parsedUrl);
+  applyCors(req, res);
 
   if (req.method === 'OPTIONS') {
+    const origin = String(req.headers.origin || '').trim();
+    if (origin && !res.getHeader('Access-Control-Allow-Origin')) {
+      res.writeHead(403, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({ error: 'Cross-origin API access is not allowed' }));
+    }
     res.writeHead(204);
     return res.end();
   }
 
-  const parsedUrl = url.parse(req.url, true);
-  const pathname = parsedUrl.pathname;
+  if (pathname.startsWith('/api/')) {
+    const authorization = authorizeApiRequest(req, parsedUrl);
+    if (!authorization.ok) {
+      res.writeHead(authorization.statusCode || 403, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({ error: authorization.error || 'Forbidden' }));
+    }
+  }
 
   if (pathname === '/api/conversations' && req.method === 'GET') {
     return handleProviderConversations(parsedUrl, res);
@@ -1582,5 +1598,10 @@ process.on('unhandledRejection', (reason) => {
 server.listen(PORT, HOST, () => {
   console.log(`=================================================`);
   console.log(`🚀 Crew Pocket Web UI (Resident Pipe) at: http://${HOST}:${PORT}`);
+  const runtimeSecurity = securityStatus();
+  if (runtimeSecurity.tokenRequired) {
+    console.log(`🔐 LAN API token: ${runtimeSecurity.token}`);
+    console.log(`   第一次開啟 LAN UI 時在網址加上 ?token=<上方 token>，之後瀏覽器會記住。`);
+  }
   console.log(`=================================================`);
 });

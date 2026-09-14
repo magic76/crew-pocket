@@ -1804,7 +1804,7 @@ async function stopGeneration() {
     currentAbortController = null;
   }
   try {
-    await fetch('/api/stop', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ provider: currentProvider }) });
+    await fetch('/api/stop', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ provider: currentProvider, conversation_id: currentConversationId || null }) });
   } catch (e) {}
   if (typeof window.haptic === 'function') {
     window.haptic('heavy');
