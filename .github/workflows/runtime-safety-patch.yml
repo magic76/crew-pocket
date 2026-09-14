@@ -7,6 +7,10 @@ on:
     paths:
       - scripts/apply-runtime-safety-patch.py
       - .github/workflows/runtime-safety-patch.yml
+  pull_request:
+    branches:
+      - main
+    types: [opened, synchronize, reopened]
 
 permissions:
   contents: write
