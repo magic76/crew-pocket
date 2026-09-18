@@ -158,6 +158,15 @@ class CrewRuntimeService : Service() {
                 return@execute
             }
 
+            // History is safely present in the APK now, but the embedded
+            // provider runtime is not enabled until its independent provider
+            // login/toolchain migration is complete. Keep normal chat on the
+            // proven Termux host instead of accepting messages without reply.
+            if (!preferences.getBoolean("embedded_runtime_enabled", false)) {
+                activateTermuxFallback(workspace, "embedded provider migration is pending")
+                return@execute
+            }
+
             attemptEmbeddedTakeover(workspace, force = true)
         }
     }
