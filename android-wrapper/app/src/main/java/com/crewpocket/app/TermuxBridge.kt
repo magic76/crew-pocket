@@ -52,17 +52,6 @@ object TermuxBridge {
         )
     }
 
-    fun provisionEmbeddedBridgeToken(context: Context, token: String): Result<Unit> {
-        require(token.matches(Regex("[0-9a-f]{64}"))) { "Invalid bridge token" }
-
-        val command =
-            "umask 077\n" +
-                "mkdir -p \"\$HOME/.crew-pocket\"\n" +
-                "printf '%s\\n' '$token' > \"\$HOME/.crew-pocket/embedded-bridge-token\""
-
-        return runCrewScript(context, command)
-    }
-
     fun migrateExistingHistory(context: Context, token: String): Result<Unit> {
         require(token.matches(Regex("[0-9a-f]{64}"))) { "Invalid history migration token" }
 
