@@ -8,15 +8,24 @@ import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.net.Socket
+import java.security.MessageDigest
+import java.security.SecureRandom
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.Future
 
-class EmbeddedCodexBridge(private val context: Context) {
+class EmbeddedCodexBridge(private val context: Context, private val bridgeToken: String) {
     companion object {
         const val PORT = 8766
         private const val TAG = "EmbeddedCodexBridge"
         private const val CODEX_LIBRARY = "libcodex_exec.so"
+        private const val HANDSHAKE_PREFIX = "CREW-CODEX-BRIDGE/1 "
+
+        fun generateToken(): String {
+            val bytes = ByteArray(32)
+            SecureRandom().nextBytes(bytes)
+            return bytes.joinToString("") { "%02x".format(it) }
+        }
 
         fun binaryFile(context: Context): File {
             return File(context.applicationInfo.nativeLibraryDir, CODEX_LIBRARY)
@@ -85,6 +94,13 @@ class EmbeddedCodexBridge(private val context: Context) {
 
         try {
             client.tcpNoDelay = true
+            client.soTimeout = 2_000
+            if (!authenticate(client)) {
+                Log.w(TAG, "Rejected unauthenticated bridge client")
+                return
+            }
+            client.soTimeout = 0
+
             val codex = startCodexProcess()
             process = codex
 
@@ -130,6 +146,30 @@ class EmbeddedCodexBridge(private val context: Context) {
             } catch (_: Exception) {
             }
         }
+    }
+
+
+    private fun authenticate(client: Socket): Boolean {
+        val input = client.getInputStream()
+        val line = ByteArray(256)
+        var size = 0
+
+        while (size < line.size) {
+            val value = input.read()
+            if (value < 0) return false
+            if (value == '\n'.code) break
+            line[size++] = value.toByte()
+        }
+
+        if (size == line.size) return false
+        val expected = (HANDSHAKE_PREFIX + bridgeToken).toByteArray(Charsets.UTF_8)
+        val actual = line.copyOf(size)
+        val valid = MessageDigest.isEqual(expected, actual)
+        if (valid) {
+            client.getOutputStream().write("OK\n".toByteArray(Charsets.UTF_8))
+            client.getOutputStream().flush()
+        }
+        return valid
     }
 
     private fun startCodexProcess(): Process {
