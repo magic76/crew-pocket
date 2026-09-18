@@ -320,6 +320,94 @@ async function handleRuntimeStatus(res) {
   }
 }
 
+const runtimeSelfDebug = {
+  status: 'idle',
+  startedAt: null,
+  completedAt: null,
+  response: '',
+  error: '',
+  reason: ''
+};
+
+function launchRuntimeSelfDebug(reason = 'Embedded Node runtime failure') {
+  if (runtimeSelfDebug.status === 'running') return false;
+
+  const provider = getProvider('codex');
+  runtimeSelfDebug.status = 'running';
+  runtimeSelfDebug.startedAt = Date.now();
+  runtimeSelfDebug.completedAt = null;
+  runtimeSelfDebug.response = '';
+  runtimeSelfDebug.error = '';
+  runtimeSelfDebug.reason = String(reason || 'Embedded Node runtime failure').slice(0, 1200);
+
+  const prompt = `[Crew Pocket Autonomous Self-Debug]
+
+The Android Runtime Supervisor detected an Embedded Node failure and temporarily switched to the Termux rescue host.
+
+Failure reason:
+${runtimeSelfDebug.reason}
+
+You are repairing Crew Pocket itself. Your cwd is mapped to the APK-private agy-web workspace.
+
+Required procedure:
+1. Read .crew-runtime/state.json.
+2. Read the end of .crew-runtime/node.log.
+3. Identify the concrete startup/runtime failure.
+4. Apply the smallest safe source fix in the current workspace.
+5. Do not start server.js yourself.
+6. Do not delete or rewrite .crew-runtime.
+7. Do not git reset, checkout, or discard unrelated changes.
+8. Finish after the patch. Android Runtime Supervisor will detect the source fingerprint change and automatically restart + health-check Embedded Node.
+
+If the failure is caused by a missing native runtime dependency that cannot be fixed in JS, do not invent a workaround. Explain the exact missing dependency in your final response and leave source unchanged.`;
+
+  Promise.resolve(provider.startTurn({
+    conversationId: null,
+    model: undefined,
+    effort: 'high',
+    workspace: process.env.HOME || RUNTIME_HOME,
+    prompt,
+    onAbort() {},
+    onEvent(event) {
+      if (!event) return;
+      if (event.type === 'text_delta') {
+        runtimeSelfDebug.response = String(event.accumulated || `${runtimeSelfDebug.response}${event.delta || ''}`).slice(-12000);
+      } else if (event.type === 'error') {
+        runtimeSelfDebug.status = 'failed';
+        runtimeSelfDebug.error = String(event.message || 'Self-debug failed').slice(0, 4000);
+        runtimeSelfDebug.completedAt = Date.now();
+      } else if (event.type === 'turn_completed') {
+        runtimeSelfDebug.status = 'completed';
+        runtimeSelfDebug.response = String(event.response || runtimeSelfDebug.response || '').slice(-12000);
+        runtimeSelfDebug.completedAt = Date.now();
+      }
+    }
+  })).catch(error => {
+    runtimeSelfDebug.status = 'failed';
+    runtimeSelfDebug.error = String(error?.message || error || 'Self-debug failed').slice(0, 4000);
+    runtimeSelfDebug.completedAt = Date.now();
+  });
+
+  return true;
+}
+
+async function handleRuntimeSelfDebug(req, res) {
+  if (req.method === 'GET') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify(runtimeSelfDebug));
+  }
+
+  try {
+    const body = await parseJsonBody(req).catch(() => ({}));
+    const started = launchRuntimeSelfDebug(body?.reason);
+    res.writeHead(started ? 202 : 200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ started, ...runtimeSelfDebug }));
+  } catch (err) {
+    res.writeHead(500, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: err.message }));
+  }
+}
+
 // ⚡ Check Conversation Session Busy Status
 function handleSessionStatus(parsedUrl, res) {
   const convId = parsedUrl.query.id;
@@ -1551,6 +1639,8 @@ const server = http.createServer(async (req, res) => {
     return handleGetProviders(res);
   } else if (pathname === '/api/runtime/status' && req.method === 'GET') {
     return handleRuntimeStatus(res);
+  } else if (pathname === '/api/runtime/self-debug' && (req.method === 'GET' || req.method === 'POST')) {
+    return handleRuntimeSelfDebug(req, res);
   } else if (pathname === '/api/auth/status' && req.method === 'GET') {
     return handleGetAuthStatus(res);
   } else if (pathname === '/api/auth/codex/device-start' && req.method === 'POST') {
