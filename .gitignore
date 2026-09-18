@@ -27,3 +27,6 @@ android-wrapper/app/src/main/jniLibs/arm64-v8a/libcrew_node_*.so
 # Local custom HTML tools, available at /extra/ but never committed.
 public/extra/
 *.apk
+
+# Locally-vendored Antigravity CLI package for embedded APK builds.
+android-wrapper/app/src/main/assets/agy-runtime/
