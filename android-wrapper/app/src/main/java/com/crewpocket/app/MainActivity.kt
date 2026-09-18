@@ -103,10 +103,11 @@ class MainActivity : Activity() {
             text = "Restart"
             textSize = 11f
             setOnClickListener {
-                RuntimeManager.crewHost.startCrewHost(this@MainActivity)
-                startCrewRuntime()
+                val restart = Intent(this@MainActivity, CrewRuntimeService::class.java)
+                    .setAction(CrewRuntimeService.ACTION_RESTART_EMBEDDED)
+                startService(restart)
                 pageLoaded.set(false)
-                statusText.text = "Restart requested…"
+                statusText.text = "Embedded restart requested…"
             }
         }
         toolbar.addView(restartButton)
@@ -237,12 +238,18 @@ class MainActivity : Activity() {
                 val alive = serverAlive()
                 runOnUiThread {
                     if (alive) {
-                        val embeddedReady = getSharedPreferences("crew_runtime", MODE_PRIVATE)
-                            .getBoolean("embedded_ready", false)
-                        statusText.text = if (embeddedReady) {
-                            "Crew active · embedded Codex"
-                        } else {
-                            "Crew active · Termux Codex fallback"
+                        val runtimePrefs = getSharedPreferences("crew_runtime", MODE_PRIVATE)
+                        val embeddedReady = runtimePrefs.getBoolean("embedded_ready", false)
+                        val hostMode = runtimePrefs.getString("host_mode", "unknown")
+                        statusText.text = when (hostMode) {
+                            "embedded-node" -> "Crew active · embedded Node + Codex"
+                            "termux-fallback" -> if (embeddedReady) {
+                                "Crew active · Termux rescue + embedded Codex"
+                            } else {
+                                "Crew active · Termux fallback"
+                            }
+                            "testing-embedded" -> "Testing embedded runtime…"
+                            else -> "Crew active · $hostMode"
                         }
                         if (pageLoaded.compareAndSet(false, true)) {
                             webView.loadUrl(SERVER_URL)
@@ -276,6 +283,10 @@ class MainActivity : Activity() {
     }
 
     private fun requestTermuxPermissionIfPossible() {
+        if (EmbeddedNodeHost.isBinaryBundled(this)) {
+            refreshSetupStatus()
+            return
+        }
         if (!TermuxBridge.isInstalled(this)) {
             refreshSetupStatus()
             return
@@ -302,10 +313,11 @@ class MainActivity : Activity() {
 
     private fun refreshSetupStatus() {
         val message = when {
+            EmbeddedNodeHost.isBinaryBundled(this) -> null
             !TermuxBridge.isInstalled(this) ->
-                "Termux not found. Install Termux first, then install Crew Pocket in Termux."
+                "Embedded Node is not bundled and Termux fallback is unavailable."
             !TermuxBridge.hasRunCommandPermission(this) ->
-                "Grant “Run commands in Termux environment” to Crew Pocket. Tap here to open App settings."
+                "Embedded Node is not bundled. Grant Termux RUN_COMMAND for fallback."
             else -> null
         }
         setupText.text = message ?: ""
@@ -397,7 +409,7 @@ class MainActivity : Activity() {
             REQUEST_TERMUX -> {
                 refreshSetupStatus()
                 if (TermuxBridge.hasRunCommandPermission(this)) {
-                    RuntimeManager.crewHost.startCrewHost(this)
+                    startCrewRuntime()
                 }
             }
             REQUEST_WEB_MEDIA -> {
