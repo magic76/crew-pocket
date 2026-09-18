@@ -17,6 +17,15 @@ fi
 echo
 echo
 
+echo "== self-debug job =="
+if command -v curl >/dev/null 2>&1; then
+    curl -fsS --max-time 3 http://127.0.0.1:8000/api/runtime/self-debug 2>/dev/null || echo "self-debug status unavailable"
+else
+    echo "curl unavailable"
+fi
+echo
+echo
+
 echo "== APK private supervisor state =="
 if command -v adb >/dev/null 2>&1; then
     adb shell run-as com.crewpocket.app sh -c         'cat files/workspaces/agy-web/.crew-runtime/state.json 2>/dev/null || echo state.json-missing'
