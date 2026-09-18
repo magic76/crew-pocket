@@ -10,7 +10,6 @@ import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import android.util.Log
-import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.concurrent.Executors
@@ -33,7 +32,6 @@ class CrewRuntimeService : Service() {
     private val scheduler = Executors.newSingleThreadScheduledExecutor()
     private val bootstrapExecutor = Executors.newSingleThreadExecutor()
     private val monitorStarted = AtomicBoolean(false)
-    private val authMigrationRequested = AtomicBoolean(false)
     private lateinit var embeddedCodexBridge: EmbeddedCodexBridge
     @Volatile private var lastRestartAttemptAt = 0L
     @Volatile private var consecutiveFailures = 0
@@ -53,6 +51,7 @@ class CrewRuntimeService : Service() {
         TermuxBridge.provisionEmbeddedBridgeToken(this, bridgeToken)
             .onFailure { Log.i(TAG, "Could not provision bridge token: ${it.message}") }
 
+        discardLegacyMigratedAuth(preferences)
         embeddedCodexBridge = EmbeddedCodexBridge(this, bridgeToken)
         prepareEmbeddedRuntime()
     }
@@ -69,10 +68,7 @@ class CrewRuntimeService : Service() {
                 return START_NOT_STICKY
             }
 
-            ACTION_REFRESH_EMBEDDED -> {
-                authMigrationRequested.set(false)
-                prepareEmbeddedRuntime()
-            }
+            ACTION_REFRESH_EMBEDDED -> prepareEmbeddedRuntime()
         }
 
         startMonitorIfNeeded()
@@ -107,23 +103,10 @@ class CrewRuntimeService : Service() {
                 return@execute
             }
 
-            if (!embeddedAuthReady()) {
-                if (authMigrationRequested.compareAndSet(false, true)) {
-                    TermuxBridge.migrateCodexAuth(this)
-                        .onFailure {
-                            authMigrationRequested.set(false)
-                            Log.i(TAG, "Could not request Codex auth migration: ${it.message}")
-                        }
-                }
-                setEmbeddedReady(false)
-                updateNotification("Crew runtime · migrating Codex login · Termux fallback")
-                return@execute
-            }
-
             embeddedCodexBridge.start()
                 .onSuccess {
                     setEmbeddedReady(true)
-                    Log.i(TAG, "Embedded Codex ready with APK workspace")
+                    Log.i(TAG, "Embedded Codex transport ready with APK workspace")
                     updateNotification("Crew runtime active · embedded Codex")
                 }
                 .onFailure {
@@ -141,9 +124,23 @@ class CrewRuntimeService : Service() {
             .apply()
     }
 
-    private fun embeddedAuthReady(): Boolean {
-        val auth = File(File(filesDir, ".codex"), "auth.json")
-        return auth.isFile && auth.length() > 0L
+    private fun discardLegacyMigratedAuth(
+        preferences: android.content.SharedPreferences
+    ) {
+        if (preferences.getBoolean("embedded_managed_auth_v2", false)) return
+
+        val codexHome = java.io.File(filesDir, ".codex")
+        val auth = java.io.File(codexHome, "auth.json")
+        val temp = java.io.File(codexHome, "auth.json.tmp")
+        if (auth.exists()) {
+            if (auth.delete()) {
+                Log.i(TAG, "Removed legacy copied Codex auth; embedded login will own credentials")
+            } else {
+                Log.w(TAG, "Could not remove legacy copied Codex auth")
+            }
+        }
+        temp.delete()
+        preferences.edit().putBoolean("embedded_managed_auth_v2", true).apply()
     }
 
     private fun startMonitorIfNeeded() {
