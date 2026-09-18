@@ -11,7 +11,6 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
-import android.view.Gravity
 import android.view.View
 import android.webkit.GeolocationPermissions
 import android.webkit.PermissionRequest
@@ -20,7 +19,6 @@ import android.webkit.WebChromeClient
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
-import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
 import java.net.HttpURLConnection
@@ -83,63 +81,12 @@ class MainActivity : Activity() {
             setBackgroundColor(Color.rgb(7, 11, 24))
         }
 
-        val toolbar = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(12), dp(8), dp(8), dp(8))
-        }
-
+        // Runtime controls belong in diagnostics, not the everyday chat UI.
+        // Keep this field for asynchronous status updates without reserving a
+        // permanent toolbar above the WebView.
         statusText = TextView(this).apply {
             text = "Crew runtime starting…"
-            setTextColor(Color.WHITE)
-            textSize = 12f
         }
-        toolbar.addView(
-            statusText,
-            LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-        )
-
-        val restartButton = Button(this).apply {
-            text = "Restart"
-            textSize = 11f
-            setOnClickListener {
-                val restart = Intent(this@MainActivity, CrewRuntimeService::class.java)
-                    .setAction(CrewRuntimeService.ACTION_RESTART_EMBEDDED)
-                startService(restart)
-                pageLoaded.set(false)
-                statusText.text = "Embedded restart requested…"
-            }
-        }
-        toolbar.addView(restartButton)
-
-        val browserButton = Button(this).apply {
-            text = "Browser"
-            textSize = 11f
-            setOnClickListener {
-                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(SERVER_URL)))
-            }
-        }
-        toolbar.addView(browserButton)
-
-        val stopButton = Button(this).apply {
-            text = "Stop"
-            textSize = 11f
-            setOnClickListener {
-                val stop = Intent(this@MainActivity, CrewRuntimeService::class.java)
-                    .setAction(CrewRuntimeService.ACTION_STOP)
-                startService(stop)
-                statusText.text = "Crew runtime stopped"
-            }
-        }
-        toolbar.addView(stopButton)
-
-        root.addView(
-            toolbar,
-            LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            )
-        )
 
         setupText = TextView(this).apply {
             visibility = View.GONE
