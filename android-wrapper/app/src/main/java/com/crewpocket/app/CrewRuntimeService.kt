@@ -10,6 +10,7 @@ import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import android.util.Log
+import org.json.JSONObject
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
@@ -33,6 +34,7 @@ class CrewRuntimeService : Service() {
 
     private val scheduler = Executors.newSingleThreadScheduledExecutor()
     private val bootstrapExecutor = Executors.newSingleThreadExecutor()
+    private val selfDebugExecutor = Executors.newSingleThreadExecutor()
     private val monitorStarted = AtomicBoolean(false)
 
     private lateinit var embeddedCodexBridge: EmbeddedCodexBridge
@@ -42,6 +44,7 @@ class CrewRuntimeService : Service() {
     @Volatile private var hostMode = "initializing"
     @Volatile private var lastFailedFingerprint: String? = null
     @Volatile private var lastNodeExitCode: Int? = null
+    @Volatile private var lastAutoDebugFingerprint: String? = null
     @Volatile private var lastRetryAt = 0L
     @Volatile private var crashCount = 0
 
@@ -101,6 +104,7 @@ class CrewRuntimeService : Service() {
     override fun onDestroy() {
         scheduler.shutdownNow()
         bootstrapExecutor.shutdownNow()
+        selfDebugExecutor.shutdownNow()
         if (::embeddedNodeHost.isInitialized) embeddedNodeHost.shutdown()
         if (::embeddedCodexBridge.isInitialized) embeddedCodexBridge.stop()
         setEmbeddedReady(false)
@@ -209,6 +213,7 @@ class CrewRuntimeService : Service() {
 
         if (waitForEmbeddedHealthy()) {
             lastFailedFingerprint = null
+            lastAutoDebugFingerprint = null
             lastNodeExitCode = null
             setHostMode("embedded-node")
             embeddedNodeHost.writeState(
@@ -267,6 +272,74 @@ class CrewRuntimeService : Service() {
 
         updateNotification("Crew runtime · Termux rescue host · embedded Codex")
         Log.w(TAG, "Using Termux fallback: $reason")
+        maybeRequestAutonomousSelfDebug(workspace, reason)
+    }
+
+    private fun maybeRequestAutonomousSelfDebug(workspace: File, reason: String) {
+        val fingerprint = lastFailedFingerprint ?: return
+        if (!EmbeddedNodeHost.isBinaryBundled(this)) return
+        if (!embeddedCodexBridge.isRunning()) return
+        if (lastAutoDebugFingerprint == fingerprint) return
+
+        lastAutoDebugFingerprint = fingerprint
+        selfDebugExecutor.execute {
+            var ready = false
+            repeat(24) {
+                if (serverAlive()) {
+                    ready = true
+                    return@repeat
+                }
+                Thread.sleep(500)
+            }
+
+            if (!ready) {
+                if (lastAutoDebugFingerprint == fingerprint) lastAutoDebugFingerprint = null
+                Log.w(TAG, "Rescue host did not become ready for autonomous self-debug")
+                return@execute
+            }
+
+            runCatching {
+                val connection = URL("http://127.0.0.1:8000/api/runtime/self-debug")
+                    .openConnection() as HttpURLConnection
+                connection.requestMethod = "POST"
+                connection.connectTimeout = 2_000
+                connection.readTimeout = 5_000
+                connection.doOutput = true
+                connection.setRequestProperty("Content-Type", "application/json")
+
+                val payload = JSONObject()
+                    .put("reason", reason)
+                    .put("sourceFingerprint", fingerprint)
+                    .toString()
+
+                connection.outputStream.use { output ->
+                    output.write(payload.toByteArray(Charsets.UTF_8))
+                }
+
+                val code = connection.responseCode
+                if (code !in 200..299) {
+                    throw IllegalStateException("Self-debug endpoint returned HTTP $code")
+                }
+                connection.inputStream.close()
+                connection.disconnect()
+
+                embeddedNodeHost.writeState(
+                    workspace,
+                    status = "self-debug-requested",
+                    exitCode = lastNodeExitCode,
+                    detail = "Autonomous Codex repair requested through rescue host",
+                    extra = mapOf(
+                        "hostMode" to "termux-fallback",
+                        "failureReason" to reason,
+                        "sourceFingerprint" to fingerprint
+                    )
+                )
+                Log.i(TAG, "Autonomous Codex self-debug requested")
+            }.onFailure {
+                if (lastAutoDebugFingerprint == fingerprint) lastAutoDebugFingerprint = null
+                Log.w(TAG, "Could not request autonomous self-debug", it)
+            }
+        }
     }
 
     private fun startMonitorIfNeeded() {
