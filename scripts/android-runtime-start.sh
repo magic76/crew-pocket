@@ -10,6 +10,11 @@ SERVER_URL="http://127.0.0.1:8000/"
 cd "$ROOT_DIR"
 mkdir -p "$STATE_DIR"
 
+# Keep WebView/PWA assets coherent with the checked-out runtime version.
+if [ -f "$ROOT_DIR/scripts/prepare-pwa-cache.js" ]; then
+    node "$ROOT_DIR/scripts/prepare-pwa-cache.js" >>"$LOG_FILE" 2>&1 || true
+fi
+
 find_repo_server_pid() {
     local pid cwd
     while read -r pid; do
