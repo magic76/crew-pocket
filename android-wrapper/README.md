@@ -242,3 +242,101 @@ Expected Termux log:
 Existing Codex thread IDs created under Termux may not exist in the APK-private
 `CODEX_HOME`. The provider therefore starts a new embedded thread if a previous
 Termux thread cannot be resumed.
+
+
+## Phase 2C: embedded Node + self-debug supervisor
+
+Phase 2C adds an optional APK-owned Node host. Termux stays installed as a
+rescue host until the embedded runtime is proven.
+
+Architecture:
+
+```text
+Crew Pocket APK
+├─ Embedded Codex app-server
+├─ Embedded Node host :8000
+├─ Runtime Supervisor
+│  ├─ health check
+│  ├─ node.log / state.json
+│  ├─ Termux rescue fallback
+│  └─ source-change retry
+└─ APK-private workspace
+   └─ agy-web/
+      └─ .crew-runtime/
+         ├─ SELF_DEBUG.md
+         ├─ node.log
+         └─ state.json
+```
+
+Android 10+ does not allow executing binaries copied into the writable app home,
+so the Node executable and its native dependencies are prepared as APK native
+libraries and executed from Android's installer-owned native library directory.
+
+### Prepare Node on the phone
+
+The current PoC reuses the Termux ARM64 Node build but rewrites its non-system
+native dependencies to APK-safe library names.
+
+```bash
+pkg install patchelf
+cd ~/agy-web
+bash scripts/prepare-embedded-codex.sh
+bash scripts/prepare-embedded-node.sh
+
+gradle -p android-wrapper :app:assembleDebug
+~/install-apk.sh android-wrapper/app/build/outputs/apk/debug/app-debug.apk
+```
+
+If Embedded Node starts successfully, the status API should report:
+
+```bash
+curl -s http://127.0.0.1:8000/api/runtime/status
+```
+
+Expected host field:
+
+```json
+{
+  "host": {
+    "runtime": "embedded-node"
+  }
+}
+```
+
+### Self-debug loop
+
+The supervisor intentionally keeps Termux as a rescue path:
+
+```text
+Embedded Node crashes
+→ Android writes .crew-runtime/node.log + state.json
+→ Termux rescue host takes port 8000
+→ Embedded Codex keeps using the APK-private workspace
+→ Codex patches the broken source
+→ source fingerprint changes
+→ Android supervisor stops the rescue host
+→ Embedded Node is started and health-checked again
+→ success: Embedded Node owns :8000
+→ failure: rescue host comes back
+```
+
+For a deliberate test, first confirm the embedded host is active, then ask
+Codex to introduce a temporary startup syntax error in the APK-private
+`server.js`. After fallback appears, ask:
+
+```text
+Crew runtime 掛掉了，請自我 debug。
+先讀 .crew-runtime/state.json 和 .crew-runtime/node.log，
+找出你剛才造成的問題，修好後不要手動啟動 server，
+讓 Runtime Supervisor 自己驗證。
+```
+
+A self-debug related prompt automatically receives the runtime log/state
+location as extra context.
+
+### Current boundary
+
+Phase 2C proves the self-hosting loop for the Codex path. Antigravity still
+depends on Termux and is not yet embedded. Do not remove Termux or merge this
+branch into main until both the embedded Node host and the rescue loop have
+passed device testing.
