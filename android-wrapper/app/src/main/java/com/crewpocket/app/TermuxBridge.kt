@@ -49,9 +49,93 @@ object TermuxBridge {
     fun stopCrew(context: Context): Result<Unit> = runCrewScript(
         context,
         """
-        exec "${'$'}HOME/agy-web/scripts/android-runtime-stop.sh"
+        exec "${'    private fun runCrewScript(context: Context, command: String): Result<Unit> {
+        if (!isInstalled(context)) {
+            return Result.failure(IllegalStateException("Termux is not installed"))
+        }
+        if (!hasRunCommandPermission(context)) {
+            return Result.failure(SecurityException("Run commands in Termux permission is not granted"))
+        }
+
+        val intent = Intent().apply {
+            setClassName(TERMUX_PACKAGE, RUN_COMMAND_SERVICE)
+            action = ACTION_RUN_COMMAND
+            putExtra(EXTRA_PATH, TERMUX_BASH)
+            putExtra(EXTRA_ARGUMENTS, arrayOf("-lc", command))
+            putExtra(EXTRA_WORKDIR, TERMUX_HOME)
+            putExtra(EXTRA_BACKGROUND, true)
+            putExtra(EXTRA_SESSION_ACTION, "0")
+        }
+
+        return runCatching {
+            context.startService(intent)
+            Unit
+        }
+    }
+}
+}HOME/agy-web/scripts/android-runtime-stop.sh"
         """.trimIndent()
     )
+
+    fun provisionEmbeddedBridgeToken(context: Context, token: String): Result<Unit> {
+        require(token.matches(Regex("[0-9a-f]{64}"))) { "Invalid bridge token" }
+        return runCrewScript(
+            context,
+            """
+            umask 077
+            mkdir -p "${'    private fun runCrewScript(context: Context, command: String): Result<Unit> {
+        if (!isInstalled(context)) {
+            return Result.failure(IllegalStateException("Termux is not installed"))
+        }
+        if (!hasRunCommandPermission(context)) {
+            return Result.failure(SecurityException("Run commands in Termux permission is not granted"))
+        }
+
+        val intent = Intent().apply {
+            setClassName(TERMUX_PACKAGE, RUN_COMMAND_SERVICE)
+            action = ACTION_RUN_COMMAND
+            putExtra(EXTRA_PATH, TERMUX_BASH)
+            putExtra(EXTRA_ARGUMENTS, arrayOf("-lc", command))
+            putExtra(EXTRA_WORKDIR, TERMUX_HOME)
+            putExtra(EXTRA_BACKGROUND, true)
+            putExtra(EXTRA_SESSION_ACTION, "0")
+        }
+
+        return runCatching {
+            context.startService(intent)
+            Unit
+        }
+    }
+}
+}HOME/.crew-pocket"
+            printf '%s\n' '$token' > "${'    private fun runCrewScript(context: Context, command: String): Result<Unit> {
+        if (!isInstalled(context)) {
+            return Result.failure(IllegalStateException("Termux is not installed"))
+        }
+        if (!hasRunCommandPermission(context)) {
+            return Result.failure(SecurityException("Run commands in Termux permission is not granted"))
+        }
+
+        val intent = Intent().apply {
+            setClassName(TERMUX_PACKAGE, RUN_COMMAND_SERVICE)
+            action = ACTION_RUN_COMMAND
+            putExtra(EXTRA_PATH, TERMUX_BASH)
+            putExtra(EXTRA_ARGUMENTS, arrayOf("-lc", command))
+            putExtra(EXTRA_WORKDIR, TERMUX_HOME)
+            putExtra(EXTRA_BACKGROUND, true)
+            putExtra(EXTRA_SESSION_ACTION, "0")
+        }
+
+        return runCatching {
+            context.startService(intent)
+            Unit
+        }
+    }
+}
+}HOME/.crew-pocket/embedded-bridge-token"
+            """.trimIndent()
+        )
+    }
 
     private fun runCrewScript(context: Context, command: String): Result<Unit> {
         if (!isInstalled(context)) {
