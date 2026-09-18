@@ -73,3 +73,85 @@ uses monitoring + restart rather than assuming the process never dies.
 
 For a later phase, `AgentRuntime` can gain an embedded implementation so the APK
 no longer depends on Termux.
+
+
+## Phase 2A: optional embedded Codex process
+
+This branch can now move only the **Codex app-server process** into the APK while
+keeping the existing Crew Node/PWA host in Termux.
+
+```text
+Crew Node server (Termux)
+        |
+        | TCP 127.0.0.1:8766
+        v
+Crew Pocket APK
+        |
+        v
+native Codex app-server
+```
+
+If the embedded bridge is missing or unavailable,
+`lib/runtime/codex-transport.js` automatically falls back to the existing
+Termux `codex app-server`.
+
+### Prepare the native binary on the phone
+
+The repository does not commit third-party native binaries. Use the Android
+ARM64 binary already installed by `@mmmbuto/codex-cli-termux`:
+
+```bash
+cd ~/agy-web
+bash scripts/prepare-embedded-codex.sh
+gradle -p android-wrapper :app:assembleDebug
+~/install-apk.sh android-wrapper/app/build/outputs/apk/debug/app-debug.apk
+```
+
+The prepare script copies `codex.bin` and `libc++_shared.so` into
+`jniLibs/arm64-v8a`. Both are gitignored.
+
+Android 10+ blocks executing code downloaded into an app's writable home
+directory, so the Codex ELF is packaged into the APK and executed from Android's
+installer-owned `nativeLibraryDir`.
+
+### Verify the transport
+
+Open the APK first, then send a Codex message. Watch:
+
+```bash
+tail -f ~/.agy-web.log
+```
+
+Embedded path:
+
+```text
+[Codex Runtime] Connected to embedded Android bridge at 127.0.0.1:8766
+[Codex Provider] transport=embedded-android-bridge
+```
+
+Fallback path:
+
+```text
+[Codex Runtime] Embedded bridge unavailable; using local codex process.
+[Codex Provider] transport=local-codex-process
+```
+
+Use `CREW_CODEX_BRIDGE=required` for strict testing if you want the request to
+fail instead of silently falling back.
+
+### Important sandbox limitation
+
+The APK and Termux are separate Android application sandboxes. Embedded Codex
+therefore cannot automatically read:
+
+- Termux's private `~/.codex` login state.
+- Repositories under `/data/data/com.termux/files/home`.
+
+Phase 2A proves native binary packaging, process startup, stdio JSON-RPC relay,
+and fallback. To make embedded Codex a full coding replacement, Phase 2B needs:
+
+1. an embedded Codex login/bootstrap flow; and
+2. a workspace location intentionally accessible to the APK (or a controlled
+   workspace sync/import layer).
+
+Do not remove Termux yet.
