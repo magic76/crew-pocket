@@ -173,7 +173,7 @@ class EmbeddedNodeHost(
                 .put("status", status)
                 .put("detail", detail)
                 .put("updatedAt", System.currentTimeMillis())
-                .put("pid", process?.pid() ?: JSONObject.NULL)
+                .put("processAlive", process?.isAlive == true)
                 .put("exitCode", exitCode ?: JSONObject.NULL)
                 .put("sourceFingerprint", sourceFingerprint(workspace))
                 .put("logPath", logFile(workspace).absolutePath)
