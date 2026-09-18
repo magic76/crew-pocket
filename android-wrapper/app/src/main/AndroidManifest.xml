@@ -34,10 +34,6 @@
         </activity>
 
         <service
-            android:name=".TermuxResultService"
-            android:exported="false" />
-
-        <service
             android:name=".CrewRuntimeService"
             android:exported="false"
             android:foregroundServiceType="specialUse">
