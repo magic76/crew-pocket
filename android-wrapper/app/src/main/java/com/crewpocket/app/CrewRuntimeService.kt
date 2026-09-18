@@ -9,6 +9,7 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import android.util.Log
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.concurrent.Executors
@@ -28,19 +29,25 @@ class CrewRuntimeService : Service() {
 
     private val scheduler = Executors.newSingleThreadScheduledExecutor()
     private val monitorStarted = AtomicBoolean(false)
+    private lateinit var embeddedCodexBridge: EmbeddedCodexBridge
     @Volatile private var lastRestartAttemptAt = 0L
     @Volatile private var consecutiveFailures = 0
 
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
+        embeddedCodexBridge = EmbeddedCodexBridge(this)
+        embeddedCodexBridge.start()
+            .onSuccess { Log.i("CrewRuntimeService", "Embedded Codex bridge ready") }
+            .onFailure { Log.i("CrewRuntimeService", "Embedded Codex unavailable: ${it.message}") }
         promoteToForeground("Crew runtime starting…")
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) {
             updateNotification("Stopping Crew runtime…")
-            TermuxBridge.stopCrew(this)
+            embeddedCodexBridge.stop()
+            RuntimeManager.crewHost.stopCrewHost(this)
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
             return START_NOT_STICKY
@@ -54,6 +61,7 @@ class CrewRuntimeService : Service() {
 
     override fun onDestroy() {
         scheduler.shutdownNow()
+        if (::embeddedCodexBridge.isInitialized) embeddedCodexBridge.stop()
         super.onDestroy()
     }
 
@@ -70,7 +78,12 @@ class CrewRuntimeService : Service() {
     private fun checkAndRecover() {
         if (serverAlive()) {
             consecutiveFailures = 0
-            updateNotification("Crew runtime active · localhost:8000")
+            val codexMode = if (::embeddedCodexBridge.isInitialized && embeddedCodexBridge.isRunning()) {
+                "embedded Codex bridge"
+            } else {
+                "Termux Codex fallback"
+            }
+            updateNotification("Crew runtime active · $codexMode")
             return
         }
 
@@ -78,7 +91,7 @@ class CrewRuntimeService : Service() {
         val now = System.currentTimeMillis()
         if (now - lastRestartAttemptAt >= RESTART_COOLDOWN_MS) {
             lastRestartAttemptAt = now
-            val result = TermuxBridge.startCrew(this)
+            val result = RuntimeManager.crewHost.startCrewHost(this)
             if (result.isSuccess) {
                 updateNotification("Crew runtime reconnecting through Termux…")
             } else {
