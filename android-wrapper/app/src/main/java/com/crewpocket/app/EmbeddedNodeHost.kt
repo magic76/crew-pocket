@@ -36,7 +36,7 @@ class EmbeddedNodeHost(
     fun stateFile(workspace: File): File = File(runtimeDir(workspace), "state.json")
 
     @Synchronized
-    fun start(workspace: File, bridgeToken: String): Result<Unit> {
+    fun start(workspace: File, bridgeToken: String, historyMigrationToken: String? = null): Result<Unit> {
         if (isRunning()) return Result.success(Unit)
         if (!isBinaryBundled(context)) {
             return Result.failure(IllegalStateException("Embedded Node binary is not bundled"))
@@ -77,6 +77,9 @@ class EmbeddedNodeHost(
                 put("CREW_BRAIN_DIR", brain.absolutePath)
                 put("CREW_EMBEDDED_WORKSPACE_ROOT", File(context.filesDir, "workspaces").absolutePath)
                 put("CREW_CODEX_BRIDGE_TOKEN_FILE", tokenFile.absolutePath)
+                if (!historyMigrationToken.isNullOrBlank()) {
+                    put("CREW_HISTORY_IMPORT_TOKEN", historyMigrationToken)
+                }
                 put("SHELL", "/system/bin/sh")
                 put("PATH", "/system/bin:/system/xbin:/product/bin")
                 put("LD_LIBRARY_PATH", context.applicationInfo.nativeLibraryDir)

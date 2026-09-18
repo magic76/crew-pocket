@@ -10,6 +10,7 @@ import java.util.zip.ZipInputStream
 
 object EmbeddedWorkspaceManager {
     private const val WORKSPACE_NAME = "agy-web"
+    private const val WORKSPACE_SCHEMA = "history-migration-v1"
     private const val BOOTSTRAP_URL =
         "https://api.github.com/repos/magic76/crew-pocket/zipball/feature/agent-runtime"
 
@@ -19,8 +20,10 @@ object EmbeddedWorkspaceManager {
 
     fun isReady(context: Context): Boolean {
         val workspace = workspaceDir(context)
+        val marker = File(workspace, ".crew-embedded-workspace")
         return File(workspace, "server.js").isFile &&
-            File(workspace, "lib/providers/codex.js").isFile
+            File(workspace, "lib/providers/codex.js").isFile &&
+            marker.isFile && marker.readText().contains("schema=$WORKSPACE_SCHEMA")
     }
 
     fun ensureWorkspace(context: Context): Result<File> {
@@ -65,7 +68,7 @@ object EmbeddedWorkspaceManager {
             }
 
             File(target, ".crew-embedded-workspace").writeText(
-                "source=magic76/crew-pocket\nref=feature/agent-runtime\n"
+                "source=magic76/crew-pocket\nref=feature/agent-runtime\nschema=$WORKSPACE_SCHEMA\n"
             )
             ensureRuntimeFiles(context, target)
             target

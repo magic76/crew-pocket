@@ -40,6 +40,7 @@ class CrewRuntimeService : Service() {
     private lateinit var embeddedCodexBridge: EmbeddedCodexBridge
     private lateinit var embeddedNodeHost: EmbeddedNodeHost
     private lateinit var bridgeToken: String
+    private lateinit var historyMigrationToken: String
 
     @Volatile private var hostMode = "initializing"
     @Volatile private var lastFailedFingerprint: String? = null
@@ -59,6 +60,11 @@ class CrewRuntimeService : Service() {
         bridgeToken = preferences.getString("embedded_bridge_token", null)
             ?: EmbeddedCodexBridge.generateToken().also {
                 preferences.edit().putString("embedded_bridge_token", it).apply()
+            }
+
+        historyMigrationToken = preferences.getString("history_migration_token", null)
+            ?: EmbeddedCodexBridge.generateToken().also {
+                preferences.edit().putString("history_migration_token", it).apply()
             }
 
         writePrivateBridgeToken(bridgeToken)
@@ -113,19 +119,6 @@ class CrewRuntimeService : Service() {
 
     private fun prepareEmbeddedRuntime() {
         bootstrapExecutor.execute {
-            // Existing conversations live in Termux until the explicit history
-            // migration completes. Do not replace the host with an empty app
-            // sandbox merely because this is the first embedded-runtime launch.
-            val preferences = getSharedPreferences("crew_runtime", MODE_PRIVATE)
-            if (!preferences.getBoolean("embedded_history_migrated", false)) {
-                setEmbeddedReady(false)
-                activateTermuxFallback(
-                    EmbeddedWorkspaceManager.workspaceDir(this),
-                    "waiting for existing history migration"
-                )
-                return@execute
-            }
-
             val workspaceResult = EmbeddedWorkspaceManager.ensureWorkspace(this)
             if (workspaceResult.isFailure) {
                 setEmbeddedReady(false)
@@ -139,7 +132,6 @@ class CrewRuntimeService : Service() {
             }
 
             val workspace = workspaceResult.getOrThrow()
-
             if (!EmbeddedCodexBridge.isBinaryBundled(this)) {
                 setEmbeddedReady(false)
                 activateTermuxFallback(workspace, "embedded Codex binary not bundled")
@@ -155,9 +147,14 @@ class CrewRuntimeService : Service() {
                 }
 
             setEmbeddedReady(true)
-
             if (!EmbeddedNodeHost.isBinaryBundled(this)) {
                 activateTermuxFallback(workspace, "embedded Node binary not bundled")
+                return@execute
+            }
+
+            val preferences = getSharedPreferences("crew_runtime", MODE_PRIVATE)
+            if (!preferences.getBoolean("embedded_history_migrated", false)) {
+                migrateExistingHistory(workspace)
                 return@execute
             }
 
@@ -165,7 +162,85 @@ class CrewRuntimeService : Service() {
         }
     }
 
+    private fun migrateExistingHistory(workspace: File) {
+        setHostMode("migrating-history")
+        updateNotification("Migrating existing Crew history…")
+
+        if (serverAlive()) {
+            RuntimeManager.fallbackHost.stopCrewHost(this)
+            waitForServerDown(10_000)
+        }
+        if (serverAlive()) {
+            activateTermuxFallback(workspace, "could not release Termux host for history migration")
+            return
+        }
+
+        embeddedNodeHost.start(workspace, bridgeToken, historyMigrationToken)
+            .onFailure {
+                activateTermuxFallback(workspace, "embedded host could not start history migration: ${it.message}")
+                return
+            }
+        if (!waitForEmbeddedHealthy()) {
+            embeddedNodeHost.stop()
+            activateTermuxFallback(workspace, "embedded host did not become ready for history migration")
+            return
+        }
+
+        TermuxBridge.migrateExistingHistory(this, historyMigrationToken)
+            .onFailure {
+                embeddedNodeHost.stop()
+                activateTermuxFallback(workspace, "could not request history migration: ${it.message}")
+                return
+            }
+
+        repeat(180) {
+            Thread.sleep(1_000)
+            when (historyMigrationStatus()) {
+                "complete" -> {
+                    getSharedPreferences("crew_runtime", MODE_PRIVATE).edit()
+                        .putBoolean("embedded_history_migrated", true)
+                        .apply()
+                    setHostMode("embedded-node")
+                    updateNotification("Crew runtime active · embedded Node + migrated history")
+                    Log.i(TAG, "Existing history migration completed")
+                    return
+                }
+                "failed" -> {
+                    embeddedNodeHost.stop()
+                    activateTermuxFallback(workspace, "history migration failed")
+                    return
+                }
+            }
+        }
+
+        embeddedNodeHost.stop()
+        activateTermuxFallback(workspace, "history migration timed out")
+    }
+
+    private fun historyMigrationStatus(): String? = runCatching {
+        val connection = URL("http://127.0.0.1:8000/api/runtime/history-migration")
+            .openConnection() as HttpURLConnection
+        connection.requestMethod = "GET"
+        connection.connectTimeout = 1_000
+        connection.readTimeout = 2_000
+        connection.setRequestProperty("X-Crew-History-Import-Token", historyMigrationToken)
+        try {
+            if (connection.responseCode !in 200..299) return@runCatching null
+            connection.inputStream.bufferedReader().use { reader ->
+                JSONObject(reader.readText()).optString("status", "")
+            }
+        } finally {
+            connection.disconnect()
+        }
+    }.getOrNull()
+
     private fun forceRestartEmbedded() {
+        if (!getSharedPreferences("crew_runtime", MODE_PRIVATE)
+                .getBoolean("embedded_history_migrated", false)) {
+            prepareEmbeddedRuntime()
+            return
+        }
+
         val workspaceResult = EmbeddedWorkspaceManager.ensureWorkspace(this)
         if (workspaceResult.isFailure) {
             activateTermuxFallback(

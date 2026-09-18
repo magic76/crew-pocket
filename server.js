@@ -40,6 +40,7 @@ const { createTask, getTask, listTasks, updateTask } = require('./lib/tasks');
 const { listWorkspaces, resolveWorkspace, createWorkspace } = require('./lib/workspaces');
 const auth = require('./lib/auth');
 const { applyCors, authorizeApiRequest, maybeSetAuthCookie, securityStatus } = require('./lib/http-security');
+const { createHistoryMigration } = require('./lib/runtime/history-migration');
 
 
 async function handleStorageReport(res) {
@@ -319,6 +320,10 @@ async function handleRuntimeStatus(res) {
     res.end(JSON.stringify({ error: err.message }));
   }
 }
+
+const historyMigration = process.env.CREW_HISTORY_IMPORT_TOKEN
+  ? createHistoryMigration({ homeDir: RUNTIME_HOME, token: process.env.CREW_HISTORY_IMPORT_TOKEN })
+  : null;
 
 const runtimeSelfDebug = {
   status: 'idle',
@@ -1639,6 +1644,12 @@ const server = http.createServer(async (req, res) => {
     return handleGetProviders(res);
   } else if (pathname === '/api/runtime/status' && req.method === 'GET') {
     return handleRuntimeStatus(res);
+  } else if (pathname === '/api/runtime/history-migration' && req.method === 'GET') {
+    if (!historyMigration) { res.writeHead(404); return res.end(); }
+    return historyMigration.status(req, res);
+  } else if (pathname === '/api/runtime/history-migration' && req.method === 'POST') {
+    if (!historyMigration) { res.writeHead(404); return res.end(); }
+    return historyMigration.receive(req, res);
   } else if (pathname === '/api/runtime/self-debug' && (req.method === 'GET' || req.method === 'POST')) {
     return handleRuntimeSelfDebug(req, res);
   } else if (pathname === '/api/auth/status' && req.method === 'GET') {

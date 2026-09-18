@@ -63,6 +63,26 @@ object TermuxBridge {
         return runCrewScript(context, command)
     }
 
+    fun migrateExistingHistory(context: Context, token: String): Result<Unit> {
+        require(token.matches(Regex("[0-9a-f]{64}"))) { "Invalid history migration token" }
+
+        val command = """
+            set -eu
+            cd "${'$'}HOME"
+            items=".gemini/antigravity-cli/brain .codex/sessions"
+            if [ -f .crew-pocket/conversation-settings.json ]; then
+                items="${'$'}items .crew-pocket/conversation-settings.json"
+            fi
+            if [ -d .crew-pocket/live-memos ]; then
+                items="${'$'}items .crew-pocket/live-memos"
+            fi
+            tar -czf - ${'$'}items | curl --fail --silent --show-error --max-time 900 \
+                -X POST -H 'X-Crew-History-Import-Token: $token' \
+                --data-binary @- http://127.0.0.1:8000/api/runtime/history-migration
+        """.trimIndent()
+        return runCrewScript(context, command)
+    }
+
     private fun runCrewScript(
         context: Context,
         command: String
