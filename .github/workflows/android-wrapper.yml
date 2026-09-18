@@ -8,6 +8,9 @@ on:
       - "android-wrapper/**"
       - "scripts/android-runtime-*.sh"
       - "scripts/enable-android-wrapper.sh"
+      - "scripts/prepare-embedded-codex.sh"
+      - "lib/runtime/**"
+      - "lib/providers/codex.js"
       - ".github/workflows/android-wrapper.yml"
   workflow_dispatch:
 
