@@ -10,6 +10,7 @@ import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import android.util.Log
+import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.concurrent.Executors
@@ -21,38 +22,53 @@ class CrewRuntimeService : Service() {
         const val ACTION_START = "com.crewpocket.app.action.START_RUNTIME"
         const val ACTION_STOP = "com.crewpocket.app.action.STOP_RUNTIME"
         const val ACTION_REFRESH_EMBEDDED = "com.crewpocket.app.action.REFRESH_EMBEDDED"
+        const val ACTION_RESTART_EMBEDDED = "com.crewpocket.app.action.RESTART_EMBEDDED"
 
         private const val TAG = "CrewRuntimeService"
         private const val CHANNEL_ID = "crew_runtime"
         private const val NOTIFICATION_ID = 7601
         private const val SERVER_URL = "http://127.0.0.1:8000/"
-        private const val RESTART_COOLDOWN_MS = 30_000L
+        private const val RETRY_COOLDOWN_MS = 20_000L
     }
 
     private val scheduler = Executors.newSingleThreadScheduledExecutor()
     private val bootstrapExecutor = Executors.newSingleThreadExecutor()
     private val monitorStarted = AtomicBoolean(false)
+
     private lateinit var embeddedCodexBridge: EmbeddedCodexBridge
-    @Volatile private var lastRestartAttemptAt = 0L
-    @Volatile private var consecutiveFailures = 0
+    private lateinit var embeddedNodeHost: EmbeddedNodeHost
+    private lateinit var bridgeToken: String
+
+    @Volatile private var hostMode = "initializing"
+    @Volatile private var lastFailedFingerprint: String? = null
+    @Volatile private var lastNodeExitCode: Int? = null
+    @Volatile private var lastRetryAt = 0L
+    @Volatile private var crashCount = 0
 
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
         promoteToForeground("Crew runtime starting…")
         setEmbeddedReady(false)
+        setHostMode("initializing")
 
         val preferences = getSharedPreferences("crew_runtime", MODE_PRIVATE)
-        val bridgeToken = preferences.getString("embedded_bridge_token", null)
+        bridgeToken = preferences.getString("embedded_bridge_token", null)
             ?: EmbeddedCodexBridge.generateToken().also {
                 preferences.edit().putString("embedded_bridge_token", it).apply()
             }
 
+        writePrivateBridgeToken(bridgeToken)
         TermuxBridge.provisionEmbeddedBridgeToken(this, bridgeToken)
-            .onFailure { Log.i(TAG, "Could not provision bridge token: ${it.message}") }
+            .onFailure { Log.i(TAG, "Could not provision bridge token to Termux: ${it.message}") }
 
         discardLegacyMigratedAuth(preferences)
         embeddedCodexBridge = EmbeddedCodexBridge(this, bridgeToken)
+        embeddedNodeHost = EmbeddedNodeHost(this) { exitCode ->
+            lastNodeExitCode = exitCode
+            Log.w(TAG, "Embedded Node exited with code $exitCode")
+        }
+
         prepareEmbeddedRuntime()
     }
 
@@ -60,15 +76,20 @@ class CrewRuntimeService : Service() {
         when (intent?.action) {
             ACTION_STOP -> {
                 updateNotification("Stopping Crew runtime…")
+                if (::embeddedNodeHost.isInitialized) embeddedNodeHost.shutdown()
                 if (::embeddedCodexBridge.isInitialized) embeddedCodexBridge.stop()
                 setEmbeddedReady(false)
-                RuntimeManager.crewHost.stopCrewHost(this)
+                setHostMode("stopped")
+                RuntimeManager.fallbackHost.stopCrewHost(this)
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
                 return START_NOT_STICKY
             }
 
             ACTION_REFRESH_EMBEDDED -> prepareEmbeddedRuntime()
+            ACTION_RESTART_EMBEDDED -> bootstrapExecutor.execute {
+                forceRestartEmbedded()
+            }
         }
 
         startMonitorIfNeeded()
@@ -80,6 +101,7 @@ class CrewRuntimeService : Service() {
     override fun onDestroy() {
         scheduler.shutdownNow()
         bootstrapExecutor.shutdownNow()
+        if (::embeddedNodeHost.isInitialized) embeddedNodeHost.shutdown()
         if (::embeddedCodexBridge.isInitialized) embeddedCodexBridge.stop()
         setEmbeddedReady(false)
         super.onDestroy()
@@ -87,33 +109,252 @@ class CrewRuntimeService : Service() {
 
     private fun prepareEmbeddedRuntime() {
         bootstrapExecutor.execute {
-            if (!EmbeddedCodexBridge.isBinaryBundled(this)) {
+            val workspaceResult = EmbeddedWorkspaceManager.ensureWorkspace(this)
+            if (workspaceResult.isFailure) {
                 setEmbeddedReady(false)
-                Log.i(TAG, "Embedded Codex binary is not bundled; keeping Termux fallback")
-                updateNotification("Crew runtime · Termux Codex fallback")
+                setHostMode("degraded")
+                Log.w(TAG, "Embedded workspace unavailable", workspaceResult.exceptionOrNull())
+                activateTermuxFallback(
+                    EmbeddedWorkspaceManager.workspaceDir(this),
+                    "workspace bootstrap failed"
+                )
                 return@execute
             }
 
-            updateNotification("Preparing embedded Codex workspace…")
-            val workspace = EmbeddedWorkspaceManager.ensureWorkspace(this)
-            if (workspace.isFailure) {
+            val workspace = workspaceResult.getOrThrow()
+
+            if (!EmbeddedCodexBridge.isBinaryBundled(this)) {
                 setEmbeddedReady(false)
-                Log.w(TAG, "Embedded workspace unavailable", workspace.exceptionOrNull())
-                updateNotification("Crew runtime · workspace bootstrap failed · Termux fallback")
+                activateTermuxFallback(workspace, "embedded Codex binary not bundled")
                 return@execute
             }
 
             embeddedCodexBridge.start()
-                .onSuccess {
-                    setEmbeddedReady(true)
-                    Log.i(TAG, "Embedded Codex transport ready with APK workspace")
-                    updateNotification("Crew runtime active · embedded Codex")
-                }
                 .onFailure {
                     setEmbeddedReady(false)
                     Log.w(TAG, "Embedded Codex unavailable", it)
-                    updateNotification("Crew runtime · embedded Codex failed · Termux fallback")
+                    activateTermuxFallback(workspace, "embedded Codex failed: ${it.message}")
+                    return@execute
                 }
+
+            setEmbeddedReady(true)
+
+            if (!EmbeddedNodeHost.isBinaryBundled(this)) {
+                activateTermuxFallback(workspace, "embedded Node binary not bundled")
+                return@execute
+            }
+
+            attemptEmbeddedTakeover(workspace, force = true)
+        }
+    }
+
+    private fun forceRestartEmbedded() {
+        val workspaceResult = EmbeddedWorkspaceManager.ensureWorkspace(this)
+        if (workspaceResult.isFailure) {
+            activateTermuxFallback(
+                EmbeddedWorkspaceManager.workspaceDir(this),
+                "workspace unavailable during manual restart"
+            )
+            return
+        }
+
+        val workspace = workspaceResult.getOrThrow()
+        lastFailedFingerprint = null
+
+        if (!embeddedCodexBridge.isRunning()) {
+            embeddedCodexBridge.start()
+                .onFailure {
+                    activateTermuxFallback(workspace, "embedded Codex restart failed: ${it.message}")
+                    return
+                }
+        }
+
+        setEmbeddedReady(true)
+        attemptEmbeddedTakeover(workspace, force = true)
+    }
+
+    private fun attemptEmbeddedTakeover(workspace: File, force: Boolean): Boolean {
+        if (!EmbeddedNodeHost.isBinaryBundled(this)) return false
+        if (!embeddedCodexBridge.isRunning()) return false
+
+        val fingerprint = embeddedNodeHost.sourceFingerprint(workspace)
+        if (!force && lastFailedFingerprint != null && fingerprint == lastFailedFingerprint) {
+            return false
+        }
+
+        setHostMode("testing-embedded")
+        updateNotification("Testing embedded Crew host…")
+
+        if (!embeddedNodeHost.isRunning() && serverAlive()) {
+            RuntimeManager.fallbackHost.stopCrewHost(this)
+            waitForServerDown(1_500)
+        }
+
+        if (serverAlive() && !embeddedNodeHost.isRunning()) {
+            lastFailedFingerprint = fingerprint
+            activateTermuxFallback(workspace, "port 8000 is still owned by fallback host")
+            return false
+        }
+
+        val start = embeddedNodeHost.start(workspace, bridgeToken)
+        if (start.isFailure) {
+            lastFailedFingerprint = fingerprint
+            crashCount += 1
+            activateTermuxFallback(
+                workspace,
+                "embedded Node start failed: ${start.exceptionOrNull()?.message}"
+            )
+            return false
+        }
+
+        if (waitForEmbeddedHealthy()) {
+            lastFailedFingerprint = null
+            lastNodeExitCode = null
+            setHostMode("embedded-node")
+            embeddedNodeHost.writeState(
+                workspace,
+                status = "healthy",
+                exitCode = null,
+                detail = "Embedded Node owns localhost:8000",
+                extra = mapOf(
+                    "hostMode" to "embedded-node",
+                    "crashCount" to crashCount,
+                    "selfDebug" to "enabled"
+                )
+            )
+            updateNotification("Crew runtime active · embedded Node + Codex")
+            Log.i(TAG, "Embedded Node takeover succeeded")
+            return true
+        }
+
+        embeddedNodeHost.stop()
+        lastFailedFingerprint = fingerprint
+        crashCount += 1
+        activateTermuxFallback(
+            workspace,
+            "embedded Node failed health check; exit=${lastNodeExitCode ?: "unknown"}"
+        )
+        return false
+    }
+
+    private fun activateTermuxFallback(workspace: File, reason: String) {
+        if (::embeddedNodeHost.isInitialized && embeddedNodeHost.isRunning()) {
+            embeddedNodeHost.stop()
+        }
+
+        setHostMode("termux-fallback")
+        embeddedNodeHost.writeState(
+            workspace,
+            status = "fallback",
+            exitCode = lastNodeExitCode,
+            detail = reason,
+            extra = mapOf(
+                "hostMode" to "termux-fallback",
+                "crashCount" to crashCount,
+                "waitingForSourceChange" to (lastFailedFingerprint != null)
+            )
+        )
+
+        if (!serverAlive()) {
+            RuntimeManager.fallbackHost.startCrewHost(this)
+                .onFailure {
+                    setHostMode("degraded")
+                    Log.w(TAG, "Termux fallback unavailable", it)
+                    updateNotification("Crew runtime unavailable · ${it.message}")
+                    return
+                }
+        }
+
+        updateNotification("Crew runtime · Termux rescue host · embedded Codex")
+        Log.w(TAG, "Using Termux fallback: $reason")
+    }
+
+    private fun startMonitorIfNeeded() {
+        if (!monitorStarted.compareAndSet(false, true)) return
+        scheduler.scheduleWithFixedDelay(
+            { checkAndRecover() },
+            4,
+            8,
+            TimeUnit.SECONDS
+        )
+    }
+
+    private fun checkAndRecover() {
+        val workspace = EmbeddedWorkspaceManager.workspaceDir(this)
+
+        if (hostMode == "embedded-node") {
+            if (embeddedNodeHost.isRunning() && serverAlive()) {
+                updateNotification("Crew runtime active · embedded Node + Codex")
+                return
+            }
+
+            lastFailedFingerprint = embeddedNodeHost.sourceFingerprint(workspace)
+            crashCount += 1
+            activateTermuxFallback(
+                workspace,
+                "embedded Node exited or stopped responding; exit=${lastNodeExitCode ?: "unknown"}"
+            )
+            return
+        }
+
+        if (
+            hostMode == "termux-fallback" &&
+            EmbeddedNodeHost.isBinaryBundled(this) &&
+            embeddedCodexBridge.isRunning() &&
+            EmbeddedWorkspaceManager.isReady(this)
+        ) {
+            val currentFingerprint = embeddedNodeHost.sourceFingerprint(workspace)
+            val failedFingerprint = lastFailedFingerprint
+            if (
+                failedFingerprint != null &&
+                currentFingerprint != failedFingerprint &&
+                System.currentTimeMillis() - lastRetryAt >= RETRY_COOLDOWN_MS
+            ) {
+                lastRetryAt = System.currentTimeMillis()
+                Log.i(TAG, "Workspace changed after failure; retrying embedded Node")
+                attemptEmbeddedTakeover(workspace, force = true)
+                return
+            }
+        }
+
+        if (!serverAlive()) {
+            if (System.currentTimeMillis() - lastRetryAt >= RETRY_COOLDOWN_MS) {
+                lastRetryAt = System.currentTimeMillis()
+                RuntimeManager.fallbackHost.startCrewHost(this)
+                    .onFailure {
+                        setHostMode("degraded")
+                        updateNotification("Crew runtime unavailable · ${it.message}")
+                    }
+            }
+        } else if (hostMode == "termux-fallback") {
+            updateNotification("Crew runtime · Termux rescue host · embedded Codex")
+        }
+    }
+
+    private fun waitForEmbeddedHealthy(): Boolean {
+        repeat(20) {
+            if (!embeddedNodeHost.isRunning()) return false
+            if (serverAlive()) return true
+            Thread.sleep(300)
+        }
+        return false
+    }
+
+    private fun waitForServerDown(timeoutMs: Long) {
+        val deadline = System.currentTimeMillis() + timeoutMs
+        while (System.currentTimeMillis() < deadline) {
+            if (!serverAlive()) return
+            Thread.sleep(100)
+        }
+    }
+
+    private fun writePrivateBridgeToken(token: String) {
+        runCatching {
+            val dir = File(filesDir, ".crew-pocket")
+            dir.mkdirs()
+            File(dir, "embedded-bridge-token").writeText(token + "\n")
+        }.onFailure {
+            Log.w(TAG, "Could not write APK bridge token", it)
         }
     }
 
@@ -124,14 +365,22 @@ class CrewRuntimeService : Service() {
             .apply()
     }
 
+    private fun setHostMode(mode: String) {
+        hostMode = mode
+        getSharedPreferences("crew_runtime", MODE_PRIVATE)
+            .edit()
+            .putString("host_mode", mode)
+            .apply()
+    }
+
     private fun discardLegacyMigratedAuth(
         preferences: android.content.SharedPreferences
     ) {
         if (preferences.getBoolean("embedded_managed_auth_v2", false)) return
 
-        val codexHome = java.io.File(filesDir, ".codex")
-        val auth = java.io.File(codexHome, "auth.json")
-        val temp = java.io.File(codexHome, "auth.json.tmp")
+        val codexHome = File(filesDir, ".codex")
+        val auth = File(codexHome, "auth.json")
+        val temp = File(codexHome, "auth.json.tmp")
         if (auth.exists()) {
             if (auth.delete()) {
                 Log.i(TAG, "Removed legacy copied Codex auth; embedded login will own credentials")
@@ -143,52 +392,12 @@ class CrewRuntimeService : Service() {
         preferences.edit().putBoolean("embedded_managed_auth_v2", true).apply()
     }
 
-    private fun startMonitorIfNeeded() {
-        if (!monitorStarted.compareAndSet(false, true)) return
-        scheduler.scheduleWithFixedDelay(
-            { checkAndRecover() },
-            0,
-            12,
-            TimeUnit.SECONDS
-        )
-    }
-
-    private fun checkAndRecover() {
-        if (serverAlive()) {
-            consecutiveFailures = 0
-            val codexMode = if (::embeddedCodexBridge.isInitialized && embeddedCodexBridge.isRunning()) {
-                "embedded Codex"
-            } else {
-                "Termux Codex fallback"
-            }
-            updateNotification("Crew runtime active · $codexMode")
-            return
-        }
-
-        consecutiveFailures += 1
-        val now = System.currentTimeMillis()
-        if (now - lastRestartAttemptAt >= RESTART_COOLDOWN_MS) {
-            lastRestartAttemptAt = now
-            val result = RuntimeManager.crewHost.startCrewHost(this)
-            if (result.isSuccess) {
-                updateNotification("Crew runtime reconnecting through Termux…")
-            } else {
-                updateNotification(
-                    result.exceptionOrNull()?.message
-                        ?: "Crew runtime unavailable · check Termux setup"
-                )
-            }
-        } else if (consecutiveFailures >= 2) {
-            updateNotification("Crew runtime unavailable · waiting to retry")
-        }
-    }
-
     private fun serverAlive(): Boolean {
         return try {
             val connection = URL(SERVER_URL).openConnection() as HttpURLConnection
             connection.requestMethod = "GET"
-            connection.connectTimeout = 1500
-            connection.readTimeout = 1500
+            connection.connectTimeout = 1_000
+            connection.readTimeout = 1_000
             connection.instanceFollowRedirects = false
             connection.useCaches = false
             try {
@@ -251,6 +460,15 @@ class CrewRuntimeService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
+        val restartIntent = Intent(this, CrewRuntimeService::class.java)
+            .setAction(ACTION_RESTART_EMBEDDED)
+        val restartPendingIntent = PendingIntent.getService(
+            this,
+            3,
+            restartIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
         val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             Notification.Builder(this, CHANNEL_ID)
         } else {
@@ -265,13 +483,8 @@ class CrewRuntimeService : Service() {
             .setContentIntent(openPendingIntent)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
-            .addAction(
-                Notification.Action.Builder(
-                    null,
-                    "Stop",
-                    stopPendingIntent
-                ).build()
-            )
+            .addAction(Notification.Action.Builder(null, "Retry Embedded", restartPendingIntent).build())
+            .addAction(Notification.Action.Builder(null, "Stop", stopPendingIntent).build())
             .build()
     }
 }
