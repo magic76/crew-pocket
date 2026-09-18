@@ -301,6 +301,17 @@ function handleGetProviders(res) {
   res.end(JSON.stringify({ providers: listProviderMetadata() }));
 }
 
+async function handleRuntimeStatus(res) {
+  try {
+    const codex = await getProvider('codex').getRuntimeStatus();
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ codex }));
+  } catch (err) {
+    res.writeHead(500, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: err.message }));
+  }
+}
+
 // ⚡ Check Conversation Session Busy Status
 function handleSessionStatus(parsedUrl, res) {
   const convId = parsedUrl.query.id;
@@ -1530,6 +1541,8 @@ const server = http.createServer(async (req, res) => {
     return handleGetModels(res);
   } else if (pathname === '/api/providers' && req.method === 'GET') {
     return handleGetProviders(res);
+  } else if (pathname === '/api/runtime/status' && req.method === 'GET') {
+    return handleRuntimeStatus(res);
   } else if (pathname === '/api/auth/status' && req.method === 'GET') {
     return handleGetAuthStatus(res);
   } else if (pathname === '/api/auth/codex/device-start' && req.method === 'POST') {
