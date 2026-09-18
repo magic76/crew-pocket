@@ -26,6 +26,8 @@ object TermuxAgentRuntime : AgentRuntime {
 }
 
 object RuntimeManager {
-    // Termux remains the rescue host while EmbeddedNodeHost is being proven.
-    val fallbackHost: AgentRuntime = TermuxAgentRuntime
+    val productionHost: AgentRuntime = TermuxAgentRuntime
+
+    // Compatibility alias for older experimental embedded-runtime code.
+    val fallbackHost: AgentRuntime = productionHost
 }
