@@ -7,6 +7,10 @@ android {
     namespace = "com.crewpocket.app"
     compileSdk = 35
 
+    buildFeatures {
+        buildConfig = true
+    }
+
     defaultConfig {
         applicationId = "com.crewpocket.app"
         minSdk = 26

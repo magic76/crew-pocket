@@ -42,18 +42,14 @@ object TermuxBridge {
     fun startCrew(context: Context): Result<Unit> = runCrewScript(
         context,
         """
-        ROOT="$HOME/agy-web"
-        [ -d "$HOME/crew-pocket" ] && ROOT="$HOME/crew-pocket"
-        exec "$ROOT/scripts/android-runtime-start.sh"
+        exec "${'$'}HOME/agy-web/scripts/android-runtime-start.sh"
         """.trimIndent()
     )
 
     fun stopCrew(context: Context): Result<Unit> = runCrewScript(
         context,
         """
-        ROOT="$HOME/agy-web"
-        [ -d "$HOME/crew-pocket" ] && ROOT="$HOME/crew-pocket"
-        exec "$ROOT/scripts/android-runtime-stop.sh"
+        exec "${'$'}HOME/agy-web/scripts/android-runtime-stop.sh"
         """.trimIndent()
     )
 
