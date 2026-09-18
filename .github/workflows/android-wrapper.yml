@@ -9,6 +9,7 @@ on:
       - "scripts/android-runtime-*.sh"
       - "scripts/enable-android-wrapper.sh"
       - "scripts/prepare-embedded-codex.sh"
+      - "scripts/prepare-embedded-node.sh"
       - "lib/**/*.js"
       - "server.js"
       - "public/js/auth.js"
