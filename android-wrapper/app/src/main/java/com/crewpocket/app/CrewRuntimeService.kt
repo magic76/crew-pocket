@@ -10,6 +10,7 @@ import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import android.util.Log
+import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.concurrent.Executors
@@ -20,7 +21,9 @@ class CrewRuntimeService : Service() {
     companion object {
         const val ACTION_START = "com.crewpocket.app.action.START_RUNTIME"
         const val ACTION_STOP = "com.crewpocket.app.action.STOP_RUNTIME"
+        const val ACTION_REFRESH_EMBEDDED = "com.crewpocket.app.action.REFRESH_EMBEDDED"
 
+        private const val TAG = "CrewRuntimeService"
         private const val CHANNEL_ID = "crew_runtime"
         private const val NOTIFICATION_ID = 7601
         private const val SERVER_URL = "http://127.0.0.1:8000/"
@@ -28,7 +31,9 @@ class CrewRuntimeService : Service() {
     }
 
     private val scheduler = Executors.newSingleThreadScheduledExecutor()
+    private val bootstrapExecutor = Executors.newSingleThreadExecutor()
     private val monitorStarted = AtomicBoolean(false)
+    private val authMigrationRequested = AtomicBoolean(false)
     private lateinit var embeddedCodexBridge: EmbeddedCodexBridge
     @Volatile private var lastRestartAttemptAt = 0L
     @Volatile private var consecutiveFailures = 0
@@ -36,29 +41,36 @@ class CrewRuntimeService : Service() {
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
+        promoteToForeground("Crew runtime starting…")
+
         val preferences = getSharedPreferences("crew_runtime", MODE_PRIVATE)
         val bridgeToken = preferences.getString("embedded_bridge_token", null)
             ?: EmbeddedCodexBridge.generateToken().also {
                 preferences.edit().putString("embedded_bridge_token", it).apply()
             }
+
         TermuxBridge.provisionEmbeddedBridgeToken(this, bridgeToken)
-            .onFailure { Log.i("CrewRuntimeService", "Could not provision bridge token: ${it.message}") }
+            .onFailure { Log.i(TAG, "Could not provision bridge token: ${it.message}") }
 
         embeddedCodexBridge = EmbeddedCodexBridge(this, bridgeToken)
-        embeddedCodexBridge.start()
-            .onSuccess { Log.i("CrewRuntimeService", "Embedded Codex bridge ready") }
-            .onFailure { Log.i("CrewRuntimeService", "Embedded Codex unavailable: ${it.message}") }
-        promoteToForeground("Crew runtime starting…")
+        prepareEmbeddedRuntime()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent?.action == ACTION_STOP) {
-            updateNotification("Stopping Crew runtime…")
-            embeddedCodexBridge.stop()
-            RuntimeManager.crewHost.stopCrewHost(this)
-            stopForeground(STOP_FOREGROUND_REMOVE)
-            stopSelf()
-            return START_NOT_STICKY
+        when (intent?.action) {
+            ACTION_STOP -> {
+                updateNotification("Stopping Crew runtime…")
+                if (::embeddedCodexBridge.isInitialized) embeddedCodexBridge.stop()
+                RuntimeManager.crewHost.stopCrewHost(this)
+                stopForeground(STOP_FOREGROUND_REMOVE)
+                stopSelf()
+                return START_NOT_STICKY
+            }
+
+            ACTION_REFRESH_EMBEDDED -> {
+                authMigrationRequested.set(false)
+                prepareEmbeddedRuntime()
+            }
         }
 
         startMonitorIfNeeded()
@@ -69,8 +81,54 @@ class CrewRuntimeService : Service() {
 
     override fun onDestroy() {
         scheduler.shutdownNow()
+        bootstrapExecutor.shutdownNow()
         if (::embeddedCodexBridge.isInitialized) embeddedCodexBridge.stop()
         super.onDestroy()
+    }
+
+    private fun prepareEmbeddedRuntime() {
+        bootstrapExecutor.execute {
+            if (!EmbeddedCodexBridge.isBinaryBundled(this)) {
+                Log.i(TAG, "Embedded Codex binary is not bundled; keeping Termux fallback")
+                updateNotification("Crew runtime · Termux Codex fallback")
+                return@execute
+            }
+
+            updateNotification("Preparing embedded Codex workspace…")
+            val workspace = EmbeddedWorkspaceManager.ensureWorkspace(this)
+            if (workspace.isFailure) {
+                Log.w(TAG, "Embedded workspace unavailable", workspace.exceptionOrNull())
+                updateNotification("Crew runtime · workspace bootstrap failed · Termux fallback")
+                return@execute
+            }
+
+            if (!embeddedAuthReady()) {
+                if (authMigrationRequested.compareAndSet(false, true)) {
+                    TermuxBridge.migrateCodexAuth(this)
+                        .onFailure {
+                            authMigrationRequested.set(false)
+                            Log.i(TAG, "Could not request Codex auth migration: ${it.message}")
+                        }
+                }
+                updateNotification("Crew runtime · migrating Codex login · Termux fallback")
+                return@execute
+            }
+
+            embeddedCodexBridge.start()
+                .onSuccess {
+                    Log.i(TAG, "Embedded Codex ready with APK workspace")
+                    updateNotification("Crew runtime active · embedded Codex")
+                }
+                .onFailure {
+                    Log.w(TAG, "Embedded Codex unavailable", it)
+                    updateNotification("Crew runtime · embedded Codex failed · Termux fallback")
+                }
+        }
+    }
+
+    private fun embeddedAuthReady(): Boolean {
+        val auth = File(File(filesDir, ".codex"), "auth.json")
+        return auth.isFile && auth.length() > 0L
     }
 
     private fun startMonitorIfNeeded() {
@@ -87,7 +145,7 @@ class CrewRuntimeService : Service() {
         if (serverAlive()) {
             consecutiveFailures = 0
             val codexMode = if (::embeddedCodexBridge.isInitialized && embeddedCodexBridge.isRunning()) {
-                "embedded Codex bridge"
+                "embedded Codex"
             } else {
                 "Termux Codex fallback"
             }
