@@ -1,11 +1,9 @@
 package com.crewpocket.app
 
-import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
-import java.util.concurrent.atomic.AtomicInteger
 
 object TermuxBridge {
     const val TERMUX_PACKAGE = "com.termux"
@@ -18,11 +16,9 @@ object TermuxBridge {
     private const val EXTRA_WORKDIR = "com.termux.RUN_COMMAND_WORKDIR"
     private const val EXTRA_BACKGROUND = "com.termux.RUN_COMMAND_BACKGROUND"
     private const val EXTRA_SESSION_ACTION = "com.termux.RUN_COMMAND_SESSION_ACTION"
-    private const val EXTRA_PENDING_INTENT = "com.termux.RUN_COMMAND_PENDING_INTENT"
 
     private const val TERMUX_BASH = "/data/data/com.termux/files/usr/bin/bash"
     private const val TERMUX_HOME = "/data/data/com.termux/files/home"
-    private val requestIds = AtomicInteger(7800)
 
     fun isInstalled(context: Context): Boolean {
         return try {
@@ -56,32 +52,6 @@ object TermuxBridge {
         )
     }
 
-    fun migrateCodexAuth(context: Context): Result<Unit> {
-        val callbackIntent = Intent(context, TermuxResultService::class.java)
-            .putExtra(
-                TermuxResultService.EXTRA_OPERATION,
-                TermuxResultService.OP_MIGRATE_CODEX_AUTH
-            )
-        val pendingIntentFlags = PendingIntent.FLAG_ONE_SHOT or
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                PendingIntent.FLAG_MUTABLE
-            } else {
-                0
-            }
-        val pendingIntent = PendingIntent.getService(
-            context,
-            requestIds.incrementAndGet(),
-            callbackIntent,
-            pendingIntentFlags
-        )
-
-        val command =
-            "test -s \"\$HOME/.codex/auth.json\" || exit 4\n" +
-                "cat \"\$HOME/.codex/auth.json\""
-
-        return runCrewScript(context, command, pendingIntent)
-    }
-
     fun provisionEmbeddedBridgeToken(context: Context, token: String): Result<Unit> {
         require(token.matches(Regex("[0-9a-f]{64}"))) { "Invalid bridge token" }
 
@@ -95,8 +65,7 @@ object TermuxBridge {
 
     private fun runCrewScript(
         context: Context,
-        command: String,
-        resultPendingIntent: PendingIntent? = null
+        command: String
     ): Result<Unit> {
         if (!isInstalled(context)) {
             return Result.failure(IllegalStateException("Termux is not installed"))
@@ -115,9 +84,6 @@ object TermuxBridge {
             putExtra(EXTRA_WORKDIR, TERMUX_HOME)
             putExtra(EXTRA_BACKGROUND, true)
             putExtra(EXTRA_SESSION_ACTION, "0")
-            if (resultPendingIntent != null) {
-                putExtra(EXTRA_PENDING_INTENT, resultPendingIntent)
-            }
         }
 
         return runCatching {
