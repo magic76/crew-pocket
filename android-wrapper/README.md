@@ -155,3 +155,72 @@ and fallback. To make embedded Codex a full coding replacement, Phase 2B needs:
    workspace sync/import layer).
 
 Do not remove Termux yet.
+
+
+## Phase 2B: APK auth + workspace
+
+Phase 2B makes embedded Codex usable inside the Android app sandbox instead of
+only proving that the native process can start.
+
+The embedded bridge is now opened only when all three prerequisites are ready:
+
+1. `libcodex_exec.so` is bundled in the APK.
+2. APK-private Codex auth exists at `files/.codex/auth.json`.
+3. APK-private workspace exists at `files/workspaces/agy-web`.
+
+Until all three are ready, Crew Pocket keeps using the Termux Codex fallback.
+
+### Auth migration
+
+On first start, Crew Pocket requests the existing Termux Codex login through the
+official Termux `RUN_COMMAND` PendingIntent result channel. Only
+`~/.codex/auth.json` is requested. The result is validated and written into the
+APK-private `CODEX_HOME`; token contents are never written to Crew logs.
+
+This is a one-time bootstrap. Once copied, embedded Codex owns its private
+`auth.json` and can use Codex's normal managed refresh-token behavior.
+
+### Workspace bootstrap
+
+The APK downloads the current `magic76/crew-pocket`
+`feature/agent-runtime` GitHub snapshot and extracts it into:
+
+```text
+/data/user/0/com.crewpocket.app/files/workspaces/agy-web
+```
+
+This first version intentionally bootstraps a source snapshot, not a Git worktree.
+Git support / sync-back is a later phase.
+
+When Codex transport is embedded, Crew's Termux workspace path is translated to
+the APK-private workspace. When transport falls back to Termux, existing paths
+are unchanged.
+
+### Debug verification
+
+The debug APK is debuggable, so ADB can inspect the app sandbox:
+
+```bash
+adb shell run-as com.crewpocket.app ls -l files/.codex/auth.json
+adb shell run-as com.crewpocket.app ls -l files/workspaces/agy-web/server.js
+adb shell run-as com.crewpocket.app cat files/workspaces/agy-web/.crew-embedded-workspace
+```
+
+Then start a **new Codex conversation** and ask it to create a simple file such as
+`EMBEDDED_RUNTIME_TEST.txt`. Verify it was created inside the APK workspace:
+
+```bash
+adb shell run-as com.crewpocket.app cat files/workspaces/agy-web/EMBEDDED_RUNTIME_TEST.txt
+```
+
+Expected Termux log:
+
+```text
+[Codex Runtime] Connected to embedded Android bridge at 127.0.0.1:8766
+[Codex Provider] transport=embedded-android-bridge
+[Codex Runtime] workspace=/data/user/0/com.crewpocket.app/files/workspaces/agy-web
+```
+
+Existing Codex thread IDs created under Termux may not exist in the APK-private
+`CODEX_HOME`. The provider therefore starts a new embedded thread if a previous
+Termux thread cannot be resumed.
