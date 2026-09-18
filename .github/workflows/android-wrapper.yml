@@ -9,9 +9,7 @@ on:
       - "scripts/android-runtime-*.sh"
       - "scripts/enable-android-wrapper.sh"
       - "scripts/prepare-embedded-codex.sh"
-      - "lib/runtime/**"
-      - "lib/providers/codex.js"
-      - "lib/auth.js"
+      - "lib/**/*.js"
       - "server.js"
       - "public/js/auth.js"
       - "public/index.html"
@@ -41,6 +39,11 @@ jobs:
           node --check lib/runtime/codex-transport.js
           node --check lib/providers/codex.js
           node --check lib/auth.js
+          node --check lib/config.js
+          node --check lib/files.js
+          node --check lib/sandbox.js
+          node --check lib/storage.js
+          node --check lib/workspaces.js
           node --check server.js
           node --check public/js/auth.js
 
