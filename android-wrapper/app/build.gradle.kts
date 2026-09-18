@@ -11,6 +11,15 @@ android {
         buildConfig = true
     }
 
+    packaging {
+        jniLibs {
+            // Android 10+ forbids exec from writable app-home paths. Keep the
+            // optional Codex ELF in installer-owned nativeLibraryDir instead.
+            useLegacyPackaging = true
+            keepDebugSymbols += setOf("**/libcodex_exec.so")
+        }
+    }
+
     defaultConfig {
         applicationId = "com.crewpocket.app"
         minSdk = 26
