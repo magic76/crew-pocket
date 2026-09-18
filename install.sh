@@ -8,6 +8,8 @@
 
 set -euo pipefail
 
+export PATH="$HOME/.local/bin:${PREFIX:-/data/data/com.termux/files/usr}/bin:$PATH"
+
 REPOSITORY="https://github.com/magic76/crew-pocket.git"
 if [ -d "/data/data/com.termux/files/home" ]; then
     TARGET_DIR="$HOME/agy-web"
