@@ -35,6 +35,13 @@ jobs:
         with:
           gradle-version: "8.10.2"
 
+      - name: Check runtime shell scripts
+        run: |
+          bash -n scripts/prepare-embedded-node.sh
+          bash -n scripts/prepare-embedded-codex.sh
+          bash -n scripts/android-runtime-start.sh
+          bash -n scripts/android-runtime-stop.sh
+
       - name: Check runtime JavaScript
         run: |
           node --check lib/runtime/codex-transport.js
