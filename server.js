@@ -9,6 +9,8 @@ const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
 
 const execFileAsync = promisify(execFile);
+const RUNTIME_HOME = path.resolve(process.env.HOME || '/data/data/com.termux/files/home');
+const REUSABLE_TOOL_DIR = process.env.CREW_REUSABLE_TOOL_DIR || path.join(__dirname, 'public', 'extra');
 
 const {
   PORT,
@@ -766,7 +768,7 @@ async function handleImageProxy(parsedUrl, res) {
       return res.end('Image not found');
     }
 
-    const HOME_DIR = '/data/data/com.termux/files/home';
+    const HOME_DIR = RUNTIME_HOME;
     const allowedRoots = [UPLOADS_DIR, BRAIN_DIR, HOME_DIR, '/sdcard', '/storage'];
     const isLegacyUploadPath = [LEGACY_UPLOADS_DIR, PREVIOUS_UPLOADS_DIR]
       .some(root => imgPath.startsWith(`${root}${path.sep}`));
@@ -907,7 +909,7 @@ const CREW_POCKET_CAPABILITY_INDEX = '[Crew Pocket：支援互動 HTML、Chart.j
 
 const CAPABILITY_RULES = {
   html: `[Crew Pocket Capability Rules]
-若建立或更新互動工具，輸出完整、自包含的 \`\`\`html\`\`\`；純 HTML 區塊不得混入說明文字。需要載入本機資產時使用絕對路徑，不用 file://。明確要求可重複使用的本機工具頁時，寫入 /data/data/com.termux/files/home/agy-web/public/extra/<safe-name>.html。`,
+若建立或更新互動工具，輸出完整、自包含的 \`\`\`html\`\`\`；純 HTML 區塊不得混入說明文字。需要載入本機資產時使用絕對路徑，不用 file://。明確要求可重複使用的本機工具頁時，寫入 ${REUSABLE_TOOL_DIR}/<safe-name>.html。`,
   chart: `[Crew Pocket Capability Rules]
 若建立資料圖表，輸出含 Chart.js CDN 與 <canvas id="chart"> 的完整 HTML。獨立向量圖或流程圖使用 SVG 或 Mermaid。`,
   maps: `[Crew Pocket Capability Rules]
@@ -1264,7 +1266,7 @@ async function handleGetGuidelines(res) {
   try {
     const candidates = [
       path.join(__dirname, 'GEMINI.md'),
-      path.join(process.env.HOME || '/data/data/com.termux/files/home', 'GEMINI.md'),
+      path.join(RUNTIME_HOME, 'GEMINI.md'),
       path.join(__dirname, 'AGENTS.md')
     ];
     let content = '';
@@ -1287,7 +1289,7 @@ async function handleGetGuidelines(res) {
 // 🚀 Sync & Save Guidelines to all default locations (~/ and ~/agy-web/)
 async function handleSyncGuidelines(req, res) {
   try {
-    const homeDir = process.env.HOME || '/data/data/com.termux/files/home';
+    const homeDir = RUNTIME_HOME;
     const agyWebDir = __dirname;
     let body = {};
     try {
