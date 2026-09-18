@@ -950,10 +950,10 @@
 
           <!-- Auth Action Buttons -->
           <div class="space-y-2">
-            <!-- 1. Primary: Browser One-Click OAuth Login -->
-            <button id="codex-device-start-btn" type="button" class="w-full py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-950/40 cursor-pointer transition" onclick="startCodexOAuthFlow()">
-              <span>🌐</span>
-              <span>瀏覽器一鍵快速登入 (推薦・免設定開關)</span>
+            <!-- 1. Primary: Device Code Login (robust inside Android/WebView) -->
+            <button id="codex-device-start-btn" type="button" class="w-full py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-950/40 cursor-pointer transition" onclick="startCodexDeviceFlow()">
+              <span>🔑</span>
+              <span>使用設備碼登入 Codex (推薦)</span>
             </button>
 
             <!-- Device Flow Step Display (Initially hidden) -->
@@ -988,10 +988,10 @@
               </div>
             </div>
 
-            <!-- Alternative Login Options (Device Code & API Key) -->
+            <!-- Alternative Login Options -->
             <div class="flex items-center justify-between pt-1">
-              <button type="button" class="text-[11px] text-slate-400 hover:text-slate-200 transition font-mono flex items-center gap-1 cursor-pointer" onclick="startCodexDeviceFlow()">
-                <span>🔑 使用設備碼 (Device Auth)</span>
+              <button type="button" class="text-[11px] text-slate-400 hover:text-slate-200 transition font-mono flex items-center gap-1 cursor-pointer" onclick="startCodexOAuthFlow()">
+                <span>🌐 改用瀏覽器 OAuth</span>
               </button>
             </div>
 
