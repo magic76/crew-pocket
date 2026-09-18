@@ -189,6 +189,10 @@ class EmbeddedCodexBridge(private val context: Context, private val bridgeToken:
             put("HOME", context.filesDir.absolutePath)
             put("CODEX_HOME", codexHome.absolutePath)
             put("TMPDIR", context.cacheDir.absolutePath)
+            put("SHELL", "/system/bin/sh")
+            if (get("PATH").isNullOrBlank()) {
+                put("PATH", "/system/bin:/system/xbin:/product/bin")
+            }
             put("CODEX_SELF_EXE", binary.absolutePath)
             put("LD_LIBRARY_PATH", context.applicationInfo.nativeLibraryDir)
         }
