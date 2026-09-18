@@ -306,8 +306,14 @@ function handleGetProviders(res) {
 async function handleRuntimeStatus(res) {
   try {
     const codex = await getProvider('codex').getRuntimeStatus();
+    const host = {
+      runtime: process.env.CREW_HOST_RUNTIME || 'termux-node',
+      pid: process.pid,
+      home: RUNTIME_HOME,
+      workspace: process.env.CREW_EMBEDDED_WORKSPACE_ROOT || null
+    };
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ codex }));
+    res.end(JSON.stringify({ host, codex }));
   } catch (err) {
     res.writeHead(500, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: err.message }));
