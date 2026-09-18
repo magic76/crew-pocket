@@ -3,6 +3,7 @@ name: Build Android Wrapper
 on:
   push:
     branches:
+      - main
       - feature/agent-runtime
     paths:
       - "android-wrapper/**"
