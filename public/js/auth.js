@@ -116,7 +116,7 @@ async function startCodexOAuthFlow() {
     alert('啟動登入失敗：' + err.message);
     if (startBtn) {
       startBtn.disabled = false;
-      startBtn.innerHTML = '🌐 瀏覽器一鍵快速登入 (推薦)';
+      startBtn.innerHTML = '🔑 使用設備碼登入 Codex (推薦)';
     }
   }
 }
@@ -169,7 +169,7 @@ async function startCodexDeviceFlow() {
     alert('啟動 Device Auth 失敗：' + err.message);
     if (startBtn) {
       startBtn.disabled = false;
-      startBtn.innerHTML = '🌐 瀏覽器一鍵快速登入 (推薦)';
+      startBtn.innerHTML = '🔑 使用設備碼登入 Codex (推薦)';
     }
   }
 }
@@ -202,7 +202,7 @@ function pollCodexDeviceStatus(sessionId) {
           if (startBtn) {
             startBtn.classList.remove('hidden');
             startBtn.disabled = false;
-            startBtn.innerHTML = '🌐 再次重新登入 Codex';
+            startBtn.innerHTML = '🔑 再次重新登入 Codex';
           }
         }, 3500);
 
