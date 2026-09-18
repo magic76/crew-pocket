@@ -53,7 +53,7 @@ class CrewRuntimeService : Service() {
         when (intent?.action) {
             ACTION_STOP -> {
                 updateNotification("Stopping Crew runtime…")
-                RuntimeManager.fallbackHost.stopCrewHost(this)
+                RuntimeManager.productionHost.stopCrewHost(this)
                 getSharedPreferences("crew_runtime", MODE_PRIVATE)
                     .edit()
                     .putString("host_mode", "stopped")
@@ -95,7 +95,7 @@ class CrewRuntimeService : Service() {
     private fun restartTermuxRuntime() {
         scheduler.execute {
             updateNotification("Restarting Crew Termux runtime…")
-            RuntimeManager.fallbackHost.stopCrewHost(this)
+            RuntimeManager.productionHost.stopCrewHost(this)
             repeat(15) {
                 if (!serverAlive()) return@repeat
                 Thread.sleep(200)
@@ -120,7 +120,7 @@ class CrewRuntimeService : Service() {
             .putString("host_mode", "termux-runtime")
             .apply()
 
-        RuntimeManager.fallbackHost.startCrewHost(this)
+        RuntimeManager.productionHost.startCrewHost(this)
             .onSuccess {
                 Log.i(TAG, "Requested Termux runtime start: $reason")
                 updateNotification("Starting Crew Termux runtime…")
