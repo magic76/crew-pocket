@@ -1375,7 +1375,11 @@ async function handleSaveVoiceprint(req, res) {
 
 async function handleGetAuthStatus(res) {
   try {
-    const status = await auth.getAuthStatus();
+    const [codexStatus, providerStatus] = await Promise.all([
+      getProvider('codex').getAuthStatus(),
+      auth.getAuthStatus()
+    ]);
+    const status = { ...providerStatus, codex: codexStatus };
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(status));
   } catch (err) {
@@ -1387,8 +1391,8 @@ async function handleGetAuthStatus(res) {
 async function handleCodexDeviceStart(req, res) {
   try {
     const body = await parseJsonBody(req).catch(() => ({}));
-    const mode = body?.mode || 'oauth';
-    const session = await auth.startCodexLogin(mode);
+    const mode = body?.mode === 'oauth' ? 'oauth' : 'device';
+    const session = await getProvider('codex').startLogin(mode);
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ success: true, ...session }));
   } catch (err) {
@@ -1399,7 +1403,7 @@ async function handleCodexDeviceStart(req, res) {
 
 function handleCodexDeviceStatus(parsedUrl, res) {
   const sessionId = parsedUrl.query?.sessionId;
-  const status = auth.getCodexDeviceLoginStatus(sessionId);
+  const status = getProvider('codex').getLoginStatus(sessionId);
   res.writeHead(200, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify(status));
 }
@@ -1407,7 +1411,7 @@ function handleCodexDeviceStatus(parsedUrl, res) {
 async function handleCodexDeviceCancel(req, res) {
   try {
     const body = await parseJsonBody(req);
-    const result = auth.cancelCodexDeviceLogin(body?.sessionId);
+    const result = await getProvider('codex').cancelLogin(body?.sessionId);
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(result));
   } catch (err) {
@@ -1419,7 +1423,7 @@ async function handleCodexDeviceCancel(req, res) {
 async function handleCodexApiKey(req, res) {
   try {
     const body = await parseJsonBody(req);
-    const result = await auth.loginCodexWithApiKey(body.apiKey);
+    const result = await getProvider('codex').loginWithApiKey(body.apiKey);
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(result));
   } catch (err) {
