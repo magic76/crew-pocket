@@ -18,6 +18,8 @@
     <application
         android:allowBackup="true"
         android:hardwareAccelerated="true"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:label="Crew Pocket"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.NoActionBar"
