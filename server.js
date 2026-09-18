@@ -41,6 +41,7 @@ const { listWorkspaces, resolveWorkspace, createWorkspace } = require('./lib/wor
 const auth = require('./lib/auth');
 const { applyCors, authorizeApiRequest, maybeSetAuthCookie, securityStatus } = require('./lib/http-security');
 const { createHistoryMigration } = require('./lib/runtime/history-migration');
+const { getProviderRuntimeStatus, updateProvider } = require('./lib/runtime/provider-manager');
 
 
 async function handleStorageReport(res) {
@@ -306,18 +307,53 @@ function handleGetProviders(res) {
 
 async function handleRuntimeStatus(res) {
   try {
-    const codex = await getProvider('codex').getRuntimeStatus();
+    const providerRuntime = await getProviderRuntimeStatus();
     const host = {
-      runtime: process.env.CREW_HOST_RUNTIME || 'termux-node',
+      runtime: 'termux-node',
       pid: process.pid,
       home: RUNTIME_HOME,
-      workspace: process.env.CREW_EMBEDDED_WORKSPACE_ROOT || null
+      updateModel: 'provider-managed'
     };
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ host, codex, selfDebug: runtimeSelfDebug }));
+    res.end(JSON.stringify({ host, providers: providerRuntime.providers }));
   } catch (err) {
     res.writeHead(500, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: err.message }));
+  }
+}
+
+async function handleRuntimeProviders(req, res) {
+  try {
+    if (req.method === 'GET') {
+      const status = await getProviderRuntimeStatus();
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify(status));
+    }
+
+    const body = await parseJsonBody(req);
+    const providerId = body?.provider === 'agy' ? 'antigravity' : body?.provider;
+    if (!['codex', 'antigravity'].includes(providerId)) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({ error: 'provider must be codex or antigravity' }));
+    }
+
+    if (providerId === 'codex') {
+      await Promise.resolve(getProvider('codex').stop(null)).catch(() => {});
+    } else {
+      await Promise.resolve(getProvider('antigravity').stop()).catch(() => {});
+    }
+
+    const result = await updateProvider(providerId);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: true, ...result }));
+  } catch (err) {
+    const details = String(err.stderr || err.stdout || err.message || err).trim();
+    res.writeHead(500, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      success: false,
+      error: err.message || 'Provider update failed',
+      details: details.slice(-8000)
+    }));
   }
 }
 
@@ -1644,6 +1680,8 @@ const server = http.createServer(async (req, res) => {
     return handleGetProviders(res);
   } else if (pathname === '/api/runtime/status' && req.method === 'GET') {
     return handleRuntimeStatus(res);
+  } else if (pathname === '/api/runtime/providers' && (req.method === 'GET' || req.method === 'POST')) {
+    return handleRuntimeProviders(req, res);
   } else if (pathname === '/api/runtime/history-migration' && req.method === 'GET') {
     if (!historyMigration) { res.writeHead(404); return res.end(); }
     return historyMigration.status(req, res);
