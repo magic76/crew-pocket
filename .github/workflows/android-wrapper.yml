@@ -29,6 +29,11 @@ jobs:
         with:
           gradle-version: "8.10.2"
 
+      - name: Check runtime JavaScript
+        run: |
+          node --check lib/runtime/codex-transport.js
+          node --check lib/providers/codex.js
+
       - name: Build debug APK
         run: gradle -p android-wrapper :app:assembleDebug --stacktrace
 
