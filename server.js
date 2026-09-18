@@ -313,7 +313,7 @@ async function handleRuntimeStatus(res) {
       workspace: process.env.CREW_EMBEDDED_WORKSPACE_ROOT || null
     };
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ host, codex }));
+    res.end(JSON.stringify({ host, codex, selfDebug: runtimeSelfDebug }));
   } catch (err) {
     res.writeHead(500, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: err.message }));
