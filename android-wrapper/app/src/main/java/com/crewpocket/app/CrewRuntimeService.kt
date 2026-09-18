@@ -36,7 +36,15 @@ class CrewRuntimeService : Service() {
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
-        embeddedCodexBridge = EmbeddedCodexBridge(this)
+        val preferences = getSharedPreferences("crew_runtime", MODE_PRIVATE)
+        val bridgeToken = preferences.getString("embedded_bridge_token", null)
+            ?: EmbeddedCodexBridge.generateToken().also {
+                preferences.edit().putString("embedded_bridge_token", it).apply()
+            }
+        TermuxBridge.provisionEmbeddedBridgeToken(this, bridgeToken)
+            .onFailure { Log.i("CrewRuntimeService", "Could not provision bridge token: ${it.message}") }
+
+        embeddedCodexBridge = EmbeddedCodexBridge(this, bridgeToken)
         embeddedCodexBridge.start()
             .onSuccess { Log.i("CrewRuntimeService", "Embedded Codex bridge ready") }
             .onFailure { Log.i("CrewRuntimeService", "Embedded Codex unavailable: ${it.message}") }
