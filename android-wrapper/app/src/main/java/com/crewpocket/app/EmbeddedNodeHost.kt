@@ -53,7 +53,7 @@ class EmbeddedNodeHost(
             val node = binaryFile(context)
             val codexHome = File(context.filesDir, ".codex")
             val uploads = File(context.filesDir, "media")
-            val brain = File(context.filesDir, "brain")
+            val brain = File(context.filesDir, ".gemini/antigravity-cli/brain")
             val tokenFile = File(File(context.filesDir, ".crew-pocket"), "embedded-bridge-token")
             codexHome.mkdirs()
             uploads.mkdirs()
@@ -83,6 +83,9 @@ class EmbeddedNodeHost(
                 put("SHELL", "/system/bin/sh")
                 put("PATH", "/system/bin:/system/xbin:/product/bin")
                 put("LD_LIBRARY_PATH", context.applicationInfo.nativeLibraryDir)
+                EmbeddedAgyRuntime.environment(context).forEach { (key, value) ->
+                    put(key, value)
+                }
             }
 
             val started = builder.start()
