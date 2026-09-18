@@ -172,10 +172,26 @@ class EmbeddedCodexBridge(private val context: Context, private val bridgeToken:
         return valid
     }
 
+    private fun ensureCodexConfig(codexHome: File) {
+        val config = File(codexHome, "config.toml")
+        val existing = if (config.isFile) config.readText() else ""
+        if (Regex("(?m)^\\s*cli_auth_credentials_store\\s*=").containsMatchIn(existing)) {
+            return
+        }
+
+        val prefix = if (existing.isBlank() || existing.endsWith("\n")) "" else "\n"
+        config.appendText(
+            prefix +
+                "# Managed by Crew Pocket Android wrapper\n" +
+                "cli_auth_credentials_store = \"file\"\n"
+        )
+    }
+
     private fun startCodexProcess(): Process {
         val binary = binaryFile(context)
         val codexHome = File(context.filesDir, ".codex")
         codexHome.mkdirs()
+        ensureCodexConfig(codexHome)
 
         val builder = ProcessBuilder(
             binary.absolutePath,
