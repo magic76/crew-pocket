@@ -16,7 +16,7 @@ android {
             // Android 10+ forbids exec from writable app-home paths. Keep the
             // optional Codex ELF in installer-owned nativeLibraryDir instead.
             useLegacyPackaging = true
-            keepDebugSymbols += setOf("**/libcodex_exec.so")
+            keepDebugSymbols += "**/libcodex_exec.so"
         }
     }
 
