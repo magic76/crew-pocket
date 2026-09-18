@@ -113,6 +113,19 @@ class CrewRuntimeService : Service() {
 
     private fun prepareEmbeddedRuntime() {
         bootstrapExecutor.execute {
+            // Existing conversations live in Termux until the explicit history
+            // migration completes. Do not replace the host with an empty app
+            // sandbox merely because this is the first embedded-runtime launch.
+            val preferences = getSharedPreferences("crew_runtime", MODE_PRIVATE)
+            if (!preferences.getBoolean("embedded_history_migrated", false)) {
+                setEmbeddedReady(false)
+                activateTermuxFallback(
+                    EmbeddedWorkspaceManager.workspaceDir(this),
+                    "waiting for existing history migration"
+                )
+                return@execute
+            }
+
             val workspaceResult = EmbeddedWorkspaceManager.ensureWorkspace(this)
             if (workspaceResult.isFailure) {
                 setEmbeddedReady(false)
@@ -191,7 +204,7 @@ class CrewRuntimeService : Service() {
 
         if (!embeddedNodeHost.isRunning() && serverAlive()) {
             RuntimeManager.fallbackHost.stopCrewHost(this)
-            waitForServerDown(1_500)
+            waitForServerDown(10_000)
         }
 
         if (serverAlive() && !embeddedNodeHost.isRunning()) {

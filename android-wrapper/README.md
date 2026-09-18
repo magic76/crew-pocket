@@ -83,7 +83,7 @@ keeping the existing Crew Node/PWA host in Termux.
 ```text
 Crew Node server (Termux)
         |
-        | TCP 127.0.0.1:8766
+        | TCP 127.0.0.1:8767
         v
 Crew Pocket APK
         |
@@ -125,7 +125,7 @@ tail -f ~/.agy-web.log
 Embedded path:
 
 ```text
-[Codex Runtime] Connected to embedded Android bridge at 127.0.0.1:8766
+[Codex Runtime] Connected to embedded Android bridge at 127.0.0.1:8767
 [Codex Provider] transport=embedded-android-bridge
 ```
 
@@ -234,7 +234,7 @@ adb shell run-as com.crewpocket.app cat files/workspaces/agy-web/EMBEDDED_RUNTIM
 Expected Termux log:
 
 ```text
-[Codex Runtime] Connected to embedded Android bridge at 127.0.0.1:8766
+[Codex Runtime] Connected to embedded Android bridge at 127.0.0.1:8767
 [Codex Provider] transport=embedded-android-bridge
 [Codex Runtime] workspace=/data/user/0/com.crewpocket.app/files/workspaces/agy-web
 ```

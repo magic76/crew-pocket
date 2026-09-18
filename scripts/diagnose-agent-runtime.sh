@@ -63,10 +63,10 @@ else
 fi
 echo
 
-echo "== embedded bridge :8766 =="
+echo "== embedded bridge :8767 =="
 if [ -s "$TOKEN_FILE" ] && command -v nc >/dev/null 2>&1; then
     TOKEN="$(tr -d '\r\n' < "$TOKEN_FILE")"
-    RESPONSE="$(printf 'CREW-CODEX-BRIDGE/1 %s\n' "$TOKEN" | nc -w 2 127.0.0.1 8766 2>/dev/null | head -n 1 || true)"
+    RESPONSE="$(printf 'CREW-CODEX-BRIDGE/1 %s\n' "$TOKEN" | nc -w 2 127.0.0.1 8767 2>/dev/null | head -n 1 || true)"
     if [ "$RESPONSE" = "OK" ]; then
         echo "authenticated=yes"
     else
