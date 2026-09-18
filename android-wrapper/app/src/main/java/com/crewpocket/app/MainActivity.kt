@@ -237,10 +237,12 @@ class MainActivity : Activity() {
                 val alive = serverAlive()
                 runOnUiThread {
                     if (alive) {
-                        statusText.text = if (EmbeddedCodexBridge.isBinaryBundled(this@MainActivity)) {
+                        val embeddedReady = getSharedPreferences("crew_runtime", MODE_PRIVATE)
+                            .getBoolean("embedded_ready", false)
+                        statusText.text = if (embeddedReady) {
                             "Crew active · embedded Codex"
                         } else {
-                            "Crew active · Termux Codex"
+                            "Crew active · Termux Codex fallback"
                         }
                         if (pageLoaded.compareAndSet(false, true)) {
                             webView.loadUrl(SERVER_URL)
