@@ -24,7 +24,11 @@ object EmbeddedWorkspaceManager {
     }
 
     fun ensureWorkspace(context: Context): Result<File> {
-        if (isReady(context)) return Result.success(workspaceDir(context))
+        if (isReady(context)) {
+            val workspace = workspaceDir(context)
+            ensureRuntimeFiles(context, workspace)
+            return Result.success(workspace)
+        }
 
         return runCatching {
             val root = File(context.filesDir, "workspaces")
@@ -63,7 +67,23 @@ object EmbeddedWorkspaceManager {
             File(target, ".crew-embedded-workspace").writeText(
                 "source=magic76/crew-pocket\nref=feature/agent-runtime\n"
             )
+            ensureRuntimeFiles(context, target)
             target
+        }
+    }
+
+
+    fun ensureRuntimeFiles(context: Context, workspace: File) {
+        val runtimeDir = File(workspace, ".crew-runtime")
+        runtimeDir.mkdirs()
+
+        val guide = File(runtimeDir, "SELF_DEBUG.md")
+        if (!guide.exists()) {
+            runCatching {
+                context.assets.open("runtime/SELF_DEBUG.md").use { input ->
+                    guide.outputStream().use { output -> input.copyTo(output) }
+                }
+            }
         }
     }
 
