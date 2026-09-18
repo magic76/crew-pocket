@@ -17,6 +17,8 @@ android {
             // optional Codex ELF in installer-owned nativeLibraryDir instead.
             useLegacyPackaging = true
             keepDebugSymbols += "**/libcodex_exec.so"
+            keepDebugSymbols += "**/libnode_exec.so"
+            keepDebugSymbols += "**/libcrew_node_*.so"
         }
     }
 
