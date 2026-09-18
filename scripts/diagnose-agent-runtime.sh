@@ -87,6 +87,14 @@ else
 fi
 echo
 
+echo "== provider runtime =="
+if command -v curl >/dev/null 2>&1; then
+    curl -fsS --max-time 5 http://127.0.0.1:8000/api/runtime/providers 2>/dev/null || echo "provider runtime unavailable"
+else
+    echo "curl unavailable"
+fi
+echo
+
 echo "== recent runtime log =="
 if [ -f "$LOG_FILE" ]; then
     tail -n 30 "$LOG_FILE"
