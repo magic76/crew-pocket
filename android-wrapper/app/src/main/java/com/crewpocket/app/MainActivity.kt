@@ -103,7 +103,7 @@ class MainActivity : Activity() {
             text = "Restart"
             textSize = 11f
             setOnClickListener {
-                TermuxBridge.startCrew(this@MainActivity)
+                RuntimeManager.crewHost.startCrewHost(this@MainActivity)
                 startCrewRuntime()
                 pageLoaded.set(false)
                 statusText.text = "Restart requested…"
@@ -237,7 +237,11 @@ class MainActivity : Activity() {
                 val alive = serverAlive()
                 runOnUiThread {
                     if (alive) {
-                        statusText.text = "Crew runtime active"
+                        statusText.text = if (EmbeddedCodexBridge.isBinaryBundled(this@MainActivity)) {
+                            "Crew active · embedded Codex"
+                        } else {
+                            "Crew active · Termux Codex"
+                        }
                         if (pageLoaded.compareAndSet(false, true)) {
                             webView.loadUrl(SERVER_URL)
                         }
@@ -391,7 +395,7 @@ class MainActivity : Activity() {
             REQUEST_TERMUX -> {
                 refreshSetupStatus()
                 if (TermuxBridge.hasRunCommandPermission(this)) {
-                    TermuxBridge.startCrew(this)
+                    RuntimeManager.crewHost.startCrewHost(this)
                 }
             }
             REQUEST_WEB_MEDIA -> {
