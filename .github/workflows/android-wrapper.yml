@@ -11,6 +11,10 @@ on:
       - "scripts/prepare-embedded-codex.sh"
       - "lib/runtime/**"
       - "lib/providers/codex.js"
+      - "lib/auth.js"
+      - "server.js"
+      - "public/js/auth.js"
+      - "public/index.html"
       - ".github/workflows/android-wrapper.yml"
   workflow_dispatch:
 
@@ -36,6 +40,9 @@ jobs:
         run: |
           node --check lib/runtime/codex-transport.js
           node --check lib/providers/codex.js
+          node --check lib/auth.js
+          node --check server.js
+          node --check public/js/auth.js
 
       - name: Build debug APK
         run: gradle -p android-wrapper :app:assembleDebug --stacktrace
