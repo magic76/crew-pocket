@@ -6,10 +6,7 @@ on:
       - feature/agent-runtime
     paths:
       - "android-wrapper/**"
-      - "scripts/android-runtime-*.sh"
-      - "scripts/enable-android-wrapper.sh"
-      - "scripts/prepare-embedded-codex.sh"
-      - "scripts/prepare-embedded-node.sh"
+      - "scripts/*.sh"
       - "lib/**/*.js"
       - "server.js"
       - "public/js/auth.js"
@@ -41,6 +38,7 @@ jobs:
           bash -n scripts/prepare-embedded-codex.sh
           bash -n scripts/android-runtime-start.sh
           bash -n scripts/android-runtime-stop.sh
+          bash -n scripts/diagnose-embedded-self-debug.sh
 
       - name: Check runtime JavaScript
         run: |
