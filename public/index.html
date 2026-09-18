@@ -1039,6 +1039,41 @@
           </details>
         </div>
 
+        <!-- 3. Termux Runtime Providers -->
+        <div class="p-3 rounded-2xl bg-slate-950/80 border border-slate-700/70 space-y-2.5">
+          <div class="flex items-center justify-between">
+            <div>
+              <div class="font-bold text-slate-100 text-xs">Termux Runtime Engine</div>
+              <div class="text-[10px] text-slate-400">Crew Pocket 保持 APK 穩定，Codex / AGY 可獨立更新</div>
+            </div>
+            <span id="provider-runtime-host" class="px-2 py-0.5 rounded-full text-[10px] font-mono bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">Termux</span>
+          </div>
+
+          <div class="grid grid-cols-1 gap-2">
+            <div class="flex items-center justify-between gap-3 p-2 rounded-xl bg-slate-900/80 border border-slate-800">
+              <div class="min-w-0">
+                <div class="text-[11px] font-semibold text-slate-200">OpenAI Codex</div>
+                <div id="provider-version-codex" class="text-[10px] text-slate-500 font-mono truncate">讀取版本中...</div>
+              </div>
+              <button id="provider-update-codex" type="button" onclick="updateRuntimeProvider('codex')" class="shrink-0 px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-[10px] font-semibold text-slate-200 cursor-pointer">
+                更新
+              </button>
+            </div>
+
+            <div class="flex items-center justify-between gap-3 p-2 rounded-xl bg-slate-900/80 border border-slate-800">
+              <div class="min-w-0">
+                <div class="text-[11px] font-semibold text-slate-200">Google Antigravity</div>
+                <div id="provider-version-antigravity" class="text-[10px] text-slate-500 font-mono truncate">讀取版本中...</div>
+              </div>
+              <button id="provider-update-antigravity" type="button" onclick="updateRuntimeProvider('antigravity')" class="shrink-0 px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-[10px] font-semibold text-slate-200 cursor-pointer">
+                更新
+              </button>
+            </div>
+          </div>
+
+          <div id="provider-update-status" class="hidden text-[10px] leading-relaxed rounded-lg px-2.5 py-2 bg-slate-900 text-slate-400 border border-slate-800"></div>
+        </div>
+
       </div>
 
       <!-- Footer -->
