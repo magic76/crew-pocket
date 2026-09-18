@@ -185,19 +185,7 @@ class MainActivity : Activity() {
                 val alive = serverAlive()
                 runOnUiThread {
                     if (alive) {
-                        val runtimePrefs = getSharedPreferences("crew_runtime", MODE_PRIVATE)
-                        val embeddedReady = runtimePrefs.getBoolean("embedded_ready", false)
-                        val hostMode = runtimePrefs.getString("host_mode", "unknown")
-                        statusText.text = when (hostMode) {
-                            "embedded-node" -> "Crew active · embedded Node + Codex"
-                            "termux-fallback" -> if (embeddedReady) {
-                                "Crew active · Termux rescue + embedded Codex"
-                            } else {
-                                "Crew active · Termux fallback"
-                            }
-                            "testing-embedded" -> "Testing embedded runtime…"
-                            else -> "Crew active · $hostMode"
-                        }
+                        statusText.text = "Crew active · Termux engine"
                         if (pageLoaded.compareAndSet(false, true)) {
                             webView.loadUrl(SERVER_URL)
                         }
@@ -230,10 +218,6 @@ class MainActivity : Activity() {
     }
 
     private fun requestTermuxPermissionIfPossible() {
-        if (EmbeddedNodeHost.isBinaryBundled(this)) {
-            refreshSetupStatus()
-            return
-        }
         if (!TermuxBridge.isInstalled(this)) {
             refreshSetupStatus()
             return
@@ -260,11 +244,10 @@ class MainActivity : Activity() {
 
     private fun refreshSetupStatus() {
         val message = when {
-            EmbeddedNodeHost.isBinaryBundled(this) -> null
             !TermuxBridge.isInstalled(this) ->
-                "Embedded Node is not bundled and Termux fallback is unavailable."
+                "Termux is required as the Crew Pocket runtime engine."
             !TermuxBridge.hasRunCommandPermission(this) ->
-                "Embedded Node is not bundled. Grant Termux RUN_COMMAND for fallback."
+                "Grant “Run commands in Termux environment” so Crew Pocket can start and recover the runtime."
             else -> null
         }
         setupText.text = message ?: ""
