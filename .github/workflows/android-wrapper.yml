@@ -39,11 +39,13 @@ jobs:
           bash -n scripts/prepare-embedded-agy.sh
           bash -n scripts/android-runtime-start.sh
           bash -n scripts/android-runtime-stop.sh
+          bash -n scripts/update-provider.sh
           bash -n scripts/diagnose-embedded-self-debug.sh
 
       - name: Check runtime JavaScript
         run: |
           node --check lib/runtime/codex-transport.js
+          node --check lib/runtime/provider-manager.js
           node --check lib/runtime/agy-transport.js
           node --check lib/providers/codex.js
           node --check lib/providers/antigravity.js
