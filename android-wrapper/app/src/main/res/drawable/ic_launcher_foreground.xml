@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Pocket / chat body -->
+    <path
+        android:fillColor="#F8FAFC"
+        android:pathData="M28,28H80C85.5,28 90,32.5 90,38V69C90,77.3 83.3,84 75,84H33C24.7,84 18,77.3 18,69V38C18,32.5 22.5,28 28,28Z" />
+
+    <!-- Pocket opening -->
+    <path
+        android:fillColor="#0F172A"
+        android:pathData="M25,40C33,47 42.7,51 54,51C65.3,51 75,47 83,40V47C75.1,54 65.2,58 54,58C42.8,58 32.9,54 25,47Z" />
+
+    <!-- Crew dots -->
+    <path
+        android:fillColor="#5EEAD4"
+        android:pathData="M34,66A5,5 0,1 0,44 66A5,5 0,1 0,34 66Z" />
+    <path
+        android:fillColor="#60A5FA"
+        android:pathData="M49,66A5,5 0,1 0,59 66A5,5 0,1 0,49 66Z" />
+    <path
+        android:fillColor="#FBBF24"
+        android:pathData="M64,66A5,5 0,1 0,74 66A5,5 0,1 0,64 66Z" />
+</vector>
