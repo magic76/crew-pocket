@@ -1,55 +1,120 @@
-# Embedded Provider Migration Handoff
+# Runtime Provider Handoff
 
-## Current state
+## Production decision
 
-- Branch: `feature/agent-runtime`.
-- Conversation data has been copied into Crew Pocket APK private storage:
-  - AGY brain: `files/.gemini/antigravity-cli/brain`
-  - Codex sessions: `files/.codex/sessions`
-  - Crew Pocket settings and live memos: `files/.crew-pocket/`
-- The Termux source data remains intact. Migration is copy-only.
-- The Android wrapper currently keeps ordinary chat on the Termux host after data migration. This is intentional protection against accepting messages with no provider reply.
-- `embedded_history_migrated=true` marks completed data migration.
-- `embedded_runtime_enabled` is deliberately unset/false. Do not enable it until the checks below pass.
+Crew Pocket will use **Termux as the production runtime engine** for now.
 
-## What works in the embedded runtime
+The Android APK is responsible for:
 
-- Embedded Node can serve the Crew Pocket UI on localhost:8000.
-- Embedded Codex bridge uses localhost:8767. Port 8766 must remain unused by Crew Pocket because Crew Helper owns it.
-- Existing AGY and Codex history is readable from APK private storage.
+- WebView/UI.
+- Foreground service supervision.
+- Starting/stopping/recovering the Termux Crew runtime.
+- Showing provider status and versions.
+- Triggering safe provider updates.
 
-## Blocking provider work
+Termux is responsible for:
 
-### Antigravity / AGY
+- Node.js / Crew Pocket server.
+- OpenAI Codex CLI.
+- Google Antigravity (AGY) CLI.
+- Git, shell, native dependencies, and workspace tooling.
+- Provider login state.
 
-The embedded Node environment has no `agy` executable, so provider calls fail (`agy models` cannot run). Bundle or replace the AGY runtime so it works with APK-private `HOME`, `BRAIN_DIR`, and configuration.
+This is intentional. Codex and AGY evolve independently and are easier to update safely in Termux than when vendored into every APK build.
 
-### Codex
+## Embedded runtime status
 
-The embedded Codex bridge starts, but APK-private Codex has no completed account login. Do not copy or expose credentials through logs. Implement an APK-local sign-in/device-login flow, then verify the bridge can complete `account/read` and a real turn.
+The branch still contains the Embedded Node / Embedded Codex / Embedded AGY experiments and history migration work. Keep them as research code, but **do not enable them in production**.
 
-## Required verification before enabling embedded runtime
+At service startup:
 
-1. With Termux still installed, start embedded Node and verify both providers can complete a short new chat turn.
-2. Verify SSE text streaming, tool events, cancellation, history loading, and a new conversation for both providers.
-3. Stop Termux. Confirm `/api/runtime/status` reports:
+- `embedded_runtime_enabled=false` is enforced.
+- `embedded_ready=false` is enforced.
+- `host_mode=termux-runtime`.
+- Termux owns localhost:8000.
+- `CREW_CODEX_BRIDGE=off` prevents production Codex traffic from accidentally using the experimental APK bridge.
 
-   ```json
-   {
-     "host": { "runtime": "embedded-node" },
-     "codex": { "transport": "embedded-android-bridge" }
-   }
-   ```
+Do not remove the experimental code until the Termux-first path has been merged and proven stable. It remains useful for future Android-native provider work.
 
-4. Reopen the APK with Termux stopped and repeat the chat checks.
-5. Only then persist `embedded_runtime_enabled=true` and remove the fallback guard in `CrewRuntimeService` if it is no longer useful.
+## Provider update model
+
+Crew Pocket exposes:
+
+```text
+GET  /api/runtime/providers
+POST /api/runtime/providers
+```
+
+GET reports the installed Codex and AGY versions.
+
+POST accepts only:
+
+```json
+{ "provider": "codex" }
+```
+
+or:
+
+```json
+{ "provider": "antigravity" }
+```
+
+Before updating, the active resident process for that provider is stopped.
+
+Update commands are intentionally fixed and not user-controlled:
+
+- Codex: `npm install -g @mmmbuto/codex-cli-termux@latest`
+- AGY: download and execute the official installer from
+  `https://antigravity.google/cli/install.sh`
+
+The PWA Authentication panel contains version labels and Update buttons for both providers.
+
+## Runtime recovery
+
+The Android foreground service checks localhost:8000 periodically.
+
+If Crew is unavailable:
+
+1. Android calls Termux RUN_COMMAND.
+2. `scripts/android-runtime-start.sh` starts the Node server.
+3. The start script rebuilds PWA cache first.
+4. Existing repo-owned server processes can still be adopted through the PID logic.
+
+The APK Stop action stops the Termux Crew server. Restart restarts the Termux Crew runtime.
+
+## Required device verification
+
+Before merging this branch:
+
+1. Confirm APK startup launches the Termux Crew server without manually running `crew start`.
+2. Confirm Codex new chat + existing history.
+3. Confirm AGY new chat + existing history.
+4. Confirm Codex update from the Provider Runtime panel, then run a new Codex turn.
+5. Confirm AGY update from the Provider Runtime panel, then run a new AGY turn.
+6. Kill `node server.js` from Termux and verify the foreground service restores it.
+7. Swipe Crew Pocket from recents and verify the foreground service remains active.
+8. Reopen the APK and verify the same conversations remain available.
 
 ## Relevant files
 
 - `android-wrapper/app/src/main/java/com/crewpocket/app/CrewRuntimeService.kt`
-- `android-wrapper/app/src/main/java/com/crewpocket/app/EmbeddedNodeHost.kt`
-- `android-wrapper/app/src/main/java/com/crewpocket/app/EmbeddedCodexBridge.kt`
-- `android-wrapper/app/src/main/java/com/crewpocket/app/EmbeddedWorkspaceManager.kt`
+- `android-wrapper/app/src/main/java/com/crewpocket/app/MainActivity.kt`
 - `android-wrapper/app/src/main/java/com/crewpocket/app/TermuxBridge.kt`
-- `lib/runtime/history-migration.js`
-- `lib/runtime/codex-transport.js`
+- `scripts/android-runtime-start.sh`
+- `scripts/android-runtime-stop.sh`
+- `scripts/update-provider.sh`
+- `lib/runtime/provider-manager.js`
+- `server.js`
+- `public/js/auth.js`
+
+## Future embedded work
+
+Only revisit full provider embedding when it provides a concrete benefit over Termux and has a clean solution for:
+
+- provider upgrades without rebuilding the APK;
+- OAuth/keyring behavior;
+- native dependencies;
+- Git/shell/toolchain compatibility;
+- rollback after a broken provider release.
+
+Until then, Termux is the supported runtime boundary.
