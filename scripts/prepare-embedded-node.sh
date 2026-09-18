@@ -130,11 +130,19 @@ for needed in "${!SOURCE_BY_NEEDED[@]}"; do
     patchelf --set-soname "${SAFE_BY_NEEDED[$needed]}" "$target" || true
 done
 
+echo "Validating patched Node runtime..."
+if ! NODE_VERSION="$(LD_LIBRARY_PATH="$DEST" "$DEST/libnode_exec.so" --version 2>&1)"; then
+    echo "Patched embedded Node failed to start:" >&2
+    echo "$NODE_VERSION" >&2
+    exit 1
+fi
+
 echo "✓ Embedded Node runtime prepared"
 echo "  node: $DEST/libnode_exec.so"
+echo "  version: $NODE_VERSION"
 echo "  bundled Termux dependencies: ${#SOURCE_BY_NEEDED[@]}"
 echo
-echo "Verify:"
+echo "Verify dependencies:"
 echo "  patchelf --print-needed $DEST/libnode_exec.so"
 echo
 echo "Then rebuild:"
