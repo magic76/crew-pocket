@@ -36,6 +36,7 @@ jobs:
         run: |
           bash -n scripts/prepare-embedded-node.sh
           bash -n scripts/prepare-embedded-codex.sh
+          bash -n scripts/prepare-embedded-agy.sh
           bash -n scripts/android-runtime-start.sh
           bash -n scripts/android-runtime-stop.sh
           bash -n scripts/diagnose-embedded-self-debug.sh
@@ -43,7 +44,10 @@ jobs:
       - name: Check runtime JavaScript
         run: |
           node --check lib/runtime/codex-transport.js
+          node --check lib/runtime/agy-transport.js
           node --check lib/providers/codex.js
+          node --check lib/providers/antigravity.js
+          node --check lib/session.js
           node --check lib/auth.js
           node --check lib/config.js
           node --check lib/files.js
