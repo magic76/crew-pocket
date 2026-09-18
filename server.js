@@ -338,7 +338,12 @@ async function handleRuntimeProviders(req, res) {
     }
 
     if (providerId === 'codex') {
-      await Promise.resolve(getProvider('codex').stop(null)).catch(() => {});
+      const codex = getProvider('codex');
+      if (typeof codex.shutdownRuntime === 'function') {
+        await Promise.resolve(codex.shutdownRuntime()).catch(() => {});
+      } else {
+        await Promise.resolve(codex.stop(null)).catch(() => {});
+      }
     } else {
       await Promise.resolve(getProvider('antigravity').stop()).catch(() => {});
     }
