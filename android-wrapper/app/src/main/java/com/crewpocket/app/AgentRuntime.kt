@@ -26,6 +26,6 @@ object TermuxAgentRuntime : AgentRuntime {
 }
 
 object RuntimeManager {
-    // Phase 2A keeps the Node/PWA host in Termux while Codex can move into APK.
-    val crewHost: AgentRuntime = TermuxAgentRuntime
+    // Termux remains the rescue host while EmbeddedNodeHost is being proven.
+    val fallbackHost: AgentRuntime = TermuxAgentRuntime
 }
