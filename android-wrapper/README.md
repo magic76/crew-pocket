@@ -170,15 +170,33 @@ The embedded bridge is now opened only when all three prerequisites are ready:
 
 Until all three are ready, Crew Pocket keeps using the Termux Codex fallback.
 
-### Auth migration
+### Embedded Codex login
 
-On first start, Crew Pocket requests the existing Termux Codex login through the
-official Termux `RUN_COMMAND` PendingIntent result channel. Only
-`~/.codex/auth.json` is requested. The result is validated and written into the
-APK-private `CODEX_HOME`; token contents are never written to Crew logs.
+Embedded Codex now owns its authentication lifecycle. Crew Pocket does **not**
+copy Termux's `~/.codex/auth.json`.
 
-This is a one-time bootstrap. Once copied, embedded Codex owns its private
-`auth.json` and can use Codex's normal managed refresh-token behavior.
+Open the existing Authentication panel and use **Device Code Login**. The Node
+host forwards the login request to the active Codex app-server:
+
+```text
+account/login/start
+{ "type": "chatgptDeviceCode" }
+```
+
+The APK-private Codex process returns a verification URL and user code. After the
+user completes authorization, Codex writes and refreshes its own credentials
+inside:
+
+```text
+/data/user/0/com.crewpocket.app/files/.codex/
+```
+
+The wrapper pins `cli_auth_credentials_store = "file"` for this private
+`CODEX_HOME`.
+
+Older Phase 2B builds briefly copied Termux auth into the APK. On upgrade, Crew
+Pocket removes that legacy copied auth once and requires a fresh embedded login,
+so Termux and the APK never compete over the same OAuth refresh token.
 
 ### Workspace bootstrap
 
