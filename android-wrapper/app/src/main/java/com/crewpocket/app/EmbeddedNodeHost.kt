@@ -97,16 +97,26 @@ class EmbeddedNodeHost(
                 } catch (_: InterruptedException) {
                     -1
                 }
-                synchronized(this) {
-                    if (process === started) process = null
+
+                val shouldHandleExit = synchronized(this) {
+                    val isCurrentProcess = process === started
+                    if (isCurrentProcess) process = null
+                    isCurrentProcess
                 }
-                writeState(
-                    workspace,
-                    status = if (intentionalStop) "stopped" else "exited",
-                    exitCode = code,
-                    detail = if (intentionalStop) "Intentional stop" else "Unexpected exit"
-                )
-                if (!intentionalStop) onExit(code)
+
+                // A previous process can finish after a new takeover has
+                // already started. Never let that stale waiter overwrite the
+                // new runtime state or report a fake crash.
+                if (shouldHandleExit) {
+                    val stoppedIntentionally = intentionalStop
+                    writeState(
+                        workspace,
+                        status = if (stoppedIntentionally) "stopped" else "exited",
+                        exitCode = code,
+                        detail = if (stoppedIntentionally) "Intentional stop" else "Unexpected exit"
+                    )
+                    if (!stoppedIntentionally) onExit(code)
+                }
             }
             Unit
         }
