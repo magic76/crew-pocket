@@ -47,7 +47,7 @@ if curl -fsS --max-time 1 "$SERVER_URL" >/dev/null 2>&1; then
     exit 2
 fi
 
-CREW_HOST_RUNTIME=termux-node setsid node server.js </dev/null >>"$LOG_FILE" 2>&1 &
+CREW_HOST_RUNTIME=termux-node CREW_CODEX_BRIDGE=off setsid node server.js </dev/null >>"$LOG_FILE" 2>&1 &
 SERVER_PID=$!
 printf '%s\n' "$SERVER_PID" > "$PID_FILE"
 
