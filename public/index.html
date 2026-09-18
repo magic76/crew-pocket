@@ -950,10 +950,10 @@
 
           <!-- Auth Action Buttons -->
           <div class="space-y-2">
-            <!-- 1. Primary: Browser One-Click OAuth Login -->
-            <button id="codex-device-start-btn" type="button" class="w-full py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-950/40 cursor-pointer transition" onclick="startCodexOAuthFlow()">
-              <span>🌐</span>
-              <span>瀏覽器一鍵快速登入 (推薦・免設定開關)</span>
+            <!-- 1. Primary: Device Code Login (robust inside Android/WebView) -->
+            <button id="codex-device-start-btn" type="button" class="w-full py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-950/40 cursor-pointer transition" onclick="startCodexDeviceFlow()">
+              <span>🔑</span>
+              <span>使用設備碼登入 Codex (推薦)</span>
             </button>
 
             <!-- Device Flow Step Display (Initially hidden) -->
@@ -988,10 +988,10 @@
               </div>
             </div>
 
-            <!-- Alternative Login Options (Device Code & API Key) -->
+            <!-- Alternative Login Options -->
             <div class="flex items-center justify-between pt-1">
-              <button type="button" class="text-[11px] text-slate-400 hover:text-slate-200 transition font-mono flex items-center gap-1 cursor-pointer" onclick="startCodexDeviceFlow()">
-                <span>🔑 使用設備碼 (Device Auth)</span>
+              <button type="button" class="text-[11px] text-slate-400 hover:text-slate-200 transition font-mono flex items-center gap-1 cursor-pointer" onclick="startCodexOAuthFlow()">
+                <span>🌐 改用瀏覽器 OAuth</span>
               </button>
             </div>
 
@@ -1037,6 +1037,41 @@
               </button>
             </div>
           </details>
+        </div>
+
+        <!-- 3. Termux Runtime Providers -->
+        <div class="p-3 rounded-2xl bg-slate-950/80 border border-slate-700/70 space-y-2.5">
+          <div class="flex items-center justify-between">
+            <div>
+              <div class="font-bold text-slate-100 text-xs">Termux Runtime Engine</div>
+              <div class="text-[10px] text-slate-400">Crew Pocket 保持 APK 穩定，Codex / AGY 可獨立更新</div>
+            </div>
+            <span id="provider-runtime-host" class="px-2 py-0.5 rounded-full text-[10px] font-mono bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">Termux</span>
+          </div>
+
+          <div class="grid grid-cols-1 gap-2">
+            <div class="flex items-center justify-between gap-3 p-2 rounded-xl bg-slate-900/80 border border-slate-800">
+              <div class="min-w-0">
+                <div class="text-[11px] font-semibold text-slate-200">OpenAI Codex</div>
+                <div id="provider-version-codex" class="text-[10px] text-slate-500 font-mono truncate">讀取版本中...</div>
+              </div>
+              <button id="provider-update-codex" type="button" onclick="updateRuntimeProvider('codex')" class="shrink-0 px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-[10px] font-semibold text-slate-200 cursor-pointer">
+                更新
+              </button>
+            </div>
+
+            <div class="flex items-center justify-between gap-3 p-2 rounded-xl bg-slate-900/80 border border-slate-800">
+              <div class="min-w-0">
+                <div class="text-[11px] font-semibold text-slate-200">Google Antigravity</div>
+                <div id="provider-version-antigravity" class="text-[10px] text-slate-500 font-mono truncate">讀取版本中...</div>
+              </div>
+              <button id="provider-update-antigravity" type="button" onclick="updateRuntimeProvider('antigravity')" class="shrink-0 px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-[10px] font-semibold text-slate-200 cursor-pointer">
+                更新
+              </button>
+            </div>
+          </div>
+
+          <div id="provider-update-status" class="hidden text-[10px] leading-relaxed rounded-lg px-2.5 py-2 bg-slate-900 text-slate-400 border border-slate-800"></div>
         </div>
 
       </div>
@@ -1411,7 +1446,7 @@
   <script src="/js/chat.js?v=b86dc10dcaf9"></script>
   <script src="/js/tasks.js?v=2e5e3f5e9e77"></script>
   <script src="/js/live.js?v=21194ec8d582"></script>
-  <script src="/js/auth.js?v=fc7f99aa4eef"></script>
+  <script src="/js/auth.js?v=9f4200b4bcdd"></script>
   <script src="/js/app.js?v=c753843f3d15"></script>
 </body>
 </html>

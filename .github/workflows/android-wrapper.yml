@@ -1,0 +1,70 @@
+name: Build Android Wrapper
+
+on:
+  push:
+    branches:
+      - feature/agent-runtime
+    paths:
+      - "android-wrapper/**"
+      - "scripts/*.sh"
+      - "lib/**/*.js"
+      - "server.js"
+      - "public/js/auth.js"
+      - "public/index.html"
+      - ".github/workflows/android-wrapper.yml"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.10.2"
+
+      - name: Check runtime shell scripts
+        run: |
+          bash -n install.sh
+          bash -n scripts/prepare-embedded-node.sh
+          bash -n scripts/prepare-embedded-codex.sh
+          bash -n scripts/prepare-embedded-agy.sh
+          bash -n scripts/android-runtime-start.sh
+          bash -n scripts/android-runtime-stop.sh
+          bash -n scripts/update-provider.sh
+          bash -n scripts/diagnose-embedded-self-debug.sh
+
+      - name: Check runtime JavaScript
+        run: |
+          node --check lib/runtime/codex-transport.js
+          node --check lib/runtime/provider-manager.js
+          node --check lib/runtime/agy-transport.js
+          node --check lib/providers/codex.js
+          node --check lib/providers/antigravity.js
+          node --check lib/session.js
+          node --check lib/auth.js
+          node --check lib/config.js
+          node --check lib/files.js
+          node --check lib/sandbox.js
+          node --check lib/storage.js
+          node --check lib/workspaces.js
+          node --check server.js
+          node --check public/js/auth.js
+
+      - name: Build debug APK
+        run: gradle -p android-wrapper :app:assembleDebug --stacktrace
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: crew-pocket-android-wrapper-debug
+          path: android-wrapper/app/build/outputs/apk/debug/app-debug.apk

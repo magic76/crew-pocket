@@ -9,6 +9,8 @@ const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
 
 const execFileAsync = promisify(execFile);
+const RUNTIME_HOME = path.resolve(process.env.HOME || '/data/data/com.termux/files/home');
+const REUSABLE_TOOL_DIR = process.env.CREW_REUSABLE_TOOL_DIR || path.join(__dirname, 'public', 'extra');
 
 const {
   PORT,
@@ -38,6 +40,8 @@ const { createTask, getTask, listTasks, updateTask } = require('./lib/tasks');
 const { listWorkspaces, resolveWorkspace, createWorkspace } = require('./lib/workspaces');
 const auth = require('./lib/auth');
 const { applyCors, authorizeApiRequest, maybeSetAuthCookie, securityStatus } = require('./lib/http-security');
+const { createHistoryMigration } = require('./lib/runtime/history-migration');
+const { getProviderRuntimeStatus, updateProvider } = require('./lib/runtime/provider-manager');
 
 
 async function handleStorageReport(res) {
@@ -299,6 +303,155 @@ async function handleGetModels(res) {
 function handleGetProviders(res) {
   res.writeHead(200, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({ providers: listProviderMetadata() }));
+}
+
+async function handleRuntimeStatus(res) {
+  try {
+    const providerRuntime = await getProviderRuntimeStatus();
+    const host = {
+      runtime: 'termux-node',
+      pid: process.pid,
+      home: RUNTIME_HOME,
+      updateModel: 'provider-managed'
+    };
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ host, providers: providerRuntime.providers }));
+  } catch (err) {
+    res.writeHead(500, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: err.message }));
+  }
+}
+
+async function handleRuntimeProviders(req, res) {
+  try {
+    if (req.method === 'GET') {
+      const status = await getProviderRuntimeStatus();
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify(status));
+    }
+
+    const body = await parseJsonBody(req);
+    const providerId = body?.provider === 'agy' ? 'antigravity' : body?.provider;
+    if (!['codex', 'antigravity'].includes(providerId)) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({ error: 'provider must be codex or antigravity' }));
+    }
+
+    if (providerId === 'codex') {
+      const codex = getProvider('codex');
+      if (typeof codex.shutdownRuntime === 'function') {
+        await Promise.resolve(codex.shutdownRuntime()).catch(() => {});
+      } else {
+        await Promise.resolve(codex.stop(null)).catch(() => {});
+      }
+    } else {
+      await Promise.resolve(getProvider('antigravity').stop()).catch(() => {});
+    }
+
+    const result = await updateProvider(providerId);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: true, ...result }));
+  } catch (err) {
+    const details = String(err.stderr || err.stdout || err.message || err).trim();
+    res.writeHead(500, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      success: false,
+      error: err.message || 'Provider update failed',
+      details: details.slice(-8000)
+    }));
+  }
+}
+
+const historyMigration = process.env.CREW_HISTORY_IMPORT_TOKEN
+  ? createHistoryMigration({ homeDir: RUNTIME_HOME, token: process.env.CREW_HISTORY_IMPORT_TOKEN })
+  : null;
+
+const runtimeSelfDebug = {
+  status: 'idle',
+  startedAt: null,
+  completedAt: null,
+  response: '',
+  error: '',
+  reason: ''
+};
+
+function launchRuntimeSelfDebug(reason = 'Embedded Node runtime failure') {
+  if (runtimeSelfDebug.status === 'running') return false;
+
+  const provider = getProvider('codex');
+  runtimeSelfDebug.status = 'running';
+  runtimeSelfDebug.startedAt = Date.now();
+  runtimeSelfDebug.completedAt = null;
+  runtimeSelfDebug.response = '';
+  runtimeSelfDebug.error = '';
+  runtimeSelfDebug.reason = String(reason || 'Embedded Node runtime failure').slice(0, 1200);
+
+  const prompt = `[Crew Pocket Autonomous Self-Debug]
+
+The Android Runtime Supervisor detected an Embedded Node failure and temporarily switched to the Termux rescue host.
+
+Failure reason:
+${runtimeSelfDebug.reason}
+
+You are repairing Crew Pocket itself. Your cwd is mapped to the APK-private agy-web workspace.
+
+Required procedure:
+1. Read .crew-runtime/state.json.
+2. Read the end of .crew-runtime/node.log.
+3. Identify the concrete startup/runtime failure.
+4. Apply the smallest safe source fix in the current workspace.
+5. Do not start server.js yourself.
+6. Do not delete or rewrite .crew-runtime.
+7. Do not git reset, checkout, or discard unrelated changes.
+8. Finish after the patch. Android Runtime Supervisor will detect the source fingerprint change and automatically restart + health-check Embedded Node.
+
+If the failure is caused by a missing native runtime dependency that cannot be fixed in JS, do not invent a workaround. Explain the exact missing dependency in your final response and leave source unchanged.`;
+
+  Promise.resolve(provider.startTurn({
+    conversationId: null,
+    model: undefined,
+    effort: 'high',
+    workspace: process.env.HOME || RUNTIME_HOME,
+    prompt,
+    onAbort() {},
+    onEvent(event) {
+      if (!event) return;
+      if (event.type === 'text_delta') {
+        runtimeSelfDebug.response = String(event.accumulated || `${runtimeSelfDebug.response}${event.delta || ''}`).slice(-12000);
+      } else if (event.type === 'error') {
+        runtimeSelfDebug.status = 'failed';
+        runtimeSelfDebug.error = String(event.message || 'Self-debug failed').slice(0, 4000);
+        runtimeSelfDebug.completedAt = Date.now();
+      } else if (event.type === 'turn_completed') {
+        runtimeSelfDebug.status = 'completed';
+        runtimeSelfDebug.response = String(event.response || runtimeSelfDebug.response || '').slice(-12000);
+        runtimeSelfDebug.completedAt = Date.now();
+      }
+    }
+  })).catch(error => {
+    runtimeSelfDebug.status = 'failed';
+    runtimeSelfDebug.error = String(error?.message || error || 'Self-debug failed').slice(0, 4000);
+    runtimeSelfDebug.completedAt = Date.now();
+  });
+
+  return true;
+}
+
+async function handleRuntimeSelfDebug(req, res) {
+  if (req.method === 'GET') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify(runtimeSelfDebug));
+  }
+
+  try {
+    const body = await parseJsonBody(req).catch(() => ({}));
+    const started = launchRuntimeSelfDebug(body?.reason);
+    res.writeHead(started ? 202 : 200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ started, ...runtimeSelfDebug }));
+  } catch (err) {
+    res.writeHead(500, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: err.message }));
+  }
 }
 
 // ⚡ Check Conversation Session Busy Status
@@ -755,7 +908,7 @@ async function handleImageProxy(parsedUrl, res) {
       return res.end('Image not found');
     }
 
-    const HOME_DIR = '/data/data/com.termux/files/home';
+    const HOME_DIR = RUNTIME_HOME;
     const allowedRoots = [UPLOADS_DIR, BRAIN_DIR, HOME_DIR, '/sdcard', '/storage'];
     const isLegacyUploadPath = [LEGACY_UPLOADS_DIR, PREVIOUS_UPLOADS_DIR]
       .some(root => imgPath.startsWith(`${root}${path.sep}`));
@@ -896,7 +1049,7 @@ const CREW_POCKET_CAPABILITY_INDEX = '[Crew Pocket：支援互動 HTML、Chart.j
 
 const CAPABILITY_RULES = {
   html: `[Crew Pocket Capability Rules]
-若建立或更新互動工具，輸出完整、自包含的 \`\`\`html\`\`\`；純 HTML 區塊不得混入說明文字。需要載入本機資產時使用絕對路徑，不用 file://。明確要求可重複使用的本機工具頁時，寫入 /data/data/com.termux/files/home/agy-web/public/extra/<safe-name>.html。`,
+若建立或更新互動工具，輸出完整、自包含的 \`\`\`html\`\`\`；純 HTML 區塊不得混入說明文字。需要載入本機資產時使用絕對路徑，不用 file://。明確要求可重複使用的本機工具頁時，寫入 ${REUSABLE_TOOL_DIR}/<safe-name>.html。`,
   chart: `[Crew Pocket Capability Rules]
 若建立資料圖表，輸出含 Chart.js CDN 與 <canvas id="chart"> 的完整 HTML。獨立向量圖或流程圖使用 SVG 或 Mermaid。`,
   maps: `[Crew Pocket Capability Rules]
@@ -1253,7 +1406,7 @@ async function handleGetGuidelines(res) {
   try {
     const candidates = [
       path.join(__dirname, 'GEMINI.md'),
-      path.join(process.env.HOME || '/data/data/com.termux/files/home', 'GEMINI.md'),
+      path.join(RUNTIME_HOME, 'GEMINI.md'),
       path.join(__dirname, 'AGENTS.md')
     ];
     let content = '';
@@ -1276,7 +1429,7 @@ async function handleGetGuidelines(res) {
 // 🚀 Sync & Save Guidelines to all default locations (~/ and ~/agy-web/)
 async function handleSyncGuidelines(req, res) {
   try {
-    const homeDir = process.env.HOME || '/data/data/com.termux/files/home';
+    const homeDir = RUNTIME_HOME;
     const agyWebDir = __dirname;
     let body = {};
     try {
@@ -1375,7 +1528,11 @@ async function handleSaveVoiceprint(req, res) {
 
 async function handleGetAuthStatus(res) {
   try {
-    const status = await auth.getAuthStatus();
+    const [codexStatus, providerStatus] = await Promise.all([
+      getProvider('codex').getAuthStatus(),
+      auth.getAuthStatus()
+    ]);
+    const status = { ...providerStatus, codex: codexStatus };
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(status));
   } catch (err) {
@@ -1387,8 +1544,8 @@ async function handleGetAuthStatus(res) {
 async function handleCodexDeviceStart(req, res) {
   try {
     const body = await parseJsonBody(req).catch(() => ({}));
-    const mode = body?.mode || 'oauth';
-    const session = await auth.startCodexLogin(mode);
+    const mode = body?.mode === 'oauth' ? 'oauth' : 'device';
+    const session = await getProvider('codex').startLogin(mode);
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ success: true, ...session }));
   } catch (err) {
@@ -1399,7 +1556,7 @@ async function handleCodexDeviceStart(req, res) {
 
 function handleCodexDeviceStatus(parsedUrl, res) {
   const sessionId = parsedUrl.query?.sessionId;
-  const status = auth.getCodexDeviceLoginStatus(sessionId);
+  const status = getProvider('codex').getLoginStatus(sessionId);
   res.writeHead(200, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify(status));
 }
@@ -1407,7 +1564,7 @@ function handleCodexDeviceStatus(parsedUrl, res) {
 async function handleCodexDeviceCancel(req, res) {
   try {
     const body = await parseJsonBody(req);
-    const result = auth.cancelCodexDeviceLogin(body?.sessionId);
+    const result = await getProvider('codex').cancelLogin(body?.sessionId);
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(result));
   } catch (err) {
@@ -1419,7 +1576,7 @@ async function handleCodexDeviceCancel(req, res) {
 async function handleCodexApiKey(req, res) {
   try {
     const body = await parseJsonBody(req);
-    const result = await auth.loginCodexWithApiKey(body.apiKey);
+    const result = await getProvider('codex').loginWithApiKey(body.apiKey);
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(result));
   } catch (err) {
@@ -1526,6 +1683,18 @@ const server = http.createServer(async (req, res) => {
     return handleGetModels(res);
   } else if (pathname === '/api/providers' && req.method === 'GET') {
     return handleGetProviders(res);
+  } else if (pathname === '/api/runtime/status' && req.method === 'GET') {
+    return handleRuntimeStatus(res);
+  } else if (pathname === '/api/runtime/providers' && (req.method === 'GET' || req.method === 'POST')) {
+    return handleRuntimeProviders(req, res);
+  } else if (pathname === '/api/runtime/history-migration' && req.method === 'GET') {
+    if (!historyMigration) { res.writeHead(404); return res.end(); }
+    return historyMigration.status(req, res);
+  } else if (pathname === '/api/runtime/history-migration' && req.method === 'POST') {
+    if (!historyMigration) { res.writeHead(404); return res.end(); }
+    return historyMigration.receive(req, res);
+  } else if (pathname === '/api/runtime/self-debug' && (req.method === 'GET' || req.method === 'POST')) {
+    return handleRuntimeSelfDebug(req, res);
   } else if (pathname === '/api/auth/status' && req.method === 'GET') {
     return handleGetAuthStatus(res);
   } else if (pathname === '/api/auth/codex/device-start' && req.method === 'POST') {

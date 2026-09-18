@@ -15,6 +15,7 @@ function openAuthModal() {
   authModal.classList.remove('opacity-0', 'pointer-events-none');
   if (typeof window.haptic === 'function') window.haptic('light');
   refreshAuthStatus();
+  refreshProviderRuntime();
 }
 
 function closeAuthModal() {
@@ -22,6 +23,94 @@ function closeAuthModal() {
   if (!authModal) return;
   authModal.classList.add('opacity-0', 'pointer-events-none');
   stopDeviceAuthPolling();
+}
+
+async function refreshProviderRuntime() {
+  const codexEl = document.getElementById('provider-version-codex');
+  const agyEl = document.getElementById('provider-version-antigravity');
+  const statusEl = document.getElementById('provider-update-status');
+
+  try {
+    const res = await fetch('/api/runtime/providers');
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || '無法取得 Provider runtime 狀態');
+
+    const codex = data.providers?.codex;
+    const agy = data.providers?.antigravity;
+
+    if (codexEl) {
+      codexEl.textContent = codex?.installed
+        ? (codex.version || '已安裝')
+        : '未安裝';
+    }
+    if (agyEl) {
+      agyEl.textContent = agy?.installed
+        ? (agy.version || '已安裝')
+        : '未安裝';
+    }
+    if (statusEl && !statusEl.dataset.busy) {
+      statusEl.classList.add('hidden');
+      statusEl.textContent = '';
+    }
+  } catch (err) {
+    if (codexEl) codexEl.textContent = '讀取失敗';
+    if (agyEl) agyEl.textContent = '讀取失敗';
+    if (statusEl && !statusEl.dataset.busy) {
+      statusEl.classList.remove('hidden');
+      statusEl.textContent = 'Provider runtime 狀態讀取失敗：' + err.message;
+    }
+  }
+}
+
+async function updateRuntimeProvider(provider) {
+  const id = provider === 'antigravity' ? 'antigravity' : 'codex';
+  const button = document.getElementById('provider-update-' + id);
+  const statusEl = document.getElementById('provider-update-status');
+  const label = id === 'codex' ? 'Codex' : 'Antigravity';
+
+  if (!confirm('要更新 ' + label + ' 嗎？更新期間該 Provider 的進行中工作會停止。')) {
+    return;
+  }
+
+  if (button) {
+    button.disabled = true;
+    button.textContent = '更新中...';
+  }
+  if (statusEl) {
+    statusEl.dataset.busy = '1';
+    statusEl.classList.remove('hidden');
+    statusEl.className = 'text-[10px] leading-relaxed rounded-lg px-2.5 py-2 bg-amber-950/40 text-amber-300 border border-amber-500/30';
+    statusEl.textContent = '正在更新 ' + label + '，請勿關閉 Crew Pocket...';
+  }
+
+  try {
+    const res = await fetch('/api/runtime/providers', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ provider: id })
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      throw new Error(data.details || data.error || '更新失敗');
+    }
+
+    if (statusEl) {
+      statusEl.className = 'text-[10px] leading-relaxed rounded-lg px-2.5 py-2 bg-emerald-950/40 text-emerald-300 border border-emerald-500/30';
+      statusEl.textContent = label + ' 更新完成：' + (data.provider?.version || '已更新');
+    }
+    await refreshProviderRuntime();
+  } catch (err) {
+    if (statusEl) {
+      statusEl.className = 'text-[10px] leading-relaxed rounded-lg px-2.5 py-2 bg-rose-950/40 text-rose-300 border border-rose-500/30';
+      statusEl.textContent = label + ' 更新失敗：' + String(err.message || err).slice(-1200);
+    }
+  } finally {
+    if (statusEl) delete statusEl.dataset.busy;
+    if (button) {
+      button.disabled = false;
+      button.textContent = '更新';
+    }
+  }
 }
 
 async function refreshAuthStatus() {
@@ -116,7 +205,7 @@ async function startCodexOAuthFlow() {
     alert('啟動登入失敗：' + err.message);
     if (startBtn) {
       startBtn.disabled = false;
-      startBtn.innerHTML = '🌐 瀏覽器一鍵快速登入 (推薦)';
+      startBtn.innerHTML = '🔑 使用設備碼登入 Codex (推薦)';
     }
   }
 }
@@ -169,7 +258,7 @@ async function startCodexDeviceFlow() {
     alert('啟動 Device Auth 失敗：' + err.message);
     if (startBtn) {
       startBtn.disabled = false;
-      startBtn.innerHTML = '🌐 瀏覽器一鍵快速登入 (推薦)';
+      startBtn.innerHTML = '🔑 使用設備碼登入 Codex (推薦)';
     }
   }
 }
@@ -202,7 +291,7 @@ function pollCodexDeviceStatus(sessionId) {
           if (startBtn) {
             startBtn.classList.remove('hidden');
             startBtn.disabled = false;
-            startBtn.innerHTML = '🌐 再次重新登入 Codex';
+            startBtn.innerHTML = '🔑 再次重新登入 Codex';
           }
         }, 3500);
 
@@ -401,6 +490,8 @@ window.startCodexDeviceFlow = startCodexDeviceFlow;
 window.copyCodexUserCode = copyCodexUserCode;
 window.saveCodexApiKey = saveCodexApiKey;
 window.saveAgyToken = saveAgyToken;
+window.refreshProviderRuntime = refreshProviderRuntime;
+window.updateRuntimeProvider = updateRuntimeProvider;
 window.renderAuthRecoveryCard = renderAuthRecoveryCard;
 window.notifyAuthRecoverySuccess = notifyAuthRecoverySuccess;
 window.retryPendingAuthMessage = retryPendingAuthMessage;

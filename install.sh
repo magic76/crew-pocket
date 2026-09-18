@@ -8,6 +8,8 @@
 
 set -euo pipefail
 
+export PATH="$HOME/.local/bin:${PREFIX:-/data/data/com.termux/files/usr}/bin:$PATH"
+
 REPOSITORY="https://github.com/magic76/crew-pocket.git"
 if [ -d "/data/data/com.termux/files/home" ]; then
     TARGET_DIR="$HOME/agy-web"
@@ -61,6 +63,27 @@ install_ai_engine() {
     say "✓ $provider 安裝完成"
 }
 
+install_agy_engine() {
+    if has agy; then
+        say "✓ agy 已可使用：$(agy --version 2>/dev/null | head -n 1 || true)"
+        return
+    fi
+
+    say "安裝 Antigravity CLI（官方 installer）…"
+    local tmp
+    tmp="$(mktemp)"
+    trap 'rm -f "$tmp"' RETURN
+    curl --proto '=https' --tlsv1.2 --fail --silent --show-error --location \
+        https://antigravity.google/cli/install.sh \
+        -o "$tmp" || fail "無法下載 Antigravity CLI 官方 installer。"
+    bash "$tmp" || fail "Antigravity CLI 安裝失敗。"
+    rm -f "$tmp"
+    trap - RETURN
+
+    has agy || fail "Antigravity CLI 安裝完成後仍找不到 agy 指令。請重新開啟 Termux 後再試。"
+    say "✓ agy 安裝完成：$(agy --version 2>/dev/null | head -n 1 || true)"
+}
+
 say "🚀 Crew Pocket 最小安裝器"
 
 if [ "$IS_TERMUX" = true ]; then
@@ -96,10 +119,10 @@ fi
 say "\n[4/5] 設定 AI 引擎…"
 choose_provider
 case "$PROVIDER" in
-    agy) install_ai_engine agy agy ;;
+    agy) install_agy_engine ;;
     codex) install_ai_engine codex @mmmbuto/codex-cli-termux ;;
     both)
-        install_ai_engine agy agy
+        install_agy_engine
         install_ai_engine codex @mmmbuto/codex-cli-termux
         ;;
     skip) say "! 已略過 AI 引擎；完成後請自行安裝至少一個 Provider。" ;;
