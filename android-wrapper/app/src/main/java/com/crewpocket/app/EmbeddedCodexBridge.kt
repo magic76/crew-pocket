@@ -85,21 +85,22 @@ class EmbeddedCodexBridge(private val context: Context) {
 
         try {
             client.tcpNoDelay = true
-            process = startCodexProcess()
+            val codex = startCodexProcess()
+            process = codex
 
             upstream = workers.submit {
                 try {
-                    client.getInputStream().copyTo(process.outputStream)
+                    client.getInputStream().copyTo(codex.outputStream)
                 } finally {
                     try {
-                        process.outputStream.close()
+                        codex.outputStream.close()
                     } catch (_: Exception) {
                     }
                 }
             }
 
             downstream = workers.submit {
-                process.inputStream.copyTo(client.getOutputStream())
+                codex.inputStream.copyTo(client.getOutputStream())
                 try {
                     client.getOutputStream().flush()
                 } catch (_: Exception) {
@@ -107,7 +108,7 @@ class EmbeddedCodexBridge(private val context: Context) {
             }
 
             stderr = workers.submit {
-                process.errorStream.bufferedReader().useLines { lines ->
+                codex.errorStream.bufferedReader().useLines { lines ->
                     lines.forEach { line -> Log.e(TAG, "codex: $line") }
                 }
             }
