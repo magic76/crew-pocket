@@ -42,6 +42,7 @@ class CrewRuntimeService : Service() {
         super.onCreate()
         createNotificationChannel()
         promoteToForeground("Crew runtime starting…")
+        setEmbeddedReady(false)
 
         val preferences = getSharedPreferences("crew_runtime", MODE_PRIVATE)
         val bridgeToken = preferences.getString("embedded_bridge_token", null)
@@ -61,6 +62,7 @@ class CrewRuntimeService : Service() {
             ACTION_STOP -> {
                 updateNotification("Stopping Crew runtime…")
                 if (::embeddedCodexBridge.isInitialized) embeddedCodexBridge.stop()
+                setEmbeddedReady(false)
                 RuntimeManager.crewHost.stopCrewHost(this)
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
@@ -83,12 +85,14 @@ class CrewRuntimeService : Service() {
         scheduler.shutdownNow()
         bootstrapExecutor.shutdownNow()
         if (::embeddedCodexBridge.isInitialized) embeddedCodexBridge.stop()
+        setEmbeddedReady(false)
         super.onDestroy()
     }
 
     private fun prepareEmbeddedRuntime() {
         bootstrapExecutor.execute {
             if (!EmbeddedCodexBridge.isBinaryBundled(this)) {
+                setEmbeddedReady(false)
                 Log.i(TAG, "Embedded Codex binary is not bundled; keeping Termux fallback")
                 updateNotification("Crew runtime · Termux Codex fallback")
                 return@execute
@@ -97,6 +101,7 @@ class CrewRuntimeService : Service() {
             updateNotification("Preparing embedded Codex workspace…")
             val workspace = EmbeddedWorkspaceManager.ensureWorkspace(this)
             if (workspace.isFailure) {
+                setEmbeddedReady(false)
                 Log.w(TAG, "Embedded workspace unavailable", workspace.exceptionOrNull())
                 updateNotification("Crew runtime · workspace bootstrap failed · Termux fallback")
                 return@execute
@@ -110,20 +115,30 @@ class CrewRuntimeService : Service() {
                             Log.i(TAG, "Could not request Codex auth migration: ${it.message}")
                         }
                 }
+                setEmbeddedReady(false)
                 updateNotification("Crew runtime · migrating Codex login · Termux fallback")
                 return@execute
             }
 
             embeddedCodexBridge.start()
                 .onSuccess {
+                    setEmbeddedReady(true)
                     Log.i(TAG, "Embedded Codex ready with APK workspace")
                     updateNotification("Crew runtime active · embedded Codex")
                 }
                 .onFailure {
+                    setEmbeddedReady(false)
                     Log.w(TAG, "Embedded Codex unavailable", it)
                     updateNotification("Crew runtime · embedded Codex failed · Termux fallback")
                 }
         }
+    }
+
+    private fun setEmbeddedReady(ready: Boolean) {
+        getSharedPreferences("crew_runtime", MODE_PRIVATE)
+            .edit()
+            .putBoolean("embedded_ready", ready)
+            .apply()
     }
 
     private fun embeddedAuthReady(): Boolean {
