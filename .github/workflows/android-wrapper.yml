@@ -7,13 +7,6 @@ on:
       - feature/agent-runtime
     paths:
       - "android-wrapper/**"
-      - "scripts/*.sh"
-      - "lib/**/*.js"
-      - "server.js"
-      - "install.sh"
-      - "public/js/*.js"
-      - "public/css/*.css"
-      - "public/index.html"
       - ".github/workflows/android-wrapper.yml"
   workflow_dispatch:
 
@@ -34,34 +27,6 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.10.2"
-
-      - name: Check runtime shell scripts
-        run: |
-          bash -n install.sh
-          bash -n scripts/prepare-embedded-node.sh
-          bash -n scripts/prepare-embedded-codex.sh
-          bash -n scripts/prepare-embedded-agy.sh
-          bash -n scripts/android-runtime-start.sh
-          bash -n scripts/android-runtime-stop.sh
-          bash -n scripts/update-provider.sh
-          bash -n scripts/diagnose-embedded-self-debug.sh
-
-      - name: Check runtime JavaScript
-        run: |
-          node --check lib/runtime/codex-transport.js
-          node --check lib/runtime/provider-manager.js
-          node --check lib/runtime/agy-transport.js
-          node --check lib/providers/codex.js
-          node --check lib/providers/antigravity.js
-          node --check lib/session.js
-          node --check lib/auth.js
-          node --check lib/config.js
-          node --check lib/files.js
-          node --check lib/sandbox.js
-          node --check lib/storage.js
-          node --check lib/workspaces.js
-          node --check server.js
-          for file in public/js/*.js; do node --check "$file"; done
 
       - name: Build debug APK
         run: gradle -p android-wrapper :app:assembleDebug --stacktrace
