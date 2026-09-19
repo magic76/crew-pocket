@@ -436,7 +436,7 @@ function buildExecutionStepRowsHtml(tools, hasThinking = false) {
 
 function buildExecutionDetailsHtml(tools, thinking = '', { lazy = false } = {}) {
   const groupedTools = coalesceToolEvents(tools);
-  const hasExecution = groupedTools.length > 0 || Boolean(String(thinking || '').trim());
+  const hasExecution = groupedTools.length > 0;
   if (!hasExecution) return '';
 
   const stepCount = groupedTools.length + 2;
@@ -607,6 +607,22 @@ function updateContextPill(stats) {
     indicator.className = `w-1.5 h-1.5 rounded-full ${dotClass} shrink-0${level === 'red' ? ' animate-ping' : ''}`;
   }
   if (textEl) textEl.className = `font-mono font-semibold ${textClass}`;
+
+  const contextWindow = Number(stats?.context_window) || 80000;
+  const pct = Number.isFinite(activeTokens) && contextWindow > 0
+    ? Math.max(0, Math.min(100, (activeTokens / contextWindow) * 100))
+    : 0;
+  const compactQuickBtn = document.getElementById('header-compact-btn');
+  if (pill) pill.dataset.contextLoad = pct >= 90 ? 'critical' : pct >= 70 ? 'warning' : 'normal';
+  if (compactQuickBtn) {
+    const canCompact = Boolean(providerConfig().capabilities?.compact && currentConversationId);
+    const visible = canCompact && pct >= 70;
+    compactQuickBtn.classList.toggle('hidden', !visible);
+    compactQuickBtn.dataset.contextLoad = pct >= 90 ? 'critical' : 'warning';
+    compactQuickBtn.title = pct >= 90
+      ? `Context 已使用 ${Math.round(pct)}%，建議立即 Compact`
+      : `Context 已使用 ${Math.round(pct)}%，可先 Compact`;
+  }
 }
 
 function showContextModal() {
@@ -1044,37 +1060,37 @@ async function deleteConversationDirect(convId, wrapperElement, conversationProv
   }
 }
 
-// ✏️ Rename Conversation Action
+// ✏️ Conversation title helpers
+async function saveConversationTitle(convId, title, conversationProvider = currentProvider) {
+  const cleanTitle = String(title || '').trim();
+  if (!cleanTitle) throw new Error('標題不能為空白');
+
+  const res = await fetch('/api/rename-conversation', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ provider: conversationProvider, conversation_id: convId, title: cleanTitle })
+  });
+  const data = await res.json();
+  if (!data.success) throw new Error(data.error || '重新命名失敗');
+
+  if (currentConversationId === convId && headerTitle) headerTitle.textContent = cleanTitle;
+  if (typeof loadConversations === 'function') loadConversations();
+  if (navigator.vibrate) navigator.vibrate(25);
+  return cleanTitle;
+}
+
 async function renameConversationDirect(convId, currentTitle, conversationProvider = currentProvider) {
   const defaultVal = currentTitle && !currentTitle.startsWith('對話 ') ? currentTitle : '';
   const newTitle = window.prompt('請輸入自定義對話標題：', defaultVal);
-  if (newTitle === null) return; // User canceled
-  const cleanTitle = newTitle.trim();
-  if (!cleanTitle) {
-    alert('標題不能為空白');
-    return;
-  }
-
+  if (newTitle === null) return;
   try {
-    const res = await fetch('/api/rename-conversation', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ provider: conversationProvider, conversation_id: convId, title: cleanTitle })
-    });
-    const data = await res.json();
-    if (data.success) {
-      if (currentConversationId === convId && headerTitle) {
-        headerTitle.textContent = cleanTitle;
-      }
-      loadConversations();
-      if (navigator.vibrate) navigator.vibrate(25);
-    } else {
-      alert('重新命名失敗：' + (data.error || '未知錯誤'));
-    }
+    await saveConversationTitle(convId, newTitle, conversationProvider);
   } catch (err) {
     alert('重新命名失敗：' + err.message);
   }
 }
+
+window.saveConversationTitle = saveConversationTitle;
 
 // Used by system-created conversations. Unlike manual rename it never opens a
 // prompt, and updates the visible title immediately after the server accepts it.
@@ -1587,22 +1603,11 @@ function renderConversationItems(conversations) {
         </div>
         <div class="flex items-center gap-1 shrink-0 ml-1">
           ${isCurrent ? '<span class="text-[9px] px-1.5 py-0.2 rounded-full bg-indigo-900 text-indigo-200 border border-indigo-500/60 font-mono shrink-0">目前</span>' : ''}
-          <button type="button" class="rename-conv-btn min-w-7 min-h-7 rounded-lg hover:bg-slate-700/80 text-slate-500 hover:text-indigo-300 transition active:scale-95 shrink-0 text-base leading-none" title="重新命名對話" aria-label="重新命名對話">⋯</button>
         </div>
       </div>
     `;
 
     const contentEl = wrapper.querySelector('.swipe-item-content');
-    const renameBtn = wrapper.querySelector('.rename-conv-btn');
-
-    if (renameBtn) {
-      renameBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        renameConversationDirect(conv.id, conv.title, conversationProvider);
-      });
-      renameBtn.addEventListener('pointerdown', (e) => e.stopPropagation());
-      renameBtn.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });
-    }
 
     // Swipe Gesture Handling
     let startX = 0;
@@ -1611,6 +1616,24 @@ function renderConversationItems(conversations) {
     let isSwiping = false;
     let isVerticalScroll = false;
     let isDeleted = false;
+    let longPressTimer = null;
+    let longPressTriggered = false;
+
+    const cancelLongPress = () => {
+      if (longPressTimer) clearTimeout(longPressTimer);
+      longPressTimer = null;
+    };
+
+    const scheduleLongPressRename = () => {
+      cancelLongPress();
+      longPressTriggered = false;
+      longPressTimer = setTimeout(() => {
+        if (isDeleted || isSwiping || isVerticalScroll) return;
+        longPressTriggered = true;
+        if (typeof window.haptic === 'function') window.haptic('medium');
+        renameConversationDirect(conv.id, conv.title, conversationProvider);
+      }, 520);
+    };
 
     const onTouchStart = (clientX, clientY) => {
       if (isDeleted) return;
@@ -1621,12 +1644,15 @@ function renderConversationItems(conversations) {
       isVerticalScroll = false;
       wrapper.classList.remove('is-swiping-left');
       contentEl.style.transition = 'none';
+      scheduleLongPressRename();
     };
 
     const onTouchMove = (clientX, clientY) => {
       if (isDeleted) return;
       const diffX = clientX - startX;
       const diffY = clientY - startY;
+
+      if (Math.abs(diffX) > 7 || Math.abs(diffY) > 7) cancelLongPress();
 
       if (!isSwiping && !isVerticalScroll) {
         if (Math.abs(diffY) > Math.abs(diffX) + 4) {
@@ -1652,6 +1678,13 @@ function renderConversationItems(conversations) {
     };
 
     const onTouchEnd = () => {
+      cancelLongPress();
+      if (longPressTriggered) {
+        longPressTriggered = false;
+        currentDiffX = 0;
+        contentEl.style.transform = 'translateX(0px)';
+        return;
+      }
       if (isDeleted || isVerticalScroll) return;
 
       if (currentDiffX < -75) {
@@ -1682,7 +1715,10 @@ function renderConversationItems(conversations) {
     }, { passive: true });
 
     contentEl.addEventListener('touchend', onTouchEnd, { passive: true });
-    contentEl.addEventListener('touchcancel', onTouchEnd, { passive: true });
+    contentEl.addEventListener('touchcancel', () => {
+      cancelLongPress();
+      onTouchEnd();
+    }, { passive: true });
 
     contentEl.addEventListener('pointerdown', (e) => {
       if (e.pointerType === 'touch') return;
@@ -1697,8 +1733,15 @@ function renderConversationItems(conversations) {
       window.addEventListener('pointerup', onPointerUp);
     });
 
-    contentEl.addEventListener('click', (e) => {
-      if (e.target.closest('.rename-conv-btn')) return;
+    contentEl.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      renameConversationDirect(conv.id, conv.title, conversationProvider);
+    });
+
+    contentEl.title = '點擊開啟 · 長按重新命名 · 左滑刪除';
+
+    contentEl.addEventListener('click', () => {
+      if (longPressTriggered) return;
       if (!isDeleted && Math.abs(currentDiffX) < 10) {
         window.applyConversationSettings({
           provider: conversationProvider,
@@ -1776,8 +1819,10 @@ function updateBtwQueueStatus() {
 function updateSendButtonMode() {
   if (!sendBtn || !sendIcon || !stopIcon) return;
   const queueIcon = document.getElementById('queue-icon');
+  const queueCountBadge = document.getElementById('send-queue-count');
   const srLabel = document.getElementById('send-btn-sr-label');
   const hasInputText = promptInput ? promptInput.value.trim().length > 0 : false;
+  if (queueCountBadge) queueCountBadge.classList.toggle('hidden', !pendingQueuedMessage);
 
   sendBtn.classList.remove(
     'bg-indigo-600', 'hover:bg-indigo-500', 'active:bg-indigo-700', 'shadow-indigo-600/30',
@@ -2269,8 +2314,16 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
     if (statusTextElem) {
       statusTextElem.textContent = doneData?.error
         ? '⚠️ 執行已停止'
-        : `✓ 完成 · ${progressOrder.length} steps`;
+        : liveTools.length > 0
+        ? `✓ 完成 · ${progressOrder.length} steps`
+        : '✓ 完成';
       if (liveTimerElem) liveTimerElem.textContent = `${activityElapsedSec}s`;
+    }
+    if (!doneData?.error && liveTools.length === 0) {
+      liveStatusElem.classList.add('execution-heartbeat-only');
+      window.setTimeout(() => {
+        if (liveStatusElem?.isConnected) liveStatusElem.classList.add('execution-heartbeat-dismissed');
+      }, 450);
     }
 
     const targetDoneConvId = doneData?.conversation_id || streamConversationId;
