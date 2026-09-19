@@ -35,6 +35,15 @@ After installing the APK, Android must also grant Crew Pocket:
 
 Both requirements are mandatory for Termux's official `RUN_COMMAND` integration.
 
+## Wireless debugging setup from the APK
+
+Open the Crew Pocket tools menu and choose **無線偵錯設定**. The native setup
+sheet can save the debug `IP:Port`, run `adb connect` through Termux, show the
+current ADB status, open Android's developer settings, and copy a matching
+command for Termux. For a new pairing, enter the pairing `IP:Port` and the
+six-digit pairing code, then choose **配對並連線**. The endpoint is stored in
+`~/.adb_port`, so `~/install-apk.sh` uses the same setting afterward.
+
 ## Build
 
 With JDK 17 and Gradle available:

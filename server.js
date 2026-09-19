@@ -80,12 +80,17 @@ async function handleStorageThumbnail(parsedUrl, res) {
 
 // 🔌 Central ADB Wireless Debugging Handlers (~/.adb_port)
 const ADB_PORT_FILE = path.join(os.homedir(), '.adb_port');
+const ADB_RESULT_FILE = path.join(os.homedir(), '.crew-pocket', 'adb-last-result');
 
 async function handleAdbStatus(res) {
   try {
     let target = '';
+    let lastOutput = '';
     try {
       target = (await fsPromises.readFile(ADB_PORT_FILE, 'utf-8')).trim();
+    } catch (_) {}
+    try {
+      lastOutput = (await fsPromises.readFile(ADB_RESULT_FILE, 'utf-8')).trim().slice(-2000);
     } catch (_) {}
 
     let connected = false;
@@ -101,7 +106,7 @@ async function handleAdbStatus(res) {
     } catch (_) {}
 
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ target, connected, devices: devicesOutput.trim() }));
+    res.end(JSON.stringify({ target, connected, devices: devicesOutput.trim(), last_output: lastOutput }));
   } catch (err) {
     res.writeHead(500, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: err.message }));
@@ -112,6 +117,8 @@ async function handleAdbUpdate(req, res) {
   try {
     const body = await parseJsonBody(req);
     let target = (body.target || body.port || '').toString().trim();
+    let pairingTarget = (body.pairing_target || body.pair_target || '').toString().trim();
+    const pairingCode = (body.pairing_code || body.pair_code || '').toString().trim();
     if (!target) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
       return res.end(JSON.stringify({ success: false, error: 'Port or target is required' }));
@@ -119,10 +126,39 @@ async function handleAdbUpdate(req, res) {
     if (/^\d+$/.test(target)) {
       target = `127.0.0.1:${target}`;
     }
+    if (pairingTarget && /^\d+$/.test(pairingTarget)) {
+      pairingTarget = `127.0.0.1:${pairingTarget}`;
+    }
+    const endpointPattern = /^(?:[A-Za-z0-9._-]+|\[[0-9A-Fa-f:]+\]):[1-9][0-9]{0,4}$/;
+    if (!endpointPattern.test(target)) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({ success: false, error: 'Invalid ADB target' }));
+    }
+    const targetPort = Number(target.slice(target.lastIndexOf(':') + 1));
+    if (targetPort > 65535) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({ success: false, error: 'Invalid ADB port' }));
+    }
+    if (pairingTarget || pairingCode) {
+      if (!endpointPattern.test(pairingTarget) || !/^\d{6}$/.test(pairingCode)) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify({ success: false, error: 'Pairing target and six-digit pairing code are required' }));
+      }
+    }
     await fsPromises.writeFile(ADB_PORT_FILE, target + '\n', 'utf-8');
 
     let connectOutput = '';
+    let pairOutput = '';
     let connected = false;
+    if (pairingTarget) {
+      try {
+        const { stdout, stderr } = await execFileAsync('adb', ['pair', pairingTarget, pairingCode]);
+        pairOutput = (stdout + '\n' + stderr).trim();
+      } catch (e) {
+        pairOutput = (e.stdout || '') + '\n' + (e.stderr || e.message || 'pair failed');
+        pairOutput = pairOutput.trim();
+      }
+    }
     try {
       const { stdout, stderr } = await execFileAsync('adb', ['connect', target]);
       connectOutput = (stdout + '\n' + stderr).trim();
@@ -132,12 +168,19 @@ async function handleAdbUpdate(req, res) {
       connectOutput = e.message;
     }
 
+    await fsPromises.mkdir(path.dirname(ADB_RESULT_FILE), { recursive: true });
+    const resultLines = [];
+    if (pairOutput) resultLines.push(`pair: ${pairOutput}`);
+    if (connectOutput) resultLines.push(`connect: ${connectOutput}`);
+    await fsPromises.writeFile(ADB_RESULT_FILE, resultLines.join('\n') + '\n', 'utf-8');
+
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
       success: true,
       target,
       connected,
-      output: connectOutput
+      output: connectOutput,
+      pair_output: pairOutput
     }));
   } catch (err) {
     res.writeHead(500, { 'Content-Type': 'application/json' });
@@ -1101,13 +1144,32 @@ function isPollingToolEvent(event) {
 
 // 💬 SSE Chat Streaming with Resident Pipe
 async function handleChat(req, res) {
+  const requestId = crypto.randomUUID();
+  const requestStartedAt = Date.now();
+  const turnTiming = {
+    body_ms: null,
+    workspace_ms: null,
+    to_sse_ms: null,
+    to_first_event_ms: null,
+    to_session_ms: null,
+    to_first_text_ms: null,
+    to_first_tool_ms: null,
+    to_done_ms: null
+  };
+  const elapsed = () => Date.now() - requestStartedAt;
+  const markOnce = (key) => {
+    if (turnTiming[key] == null) turnTiming[key] = elapsed();
+  };
+
   let body;
+  const bodyStartedAt = Date.now();
   try {
     body = await parseJsonBody(req);
   } catch (err) {
     res.writeHead(400, { 'Content-Type': 'application/json' });
     return res.end(JSON.stringify({ error: 'Invalid JSON body' }));
   }
+  turnTiming.body_ms = Date.now() - bodyStartedAt;
 
   const { prompt, conversation_id, image_path, model, effort } = body;
   const providerId = normalizeProviderId(body.provider);
@@ -1118,6 +1180,7 @@ async function handleChat(req, res) {
   // 🛡️ Resolve workspace:
   // For an existing conversation, lock to the conversation's saved workspace from database,
   // preventing accidental workspace hijacking from stale frontend state.
+  const workspaceStartedAt = Date.now();
   let workspace;
   try {
     if (conversation_id) {
@@ -1141,6 +1204,7 @@ async function handleChat(req, res) {
     res.writeHead(400, { 'Content-Type': 'application/json' });
     return res.end(JSON.stringify({ error: err.message }));
   }
+  turnTiming.workspace_ms = Date.now() - workspaceStartedAt;
 
   let finalPrompt = prompt || 'Analyze this image';
 
@@ -1166,6 +1230,7 @@ async function handleChat(req, res) {
   };
   if (allowOrigin) headers['Access-Control-Allow-Origin'] = allowOrigin;
   res.writeHead(200, headers);
+  markOnce('to_sse_ms');
 
   const sendEvent = (event, data) => {
     res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
@@ -1173,12 +1238,12 @@ async function handleChat(req, res) {
 
   try {
     const provider = getProvider(providerId);
-    const requestId = crypto.randomUUID();
     const toolRuns = new Map();
     let toolEventCount = 0;
     let metricsLogged = false;
     let ended = false;
     let abortTurn = () => {};
+    let lastContextStats = null;
     const getToolMetrics = () => {
       let executions = 0;
       let polls = 0;
@@ -1201,6 +1266,14 @@ async function handleChat(req, res) {
         provider: providerId,
         conversation_id: conversation_id || null,
         reason,
+        elapsed_ms: elapsed(),
+        turn_timing: turnTiming,
+        context_stats: lastContextStats ? {
+          active_tokens: lastContextStats.active_tokens,
+          total_tokens: lastContextStats.total_tokens,
+          context_window: lastContextStats.context_window,
+          status_level: lastContextStats.status_level
+        } : null,
         ...getToolMetrics()
       }));
     };
@@ -1237,10 +1310,12 @@ async function handleChat(req, res) {
     const finish = (payload) => {
       if (ended) return;
       ended = true;
+      markOnce('to_done_ms');
       const finalPayload = {
         ...(payload || {}),
         request_id: requestId,
-        tool_metrics: getToolMetrics()
+        tool_metrics: getToolMetrics(),
+        turn_timing: turnTiming
       };
       logToolMetrics(finalPayload.error ? 'error' : 'completed');
       sendEvent('done', finalPayload);
@@ -1253,6 +1328,7 @@ async function handleChat(req, res) {
       if (!ended && !res.writableEnded) {
         ended = true;
         abortTurn();
+        markOnce('to_done_ms');
         logToolMetrics('client_closed');
       }
     });
@@ -1268,7 +1344,9 @@ async function handleChat(req, res) {
       onAbort(handler) { abortTurn = handler; },
       onEvent(event) {
         if (ended) return;
+        markOnce('to_first_event_ms');
         if (event.type === 'session_started') {
+          markOnce('to_session_ms');
           // A new thread only has an id after its provider starts. Persist here
           // as well as on manual selector changes so new conversations are
           // immediately bound to their first model.
@@ -1280,12 +1358,17 @@ async function handleChat(req, res) {
           }).catch(err => console.warn('[Conversation Settings] Save failed:', err.message));
           sendEvent('init', { conversation_id: event.conversationId, provider: providerId, model: event.model, effort: event.effort });
         } else if (event.type === 'text_delta') {
-          sendEvent('chunk', { delta: event.delta, accumulated: event.accumulated });
+          markOnce('to_first_text_ms');
+          // The browser already appends deltas locally. Sending the complete
+          // response on every token makes one long answer O(n²) in SSE bytes
+          // and JSON serialization work on the phone.
+          sendEvent('chunk', { delta: event.delta });
         } else if (event.type === 'reasoning_delta') {
           sendEvent('thought', { delta: event.delta });
         } else if (event.type === 'reasoning_complete') {
           sendEvent('thought', { fullThinking: event.thinking });
         } else if (event.type === 'tool') {
+          markOnce('to_first_tool_ms');
           const tracking = recordToolEvent(event);
           sendEvent('tool', {
             request_id: requestId,
@@ -1301,6 +1384,7 @@ async function handleChat(req, res) {
             unique_tool_count: toolRuns.size
           });
         } else if (event.type === 'context_usage') {
+          lastContextStats = event.stats || null;
           sendEvent('context', event.stats);
         } else if (event.type === 'error') {
           finish({ error: event.message, provider: providerId, conversation_id });
@@ -1312,8 +1396,17 @@ async function handleChat(req, res) {
 
   } catch (err) {
     console.error('[Chat Error]', err);
+    markOnce('to_done_ms');
+    console.log('[TurnMetrics] ' + JSON.stringify({
+      request_id: requestId,
+      provider: providerId,
+      conversation_id: conversation_id || null,
+      reason: 'error',
+      elapsed_ms: elapsed(),
+      turn_timing: turnTiming
+    }));
     if (!res.writableEnded && !res.destroyed) {
-      sendEvent('done', { error: err.message });
+      sendEvent('done', { error: err.message, request_id: requestId, turn_timing: turnTiming });
       res.end();
     }
   }

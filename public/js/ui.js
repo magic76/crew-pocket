@@ -8,7 +8,11 @@ const DEFAULT_PROVIDERS = [
 let availableProviders = DEFAULT_PROVIDERS;
 let currentConversationId = null;
 let currentProvider = localStorage.getItem('crew_current_provider') || 'antigravity';
-let currentModel = localStorage.getItem('agy_current_model') || 'gemini-3.7-flash';
+const initialModelStoragePrefix = currentProvider === 'codex' ? 'codex' : 'agy';
+const initialModelFallback = currentProvider === 'codex' ? 'gpt-5.6-terra' : 'gemini-3.7-flash';
+let currentModel = localStorage.getItem(`${initialModelStoragePrefix}_current_model`)
+  || (currentProvider === 'antigravity' ? localStorage.getItem('agy_current_model') : null)
+  || initialModelFallback;
 let currentEffort = localStorage.getItem(providerStorageKey('current_effort')) || 'low';
 const BUILTIN_MODEL_FALLBACKS = [
   { id: 'gpt-6-astra', provider: 'codex', name: 'GPT-6 Astra', desc: '最強旗艦 · 複雜多步開發與代理任務', icon: '✦', badge: '旗艦', badgeColor: 'bg-violet-500/20 text-violet-200 border-violet-400/40', isDefault: false, defaultReasoningEffort: 'medium', supportedReasoningEfforts: ['low', 'medium', 'high', 'xhigh', 'max'] },
@@ -794,13 +798,23 @@ window.applyConversationSettings = function(settings) {
   }
   if (!settings.model) return true;
   const selected = providerModels.find(model => model.id === settings.model);
-  const modelToApply = selected || providerModels.find(model => model.isDefault) || providerModels[0];
+  const modelToApply = selected;
   if (modelToApply) {
     currentModel = modelToApply.id;
     const supported = modelToApply.supportedReasoningEfforts || ['low', 'medium', 'high'];
     currentEffort = supported.includes(settings.effort)
       ? settings.effort
       : (modelToApply.defaultReasoningEffort || supported[0] || 'low');
+    localStorage.setItem(providerStorageKey('current_model'), currentModel);
+    localStorage.setItem(providerStorageKey('current_effort'), currentEffort);
+    updateModelUI();
+    updateEffortUI();
+  } else {
+    // The model catalog can still be loading while history is restored. Keep
+    // the conversation's persisted model visible and send it on the next turn
+    // instead of briefly falling back to another provider's default.
+    currentModel = String(settings.model);
+    currentEffort = String(settings.effort || 'low');
     localStorage.setItem(providerStorageKey('current_model'), currentModel);
     localStorage.setItem(providerStorageKey('current_effort'), currentEffort);
     updateModelUI();

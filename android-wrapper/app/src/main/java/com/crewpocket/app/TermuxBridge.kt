@@ -52,6 +52,62 @@ object TermuxBridge {
         )
     }
 
+    /**
+     * Persist the Wireless Debugging endpoint in Termux and ask adb to connect.
+     *
+     * The APK cannot run adb in its own sandbox. Keeping this small operation
+     * behind the existing Termux RunCommand bridge gives the native setup sheet
+     * the same source of truth as install-apk.sh and the web diagnostics page.
+     */
+    fun setAdbTarget(context: Context, target: String): Result<Unit> {
+        val normalized = validateAdbEndpoint(target)
+
+        val safeTarget = normalized.replace("'", "'\\\"'\\\"'")
+        val command = """
+            set -eu
+            mkdir -p "${'$'}HOME/.crew-pocket"
+            printf '%s\n' '$safeTarget' > "${'$'}HOME/.adb_port"
+            echo "connect: ${'$'}(adb connect '$safeTarget' 2>&1 || true)" > "${'$'}HOME/.crew-pocket/adb-last-result"
+        """.trimIndent()
+        return runCrewScript(context, command)
+    }
+
+    /** Pair a fresh Wireless Debugging endpoint, then connect the ADB endpoint. */
+    fun pairAdbTarget(
+        context: Context,
+        pairingTarget: String,
+        pairingCode: String,
+        target: String
+    ): Result<Unit> {
+        val safePairingTarget = validateAdbEndpoint(pairingTarget)
+        val safeTarget = validateAdbEndpoint(target)
+        val safeCode = pairingCode.trim()
+        require(safeCode.matches(Regex("[0-9]{6}"))) {
+            "Wireless Debugging 配對碼必須是 6 位數字"
+        }
+
+        val command = """
+            set -eu
+            mkdir -p "${'$'}HOME/.crew-pocket"
+            printf '%s\n' '$safeTarget' > "${'$'}HOME/.adb_port"
+            {
+                echo "pair: ${'$'}(adb pair '$safePairingTarget' '$safeCode' 2>&1 || true)"
+                echo "connect: ${'$'}(adb connect '$safeTarget' 2>&1 || true)"
+            } > "${'$'}HOME/.crew-pocket/adb-last-result"
+        """.trimIndent()
+        return runCrewScript(context, command)
+    }
+
+    private fun validateAdbEndpoint(target: String): String {
+        val normalized = target.trim().replace('：', ':').replace(" ", "")
+        require(normalized.matches(Regex("(?:[A-Za-z0-9._-]+|\\[[0-9A-Fa-f:]+\\]):[1-9][0-9]{0,4}"))) {
+            "Invalid Wireless Debugging endpoint"
+        }
+        val port = normalized.substringAfterLast(':').removeSuffix("]").toIntOrNull()
+        require(port != null && port in 1..65535) { "Invalid Wireless Debugging port" }
+        return normalized
+    }
+
     fun provisionEmbeddedBridgeToken(context: Context, token: String): Result<Unit> {
         require(token.matches(Regex("[0-9a-f]{64}"))) { "Invalid bridge token" }
 

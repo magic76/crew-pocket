@@ -1022,6 +1022,68 @@
     return div.innerHTML;
   }
 
+  const IS_ANDROID_DEVICE = /Android/i.test(navigator.userAgent || '');
+
+  // Android WebView devices differ in which WebRTC audio constraints their
+  // current audio route accepts. Start with the normal low-latency profile,
+  // then fall back to a plain capture request instead of treating every
+  // source failure as a missing permission.
+  async function requestLiveMicrophone() {
+    if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== 'function') {
+      const error = new Error('目前 WebView 不支援麥克風擷取');
+      error.name = 'NotSupportedError';
+      throw error;
+    }
+
+    const attempts = IS_ANDROID_DEVICE
+      ? [
+          { audio: { channelCount: 1, echoCancellation: false, noiseSuppression: false, autoGainControl: false } },
+          { audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true } },
+          { audio: true }
+        ]
+      : [
+          { audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true } },
+          { audio: { channelCount: 1 } },
+          { audio: true }
+        ];
+
+    let lastError = null;
+    for (let index = 0; index < attempts.length; index++) {
+      try {
+        return await navigator.mediaDevices.getUserMedia(attempts[index]);
+      } catch (error) {
+        lastError = error;
+        // Permission and device-selection errors will not be fixed by trying
+        // the same source again with different processing flags.
+        if (['NotAllowedError', 'SecurityError', 'NotFoundError'].includes(error?.name)) {
+          break;
+        }
+        if (index < attempts.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 140));
+        }
+      }
+    }
+    throw lastError || new Error('無法啟動麥克風音源');
+  }
+
+  function describeLiveMicrophoneError(error) {
+    const name = String(error?.name || '');
+    const rawMessage = String(error?.message || '').trim();
+    if (name === 'NotAllowedError' || name === 'SecurityError') {
+      return '麥克風權限被拒絕。請在 Android 設定中允許 Crew Pocket 使用麥克風，並確認快速設定的「麥克風存取權限」已開啟。';
+    }
+    if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
+      return '找不到可用的麥克風。請確認手機沒有停用麥克風或連接中的音訊裝置。';
+    }
+    if (name === 'NotReadableError' || /could not start audio source/i.test(rawMessage)) {
+      return '麥克風權限已授權，但 Android 音訊來源目前無法啟動。請先關閉其他錄音、通話或語音助理，再確認快速設定的「麥克風存取權限」已開啟後重試。';
+    }
+    if (name === 'OverconstrainedError') {
+      return '目前音訊裝置不接受這組錄音設定，已嘗試自動降級仍無法啟動。請重新開啟 Live 或切換目前的音訊裝置。';
+    }
+    return rawMessage ? `麥克風無法啟動：${rawMessage}` : '麥克風無法啟動，請確認系統麥克風開關後重試。';
+  }
+
   // ==========================================
   // 🌟 Option A: Inline Live Card DOM Management
   // ==========================================
@@ -2645,6 +2707,12 @@
   async function startLiveSession(mode = 'operation', continuation = null) {
     const resumeHandle = String(continuation?.handle || '');
     const isResuming = Boolean(resumeHandle);
+    // A failed permission/source attempt can leave a context behind even
+    // though no socket was opened. Release that stale media state before a
+    // fresh start so the next attempt gets a clean Android audio route.
+    if (!isResuming && !isConnected && (audioContext || audioPlayer || micMediaStream || micAudioSource || ws)) {
+      releaseLiveRuntimeResources();
+    }
     // Prevent duplicate sessions
     if (isResuming) {
       // Preserve the dialogue, task state and Gemini context handle. The new
@@ -2883,7 +2951,26 @@
         await initVoiceprintEngine();
       }
 
-      // 2. Web Audio Context
+      // 2. Capture the microphone before opening the Web Audio output route.
+      // Some Android WebView audio drivers reject AudioRecord after an
+      // AudioContext/Worklet has already switched the output route.
+      try {
+        micMediaStream = await requestLiveMicrophone();
+      } catch (micErr) {
+        const micMessage = describeLiveMicrophoneError(micErr);
+        console.warn('[Live Microphone Error]', micErr?.name || 'UnknownError', micErr?.message || micErr);
+        recordLiveHealthIssue(micMessage, 'error');
+        // getUserMedia can leave a partially opened route after a rejected
+        // request. Always release every Live resource before returning so a
+        // retry starts from a clean Android audio state.
+        releaseLiveRuntimeResources();
+        restoreLiveUiAfterStartFailure();
+        updateCardStatus('error', '⚠️ 麥克風無法啟動');
+        appendCardTranscript('system', micMessage);
+        return;
+      }
+
+      // 3. Web Audio Context
       const AudioCtxClass = window.AudioContext || window.webkitAudioContext;
       try {
         audioContext = new AudioCtxClass({ latencyHint: 'interactive', sampleRate: 48000 });
@@ -2903,23 +2990,6 @@
       }
       await audioContext.audioWorklet.addModule('/js/live-audio-worklet.js?v=1787857600');
       audioPlayer = new LiveAudioPlayer(audioContext);
-
-      // 3. Microphone Capture. Live output is routed through a media <audio>
-      // element, so Android can safely enable acoustic echo control here.
-      try {
-        micMediaStream = await navigator.mediaDevices.getUserMedia({
-          audio: {
-            channelCount: 1,
-            echoCancellation: true,
-            noiseSuppression: true,
-            autoGainControl: true
-          }
-        });
-      } catch (micErr) {
-        updateCardStatus('error', '⚠️ 麥克風未開啟');
-        appendCardTranscript('system', '請允許麥克風權限：' + micErr.message);
-        return;
-      }
 
       micAudioSource = audioContext.createMediaStreamSource(micMediaStream);
       micAudioSource.connect(analyser);
@@ -3586,6 +3656,8 @@
     } catch (err) {
       console.error('[Live Session Error]', err);
       recordLiveHealthIssue(`啟動失敗：${err.message}`, 'error');
+      releaseLiveRuntimeResources();
+      restoreLiveUiAfterStartFailure();
       updateCardStatus('error', '⚠️ 啟動失敗');
       appendCardTranscript('system', '錯誤：' + err.message);
     }
@@ -3819,6 +3891,24 @@
     }
     ws = null;
     try { setMediaSessionActive(false); } catch (_) {}
+  }
+
+  function restoreLiveUiAfterStartFailure() {
+    if (liveVoiceBtn) {
+      liveVoiceBtn.classList.remove('bg-rose-950/80', 'text-rose-300', 'border-rose-500/50', 'shadow-rose-500/30');
+      liveVoiceBtn.classList.add('bg-teal-500/15', 'hover:bg-teal-500/25', 'text-teal-300', 'border-teal-500/50', 'shadow-teal-500/20');
+      liveVoiceBtn.title = '🎙️ Gemini Live 原生雙向全雙工通話 (端到端音訊)';
+      const span = liveVoiceBtn.querySelector('span:last-child');
+      if (span) span.textContent = 'Live 通話';
+    }
+    const standardInputBar = document.getElementById('standard-input-bar');
+    const liveBottomDock = document.getElementById('live-bottom-dock');
+    if (liveBottomDock) {
+      liveBottomDock.classList.add('hidden');
+      liveBottomDock.classList.remove('flex');
+    }
+    document.body.classList.remove('live-active');
+    if (standardInputBar) standardInputBar.classList.remove('hidden');
   }
 
   async function endLiveSession() {

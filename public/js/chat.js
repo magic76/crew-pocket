@@ -1424,27 +1424,47 @@ async function loadConversationHistory(convId, { preserveComposer = false } = {}
   }
 }
 
-// Load Conversations List in Drawer (with Smooth Swipe-to-Delete & Context Stats)
-async function loadConversations() {
-  if (!convList) return;
-  try {
-    const providerIds = availableProviders.filter(provider => provider.capabilities?.history !== false).map(provider => provider.id);
-    const results = await Promise.all(providerIds.map(async provider => {
-      try {
-        const response = await fetch('/api/conversations?provider=' + encodeURIComponent(provider));
-        const data = await response.json();
-        return (data.conversations || []).map(conversation => ({ ...conversation, provider }));
-      } catch (_) {
-        return [];
-      }
-    }));
-    cachedConversations = results.flat().sort((a, b) => (a.title || '').localeCompare(b.title || '', 'zh-TW') || String(a.id).localeCompare(String(b.id)));
-    
-    renderConversationItems(cachedConversations);
-  } catch (err) {
-    console.error('Failed to load conversations:', err);
-    if (convList) convList.innerHTML = '<div class="p-4 text-center text-xs text-rose-400">無法載入歷史紀錄</div>';
+// The drawer is normally closed while a turn is running. Defer its two
+// provider-wide filesystem scans until the user opens it, and share concurrent
+// callers so completion/title updates cannot start duplicate scans.
+let conversationListRequest = null;
+
+function isConversationDrawerVisible() {
+  const drawerElement = document.getElementById('drawer');
+  return !drawerElement || !drawerElement.classList.contains('-translate-x-full');
+}
+
+async function loadConversations({ force = false } = {}) {
+  if (!convList) return [];
+  if (!force && !isConversationDrawerVisible()) {
+    return cachedConversations;
   }
+  if (conversationListRequest) return conversationListRequest;
+
+  conversationListRequest = (async () => {
+    try {
+      const providerIds = availableProviders.filter(provider => provider.capabilities?.history !== false).map(provider => provider.id);
+      const results = await Promise.all(providerIds.map(async provider => {
+        try {
+          const response = await fetch('/api/conversations?provider=' + encodeURIComponent(provider));
+          const data = await response.json();
+          return (data.conversations || []).map(conversation => ({ ...conversation, provider }));
+        } catch (_) {
+          return [];
+        }
+      }));
+      cachedConversations = results.flat().sort((a, b) => (a.title || '').localeCompare(b.title || '', 'zh-TW') || String(a.id).localeCompare(String(b.id)));
+      renderConversationItems(cachedConversations);
+      return cachedConversations;
+    } catch (err) {
+      console.error('Failed to load conversations:', err);
+      if (convList) convList.innerHTML = '<div class="p-4 text-center text-xs text-rose-400">無法載入歷史紀錄</div>';
+      return cachedConversations;
+    } finally {
+      conversationListRequest = null;
+    }
+  })();
+  return conversationListRequest;
 }
 
 let cachedConversations = [];
@@ -2254,6 +2274,7 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
   const liveTools = [];
   const liveToolMap = new Map();
   let hadThinking = false;
+  let receivedContextStats = false;
   const startTs = performance.now();
 
   const assistantMsgDiv = document.createElement('div');
@@ -2300,6 +2321,12 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
   function finalizeTurn(doneData = null) {
     if (turnFinalized) return;
     turnFinalized = true;
+
+    if (renderTimer) {
+      clearTimeout(renderTimer);
+      renderTimer = null;
+      renderPending = false;
+    }
 
     clearInterval(liveTimerInterval);
     markProgressDone('phase:analysis');
@@ -2348,13 +2375,16 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
     } else {
       contentElem.innerHTML = formatMessageContent(accumulatedText);
     }
-    // 🧠 Refresh Context Usage Stats
-    if (targetDoneConvId) {
+    // Codex streams fresh token usage during the turn. Only reload history
+    // when a provider did not provide that event; the drawer itself refreshes
+    // lazily when opened, so a closed sidebar does not trigger a filesystem
+    // scan after every answer.
+    if (targetDoneConvId && !receivedContextStats) {
       fetch(`/api/history?id=${targetDoneConvId}&provider=${encodeURIComponent(streamProvider)}`).then(r => r.json()).then(hData => {
         if (hData.context_stats && currentProvider === streamProvider && currentConversationId === targetDoneConvId) updateContextPill(hData.context_stats);
-        loadConversations();
       }).catch(() => {});
     }
+    if (targetDoneConvId) loadConversations();
 
     const totalSec = activityElapsedSec;
     const estTokens = Math.round(accumulatedText.length / 2);
@@ -2453,6 +2483,7 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
   let accumulatedText = '';
   let abortedHandled = false;
   let renderPending = false;
+  let renderTimer = null;
 
   try {
     const response = await fetch('/api/chat', {
@@ -2516,6 +2547,7 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
               }
               if (isStreamVisible()) scrollToBottom();
             } else if (currentEvent === 'context') {
+              receivedContextStats = true;
               if (isStreamVisible()) updateContextPill(data);
             } else if (currentEvent === 'tool') {
               const mergedTool = mergeToolEventIntoMap(liveToolMap, liveTools, data);
@@ -2539,7 +2571,7 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
               statusTextElem.textContent = progressState === 'running'
                 ? `${progress.icon} ${activePrefix}${progress.text}…`
                 : `${progress.icon} ${activePrefix}${progress.text}`;
-            } else if (currentEvent === 'chunk' && data.accumulated) {
+            } else if (currentEvent === 'chunk' && (data.accumulated !== undefined || data.delta !== undefined)) {
               markProgressDone('phase:analysis');
               upsertProgress('phase:writing', {
                 icon: '✍️',
@@ -2547,10 +2579,16 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
                 state: 'running'
               });
               statusTextElem.textContent = '✍️ 正在整理並輸出回覆…';
-              accumulatedText = data.accumulated;
+              // New servers send only the delta to avoid repeatedly
+              // serializing the full response. Keep accepting accumulated for
+              // older cached pages or an external compatible server.
+              accumulatedText = data.accumulated !== undefined
+                ? data.accumulated
+                : `${accumulatedText}${data.delta || ''}`;
               if (!renderPending) {
                 renderPending = true;
-                requestAnimationFrame(() => {
+                renderTimer = setTimeout(() => {
+                  renderTimer = null;
                   contentElem.innerHTML = formatMessageContent(accumulatedText);
                   renderPending = false;
                   if (userScrolledUp) {
@@ -2558,7 +2596,7 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
                     if (scrollBadge) scrollBadge.classList.remove('hidden');
                   }
                   if (isStreamVisible()) scrollToBottom();
-                });
+                }, 50);
               }
 
             } else if (currentEvent === 'done') {

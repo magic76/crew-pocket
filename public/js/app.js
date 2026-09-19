@@ -314,6 +314,7 @@ function initAppAndListeners() {
     const sheetQuickFilesBtn = document.getElementById('sheet-quick-files-btn');
     const sheetQuickTasksBtn = document.getElementById('sheet-quick-tasks-btn');
     const sheetQuickRuntimeBtn = document.getElementById('sheet-quick-runtime-btn');
+    const adbSettingsBtn = document.getElementById('adb-settings-btn');
 
     const setToolsMenuOpen = (open) => {
       toolsMenuDropdown.classList.toggle('hidden', !open);
@@ -347,6 +348,15 @@ function initAppAndListeners() {
       document.getElementById('auth-menu-btn')?.click();
     });
 
+    if (adbSettingsBtn) adbSettingsBtn.addEventListener('click', () => {
+      setToolsMenuOpen(false);
+      if (typeof window.CrewPocket?.openWirelessDebugSettings === 'function') {
+        window.CrewPocket.openWirelessDebugSettings();
+      } else {
+        window.location.assign('/extra/adb.html');
+      }
+    });
+
     if (window.matchMedia('(max-width: 640px)').matches) {
       const moreTools = toolsMenuDropdown.querySelector('details.group');
       const moreSummary = moreTools?.querySelector('summary');
@@ -367,7 +377,7 @@ function initAppAndListeners() {
     });
 
     const authMenuBtn = document.getElementById('auth-menu-btn');
-    [newChatBtn, filesBtn, storageBtn, authMenuBtn, usageBtn, cheatSheetBtn, notifyBtn, exportExtBtn].forEach(btn => {
+    [newChatBtn, filesBtn, storageBtn, authMenuBtn, usageBtn, cheatSheetBtn, notifyBtn, exportExtBtn, adbSettingsBtn].forEach(btn => {
       if (btn) btn.addEventListener('click', () => {
         if (typeof window.haptic === 'function') window.haptic('light');
         setToolsMenuOpen(false);
@@ -1032,34 +1042,64 @@ function initAppAndListeners() {
   // Initialize providers and models, then restore the active conversation.
   (async function initProviderState() {
     try {
-      await loadProviderCatalog();
-      const modelsData = await loadModelsCatalog();
-      const providerModels = availableModels.filter(model => (model.provider || 'antigravity') === currentProvider);
-      currentModel = localStorage.getItem(providerStorageKey('current_model')) || (providerModels.find(model => model.isDefault) || providerModels[0] || {}).id || 'gemini-3.7-flash';
-      const selectedModel = providerModels.find(model => model.id === currentModel);
-      const supported = selectedModel?.supportedReasoningEfforts || ['low', 'medium', 'high'];
-      currentEffort = localStorage.getItem(providerStorageKey('current_effort')) || selectedModel?.defaultReasoningEffort || 'low';
-      if (!supported.includes(currentEffort)) currentEffort = selectedModel?.defaultReasoningEffort || supported[0] || 'low';
-      if (modelsData.efforts) availableEfforts = modelsData.efforts;
-      updateModelUI();
-      updateEffortUI();
+      // Provider discovery and model discovery are independent. Start both
+      // immediately, but let the conversation restore proceed without waiting
+      // for a slow optional `agy models` lookup.
+      const providerReady = loadProviderCatalog();
+      const modelsReady = loadModelsCatalog();
+      await providerReady;
+
+      const applyAvailableModelDefaults = (modelsData = null) => {
+        const providerModels = availableModels.filter(model => (model.provider || 'antigravity') === currentProvider);
+        const storedModel = localStorage.getItem(providerStorageKey('current_model'))
+          || (currentProvider === 'antigravity' ? localStorage.getItem('agy_current_model') : null);
+        currentModel = storedModel || (providerModels.find(model => model.isDefault) || providerModels[0] || {}).id || (currentProvider === 'codex' ? 'gpt-5.6-terra' : 'gemini-3.7-flash');
+        const selectedModel = providerModels.find(model => model.id === currentModel);
+        const supported = selectedModel?.supportedReasoningEfforts || ['low', 'medium', 'high'];
+        currentEffort = localStorage.getItem(providerStorageKey('current_effort')) || selectedModel?.defaultReasoningEffort || 'low';
+        if (!supported.includes(currentEffort)) currentEffort = selectedModel?.defaultReasoningEffort || supported[0] || 'low';
+        if (modelsData?.efforts) availableEfforts = modelsData.efforts;
+        updateModelUI();
+        updateEffortUI();
+      };
+
+      // Built-in fallbacks make the header usable while the catalog request is
+      // still pending. A restored conversation can immediately override this
+      // with its persisted provider/model settings.
+      applyAvailableModelDefaults();
       updateWorkspaceUI();
       loadWorkspaces().catch(() => {});
       const savedConvId = localStorage.getItem(activeConversationStorageKey());
+      let restorePromise = Promise.resolve();
       if (savedConvId === '__new__') {
         currentConversationId = null;
         if (headerTitle) headerTitle.textContent = '新對話';
-        loadConversations().catch(() => {});
+        restorePromise = loadConversations().catch(() => {});
       } else {
-        const res = await fetch(`/api/conversations?${providerQuery()}`);
-        const data = await res.json();
-        if (data.conversations && data.conversations.length > 0) {
-          const targetId = (savedConvId && data.conversations.some(c => c.id === savedConvId))
-            ? savedConvId
-            : data.conversations[0].id;
-          loadConversationHistory(targetId);
-        }
+        restorePromise = (async () => {
+          const res = await fetch(`/api/conversations?${providerQuery()}`);
+          const data = await res.json();
+          if (data.conversations && data.conversations.length > 0) {
+            const target = data.conversations.find(c => savedConvId && c.id === savedConvId) || data.conversations[0];
+            // Apply the server-owned model before history rendering. This
+            // prevents a brief Gemini/default label while Codex is restoring.
+            if (target?.model) {
+              window.applyConversationSettings({
+                provider: currentProvider,
+                model: target.model,
+                effort: target.effort,
+                workspace: target.workspace,
+                role: target.role
+              });
+            }
+            await loadConversationHistory(target.id);
+          }
+        })();
       }
+
+      const modelsData = await modelsReady;
+      applyAvailableModelDefaults(modelsData);
+      await restorePromise;
     } catch (e) {
       console.error('Init load error:', e);
       updateModelUI();
