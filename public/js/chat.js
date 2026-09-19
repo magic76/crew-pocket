@@ -2382,7 +2382,7 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
       .filter(Boolean);
     const visible = progressExpanded ? allEntries : allEntries.slice(-MAX_VISIBLE_PROGRESS);
 
-    liveProgressListElem.classList.toggle('hidden', visible.length === 0);
+    liveProgressListElem.classList.toggle('hidden', visible.length === 0 || (turnFinalized && !progressExpanded));
     liveProgressListElem.innerHTML = visible.map(entry => {
       const stateIcon = entry.state === 'done'
         ? '<span class="text-emerald-400 font-bold shrink-0">✓</span>'
