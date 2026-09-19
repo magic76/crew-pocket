@@ -1695,6 +1695,14 @@ const server = http.createServer(async (req, res) => {
   maybeSetAuthCookie(res, parsedUrl);
   applyCors(req, res);
 
+  if (pathname === '/healthz') {
+    res.writeHead(204, {
+      'Cache-Control': 'no-store',
+      'Content-Length': '0'
+    });
+    return res.end();
+  }
+
   if (req.method === 'OPTIONS') {
     const origin = String(req.headers.origin || '').trim();
     if (origin && !res.getHeader('Access-Control-Allow-Origin')) {
