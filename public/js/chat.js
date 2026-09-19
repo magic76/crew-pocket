@@ -2351,7 +2351,11 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
     if (!doneData?.error && liveTools.length === 0) {
       liveStatusElem.classList.add('execution-heartbeat-only');
       window.setTimeout(() => {
-        if (liveStatusElem?.isConnected) liveStatusElem.classList.add('execution-heartbeat-dismissed');
+        if (!liveStatusElem?.isConnected) return;
+        liveStatusElem.classList.add('execution-heartbeat-dismissed');
+        window.setTimeout(() => {
+          if (liveStatusElem?.isConnected) liveStatusElem.remove();
+        }, 190);
       }, 450);
     }
 
