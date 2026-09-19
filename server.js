@@ -1474,16 +1474,14 @@ async function handleStatic(parsedUrl, res) {
 
   try {
     const data = await fsPromises.readFile(filePath);
-    const isVersionedAsset = typeof parsedUrl !== 'string' && Object.prototype.hasOwnProperty.call(parsedUrl.query || {}, 'v');
-    const headers = { 'Content-Type': contentType };
-    if (isVersionedAsset) {
-      // Versioned URLs are immutable. New HTML always points at a new URL.
-      headers['Cache-Control'] = 'public, max-age=31536000, immutable';
-    } else {
-      // HTML, manifest and unversioned resources must be revalidated so an
-      // update never leaves the PWA attached to an obsolete entrypoint.
-      headers['Cache-Control'] = 'no-cache, must-revalidate';
-    }
+    // The APK reads the UI from localhost. Always serve the checked-out
+    // version so git pull + runtime restart is sufficient to update the app.
+    // External CDN dependencies still use WebView/browser cache normally.
+    const headers = {
+      'Content-Type': contentType,
+      'Cache-Control': 'no-store, max-age=0',
+      'Pragma': 'no-cache'
+    };
     res.writeHead(200, headers);
     res.end(data);
   } catch (err) {
