@@ -2222,11 +2222,8 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
 
   const liveTools = [];
   const liveToolMap = new Map();
-  let liveThinking = '';
+  let hadThinking = false;
   const startTs = performance.now();
-
-  const modelObj = availableModels.find(m => m.id === currentModel);
-  const modelLabel = modelObj ? modelObj.name : 'AI';
 
   const assistantMsgDiv = document.createElement('div');
   assistantMsgDiv.className = 'w-full max-w-2xl mx-auto justify-start min-w-0';
@@ -2235,10 +2232,7 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
     ? 'btw-card bg-gradient-to-b from-slate-900 via-slate-900 to-teal-950/40 border border-teal-500/50 text-slate-200 rounded-2xl p-3 sm:p-3.5 text-xs sm:text-sm shadow-lg shadow-teal-950/30 w-full min-w-0 prose'
     : 'assistant-article bg-slate-900 text-slate-200 w-full min-w-0 prose';
 
-  const shimmerClass = isBtwQuery ? 'shimmer-bar-teal' : 'shimmer-bar';
-  const statusBorderClass = isBtwQuery ? 'border-teal-500/40 from-slate-900 to-teal-950/40' : 'border-indigo-500/30 from-slate-900 to-indigo-950/40';
-  const statusBadgeClass = isBtwQuery ? 'bg-teal-500/20 text-teal-300 border-teal-500/40' : 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40';
-  const statusInitText = isBtwQuery ? '💬 順帶一提解答中...' : '🧠 思考分析中...';
+  const statusInitText = isBtwQuery ? '💬 順帶一提解答中…' : '🧠 正在分析需求…';
 
   assistantMsgDiv.innerHTML = `
     <div class="${bubbleClass}">
@@ -2279,11 +2273,11 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
     clearInterval(liveTimerInterval);
     markProgressDone('phase:analysis');
     markProgressDone('phase:writing');
-    const writingStep = pipelineSteps.get('writing');
-    if (writingStep) writingStep.status = 'done';
-    renderPipeline();
 
     const activityElapsedSec = ((performance.now() - startTs) / 1000).toFixed(1);
+    if (hadThinking && !progressEntries.has('phase:analysis')) {
+      upsertProgress('phase:analysis', { icon: '🧠', text: '分析需求與執行方案', state: 'done' });
+    }
     renderProgressTimeline();
     liveStatusElem.classList.add('is-complete');
     const activityDot = liveStatusElem.querySelector('.activity-dot');
@@ -2369,10 +2363,6 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
 
   scrollToBottom();
 
-  // Pipeline State Tracker
-  const pipelineSteps = new Map();
-  pipelineSteps.set('init', { label: '🧠 分析需求', status: 'running' });
-
   const progressEntries = new Map();
   const progressOrder = [];
 
@@ -2415,26 +2405,6 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
     text: '分析需求與執行方案',
     state: 'running'
   });
-
-  function renderPipeline() {
-    if (!livePipelineElem) return;
-    const html = Array.from(pipelineSteps.values()).map(step => {
-      const isDone = step.status === 'done';
-      const isRunning = step.status === 'running';
-      const badgeClass = isDone
-        ? 'bg-slate-900 border-slate-700/80 text-slate-400'
-        : isRunning
-        ? 'bg-indigo-950/90 border-indigo-500/70 text-indigo-300 shadow-sm'
-        : 'bg-slate-950/50 border-slate-800 text-slate-500';
-      const icon = isDone
-        ? '<span class="text-emerald-400 font-bold">✓</span>'
-        : isRunning
-        ? '<span class="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-ping"></span>'
-        : '<span class="w-1.5 h-1.5 rounded-full bg-slate-600"></span>';
-      return `<span class="px-2 py-0.5 rounded-full border text-[10px] flex items-center gap-1 font-mono ${badgeClass}">${icon}<span>${escapeHtml(step.label)}</span></span>`;
-    }).join('');
-    livePipelineElem.innerHTML = html;
-  }
 
   const liveTimerInterval = setInterval(() => {
     const elapsedSec = (performance.now() - startTs) / 1000;
@@ -2494,12 +2464,7 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
                 localStorage.setItem(activeConversationStorageKey(), currentConversationId);
               }
             } else if (currentEvent === 'thought') {
-              const initStep = pipelineSteps.get('init');
-              if (initStep) initStep.status = 'done';
-              pipelineSteps.set('thought', { label: '💡 分析方案', status: 'running' });
-              renderPipeline();
-
-              liveThinking += (data.delta || data.thinking || data.fullThinking || '');
+              hadThinking = true;
               statusTextElem.textContent = '🧠 正在分析需求與下一步…';
               upsertProgress('phase:analysis', {
                 icon: '🧠',
@@ -2514,24 +2479,12 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
             } else if (currentEvent === 'context') {
               if (isStreamVisible()) updateContextPill(data);
             } else if (currentEvent === 'tool') {
-              const initStep = pipelineSteps.get('init');
-              if (initStep) initStep.status = 'done';
-              const thoughtStep = pipelineSteps.get('thought');
-              if (thoughtStep) thoughtStep.status = 'done';
-
               const mergedTool = mergeToolEventIntoMap(liveToolMap, liveTools, data);
               const progressTool = mergedTool || data;
               const progress = getPassiveToolProgress(progressTool);
               const progressState = toolProgressState(progressTool);
               const progressKey = getToolGroupKey(progressTool, liveTools.length);
-              const d = getToolDetails(progressTool);
-
               markProgressDone('phase:analysis');
-              pipelineSteps.set('tools', {
-                label: `⚙️ 操作 ${liveTools.length}`,
-                status: progressState === 'running' ? 'running' : 'done'
-              });
-              renderPipeline();
 
               upsertProgress(progressKey, {
                 icon: progress.icon,
@@ -2548,15 +2501,6 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
                 ? `${progress.icon} ${activePrefix}${progress.text}…`
                 : `${progress.icon} ${activePrefix}${progress.text}`;
             } else if (currentEvent === 'chunk' && data.accumulated) {
-              const initStep = pipelineSteps.get('init');
-              if (initStep) initStep.status = 'done';
-              const thoughtStep = pipelineSteps.get('thought');
-              if (thoughtStep) thoughtStep.status = 'done';
-              const toolsStep = pipelineSteps.get('tools');
-              if (toolsStep) toolsStep.status = 'done';
-              pipelineSteps.set('writing', { label: '✍️ 整理回覆', status: 'running' });
-              renderPipeline();
-
               markProgressDone('phase:analysis');
               upsertProgress('phase:writing', {
                 icon: '✍️',
@@ -2624,11 +2568,11 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
                   if (lastAssistant && lastAssistant.content && lastAssistant.content.length >= accumulatedText.length) {
                     accumulatedText = lastAssistant.content;
                     contentElem.innerHTML = formatMessageContent(accumulatedText);
-                    if (lastAssistant.tools && lastAssistant.tools.length > 0) {
-                      toolsContainerElem.innerHTML = buildToolsAccordionHtml(lastAssistant.tools);
-                    }
-                    if (lastAssistant.thinking) {
-                      thinkingContainerElem.innerHTML = buildThinkingBlockHtml(lastAssistant.thinking);
+                    if (liveProgressListElem && ((lastAssistant.tools && lastAssistant.tools.length > 0) || lastAssistant.thinking)) {
+                      liveProgressListElem.innerHTML = buildExecutionStepRowsHtml(
+                        lastAssistant.tools || [],
+                        Boolean(lastAssistant.thinking)
+                      );
                     }
                     recoveryBadge.innerHTML = `
                       <span class="flex items-center gap-1.5 text-emerald-300">
