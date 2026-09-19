@@ -72,8 +72,8 @@ function updateNetworkUI(online) {
   isOnline = online;
   if (online) {
     if (networkDot) {
-      networkDot.className = 'w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0';
-      networkDot.title = '網路連線正常 (可正常與 AI 對話)';
+      networkDot.className = 'hidden';
+      networkDot.title = '網路連線正常';
     }
     if (networkOfflineBadge) networkOfflineBadge.classList.add('hidden');
   } else {
@@ -315,6 +315,10 @@ function initAppAndListeners() {
   if (toolsMenuBtn && toolsMenuDropdown) {
     const toolsSheetOverlay = document.getElementById('tools-sheet-overlay');
     const toolsSheetCloseBtn = document.getElementById('tools-sheet-close-btn');
+    const sheetQuickNewChatBtn = document.getElementById('sheet-quick-new-chat-btn');
+    const sheetQuickFilesBtn = document.getElementById('sheet-quick-files-btn');
+    const sheetQuickTasksBtn = document.getElementById('sheet-quick-tasks-btn');
+    const sheetQuickRuntimeBtn = document.getElementById('sheet-quick-runtime-btn');
 
     const setToolsMenuOpen = (open) => {
       toolsMenuDropdown.classList.toggle('hidden', !open);
@@ -330,6 +334,36 @@ function initAppAndListeners() {
 
     if (toolsSheetCloseBtn) toolsSheetCloseBtn.addEventListener('click', () => setToolsMenuOpen(false));
     if (toolsSheetOverlay) toolsSheetOverlay.addEventListener('click', () => setToolsMenuOpen(false));
+
+    if (sheetQuickNewChatBtn) sheetQuickNewChatBtn.addEventListener('click', () => {
+      setToolsMenuOpen(false);
+      newChatBtn?.click();
+    });
+    if (sheetQuickFilesBtn) sheetQuickFilesBtn.addEventListener('click', () => {
+      setToolsMenuOpen(false);
+      filesBtn?.click();
+    });
+    if (sheetQuickTasksBtn) sheetQuickTasksBtn.addEventListener('click', () => {
+      setToolsMenuOpen(false);
+      document.querySelector('[data-open-task-center]')?.click();
+    });
+    if (sheetQuickRuntimeBtn) sheetQuickRuntimeBtn.addEventListener('click', () => {
+      setToolsMenuOpen(false);
+      document.getElementById('auth-menu-btn')?.click();
+    });
+
+    if (window.matchMedia('(max-width: 640px)').matches) {
+      const moreTools = toolsMenuDropdown.querySelector('details.group');
+      const moreSummary = moreTools?.querySelector('summary');
+      const secondaryTools = [
+        document.getElementById('live-settings-btn'),
+        toolsMenuDropdown.querySelector('a[href="/assets.html"]'),
+        document.getElementById('storage-btn')
+      ].filter(Boolean);
+      if (moreTools && moreSummary) {
+        secondaryTools.forEach(node => moreTools.appendChild(node));
+      }
+    }
 
     document.addEventListener('click', (e) => {
       if (!toolsMenuDropdown.contains(e.target) && !toolsMenuBtn.contains(e.target)) {
