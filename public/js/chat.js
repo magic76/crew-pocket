@@ -2715,15 +2715,7 @@ function handleSendClick(e) {
 
 // 🏷️ Persist a deterministic initial title; never spend another AI turn on it.
 function applyInitialConversationTitle(convId, userMessage) {
-  const isAgyConversation = currentProvider === 'antigravity';
-  const workspaceTitle = isAgyConversation
-    ? (typeof workspaceMeta === 'function'
-      ? workspaceMeta(currentWorkspace).label
-      : String(currentWorkspace || '').split('/').filter(Boolean).pop())
-    : '';
-  const title = isAgyConversation
-    ? (workspaceTitle || 'Home')
-    : (shortenConversationTitle(userMessage, 18) || '新對話');
+  const title = shortenConversationTitle(userMessage, 22) || '新對話';
   if (headerTitle) headerTitle.textContent = title;
   renameConversationSilently(convId, title).catch((error) => {
     console.warn('[Conversation Title] Failed to persist:', error.message);
