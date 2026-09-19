@@ -41,15 +41,10 @@ let modelsCatalogLoaded = false;
 const HOME_WORKSPACE = '/data/data/com.termux/files/home';
 let currentWorkspace = localStorage.getItem('crew_current_workspace') || HOME_WORKSPACE;
 let availableWorkspaces = [];
-const CONVERSATION_ROLES = {
-  lead: { icon: '✨', label: '開發主責' },
-  backend: { icon: '🧩', label: '後端工程' },
-  research: { icon: '🔎', label: '研究分析' },
-  debug: { icon: '🛠️', label: '除錯支援' },
-  ux: { icon: '🎨', label: '產品／UX' },
-  general: { icon: '💬', label: '一般助理' }
-};
-let currentRole = localStorage.getItem('crew_current_role') || 'general';
+const currentRole = 'general';
+// Conversation roles were removed from the product UI. Keep the transport value
+// fixed to "general" for backward compatibility with saved settings and providers.
+localStorage.removeItem('crew_current_role');
 
 // Coalesce boot/model/effort/new-chat prewarm requests into one provider call.
 window.requestProviderPrewarm = function(delay = 250) {
@@ -141,11 +136,6 @@ const workspaceOptions = document.getElementById('workspace-options');
 const closeWorkspaceModalBtn = document.getElementById('close-workspace-modal-btn');
 const workspaceIcon = document.getElementById('workspace-icon');
 const workspaceLabel = document.getElementById('workspace-label');
-const roleSelectorBtn = document.getElementById('role-selector-btn');
-const roleModal = document.getElementById('role-modal');
-const roleOptions = document.getElementById('role-options');
-const closeRoleModalBtn = document.getElementById('close-role-modal-btn');
-const roleIcon = document.getElementById('role-icon');
 const slashMenu = document.getElementById('slash-menu');
 const lightbox = document.getElementById('lightbox');
 const lightboxImg = document.getElementById('lightbox-img');
@@ -568,71 +558,12 @@ function updateWorkspaceUI() {
   if (workspaceSelectorBtn) workspaceSelectorBtn.title = `工作區：${meta.path}`;
 }
 
-function roleMeta(role = currentRole) {
-  return CONVERSATION_ROLES[role] || CONVERSATION_ROLES.general;
-}
-
-function updateRoleUI() {
-  const meta = roleMeta();
-  if (roleIcon) roleIcon.textContent = meta.icon;
-  if (roleSelectorBtn) roleSelectorBtn.title = `對話角色：${meta.label}`;
-}
-
 window.setConversationWorkspaceDirect = function(workspace) {
   if (!workspace) return;
   currentWorkspace = workspace;
   localStorage.setItem('crew_current_workspace', currentWorkspace);
   updateWorkspaceUI();
 };
-
-window.setConversationRoleDirect = function(role) {
-  if (!role || !CONVERSATION_ROLES[role]) return;
-  currentRole = role;
-  localStorage.setItem('crew_current_role', currentRole);
-  updateRoleUI();
-};
-
-function closeRoleModal() {
-  if (!roleModal) return;
-  roleModal.classList.add('opacity-0');
-  window.setTimeout(() => roleModal.classList.add('hidden'), 160);
-}
-
-function renderRoleOptions() {
-  if (!roleOptions) return;
-  roleOptions.innerHTML = Object.entries(CONVERSATION_ROLES).map(([id, role]) => `<button type="button" data-role="${id}" class="role-option flex min-h-16 items-center gap-2 rounded-xl border p-2.5 text-left transition active:scale-[0.99] ${id === currentRole ? 'border-indigo-400/70 bg-indigo-500/15' : 'border-slate-800 bg-slate-950/70 hover:bg-slate-800'}"><span class="text-lg">${role.icon}</span><span class="text-xs font-semibold text-slate-100">${role.label}</span>${id === currentRole ? '<span class="ml-auto text-xs text-indigo-300">✓</span>' : ''}</button>`).join('');
-  roleOptions.querySelectorAll('.role-option').forEach(button => button.addEventListener('click', () => selectConversationRole(button.dataset.role)));
-}
-
-async function selectConversationRole(role) {
-  if (!CONVERSATION_ROLES[role] || role === currentRole) return closeRoleModal();
-  if (isStreaming) return alert('目前正在回覆中，請完成後再切換角色。');
-  const previous = currentRole;
-  currentRole = role;
-  localStorage.setItem('crew_current_role', currentRole);
-  updateRoleUI();
-  try {
-    if (currentConversationId) {
-      const saved = await window.saveCurrentConversationSettings({ role: currentRole });
-      if (!saved) throw new Error('儲存對話角色失敗');
-      if (typeof loadConversations === 'function') loadConversations();
-    }
-    closeRoleModal();
-  } catch (error) {
-    currentRole = previous;
-    localStorage.setItem('crew_current_role', currentRole);
-    updateRoleUI();
-    alert(error.message || '切換角色失敗');
-  }
-}
-
-window.openRolePicker = function() {
-  if (!roleModal) return;
-  renderRoleOptions();
-  roleModal.classList.remove('hidden');
-  requestAnimationFrame(() => roleModal.classList.remove('opacity-0'));
-};
-window.closeRolePicker = closeRoleModal;
 
 async function loadWorkspaces() {
   const response = await fetch('/api/workspaces');
@@ -856,11 +787,6 @@ window.applyConversationSettings = function(settings) {
     localStorage.setItem('crew_current_workspace', currentWorkspace);
     updateWorkspaceUI();
   }
-  if (settings.role && CONVERSATION_ROLES[settings.role]) {
-    currentRole = settings.role;
-    localStorage.setItem('crew_current_role', currentRole);
-    updateRoleUI();
-  }
   const providerModels = availableModels.filter(model => (model.provider || 'antigravity') === currentProvider);
   if (!settings.model && settings.loadingModel) {
     currentModel = null;
@@ -892,7 +818,7 @@ window.saveCurrentConversationSettings = function(overrides = {}) {
     model: overrides.model !== undefined ? overrides.model : currentModel,
     effort: overrides.effort !== undefined ? overrides.effort : currentEffort,
     workspace: overrides.workspace !== undefined ? overrides.workspace : currentWorkspace,
-    role: overrides.role !== undefined ? overrides.role : currentRole
+    role: 'general'
   };
   return fetch('/api/conversation-settings', {
     method: 'POST',
