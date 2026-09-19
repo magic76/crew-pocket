@@ -23,6 +23,7 @@ import android.webkit.PermissionRequest
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebSettings
+import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Button
@@ -177,7 +178,6 @@ class MainActivity : Activity() {
         webView.settings.apply {
             javaScriptEnabled = true
             domStorageEnabled = true
-            databaseEnabled = true
             cacheMode = WebSettings.LOAD_DEFAULT
             mediaPlaybackRequiresUserGesture = true
             setGeolocationEnabled(true)
@@ -185,6 +185,30 @@ class MainActivity : Activity() {
             allowFileAccess = false
         }
         webView.webViewClient = object : WebViewClient() {
+            override fun shouldOverrideUrlLoading(
+                view: WebView?,
+                request: WebResourceRequest?
+            ): Boolean {
+                val uri = request?.url ?: return false
+                val target = uri.toString()
+                if (
+                    target.startsWith(SERVER_URL) ||
+                    target.startsWith("http://localhost:8000/")
+                ) {
+                    return false
+                }
+
+                if (uri.scheme == "http" || uri.scheme == "https") {
+                    return try {
+                        startActivity(Intent(Intent.ACTION_VIEW, uri))
+                        true
+                    } catch (_: Exception) {
+                        false
+                    }
+                }
+                return false
+            }
+
             override fun onPageFinished(view: WebView?, url: String?) {
                 super.onPageFinished(view, url)
                 if (legacyPwaCleanupInjected || !url.orEmpty().startsWith(SERVER_URL)) return
