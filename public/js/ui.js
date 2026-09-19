@@ -41,9 +41,8 @@ let modelsCatalogLoaded = false;
 const HOME_WORKSPACE = '/data/data/com.termux/files/home';
 let currentWorkspace = localStorage.getItem('crew_current_workspace') || HOME_WORKSPACE;
 let availableWorkspaces = [];
-const currentRole = 'general';
-// Conversation roles were removed from the product UI. Keep the transport value
-// fixed to "general" for backward compatibility with saved settings and providers.
+// Conversation roles were removed from the product UI. Clear any old client preference;
+ // the transport keeps "general" only for backward compatibility.
 localStorage.removeItem('crew_current_role');
 
 // Coalesce boot/model/effort/new-chat prewarm requests into one provider call.
