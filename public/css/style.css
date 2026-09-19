@@ -278,3 +278,155 @@ html, body {
   border-color: #2dd4bf !important;
   animation: walkie-talkie-glow 1.2s ease-in-out infinite !important;
 }
+
+
+/* === Mobile UX consolidation: 2026-09 === */
+:root {
+  --crew-safe-top: env(safe-area-inset-top, 0px);
+  --crew-safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+header {
+  padding-top: max(0.5rem, var(--crew-safe-top));
+}
+
+footer {
+  padding-bottom: max(0.5rem, var(--crew-safe-bottom));
+}
+
+#drawer {
+  padding-top: var(--crew-safe-top);
+  padding-bottom: var(--crew-safe-bottom);
+}
+
+#scroll-bottom-btn {
+  bottom: calc(6rem + var(--crew-safe-bottom)) !important;
+}
+
+.agent-activity-card {
+  transition: border-color 160ms ease, background-color 160ms ease, opacity 160ms ease;
+}
+
+.agent-activity-card.is-complete {
+  background: rgba(15, 23, 42, 0.58) !important;
+  border-color: rgba(71, 85, 105, 0.55) !important;
+  box-shadow: none !important;
+}
+
+.agent-activity-card.is-complete .activity-dot {
+  background: #34d399 !important;
+}
+
+.agent-activity-card .activity-toggle-btn {
+  touch-action: manipulation;
+}
+
+@media (max-width: 640px) {
+  /* Keep the first screen focused on conversation + model, not configuration. */
+  #workspace-selector-btn,
+  #role-selector-btn,
+  #header-rename-btn,
+  #context-pill {
+    display: none !important;
+  }
+
+  header {
+    min-height: calc(3.75rem + var(--crew-safe-top));
+    padding-left: 0.5rem !important;
+    padding-right: 0.5rem !important;
+    padding-bottom: 0.45rem !important;
+  }
+
+  #header-title {
+    max-width: min(48vw, 220px) !important;
+    font-size: 0.82rem !important;
+  }
+
+  #model-selector-btn {
+    max-width: min(58vw, 230px) !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    border-color: transparent !important;
+    background: transparent !important;
+  }
+
+  #input-helper-row {
+    display: none !important;
+  }
+
+  footer {
+    padding: 0.45rem 0.5rem max(0.5rem, var(--crew-safe-bottom)) !important;
+  }
+
+  #prompt-input {
+    min-height: 42px;
+    padding-top: 0.65rem !important;
+    padding-bottom: 0.65rem !important;
+  }
+
+  /* The same menu becomes a thumb-friendly bottom sheet on phones. */
+  #tools-menu-dropdown {
+    position: fixed !important;
+    left: 0.5rem !important;
+    right: 0.5rem !important;
+    top: auto !important;
+    bottom: 0 !important;
+    width: auto !important;
+    max-height: min(78dvh, 680px) !important;
+    padding: 0.5rem 0.5rem calc(0.65rem + var(--crew-safe-bottom)) !important;
+    border-radius: 1.35rem 1.35rem 0 0 !important;
+    border-bottom: 0 !important;
+    overflow-y: auto !important;
+    overscroll-behavior: contain;
+    z-index: 51 !important;
+    box-shadow: 0 -16px 45px rgba(0, 0, 0, 0.46) !important;
+  }
+
+  #tools-sheet-overlay {
+    z-index: 50 !important;
+  }
+
+  .tools-sheet-mobile-header {
+    display: flex !important;
+    position: sticky;
+    top: -0.5rem;
+    z-index: 2;
+    margin: -0.5rem -0.5rem 0.35rem;
+    padding: 0.75rem 0.75rem 0.6rem !important;
+    background: rgba(15, 23, 42, 0.97);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+  }
+
+  body.tools-sheet-open {
+    overflow: hidden !important;
+  }
+
+  .agent-activity-card {
+    margin-left: -0.15rem;
+    margin-right: -0.15rem;
+    border-radius: 0.9rem !important;
+  }
+
+  .agent-activity-card .live-progress-list > div {
+    min-height: 20px;
+  }
+}
+
+@media (min-width: 641px) {
+  #tools-sheet-overlay,
+  .tools-sheet-mobile-header {
+    display: none !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
