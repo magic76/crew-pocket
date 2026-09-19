@@ -287,7 +287,7 @@ html, body {
 }
 
 header {
-  padding-top: max(0.5rem, var(--crew-safe-top));
+  padding-top: 0.5rem;
 }
 
 footer {
@@ -331,10 +331,17 @@ footer {
   }
 
   header {
-    min-height: calc(3.75rem + var(--crew-safe-top));
+    min-height: 0 !important;
+    padding-top: 0.35rem !important;
     padding-left: 0.5rem !important;
     padding-right: 0.5rem !important;
-    padding-bottom: 0.45rem !important;
+    padding-bottom: 0.35rem !important;
+  }
+
+  /* Android WebView already lays content below the system status bar.
+     Do not add safe-area top padding again. */
+  header > div:first-child {
+    min-height: 38px;
   }
 
   #header-title {
