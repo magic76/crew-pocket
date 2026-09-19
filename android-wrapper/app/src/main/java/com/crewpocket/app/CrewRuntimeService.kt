@@ -28,11 +28,19 @@ class CrewRuntimeService : Service() {
         private const val NOTIFICATION_ID = 7601
         private const val SERVER_URL = "http://127.0.0.1:8000/"
         private const val RESTART_COOLDOWN_MS = 20_000L
+        private const val INITIAL_MONITOR_DELAY_SEC = 4L
+        private const val HEALTHY_MIN_DELAY_SEC = 10L
+        private const val HEALTHY_MAX_DELAY_SEC = 60L
+        private const val FAILURE_MAX_DELAY_SEC = 10L
     }
 
     private val scheduler = Executors.newSingleThreadScheduledExecutor()
     private val monitorStarted = AtomicBoolean(false)
+
     @Volatile private var lastRestartAt = 0L
+    @Volatile private var healthyChecks = 0
+    @Volatile private var failedChecks = 0
+    @Volatile private var lastNotificationText: String? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -81,25 +89,71 @@ class CrewRuntimeService : Service() {
 
     private fun startMonitorIfNeeded() {
         if (!monitorStarted.compareAndSet(false, true)) return
-        scheduler.scheduleWithFixedDelay({ checkAndRecover() }, 4, 10, TimeUnit.SECONDS)
+        scheduleNextMonitor(INITIAL_MONITOR_DELAY_SEC)
     }
 
-    private fun checkAndRecover() {
+    private fun scheduleNextMonitor(delaySec: Long) {
+        if (scheduler.isShutdown) return
+
+        getSharedPreferences("crew_runtime", MODE_PRIVATE)
+            .edit()
+            .putLong("monitor_interval_ms", TimeUnit.SECONDS.toMillis(delaySec))
+            .apply()
+
+        scheduler.schedule(
+            {
+                val nextDelay = checkAndRecover()
+                scheduleNextMonitor(nextDelay)
+            },
+            delaySec,
+            TimeUnit.SECONDS
+        )
+    }
+
+    private fun checkAndRecover(): Long {
         if (serverAlive()) {
+            failedChecks = 0
+            healthyChecks += 1
             updateNotification("Crew runtime active · Termux engine")
-            return
+            return healthyDelaySeconds(healthyChecks)
         }
+
+        healthyChecks = 0
+        failedChecks += 1
         ensureTermuxRuntime("health check")
+        return failureDelaySeconds(failedChecks)
+    }
+
+    private fun healthyDelaySeconds(streak: Int): Long {
+        return when {
+            streak <= 1 -> HEALTHY_MIN_DELAY_SEC
+            streak == 2 -> 20L
+            streak == 3 -> 30L
+            else -> HEALTHY_MAX_DELAY_SEC
+        }
+    }
+
+    private fun failureDelaySeconds(streak: Int): Long {
+        return when {
+            streak <= 1 -> 1L
+            streak == 2 -> 3L
+            streak == 3 -> 5L
+            else -> FAILURE_MAX_DELAY_SEC
+        }
     }
 
     private fun restartTermuxRuntime() {
         scheduler.execute {
             updateNotification("Restarting Crew Termux runtime…")
             RuntimeManager.productionHost.stopCrewHost(this)
-            repeat(15) {
-                if (!serverAlive()) return@repeat
+
+            val deadline = System.currentTimeMillis() + 3_000L
+            while (serverAlive() && System.currentTimeMillis() < deadline) {
                 Thread.sleep(200)
             }
+
+            healthyChecks = 0
+            failedChecks = 0
             lastRestartAt = 0L
             ensureTermuxRuntime("manual restart")
         }
@@ -178,6 +232,9 @@ class CrewRuntimeService : Service() {
     }
 
     private fun updateNotification(text: String) {
+        if (lastNotificationText == text) return
+        lastNotificationText = text
+
         getSystemService(NotificationManager::class.java)
             .notify(NOTIFICATION_ID, buildNotification(text))
     }
