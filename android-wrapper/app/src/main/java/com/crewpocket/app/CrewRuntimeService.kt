@@ -13,6 +13,7 @@ import android.util.Log
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.concurrent.Executors
+import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -22,6 +23,8 @@ class CrewRuntimeService : Service() {
         const val ACTION_STOP = "com.crewpocket.app.action.STOP_RUNTIME"
         const val ACTION_REFRESH_EMBEDDED = "com.crewpocket.app.action.REFRESH_EMBEDDED"
         const val ACTION_RESTART_EMBEDDED = "com.crewpocket.app.action.RESTART_EMBEDDED"
+        const val ACTION_APP_FOREGROUND = "com.crewpocket.app.action.APP_FOREGROUND"
+        const val ACTION_APP_BACKGROUND = "com.crewpocket.app.action.APP_BACKGROUND"
 
         private const val TAG = "CrewRuntimeService"
         private const val CHANNEL_ID = "crew_runtime"
@@ -32,6 +35,7 @@ class CrewRuntimeService : Service() {
         private const val HEALTHY_MIN_DELAY_SEC = 10L
         private const val HEALTHY_MAX_DELAY_SEC = 60L
         private const val FAILURE_MAX_DELAY_SEC = 10L
+        private const val BACKGROUND_GRACE_SEC = 30L
     }
 
     private val scheduler = Executors.newSingleThreadScheduledExecutor()
@@ -41,6 +45,8 @@ class CrewRuntimeService : Service() {
     @Volatile private var healthyChecks = 0
     @Volatile private var failedChecks = 0
     @Volatile private var lastNotificationText: String? = null
+    @Volatile private var appInForeground = true
+    private var idleStopTask: ScheduledFuture<*>? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -51,15 +57,15 @@ class CrewRuntimeService : Service() {
             .edit()
             .putBoolean("embedded_runtime_enabled", false)
             .putBoolean("embedded_ready", false)
+            .putString("runtime_mode", "in-use")
             .putString("host_mode", "termux-runtime")
             .apply()
-
-        ensureTermuxRuntime("service start")
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_STOP -> {
+                cancelIdleStop()
                 updateNotification("Stopping Crew runtime…")
                 RuntimeManager.productionHost.stopCrewHost(this)
                 getSharedPreferences("crew_runtime", MODE_PRIVATE)
@@ -71,20 +77,73 @@ class CrewRuntimeService : Service() {
                 return START_NOT_STICKY
             }
 
+            ACTION_APP_BACKGROUND -> {
+                appInForeground = false
+                scheduleIdleStop()
+                return START_NOT_STICKY
+            }
+
+            ACTION_APP_FOREGROUND,
+            ACTION_START -> {
+                appInForeground = true
+                cancelIdleStop()
+                ensureTermuxRuntime("app foreground")
+                startMonitorIfNeeded()
+            }
+
             ACTION_REFRESH_EMBEDDED,
-            ACTION_RESTART_EMBEDDED -> restartTermuxRuntime()
-            else -> ensureTermuxRuntime("start command")
+            ACTION_RESTART_EMBEDDED -> {
+                appInForeground = true
+                cancelIdleStop()
+                restartTermuxRuntime()
+                startMonitorIfNeeded()
+            }
+
+            else -> {
+                appInForeground = true
+                cancelIdleStop()
+                ensureTermuxRuntime("start command")
+                startMonitorIfNeeded()
+            }
         }
 
-        startMonitorIfNeeded()
-        return START_STICKY
+        return START_NOT_STICKY
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
+        cancelIdleStop()
         scheduler.shutdownNow()
         super.onDestroy()
+    }
+
+    private fun scheduleIdleStop() {
+        cancelIdleStop()
+        idleStopTask = scheduler.schedule(
+            {
+                if (!appInForeground) {
+                    getSharedPreferences("crew_runtime", MODE_PRIVATE)
+                        .edit()
+                        .putString("host_mode", "termux-runtime-idle")
+                        .putLong("monitor_interval_ms", 0L)
+                        .apply()
+
+                    // In "in-use" mode, leaving the app stops only the APK
+                    // supervisor. The Termux Node server remains available
+                    // and will be adopted when Crew Pocket is opened again.
+                    stopForeground(STOP_FOREGROUND_REMOVE)
+                    stopSelf()
+                }
+            },
+            BACKGROUND_GRACE_SEC,
+            TimeUnit.SECONDS
+        )
+    }
+
+    private fun cancelIdleStop() {
+        idleStopTask?.cancel(false)
+        idleStopTask = null
     }
 
     private fun startMonitorIfNeeded() {
@@ -111,6 +170,10 @@ class CrewRuntimeService : Service() {
     }
 
     private fun checkAndRecover(): Long {
+        if (!appInForeground) {
+            return HEALTHY_MAX_DELAY_SEC
+        }
+
         if (serverAlive()) {
             failedChecks = 0
             healthyChecks += 1
