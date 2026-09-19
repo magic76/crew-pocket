@@ -792,8 +792,8 @@ function appendMessage(role, content, timestamp, tools = [], thinking = '', isBt
       : 'bg-indigo-600 text-white rounded-2xl px-3 py-2.5 text-xs sm:text-sm shadow-md w-fit max-w-[88%] sm:max-w-[82%] break-words';
   } else {
     bubbleClass = isBtw
-      ? 'btw-card bg-gradient-to-b from-slate-900 via-slate-900 to-teal-950/40 border border-teal-500/50 text-slate-200 rounded-2xl p-3.5 sm:p-4 text-xs sm:text-sm shadow-lg shadow-teal-950/30 w-full min-w-0 prose'
-      : 'bg-slate-900 border border-slate-800 text-slate-200 rounded-2xl p-3.5 sm:p-4 text-xs sm:text-sm shadow-md w-full min-w-0 prose';
+      ? 'btw-card bg-gradient-to-b from-slate-900 via-slate-900 to-teal-950/40 border border-teal-500/50 text-slate-200 rounded-2xl p-3 sm:p-3.5 text-xs sm:text-sm shadow-lg shadow-teal-950/30 w-full min-w-0 prose'
+      : 'bg-slate-900 border border-slate-800 text-slate-200 rounded-2xl p-3 sm:p-3.5 text-xs sm:text-sm shadow-md w-full min-w-0 prose';
   }
 
   let bodyHtml = '';
@@ -820,9 +820,8 @@ function appendMessage(role, content, timestamp, tools = [], thinking = '', isBt
     msgDiv.setAttribute('data-raw-text', userText);
 
     const editRewindBtn = providerConfig().capabilities?.rewind ? `
-      <button type="button" class="edit-rewind-btn opacity-75 hover:opacity-100 hover:text-white bg-indigo-700/60 hover:bg-indigo-700 px-1.5 py-0.5 rounded transition active:scale-95 flex items-center gap-1 font-sans cursor-pointer text-[10px]" title="編輯此問題並回溯對話">
-        <svg class="w-2.5 h-2.5 text-indigo-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
-        <span>編輯回溯</span>
+      <button type="button" class="edit-rewind-btn opacity-65 hover:opacity-100 hover:text-white rounded transition active:scale-95 flex items-center justify-center cursor-pointer min-w-5 min-h-5" title="編輯此問題並回溯對話" aria-label="編輯並回溯">
+        <svg class="w-3 h-3 text-indigo-100" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
       </button>
     ` : '';
 
@@ -1809,7 +1808,7 @@ async function sendBtwConcurrentSidecard(customText = null, customImgPath = null
   const btwMsgDiv = document.createElement('div');
   btwMsgDiv.className = 'w-full max-w-2xl mx-auto justify-start min-w-0 btw-side-container my-2';
   btwMsgDiv.innerHTML = `
-    <div class="btw-card bg-gradient-to-b from-slate-900 via-slate-900 to-teal-950/40 border border-teal-500/50 text-slate-200 rounded-2xl p-3.5 sm:p-4 text-xs sm:text-sm shadow-lg shadow-teal-950/30 w-full min-w-0 prose">
+    <div class="btw-card bg-gradient-to-b from-slate-900 via-slate-900 to-teal-950/40 border border-teal-500/50 text-slate-200 rounded-2xl p-3 sm:p-3.5 text-xs sm:text-sm shadow-lg shadow-teal-950/30 w-full min-w-0 prose">
       <div class="live-status mb-2.5 rounded-2xl bg-gradient-to-b border-teal-500/40 from-slate-900 to-teal-950/40 aurora-glow-box-teal border overflow-hidden shadow-lg select-none">
         <div class="shimmer-bar-teal h-[2px] w-full"></div>
         <div class="p-2 flex items-center justify-between gap-2">
@@ -2169,8 +2168,8 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
   assistantMsgDiv.className = 'w-full max-w-2xl mx-auto justify-start min-w-0';
 
   const bubbleClass = isBtwQuery
-    ? 'btw-card bg-gradient-to-b from-slate-900 via-slate-900 to-teal-950/40 border border-teal-500/50 text-slate-200 rounded-2xl p-3.5 sm:p-4 text-xs sm:text-sm shadow-lg shadow-teal-950/30 w-full min-w-0 prose'
-    : 'bg-slate-900 border border-slate-800 text-slate-200 rounded-2xl p-3.5 sm:p-4 text-xs sm:text-sm shadow-md w-full min-w-0 prose';
+    ? 'btw-card bg-gradient-to-b from-slate-900 via-slate-900 to-teal-950/40 border border-teal-500/50 text-slate-200 rounded-2xl p-3 sm:p-3.5 text-xs sm:text-sm shadow-lg shadow-teal-950/30 w-full min-w-0 prose'
+    : 'bg-slate-900 border border-slate-800 text-slate-200 rounded-2xl p-3 sm:p-3.5 text-xs sm:text-sm shadow-md w-full min-w-0 prose';
 
   const shimmerClass = isBtwQuery ? 'shimmer-bar-teal' : 'shimmer-bar';
   const statusBorderClass = isBtwQuery ? 'border-teal-500/40 from-slate-900 to-teal-950/40' : 'border-indigo-500/30 from-slate-900 to-indigo-950/40';
