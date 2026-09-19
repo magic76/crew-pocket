@@ -163,24 +163,22 @@ Extension、Web UI 與 AI API 統一走 `127.0.0.1:8000`。
 
 ## 🚀 啟動與使用 (Usage)
 
-### 1. 啟動 Web 服務
+### 1. 啟動本機 Runtime
 ```bash
 cd ~/agy-web
-node server.js
+crew start
 ```
-*或是使用安裝器建立的指令：`crew start`。*
 
-### 2. 打開手機瀏覽器
-在手機瀏覽器輸入網址：
+Crew Pocket 的主要使用方式是 **Android APK**。APK 會直接連線本機
+`http://127.0.0.1:8000`，不需要安裝 PWA，也不依賴 Service Worker。
+
+需要除錯時，仍可用一般瀏覽器開啟：
+
 ```
 http://127.0.0.1:8000
 ```
 
-### 3. 📱 升級為全螢幕 App（PWA）
-1. 在手機 Chrome / Edge / Safari 瀏覽器打開 `http://127.0.0.1:8000`。
-2. 點選瀏覽器選單（右上角或底部的 `⋮` / 分享按鈕）。
-3. 點擊 **「加到主畫面」 (Add to Home screen)** 或 **「安裝應用程式」**。
-4. 手機桌面即會產生 **Crew Pocket** 專屬圖標，點開即享沉浸式無邊框 App 體驗！🎉
+更新 Web UI 後只要 `git pull` 並重新啟動 Crew Runtime；localhost 靜態資產不做長期快取，APK 會讀取目前 checkout 的版本。
 
 ### 安裝後自我檢查
 
