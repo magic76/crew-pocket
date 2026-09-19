@@ -788,8 +788,8 @@ function appendMessage(role, content, timestamp, tools = [], thinking = '', isBt
   let bubbleClass = '';
   if (isUser) {
     bubbleClass = isUserBtw
-      ? 'bg-gradient-to-r from-teal-700 to-indigo-600 text-white rounded-2xl p-3 sm:p-3.5 text-xs sm:text-sm shadow-md max-w-[92%] sm:max-w-[85%] break-words border border-teal-400/30'
-      : 'bg-indigo-600 text-white rounded-2xl p-3 sm:p-3.5 text-xs sm:text-sm shadow-md max-w-[92%] sm:max-w-[85%] break-words';
+      ? 'bg-gradient-to-r from-teal-700 to-indigo-600 text-white rounded-2xl px-3 py-2.5 text-xs sm:text-sm shadow-md w-fit max-w-[88%] sm:max-w-[82%] break-words border border-teal-400/30'
+      : 'bg-indigo-600 text-white rounded-2xl px-3 py-2.5 text-xs sm:text-sm shadow-md w-fit max-w-[88%] sm:max-w-[82%] break-words';
   } else {
     bubbleClass = isBtw
       ? 'btw-card bg-gradient-to-b from-slate-900 via-slate-900 to-teal-950/40 border border-teal-500/50 text-slate-200 rounded-2xl p-3.5 sm:p-4 text-xs sm:text-sm shadow-lg shadow-teal-950/30 w-full min-w-0 prose'
@@ -826,43 +826,22 @@ function appendMessage(role, content, timestamp, tools = [], thinking = '', isBt
       </button>
     ` : '';
 
-    const userHeader = `
-      <div class="flex items-center justify-between gap-2 mb-1.5 pb-1 border-b border-white/15 text-[10px] text-indigo-100/90 select-none">
-        <span class="font-semibold flex items-center gap-1.5">
-          <span>🧑 我</span>
-          ${isUserBtw ? '<span class="px-1.5 py-0.2 rounded bg-teal-400/30 border border-teal-300/50 text-[9px] font-mono font-bold text-teal-100">💬 順帶一提</span>' : ''}
-          <span class="font-mono text-[9px] opacity-70">#${userTurnIndex + 1}</span>
-        </span>
-        <div class="flex items-center gap-2">
-          <span class="font-mono text-[9px] opacity-75">🕒 ${messageTime}</span>
-          ${editRewindBtn}
-        </div>
-      </div>
-    `;
+    const userMeta = editRewindBtn
+      ? `<div class="mt-1 flex justify-end opacity-70">${editRewindBtn}</div>`
+      : '';
 
     bodyHtml = `
-      ${userHeader}
       ${imgHtml}
       <div class="whitespace-pre-wrap leading-relaxed break-words">${escapeHtml(userText)}</div>
+      ${userMeta}
     `;
   } else {
-    const assistantHeader = `
-      <div class="flex items-center justify-between gap-2 mb-2 pb-1.5 border-b border-slate-800/90 text-[11px] text-slate-400 select-none">
-        <div class="flex items-center gap-1.5 font-semibold text-slate-200">
-          <span class="text-indigo-400 font-bold">🤖 Crew Pocket</span>
-          ${isBtw ? '<span class="px-1.5 py-0.2 rounded bg-teal-500/20 text-teal-300 border border-teal-500/40 text-[9px] font-mono">順帶一提</span>' : ''}
-        </div>
-        <span class="font-mono text-[10px] text-slate-500">🕒 ${messageTime}</span>
-      </div>
-    `;
-
     const isBlankContent = !content || !String(content).trim();
     const formattedHtml = isBlankContent
       ? buildEmptyTurnFallbackHtml()
       : formatMessageContent(content);
 
     bodyHtml = `
-      ${assistantHeader}
       <div class="thinking-container">${thinkingHtml}</div>
       <div class="tools-container">${toolsHtml}</div>
       <div class="btw-content msg-content leading-relaxed min-w-0">${formattedHtml}</div>
@@ -2209,8 +2188,8 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
     <div class="${bubbleClass}">
       
       <!-- Compact Agent Activity Card -->
-      <div class="live-status agent-activity-card mb-2.5 rounded-2xl bg-slate-950/70 ${statusBorderClass} border overflow-hidden select-none">
-        <div class="p-2.5 flex flex-col gap-2">
+      <div class="live-status agent-activity-card mb-2 select-none">
+        <div class="py-1.5 flex flex-col gap-1.5">
           <div class="flex items-center justify-between gap-2">
             <div class="flex items-center gap-1.5 min-w-0">
               <span class="activity-dot inline-block w-2 h-2 rounded-full ${isBtwQuery ? 'bg-teal-400' : 'bg-indigo-400'} animate-pulse shrink-0"></span>
@@ -2222,7 +2201,7 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
               <button type="button" class="activity-toggle-btn hidden min-h-7 px-2 rounded-lg border border-slate-700/80 bg-slate-900/80 text-[10px] text-slate-400 active:scale-95" aria-expanded="false">步驟</button>
             </div>
           </div>
-          <div class="live-progress-list hidden border-t border-slate-800/70 pt-1.5 space-y-1"></div>
+          <div class="live-progress-list hidden border-t border-slate-800/50 pt-1.5 space-y-1"></div>
         </div>
       </div>
 
