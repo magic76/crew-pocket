@@ -112,6 +112,12 @@ class CrewRuntimeService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        appInForeground = false
+        scheduleIdleStop()
+        super.onTaskRemoved(rootIntent)
+    }
+
     override fun onDestroy() {
         cancelIdleStop()
         scheduler.shutdownNow()
