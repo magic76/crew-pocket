@@ -311,6 +311,20 @@
     </div>
   </header>
 
+  <div id="mobile-session-bar" class="hidden shrink-0 items-center gap-1.5 border-b border-slate-800/80 bg-slate-950/96 px-2 py-1 text-[10px]">
+    <button id="mobile-workspace-quick-btn" type="button" class="flex min-w-0 flex-1 items-center gap-1 rounded-lg border border-teal-500/25 bg-teal-500/10 px-2 py-1.5 text-left text-teal-200 active:scale-[0.98]" title="切換目前工作區">
+      <span class="shrink-0">📁</span>
+      <span id="mobile-workspace-quick-label" class="truncate font-semibold">Home</span>
+    </button>
+    <button id="mobile-context-quick-btn" type="button" class="flex shrink-0 items-center gap-1 rounded-lg border border-slate-700/80 bg-slate-900/80 px-2 py-1.5 text-slate-300 active:scale-[0.98]" title="查看 Context 用量">
+      <span id="mobile-context-quick-dot" class="h-1.5 w-1.5 rounded-full bg-emerald-400"></span>
+      <span id="mobile-context-quick-text" class="font-mono font-semibold">0 tok</span>
+    </button>
+    <button id="mobile-compact-quick-btn" type="button" class="shrink-0 rounded-lg border border-cyan-500/35 bg-cyan-500/10 px-2.5 py-1.5 font-semibold text-cyan-300 active:scale-[0.98]" title="立即執行 /compact">
+      Compact
+    </button>
+  </div>
+
   <div id="workspace-modal" class="fixed inset-0 z-[70] hidden items-end justify-center bg-black/70 p-2 opacity-0 transition-opacity duration-150 sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-labelledby="workspace-modal-title">
     <section class="w-full max-w-md overflow-hidden rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl">
       <div class="flex items-start justify-between gap-3 border-b border-slate-800 p-3.5">
