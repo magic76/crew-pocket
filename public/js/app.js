@@ -295,6 +295,13 @@ function initAppAndListeners() {
   if (closeDrawerBtn) closeDrawerBtn.addEventListener('click', () => toggleDrawer(false));
   if (drawerOverlay) drawerOverlay.addEventListener('click', () => toggleDrawer(false));
   if (workspaceSelectorBtn) workspaceSelectorBtn.addEventListener('click', () => window.openWorkspacePicker?.());
+  const mobileWorkspaceQuickBtn = document.getElementById('mobile-workspace-quick-btn');
+  const mobileContextQuickBtn = document.getElementById('mobile-context-quick-btn');
+  const mobileCompactQuickBtn = document.getElementById('mobile-compact-quick-btn');
+  if (mobileWorkspaceQuickBtn) mobileWorkspaceQuickBtn.addEventListener('click', () => window.openWorkspacePicker?.());
+  if (mobileContextQuickBtn) mobileContextQuickBtn.addEventListener('click', () => {
+    if (typeof window.showContextModal === 'function') window.showContextModal();
+  });
   if (closeWorkspaceModalBtn) closeWorkspaceModalBtn.addEventListener('click', () => window.closeWorkspacePicker?.());
   if (workspaceModal) workspaceModal.addEventListener('click', event => {
     if (event.target === workspaceModal) window.closeWorkspacePicker?.();
@@ -460,6 +467,21 @@ function initAppAndListeners() {
   }
   if (modalTriggerCompactBtn) {
     modalTriggerCompactBtn.addEventListener('click', () => runCompactFromContext('/compact'));
+  }
+  if (mobileCompactQuickBtn) {
+    mobileCompactQuickBtn.addEventListener('click', () => {
+      if (isStreaming) return;
+      if (!providerConfig().capabilities?.compact) {
+        if (typeof window.showContextModal === 'function') window.showContextModal();
+        return;
+      }
+      runCompactFromContext('/compact');
+    });
+    window.addEventListener('crew:streaming-state', (event) => {
+      const streaming = event.detail?.streaming === true;
+      mobileCompactQuickBtn.disabled = streaming;
+      mobileCompactQuickBtn.classList.toggle('opacity-45', streaming);
+    });
   }
   if (modalTriggerCompactMaxBtn) modalTriggerCompactMaxBtn.addEventListener('click', () => {
     if (currentProvider === 'codex' && typeof window.startLowContextContinuation === 'function') {
