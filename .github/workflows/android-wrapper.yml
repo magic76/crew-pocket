@@ -12,6 +12,8 @@ on:
       - "server.js"
       - "public/js/auth.js"
       - "public/js/chat.js"
+      - "public/js/app.js"
+      - "public/css/*.css"
       - "public/index.html"
       - "public/sw.js"
       - ".github/workflows/android-wrapper.yml"
@@ -63,6 +65,7 @@ jobs:
           node --check server.js
           node --check public/js/auth.js
           node --check public/js/chat.js
+          node --check public/js/app.js
           node scripts/prepare-pwa-cache.js --check
 
       - name: Build debug APK
