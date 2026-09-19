@@ -299,11 +299,6 @@ function initAppAndListeners() {
   if (workspaceModal) workspaceModal.addEventListener('click', event => {
     if (event.target === workspaceModal) window.closeWorkspacePicker?.();
   });
-  if (roleSelectorBtn) roleSelectorBtn.addEventListener('click', () => window.openRolePicker?.());
-  if (closeRoleModalBtn) closeRoleModalBtn.addEventListener('click', () => window.closeRolePicker?.());
-  if (roleModal) roleModal.addEventListener('click', event => {
-    if (event.target === roleModal) window.closeRolePicker?.();
-  });
   bindEdgeDrawerGesture();
   bindDrawerCloseGesture();
 
