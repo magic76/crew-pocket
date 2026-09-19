@@ -1274,9 +1274,6 @@ async function loadConversationHistory(convId, { preserveComposer = false } = {}
       if (cached.workspace && typeof window.setConversationWorkspaceDirect === 'function') {
         window.setConversationWorkspaceDirect(cached.workspace);
       }
-      if (cached.role && typeof window.setConversationRoleDirect === 'function') {
-        window.setConversationRoleDirect(cached.role);
-      }
     }
   }
 
@@ -1462,14 +1459,6 @@ if (conversationSearchClearBtn) {
   });
 }
 
-const CONVERSATION_ROLE_META = {
-  lead: { icon: '✨', label: '開發主責' },
-  backend: { icon: '🧩', label: '後端工程' },
-  research: { icon: '🔎', label: '研究分析' },
-  debug: { icon: '🛠️', label: '除錯支援' },
-  ux: { icon: '🎨', label: '產品／UX' },
-  general: { icon: '💬', label: '一般助理' }
-};
 
 function conversationRelativeTime(timestamp) {
   const value = Number(timestamp);
@@ -1490,13 +1479,11 @@ function renderConversationItems(conversations) {
   const filtered = (conversations || [])
     .filter(conv => {
       if (!query) return true;
-      const role = CONVERSATION_ROLE_META[conv.role] || CONVERSATION_ROLE_META.general;
       const provider = providerConfig(conv.provider || 'antigravity');
       const haystack = [
         conv.title,
         conv.preview,
         conv.workspace,
-        role.label,
         provider?.label,
         provider?.shortLabel
       ].filter(Boolean).join(' ').toLocaleLowerCase('zh-TW');
@@ -1567,7 +1554,6 @@ function renderConversationItems(conversations) {
         ? 'Home'
         : String(conv.workspace).split('/').filter(Boolean).pop())
       : '';
-    const role = CONVERSATION_ROLE_META[conv.role] || CONVERSATION_ROLE_META.general;
     const updateLabel = conversationRelativeTime(conv.updatedAt);
     const wrapper = document.createElement('div');
     wrapper.className = 'swipe-item-wrapper relative overflow-hidden rounded-xl mb-1 select-none transition-all duration-200';
@@ -1592,11 +1578,9 @@ function renderConversationItems(conversations) {
       }">
         <div class="flex flex-col truncate min-w-0 flex-1 pointer-events-none pr-1 gap-0.5">
           <div class="flex items-center gap-1.5 truncate">
-            <span class="w-4 text-center shrink-0">${role.icon}</span>
             <span class="truncate font-medium">${displayTitle}</span>
           </div>
-          <div class="flex items-center gap-1.5 truncate pl-5 text-[9px] text-slate-500">
-            <span class="shrink-0 text-slate-400">${role.label}</span>
+          <div class="flex items-center gap-1.5 truncate text-[9px] text-slate-500">
             <span class="px-1 py-0.2 rounded border font-mono shrink-0 ${providerBadgeClass}">${providerLabel}</span>
             <span class="truncate">${isCurrent && isStreaming ? '● 回覆中' : updateLabel}</span>
           </div>
@@ -1914,7 +1898,7 @@ async function sendBtwConcurrentSidecard(customText = null, customImgPath = null
         effort: 'low', // Fast low reasoning for instant 1s answers across Gemini & Codex
         image_path: imgPath,
         workspace: (typeof currentWorkspace !== 'undefined') ? currentWorkspace : '/data/data/com.termux/files/home',
-        role: (typeof currentRole !== 'undefined') ? currentRole : 'general'
+        role: 'general'
       }),
       signal: sideAbort.signal
     });
@@ -2427,7 +2411,7 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
         model: currentModel,
         effort: (typeof currentEffort !== 'undefined') ? currentEffort : 'low',
         workspace: (typeof currentWorkspace !== 'undefined') ? currentWorkspace : '/data/data/com.termux/files/home',
-        role: (typeof currentRole !== 'undefined') ? currentRole : 'general'
+        role: 'general'
       }),
       signal: streamAbortController.signal
     });
