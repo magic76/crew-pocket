@@ -48,21 +48,7 @@ if (typeof marked !== 'undefined') {
   });
 }
 
-// 2. Retire legacy PWA state. Crew Pocket is APK-first now.
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.getRegistrations()
-    .then(registrations => Promise.all(registrations.map(registration => registration.unregister())))
-    .catch(() => {});
-}
-if ('caches' in window) {
-  caches.keys()
-    .then(names => Promise.all(
-      names.filter(name => name.startsWith('crew-pocket-')).map(name => caches.delete(name))
-    ))
-    .catch(() => {});
-}
-
-// 3. Real-time Network Connectivity Monitor
+// 2. Real-time Network Connectivity Monitor
 let isOnline = navigator.onLine;
 
 function updateNetworkUI(online) {
