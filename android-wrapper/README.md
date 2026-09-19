@@ -10,8 +10,7 @@ This module is an experimental Android APK shell for the existing Crew Pocket ru
 - If the local Crew server disappears, asks Termux to run the repository's
   `scripts/android-runtime-start.sh`.
 - Shows the existing Crew Pocket web UI inside a WebView.
-- Keeps a Browser button as a fallback so the current PWA can still be opened in
-  the normal browser.
+- Keeps a Browser button only as a diagnostics fallback for the localhost UI.
 - Uses `START_STICKY` so Android may recreate the monitor service after process
   reclamation.
 
@@ -87,7 +86,7 @@ no longer depends on Termux.
 ## Phase 2A: optional embedded Codex process
 
 This branch can now move only the **Codex app-server process** into the APK while
-keeping the existing Crew Node/PWA host in Termux.
+keeping the existing Crew Node/Web UI host in Termux.
 
 ```text
 Crew Node server (Termux)
