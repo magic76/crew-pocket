@@ -998,7 +998,9 @@ async function deleteConversationDirect(convId, wrapperElement, conversationProv
           wrapperElement.remove();
         }
         if (convList && convList.children.length === 0) {
-          convList.innerHTML = '<div class="p-4 text-center text-xs text-slate-500">尚無歷史對話</div>';
+          convList.innerHTML = query
+      ? '<div class="p-5 text-center text-xs text-slate-500">找不到符合的對話</div>'
+      : '<div class="p-4 text-center text-xs text-slate-500">尚無歷史對話</div>';
         }
       }, 380);
     }
@@ -1398,6 +1400,33 @@ async function loadConversations() {
 }
 
 let cachedConversations = [];
+let conversationSearchQuery = '';
+const conversationSearchInput = document.getElementById('conversation-search-input');
+const conversationSearchClearBtn = document.getElementById('conversation-search-clear-btn');
+
+function refreshConversationSearch() {
+  if (typeof renderConversationItems === 'function') renderConversationItems(cachedConversations);
+}
+
+if (conversationSearchInput) {
+  conversationSearchInput.addEventListener('input', () => {
+    conversationSearchQuery = conversationSearchInput.value.trim().toLocaleLowerCase('zh-TW');
+    if (conversationSearchClearBtn) conversationSearchClearBtn.classList.toggle('hidden', !conversationSearchQuery);
+    refreshConversationSearch();
+  });
+}
+if (conversationSearchClearBtn) {
+  conversationSearchClearBtn.addEventListener('click', () => {
+    conversationSearchQuery = '';
+    if (conversationSearchInput) {
+      conversationSearchInput.value = '';
+      conversationSearchInput.focus();
+    }
+    conversationSearchClearBtn.classList.add('hidden');
+    refreshConversationSearch();
+  });
+}
+
 const CONVERSATION_ROLE_META = {
   lead: { icon: '✨', label: '開發主責' },
   backend: { icon: '🧩', label: '後端工程' },
@@ -1422,7 +1451,28 @@ function renderConversationItems(conversations) {
   if (!convList) return;
   convList.innerHTML = '';
 
-  const filtered = conversations || [];
+  const query = conversationSearchQuery;
+  const filtered = (conversations || [])
+    .filter(conv => {
+      if (!query) return true;
+      const role = CONVERSATION_ROLE_META[conv.role] || CONVERSATION_ROLE_META.general;
+      const provider = providerConfig(conv.provider || 'antigravity');
+      const haystack = [
+        conv.title,
+        conv.preview,
+        conv.workspace,
+        role.label,
+        provider?.label,
+        provider?.shortLabel
+      ].filter(Boolean).join(' ').toLocaleLowerCase('zh-TW');
+      return haystack.includes(query);
+    })
+    .sort((a, b) => {
+      const aCurrent = a.id === currentConversationId && (a.provider || 'antigravity') === currentProvider;
+      const bCurrent = b.id === currentConversationId && (b.provider || 'antigravity') === currentProvider;
+      if (aCurrent !== bCurrent) return aCurrent ? -1 : 1;
+      return Number(b.updatedAt || 0) - Number(a.updatedAt || 0);
+    });
 
   if (filtered.length === 0) {
     convList.innerHTML = '<div class="p-4 text-center text-xs text-slate-500">尚無歷史對話</div>';
@@ -1442,7 +1492,13 @@ function renderConversationItems(conversations) {
       label: workspace === UNASSIGNED_WORKSPACE
         ? '未指定工作區'
         : (workspace === '/data/data/com.termux/files/home' ? 'Home' : workspace.split('/').filter(Boolean).pop()),
-      items: items.sort((a, b) => (a.title || '').localeCompare(b.title || '', 'zh-TW') || String(a.id).localeCompare(String(b.id)))
+      items: items.sort((a, b) => {
+        const aCurrent = a.id === currentConversationId && (a.provider || 'antigravity') === currentProvider;
+        const bCurrent = b.id === currentConversationId && (b.provider || 'antigravity') === currentProvider;
+        if (aCurrent !== bCurrent) return aCurrent ? -1 : 1;
+        return Number(b.updatedAt || 0) - Number(a.updatedAt || 0)
+          || (a.title || '').localeCompare(b.title || '', 'zh-TW');
+      })
     }))
     .sort((a, b) => {
       // 1. Unassigned workspace is strictly placed at the very end
@@ -1461,7 +1517,7 @@ function renderConversationItems(conversations) {
 
   workspaceGroups.forEach(group => {
     const groupHeader = document.createElement('div');
-    groupHeader.className = 'flex items-center gap-2 px-1.5 pt-3 pb-1 text-[10px] font-semibold text-slate-500';
+    groupHeader.className = 'sticky top-0 z-10 flex items-center gap-2 px-1.5 py-1.5 text-[10px] font-semibold text-slate-500 bg-slate-900/95 backdrop-blur border-b border-slate-800/60';
     groupHeader.innerHTML = `<span class="text-xs">${group.workspace === UNASSIGNED_WORKSPACE ? '⚪' : (group.workspace === '/data/data/com.termux/files/home' ? '🏠' : '📁')}</span><span class="truncate">${escapeHtml(group.label)}</span><span class="ml-auto text-[9px] font-mono text-slate-600">${group.items.length}</span>`;
     convList.appendChild(groupHeader);
 
@@ -1479,8 +1535,8 @@ function renderConversationItems(conversations) {
     const role = CONVERSATION_ROLE_META[conv.role] || CONVERSATION_ROLE_META.general;
     const updateLabel = conversationRelativeTime(conv.updatedAt);
     const wrapper = document.createElement('div');
-    wrapper.className = 'swipe-item-wrapper relative overflow-hidden rounded-xl mb-1.5 select-none transition-all duration-200';
-    wrapper.style.maxHeight = '80px';
+    wrapper.className = 'swipe-item-wrapper relative overflow-hidden rounded-xl mb-1 select-none transition-all duration-200';
+    wrapper.style.maxHeight = '64px';
 
     const displayTitle = escapeHtml(conv.title);
 
@@ -1496,7 +1552,7 @@ function renderConversationItems(conversations) {
       </div>
 
       <!-- Foreground content card (slides horizontally) -->
-      <div class="swipe-item-content relative z-10 p-2.5 rounded-xl cursor-pointer flex items-center justify-between text-xs transition-transform duration-75 touch-pan-y ${
+      <div class="swipe-item-content relative z-10 px-2.5 py-2 rounded-xl cursor-pointer flex items-center justify-between text-xs transition-transform duration-75 touch-pan-y ${
         isCurrent ? 'bg-indigo-950 text-indigo-200 border border-indigo-500/60 shadow-md' : 'bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800'
       }">
         <div class="flex flex-col truncate min-w-0 flex-1 pointer-events-none pr-1 gap-0.5">
@@ -1507,17 +1563,12 @@ function renderConversationItems(conversations) {
           <div class="flex items-center gap-1.5 truncate pl-5 text-[9px] text-slate-500">
             <span class="shrink-0 text-slate-400">${role.label}</span>
             <span class="px-1 py-0.2 rounded border font-mono shrink-0 ${providerBadgeClass}">${providerLabel}</span>
-            ${workspaceLabel ? `<span class="max-w-[58px] truncate text-teal-300/80" title="${escapeHtml(conv.workspace || '')}">📁 ${escapeHtml(workspaceLabel)}</span>` : ''}
             <span class="truncate">${isCurrent && isStreaming ? '● 回覆中' : updateLabel}</span>
           </div>
         </div>
         <div class="flex items-center gap-1 shrink-0 ml-1">
           ${isCurrent ? '<span class="text-[9px] px-1.5 py-0.2 rounded-full bg-indigo-900 text-indigo-200 border border-indigo-500/60 font-mono shrink-0">目前</span>' : ''}
-          <button type="button" class="rename-conv-btn p-1 rounded-lg hover:bg-slate-700/80 text-slate-400 hover:text-indigo-300 transition active:scale-95 shrink-0" title="修改對話標題">
-            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-            </svg>
-          </button>
+          <button type="button" class="rename-conv-btn min-w-7 min-h-7 rounded-lg hover:bg-slate-700/80 text-slate-500 hover:text-indigo-300 transition active:scale-95 shrink-0 text-base leading-none" title="重新命名對話" aria-label="重新命名對話">⋯</button>
         </div>
       </div>
     `;
