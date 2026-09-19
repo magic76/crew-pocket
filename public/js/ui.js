@@ -33,7 +33,6 @@ let recognition = null;
 let isRecording = false;
 let userScrolledUp = false;
 let notificationsEnabled = localStorage.getItem('agy_notify_enabled') !== 'false';
-let swRegistration = null;
 let streamingStartedAt = 0;
 const activeBlobUrls = new Set();
 let prewarmTimer = null;
@@ -973,15 +972,6 @@ async function triggerDoneNotification(text) {
     renotify: true,
     vibrate: [200, 100, 200]
   };
-
-  if (swRegistration && swRegistration.showNotification) {
-    try {
-      await swRegistration.showNotification('Crew Pocket', notifOptions);
-      return;
-    } catch (e) {
-      console.warn('[SW showNotification error]', e);
-    }
-  }
 
   try {
     const n = new Notification('Crew Pocket', notifOptions);
