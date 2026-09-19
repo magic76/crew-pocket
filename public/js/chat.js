@@ -1618,6 +1618,7 @@ function renderConversationItems(conversations) {
     let isDeleted = false;
     let longPressTimer = null;
     let longPressTriggered = false;
+    let suppressClickUntil = 0;
 
     const cancelLongPress = () => {
       if (longPressTimer) clearTimeout(longPressTimer);
@@ -1630,6 +1631,7 @@ function renderConversationItems(conversations) {
       longPressTimer = setTimeout(() => {
         if (isDeleted || isSwiping || isVerticalScroll) return;
         longPressTriggered = true;
+        suppressClickUntil = Date.now() + 900;
         if (typeof window.haptic === 'function') window.haptic('medium');
         renameConversationDirect(conv.id, conv.title, conversationProvider);
       }, 520);
@@ -1741,7 +1743,7 @@ function renderConversationItems(conversations) {
     contentEl.title = '點擊開啟 · 長按重新命名 · 左滑刪除';
 
     contentEl.addEventListener('click', () => {
-      if (longPressTriggered) return;
+      if (longPressTriggered || Date.now() < suppressClickUntil) return;
       if (!isDeleted && Math.abs(currentDiffX) < 10) {
         window.applyConversationSettings({
           provider: conversationProvider,
