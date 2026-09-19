@@ -43,13 +43,14 @@ import java.util.concurrent.atomic.AtomicBoolean
 class MainActivity : Activity() {
     companion object {
         private const val SERVER_URL = "http://127.0.0.1:8000/"
+        private const val SERVER_HEALTH_URL = "http://127.0.0.1:8000/healthz"
         private const val REQUEST_TERMUX = 7601
         private const val REQUEST_NOTIFICATION = 7602
         private const val REQUEST_WEB_MEDIA = 7603
         private const val REQUEST_GEOLOCATION = 7604
         private const val REQUEST_FILE = 7605
         private const val WEB_MIGRATION_PREFS = "crew_web_migrations"
-        private const val LEGACY_WEB_CACHE_CLEARED = "legacy_web_cache_cleared_v1"
+        private const val LEGACY_PWA_RETIRED = "legacy_pwa_retired_v2"
     }
 
     private lateinit var statusText: TextView
@@ -67,13 +68,13 @@ class MainActivity : Activity() {
     private var pendingGeoCallback: GeolocationPermissions.Callback? = null
     private var filePathCallback: ValueCallback<Array<Uri>>? = null
     private val webSessionId = System.currentTimeMillis()
-    private var legacyPwaCleanupInjected = false
+    private var legacyPwaCleanupPending = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         buildUi()
         configureWebView()
-        clearLegacyWebCacheOnce()
+        prepareLegacyPwaRetirement()
         requestNotificationPermissionIfNeeded()
         requestTermuxPermissionIfPossible()
     }
@@ -211,9 +212,9 @@ class MainActivity : Activity() {
 
             override fun onPageFinished(view: WebView?, url: String?) {
                 super.onPageFinished(view, url)
-                if (legacyPwaCleanupInjected || !url.orEmpty().startsWith(SERVER_URL)) return
+                if (!legacyPwaCleanupPending || !url.orEmpty().startsWith(SERVER_URL)) return
 
-                legacyPwaCleanupInjected = true
+                legacyPwaCleanupPending = false
                 view?.evaluateJavascript(
                     """
                     (() => {
@@ -233,6 +234,10 @@ class MainActivity : Activity() {
                     """.trimIndent(),
                     null
                 )
+                getSharedPreferences(WEB_MIGRATION_PREFS, MODE_PRIVATE)
+                    .edit()
+                    .putBoolean(LEGACY_PWA_RETIRED, true)
+                    .apply()
             }
         }
         webView.addJavascriptInterface(NativeWebBridge(), "CrewPocket")
@@ -273,14 +278,14 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun clearLegacyWebCacheOnce() {
+    private fun prepareLegacyPwaRetirement() {
         val prefs = getSharedPreferences(WEB_MIGRATION_PREFS, MODE_PRIVATE)
-        if (prefs.getBoolean(LEGACY_WEB_CACHE_CLEARED, false)) return
+        if (prefs.getBoolean(LEGACY_PWA_RETIRED, false)) return
 
-        // The app no longer uses a PWA shell. Clear only the legacy WebView
-        // resource cache once so old installs cannot keep serving stale assets.
+        // One migration only: clear old HTTP resources now, then unregister any
+        // legacy localhost service worker after the first page has loaded.
         webView.clearCache(true)
-        prefs.edit().putBoolean(LEGACY_WEB_CACHE_CLEARED, true).apply()
+        legacyPwaCleanupPending = true
     }
 
     private fun appUrl(): String {
@@ -354,7 +359,7 @@ class MainActivity : Activity() {
 
     private fun serverAlive(): Boolean {
         return try {
-            val connection = URL(SERVER_URL).openConnection() as HttpURLConnection
+            val connection = URL(SERVER_HEALTH_URL).openConnection() as HttpURLConnection
             connection.requestMethod = "GET"
             connection.connectTimeout = 1000
             connection.readTimeout = 1000
