@@ -295,7 +295,7 @@ footer {
 }
 
 #drawer {
-  padding-top: var(--crew-safe-top);
+  padding-top: 0;
   padding-bottom: var(--crew-safe-bottom);
 }
 
@@ -435,5 +435,32 @@ footer {
     animation-duration: 0.001ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
+  }
+}
+
+
+/* === Mobile session quick controls === */
+@media (max-width: 640px) {
+  #mobile-session-bar {
+    display: flex !important;
+    min-height: 36px;
+  }
+
+  #mobile-session-bar button {
+    touch-action: manipulation;
+  }
+
+  #drawer {
+    padding-top: 0 !important;
+  }
+
+  #drawer > div:first-child {
+    padding-top: 0.7rem !important;
+  }
+}
+
+@media (min-width: 641px) {
+  #mobile-session-bar {
+    display: none !important;
   }
 }
