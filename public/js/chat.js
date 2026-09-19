@@ -132,30 +132,36 @@ function prepareDeferredImages(root) {
 // Helper: format tool info with rich metadata, category badges & icons
 function getToolDetails(tool) {
   const name = tool.name || tool.tool_name || 'action';
+  const normalizedName = String(name).toLowerCase();
   const args = tool.args || (tool.tool_info && tool.tool_info.parameters) || {};
   let icon = '⚙️';
   let label = '系統動作';
   let badgeColor = 'bg-slate-800 text-slate-300 border-slate-700';
   let desc = name;
 
-  if (name === 'run_command') {
+  if (name === 'run_command' || /commandexecution|exec_command|shell_command|shellcommand/.test(normalizedName)) {
     icon = '💻';
     label = '終端指令';
     badgeColor = 'bg-amber-950/40 text-amber-300 border-amber-800/60';
-    const cmd = args.CommandLine || '';
+    const rawCommand = args.CommandLine || args.command || args.cmd || '';
+    const cmd = Array.isArray(rawCommand) ? rawCommand.join(' ') : String(rawCommand || '');
     desc = cmd ? `$ ${cmd.slice(0, 45)}${cmd.length > 45 ? '...' : ''}` : '執行終端命令';
-  } else if (name === 'view_file') {
+  } else if (name === 'view_file' || /read_file|readfile|file_read|imageview/.test(normalizedName)) {
     icon = '📄';
     label = '檢視檔案';
     badgeColor = 'bg-blue-950/40 text-blue-300 border-blue-800/60';
     const p = (args.AbsolutePath || '').split('/').pop();
     desc = p ? `讀取 ${p}` : '檢視檔案內容';
-  } else if (name === 'replace_file_content') {
+  } else if (name === 'replace_file_content' || /filechange|apply_patch|applypatch|edit_file|editfile/.test(normalizedName)) {
     icon = '📝';
     label = '編輯修改';
     badgeColor = 'bg-emerald-950/40 text-emerald-300 border-emerald-800/60';
-    const p = (args.TargetFile || '').split('/').pop();
-    desc = p ? `修改 ${p}` : '替換檔案內容';
+    const change = Array.isArray(args.changes) ? args.changes[0] : null;
+    const changePath = change && typeof change === 'object'
+      ? (change.path || change.file || change.file_path || change.target)
+      : '';
+    const p = String(args.TargetFile || args.path || args.file || changePath || '').split('/').pop();
+    desc = p ? `修改 ${p}` : '修改檔案';
   } else if (name === 'write_to_file') {
     icon = '💾';
     label = '寫入建立';
@@ -172,7 +178,7 @@ function getToolDetails(tool) {
     label = '搜尋檔案';
     badgeColor = 'bg-purple-950/40 text-purple-300 border-purple-800/60';
     desc = args.Pattern ? `查找 "${args.Pattern}"` : '依名稱查找檔案';
-  } else if (name === 'search_web') {
+  } else if (name === 'search_web' || /websearch|web_search/.test(normalizedName)) {
     icon = '🌐';
     label = '網路檢索';
     badgeColor = 'bg-sky-950/40 text-sky-300 border-sky-800/60';
@@ -199,6 +205,87 @@ function getToolDetails(tool) {
     : '';
   return { icon, label, badgeColor, desc, durationStr };
 }
+
+
+function compactProgressText(value, maxLength = 64) {
+  const text = String(value || '').replace(/\s+/g, ' ').trim();
+  if (!text) return '';
+  return text.length > maxLength ? `${text.slice(0, maxLength - 1)}…` : text;
+}
+
+function firstToolPath(args) {
+  if (!args || typeof args !== 'object') return '';
+  const direct = args.TargetFile || args.AbsolutePath || args.path || args.file_path || args.file || args.target;
+  if (direct) return String(direct).split('/').pop();
+
+  const changes = args.changes;
+  if (Array.isArray(changes) && changes.length > 0) {
+    const first = changes[0];
+    if (typeof first === 'string') return first.split('/').pop();
+    if (first && typeof first === 'object') {
+      const path = first.path || first.file || first.file_path || first.target;
+      if (path) return String(path).split('/').pop();
+    }
+  } else if (changes && typeof changes === 'object') {
+    const firstKey = Object.keys(changes)[0];
+    if (firstKey) return firstKey.split('/').pop();
+  }
+  return '';
+}
+
+function getPassiveToolProgress(tool) {
+  const name = String(tool?.name || tool?.tool_name || 'action');
+  const normalizedName = name.toLowerCase();
+  const args = getToolGroupingArgs(tool || {});
+  const path = firstToolPath(args);
+  const query = compactProgressText(args.Query || args.query || args.Pattern || args.pattern || '', 46);
+  const rawCommand = args.CommandLine || args.command || args.cmd || '';
+  const command = compactProgressText(Array.isArray(rawCommand) ? rawCommand.join(' ') : rawCommand, 54);
+
+  if (/run_command|commandexecution|exec_command|shell_command|shellcommand/.test(normalizedName)) {
+    return { icon: '💻', text: command ? `執行指令 · ${command}` : '執行終端指令' };
+  }
+  if (/view_file|read_file|readfile|file_read|imageview/.test(normalizedName)) {
+    return { icon: '📄', text: path ? `讀取檔案 · ${path}` : '讀取檔案內容' };
+  }
+  if (/replace_file_content|filechange|apply_patch|applypatch|edit_file|editfile/.test(normalizedName)) {
+    return { icon: '📝', text: path ? `修改檔案 · ${path}` : '修改檔案內容' };
+  }
+  if (/write_to_file|writefile|create_file|createfile/.test(normalizedName)) {
+    return { icon: '💾', text: path ? `寫入檔案 · ${path}` : '寫入檔案' };
+  }
+  if (/grep_search|code_search|codesearch|find_by_name|search_files|searchfiles/.test(normalizedName)) {
+    return { icon: '🔍', text: query ? `搜尋程式碼 · ${query}` : '搜尋相關程式碼' };
+  }
+  if (/search_web|websearch|web_search/.test(normalizedName)) {
+    return { icon: '🌐', text: query ? `搜尋網路 · ${query}` : '搜尋網路資料' };
+  }
+  if (/list_dir|listdir|directory/.test(normalizedName)) {
+    return { icon: '📂', text: path ? `查看目錄 · ${path}` : '查看檔案目錄' };
+  }
+  if (/subagent|collabagent|agenttool/.test(normalizedName)) {
+    return { icon: '🤖', text: '執行子代理工作' };
+  }
+  if (/mcp|dynamictool/.test(normalizedName)) {
+    return { icon: '🔌', text: `執行外部工具 · ${compactProgressText(name, 42)}` };
+  }
+
+  const details = getToolDetails(tool || {});
+  return {
+    icon: details.icon || '⚙️',
+    text: compactProgressText(details.desc || details.label || name, 64) || '執行系統操作'
+  };
+}
+
+function toolProgressState(tool) {
+  const state = getToolState(tool);
+  if (['failed', 'error', 'cancelled', 'canceled', 'interrupted'].includes(state)) return 'failed';
+  if (isTerminalToolState(state)) return 'done';
+  return 'running';
+}
+
+// Progress UI is deliberately passive: it never sends prompts, requests, or extra
+// tool calls. It only translates SSE events that the current turn already emits.
 
 function formatToolSummary(tool) {
   const d = getToolDetails(tool);
@@ -2096,6 +2183,9 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
             </span>
             <span class="w-1.5 h-3.5 bg-indigo-400 animate-pulse shrink-0"></span>
           </div>
+
+          <!-- Passive progress timeline: rendered from existing SSE events only. -->
+          <div class="live-progress-list hidden border-t border-slate-800/70 pt-1.5 space-y-1"></div>
         </div>
       </div>
 
@@ -2113,6 +2203,7 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
   const liveSpeedElem = assistantMsgDiv.querySelector('.live-speed');
   const livePipelineElem = assistantMsgDiv.querySelector('.live-pipeline');
   const liveTickerTextElem = assistantMsgDiv.querySelector('.live-ticker-text');
+  const liveProgressListElem = assistantMsgDiv.querySelector('.live-progress-list');
   const thinkingContainerElem = assistantMsgDiv.querySelector('.thinking-container');
   const toolsContainerElem = assistantMsgDiv.querySelector('.tools-container');
   const isStreamVisible = () => assistantMsgDiv.isConnected && currentProvider === streamProvider
@@ -2147,6 +2238,11 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
     turnFinalized = true;
 
     clearInterval(liveTimerInterval);
+    markProgressDone('phase:analysis');
+    markProgressDone('phase:writing');
+    const writingStep = pipelineSteps.get('writing');
+    if (writingStep) writingStep.status = 'done';
+    renderPipeline();
     liveStatusElem.style.display = 'none';
 
     const targetDoneConvId = doneData?.conversation_id || streamConversationId;
@@ -2282,7 +2378,57 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
 
   // Pipeline State Tracker
   const pipelineSteps = new Map();
-  pipelineSteps.set('init', { label: '🧠 思考分析', status: 'running' });
+  pipelineSteps.set('init', { label: '🧠 分析需求', status: 'running' });
+
+  const progressEntries = new Map();
+  const progressOrder = [];
+  const MAX_VISIBLE_PROGRESS = 5;
+
+  function renderProgressTimeline() {
+    if (!liveProgressListElem) return;
+    const visible = progressOrder
+      .slice(-MAX_VISIBLE_PROGRESS)
+      .map(key => progressEntries.get(key))
+      .filter(Boolean);
+
+    liveProgressListElem.classList.toggle('hidden', visible.length === 0);
+    liveProgressListElem.innerHTML = visible.map(entry => {
+      const stateIcon = entry.state === 'done'
+        ? '<span class="text-emerald-400 font-bold shrink-0">✓</span>'
+        : entry.state === 'failed'
+        ? '<span class="text-rose-400 font-bold shrink-0">!</span>'
+        : '<span class="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-ping shrink-0"></span>';
+      const textClass = entry.state === 'done'
+        ? 'text-slate-400'
+        : entry.state === 'failed'
+        ? 'text-rose-300'
+        : 'text-slate-200';
+      return `<div class="flex items-center gap-1.5 text-[10px] font-mono min-w-0">
+        ${stateIcon}
+        <span class="shrink-0">${escapeHtml(entry.icon || '⚙️')}</span>
+        <span class="truncate ${textClass}">${escapeHtml(entry.text)}</span>
+      </div>`;
+    }).join('');
+  }
+
+  function upsertProgress(key, entry) {
+    if (!progressEntries.has(key)) progressOrder.push(key);
+    progressEntries.set(key, { ...(progressEntries.get(key) || {}), ...entry });
+    renderProgressTimeline();
+  }
+
+  function markProgressDone(key) {
+    const existing = progressEntries.get(key);
+    if (!existing) return;
+    progressEntries.set(key, { ...existing, state: 'done' });
+    renderProgressTimeline();
+  }
+
+  upsertProgress('phase:analysis', {
+    icon: '🧠',
+    text: '分析需求與下一步',
+    state: 'running'
+  });
 
   function renderPipeline() {
     if (!livePipelineElem) return;
@@ -2378,13 +2524,18 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
             } else if (currentEvent === 'thought') {
               const initStep = pipelineSteps.get('init');
               if (initStep) initStep.status = 'done';
-              pipelineSteps.set('thought', { label: '💡 深度推理', status: 'running' });
+              pipelineSteps.set('thought', { label: '💡 分析方案', status: 'running' });
               renderPipeline();
 
               liveThinking += (data.delta || data.thinking || data.fullThinking || '');
               thinkingContainerElem.innerHTML = buildThinkingBlockHtml(liveThinking, true);
-              statusTextElem.textContent = '💡 深度推理思考中...';
-              updateLiveTicker(liveThinking, '🧠');
+              statusTextElem.textContent = '🧠 正在分析需求與下一步…';
+              if (liveTickerTextElem) liveTickerTextElem.textContent = '🧠 正在分析可行方案與執行步驟…';
+              upsertProgress('phase:analysis', {
+                icon: '🧠',
+                text: '分析需求與可行方案',
+                state: 'running'
+              });
               if (userScrolledUp) {
                 const scrollBadge = document.getElementById('scroll-bottom-badge');
                 if (scrollBadge) scrollBadge.classList.remove('hidden');
@@ -2399,13 +2550,37 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
               if (thoughtStep) thoughtStep.status = 'done';
 
               const mergedTool = mergeToolEventIntoMap(liveToolMap, liveTools, data);
-              const d = getToolDetails(mergedTool || data);
-              pipelineSteps.set('tools', { label: `⚙️ 工具 ${liveTools.length}`, status: 'done' });
+              const progressTool = mergedTool || data;
+              const progress = getPassiveToolProgress(progressTool);
+              const progressState = toolProgressState(progressTool);
+              const progressKey = getToolGroupKey(progressTool, liveTools.length);
+              const d = getToolDetails(progressTool);
+
+              markProgressDone('phase:analysis');
+              pipelineSteps.set('tools', {
+                label: `⚙️ 操作 ${liveTools.length}`,
+                status: progressState === 'running' ? 'running' : 'done'
+              });
               renderPipeline();
 
-              statusTextElem.textContent = `${d.icon} ${d.label}: ${d.desc}`;
-              if (liveTickerTextElem && d) {
-                liveTickerTextElem.textContent = `${d.icon} ${d.label}: ${d.desc}`;
+              upsertProgress(progressKey, {
+                icon: progress.icon,
+                text: progress.text,
+                state: progressState
+              });
+
+              const activePrefix = progressState === 'running'
+                ? '正在'
+                : progressState === 'failed'
+                ? '失敗：'
+                : '已完成：';
+              statusTextElem.textContent = progressState === 'running'
+                ? `${progress.icon} ${activePrefix}${progress.text}…`
+                : `${progress.icon} ${activePrefix}${progress.text}`;
+              if (liveTickerTextElem) {
+                liveTickerTextElem.textContent = progressState === 'running'
+                  ? `${progress.icon} 正在${progress.text}…`
+                  : `${progress.icon} ${activePrefix}${progress.text}`;
               }
               queueLiveToolsRender();
             } else if (currentEvent === 'chunk' && data.accumulated) {
@@ -2413,12 +2588,20 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
               if (initStep) initStep.status = 'done';
               const thoughtStep = pipelineSteps.get('thought');
               if (thoughtStep) thoughtStep.status = 'done';
-              pipelineSteps.set('writing', { label: '✍️ 組織撰寫', status: 'running' });
+              const toolsStep = pipelineSteps.get('tools');
+              if (toolsStep) toolsStep.status = 'done';
+              pipelineSteps.set('writing', { label: '✍️ 整理回覆', status: 'running' });
               renderPipeline();
 
-              statusTextElem.textContent = '✍️ 回覆組織撰寫中...';
+              markProgressDone('phase:analysis');
+              upsertProgress('phase:writing', {
+                icon: '✍️',
+                text: '整理並輸出回覆',
+                state: 'running'
+              });
+              statusTextElem.textContent = '✍️ 正在整理並輸出回覆…';
               accumulatedText = data.accumulated;
-              updateLiveTicker(accumulatedText, '✍️');
+              if (liveTickerTextElem) liveTickerTextElem.textContent = '✍️ 正在整理並輸出回覆…';
 
               if (!renderPending) {
                 renderPending = true;
