@@ -380,16 +380,11 @@ function initAppAndListeners() {
     });
 
     const conversationWorkspaceMenuBtn = document.getElementById('conversation-workspace-menu-btn');
-    const conversationRoleMenuBtn = document.getElementById('conversation-role-menu-btn');
     const conversationContextMenuBtn = document.getElementById('conversation-context-menu-btn');
 
     if (conversationWorkspaceMenuBtn) conversationWorkspaceMenuBtn.addEventListener('click', () => {
       setToolsMenuOpen(false);
       document.getElementById('workspace-selector-btn')?.click();
-    });
-    if (conversationRoleMenuBtn) conversationRoleMenuBtn.addEventListener('click', () => {
-      setToolsMenuOpen(false);
-      document.getElementById('role-selector-btn')?.click();
     });
     if (conversationContextMenuBtn) conversationContextMenuBtn.addEventListener('click', () => {
       setToolsMenuOpen(false);
