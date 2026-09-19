@@ -440,3 +440,59 @@ body.live-active::after {
 #network-dot {
   box-shadow: 0 0 8px rgba(52, 211, 153, 0.5) !important;
 }
+
+
+/* === Performance polish: 2026-09 === */
+/* Keep the premium look while avoiding persistent full-screen compositor work. */
+header,
+footer {
+  backdrop-filter: blur(14px) saturate(140%) !important;
+  -webkit-backdrop-filter: blur(14px) saturate(140%) !important;
+}
+
+header::after,
+footer::after {
+  opacity: 0.12 !important;
+}
+
+/* Let semantic send/stop/queue state colors win over the decorative layer. */
+#send-btn {
+  animation: none !important;
+  background-size: 180% 180% !important;
+}
+#send-btn.bg-indigo-600 {
+  background: linear-gradient(135deg, #4f46e5, #6366f1) !important;
+}
+#send-btn.bg-rose-600 {
+  background: linear-gradient(135deg, #e11d48, #be123c) !important;
+}
+#send-btn.bg-amber-600 {
+  background: linear-gradient(135deg, #d97706, #b45309) !important;
+}
+#send-btn.bg-teal-600 {
+  background: linear-gradient(135deg, #0d9488, #0f766e) !important;
+}
+body.ai-streaming #send-btn {
+  animation: send-shimmer 2.4s ease infinite !important;
+}
+
+/* Completed agent activity should feel settled, not continue glowing. */
+.agent-activity-card.is-complete {
+  animation: none !important;
+  box-shadow: none !important;
+}
+
+@media (max-width: 640px) {
+  .aurora-glow-box,
+  .aurora-glow-box-teal,
+  .thinking-active-glow {
+    animation: none !important;
+  }
+
+  header,
+  footer,
+  .tools-sheet-mobile-header {
+    backdrop-filter: blur(12px) saturate(130%) !important;
+    -webkit-backdrop-filter: blur(12px) saturate(130%) !important;
+  }
+}
