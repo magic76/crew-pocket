@@ -48,21 +48,18 @@ if (typeof marked !== 'undefined') {
   });
 }
 
-// 2. Service Worker Registration (Offline & Push Notifications)
+// 2. Retire legacy PWA state. Crew Pocket is APK-first now.
 if ('serviceWorker' in navigator) {
-  // Activation must not navigate an open tab: users may already be typing,
-  // streaming, or in a Live call. The next navigation loads the updated shell.
-  navigator.serviceWorker.register('/sw.js?v=20260829-pwa2', { updateViaCache: 'none' }).then(reg => {
-    swRegistration = reg;
-    reg.update().catch(() => {});
-    // Pick up a deployment even when this PWA has remained open for hours.
-    setInterval(() => reg.update().catch(() => {}), 30 * 60 * 1000);
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible') reg.update().catch(() => {});
-    });
-  }).catch(err => {
-    console.warn('SW registration failed:', err);
-  });
+  navigator.serviceWorker.getRegistrations()
+    .then(registrations => Promise.all(registrations.map(registration => registration.unregister())))
+    .catch(() => {});
+}
+if ('caches' in window) {
+  caches.keys()
+    .then(names => Promise.all(
+      names.filter(name => name.startsWith('crew-pocket-')).map(name => caches.delete(name))
+    ))
+    .catch(() => {});
 }
 
 // 3. Real-time Network Connectivity Monitor
