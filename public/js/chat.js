@@ -392,6 +392,72 @@ function buildToolItemsHtml(tools) {
   }).join('');
 }
 
+
+function buildExecutionStepRowsHtml(tools, hasThinking = false) {
+  const groupedTools = coalesceToolEvents(tools);
+  const rows = [];
+
+  rows.push(`
+    <div class="execution-step-row">
+      <span class="execution-step-state text-emerald-400">✓</span>
+      <span class="execution-step-icon">🧠</span>
+      <span class="execution-step-text">分析需求與執行方案</span>
+    </div>
+  `);
+
+  groupedTools.forEach(tool => {
+    const detail = getToolDetails(tool);
+    const attempts = Math.max(1, Number(tool.attempts) || 1);
+    const polls = Math.max(0, Number(tool.poll_count) || 0);
+    const meta = [];
+    if (attempts > 1) meta.push(`×${attempts}`);
+    if (polls > 0) meta.push(`等待 ${polls}`);
+    if (detail.durationStr) meta.push(detail.durationStr);
+    rows.push(`
+      <div class="execution-step-row">
+        <span class="execution-step-state text-emerald-400">✓</span>
+        <span class="execution-step-icon">${escapeHtml(detail.icon || '⚙️')}</span>
+        <span class="execution-step-text">${escapeHtml(detail.desc || detail.label || '執行操作')}</span>
+        ${meta.length ? `<span class="execution-step-meta">${escapeHtml(meta.join(' · '))}</span>` : ''}
+      </div>
+    `);
+  });
+
+  rows.push(`
+    <div class="execution-step-row">
+      <span class="execution-step-state text-emerald-400">✓</span>
+      <span class="execution-step-icon">✍️</span>
+      <span class="execution-step-text">整理並輸出回覆</span>
+    </div>
+  `);
+
+  return rows.join('');
+}
+
+function buildExecutionDetailsHtml(tools, thinking = '', { lazy = false } = {}) {
+  const groupedTools = coalesceToolEvents(tools);
+  const hasExecution = groupedTools.length > 0 || Boolean(String(thinking || '').trim());
+  if (!hasExecution) return '';
+
+  const stepCount = groupedTools.length + 2;
+  const bodyHtml = lazy ? '' : buildExecutionStepRowsHtml(groupedTools, Boolean(String(thinking || '').trim()));
+  return `
+    <details class="agent-execution-details history-execution-details ${lazy ? 'lazy-execution' : ''}" data-step-count="${stepCount}">
+      <summary class="execution-summary">
+        <span class="execution-summary-main">
+          <span class="execution-status-icon text-emerald-400">✓</span>
+          <span>完成 · ${stepCount} steps</span>
+        </span>
+        <span class="execution-summary-side">
+          <span class="text-slate-500">執行詳情</span>
+          <span class="execution-chevron">›</span>
+        </span>
+      </summary>
+      <div class="execution-detail-body">${bodyHtml}</div>
+    </details>
+  `;
+}
+
 // Render tools accordion HTML with rich cards
 function buildToolsAccordionHtml(tools) {
   const groupedTools = coalesceToolEvents(tools);
@@ -780,9 +846,8 @@ function appendMessage(role, content, timestamp, tools = [], thinking = '', isBt
 
   const isUserBtw = isUser && (isBtw || /^\s*\/btw\b/i.test(content || ''));
 
-  const thinkingHtml = (!isUser && thinking) ? buildThinkingBlockHtml(thinking) : '';
-  const toolsHtml = (!isUser && tools && tools.length > 0)
-    ? (renderOptions.lazyTools ? buildLazyToolsAccordionHtml(tools) : buildToolsAccordionHtml(tools))
+  const executionHtml = !isUser
+    ? buildExecutionDetailsHtml(tools, thinking, { lazy: Boolean(renderOptions.lazyTools) })
     : '';
 
   let bubbleClass = '';
@@ -793,7 +858,7 @@ function appendMessage(role, content, timestamp, tools = [], thinking = '', isBt
   } else {
     bubbleClass = isBtw
       ? 'btw-card bg-gradient-to-b from-slate-900 via-slate-900 to-teal-950/40 border border-teal-500/50 text-slate-200 rounded-2xl p-3 sm:p-3.5 text-xs sm:text-sm shadow-lg shadow-teal-950/30 w-full min-w-0 prose'
-      : 'bg-slate-900 border border-slate-800 text-slate-200 rounded-2xl p-3 sm:p-3.5 text-xs sm:text-sm shadow-md w-full min-w-0 prose';
+      : 'assistant-article bg-slate-900 text-slate-200 w-full min-w-0 prose';
   }
 
   let bodyHtml = '';
@@ -841,23 +906,22 @@ function appendMessage(role, content, timestamp, tools = [], thinking = '', isBt
       : formatMessageContent(content);
 
     bodyHtml = `
-      <div class="thinking-container">${thinkingHtml}</div>
-      <div class="tools-container">${toolsHtml}</div>
-      <div class="btw-content msg-content leading-relaxed min-w-0">${formattedHtml}</div>
+      ${executionHtml}
+      <div class="btw-content msg-content min-w-0">${formattedHtml}</div>
     `;
   }
 
   msgDiv.innerHTML = `<div class="${bubbleClass}">${bodyHtml}</div>`;
   targetContainer.appendChild(msgDiv);
 
-  if (renderOptions.lazyTools && tools && tools.length > 0) {
-    const lazyTools = msgDiv.querySelector('.lazy-tools');
-    if (lazyTools) {
-      lazyTools.addEventListener('toggle', () => {
-        if (!lazyTools.open || lazyTools.dataset.rendered) return;
-        const body = lazyTools.querySelector('.lazy-tools-body');
-        if (body) body.innerHTML = buildToolItemsHtml(coalesceToolEvents(tools));
-        lazyTools.dataset.rendered = 'true';
+  if (renderOptions.lazyTools && !isUser && (tools?.length || String(thinking || '').trim())) {
+    const lazyExecution = msgDiv.querySelector('.lazy-execution');
+    if (lazyExecution) {
+      lazyExecution.addEventListener('toggle', () => {
+        if (!lazyExecution.open || lazyExecution.dataset.rendered) return;
+        const body = lazyExecution.querySelector('.execution-detail-body');
+        if (body) body.innerHTML = buildExecutionStepRowsHtml(tools, Boolean(String(thinking || '').trim()));
+        lazyExecution.dataset.rendered = 'true';
       });
     }
   }
@@ -2169,7 +2233,7 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
 
   const bubbleClass = isBtwQuery
     ? 'btw-card bg-gradient-to-b from-slate-900 via-slate-900 to-teal-950/40 border border-teal-500/50 text-slate-200 rounded-2xl p-3 sm:p-3.5 text-xs sm:text-sm shadow-lg shadow-teal-950/30 w-full min-w-0 prose'
-    : 'bg-slate-900 border border-slate-800 text-slate-200 rounded-2xl p-3 sm:p-3.5 text-xs sm:text-sm shadow-md w-full min-w-0 prose';
+    : 'assistant-article bg-slate-900 text-slate-200 w-full min-w-0 prose';
 
   const shimmerClass = isBtwQuery ? 'shimmer-bar-teal' : 'shimmer-bar';
   const statusBorderClass = isBtwQuery ? 'border-teal-500/40 from-slate-900 to-teal-950/40' : 'border-indigo-500/30 from-slate-900 to-indigo-950/40';
@@ -2179,27 +2243,23 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
   assistantMsgDiv.innerHTML = `
     <div class="${bubbleClass}">
       
-      <!-- Compact Agent Activity Card -->
-      <div class="live-status agent-activity-card mb-2 select-none">
-        <div class="py-1.5 flex flex-col gap-1.5">
-          <div class="flex items-center justify-between gap-2">
-            <div class="flex items-center gap-1.5 min-w-0">
-              <span class="activity-dot inline-block w-2 h-2 rounded-full ${isBtwQuery ? 'bg-teal-400' : 'bg-indigo-400'} animate-pulse shrink-0"></span>
-              <span class="text-[9px] px-1.5 py-0.5 rounded border font-mono font-semibold ${statusBadgeClass} shrink-0">${escapeHtml(modelLabel)}</span>
-              <span class="status-text truncate font-medium text-[11px] text-slate-200">${statusInitText}</span>
-            </div>
-            <div class="flex items-center gap-1.5 shrink-0">
-              <span class="live-timer font-bold text-[10px] text-slate-300 font-mono">0.0s</span>
-              <button type="button" class="activity-toggle-btn hidden min-h-7 px-2 rounded-lg border border-slate-700/80 bg-slate-900/80 text-[10px] text-slate-400 active:scale-95" aria-expanded="false">步驟</button>
-            </div>
-          </div>
-          <div class="live-progress-list hidden border-t border-slate-800/50 pt-1.5 space-y-1"></div>
+      <details class="live-status agent-execution-details live-execution-details select-none">
+        <summary class="execution-summary">
+          <span class="execution-summary-main min-w-0">
+            <span class="activity-dot inline-block w-2 h-2 rounded-full ${isBtwQuery ? 'bg-teal-400' : 'bg-indigo-400'} animate-pulse shrink-0"></span>
+            <span class="status-text truncate">${statusInitText}</span>
+          </span>
+          <span class="execution-summary-side">
+            <span class="live-timer">0.0s</span>
+            <span class="execution-chevron">›</span>
+          </span>
+        </summary>
+        <div class="execution-detail-body">
+          <div class="live-progress-list"></div>
         </div>
-      </div>
+      </details>
 
-      <div class="thinking-container"></div>
-      <div class="tools-container"></div>
-      <div class="btw-content msg-content leading-relaxed min-w-0"><span class="inline-block w-2 h-4 ${isBtwQuery ? 'bg-teal-400' : 'bg-indigo-400'} animate-pulse"></span></div>
+      <div class="btw-content msg-content min-w-0"><span class="inline-block w-2 h-4 ${isBtwQuery ? 'bg-teal-400' : 'bg-indigo-400'} animate-pulse"></span></div>
     </div>
   `;
   messagesContainer.appendChild(assistantMsgDiv);
@@ -2207,39 +2267,9 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
   const liveStatusElem = assistantMsgDiv.querySelector('.live-status');
   const statusTextElem = assistantMsgDiv.querySelector('.status-text');
   const liveTimerElem = assistantMsgDiv.querySelector('.live-timer');
-  const liveTokensElem = assistantMsgDiv.querySelector('.live-tokens');
-  const liveSpeedElem = assistantMsgDiv.querySelector('.live-speed');
-  const livePipelineElem = assistantMsgDiv.querySelector('.live-pipeline');
-  const liveTickerTextElem = assistantMsgDiv.querySelector('.live-ticker-text');
   const liveProgressListElem = assistantMsgDiv.querySelector('.live-progress-list');
-  const activityToggleBtn = assistantMsgDiv.querySelector('.activity-toggle-btn');
-  const thinkingContainerElem = assistantMsgDiv.querySelector('.thinking-container');
-  const toolsContainerElem = assistantMsgDiv.querySelector('.tools-container');
   const isStreamVisible = () => assistantMsgDiv.isConnected && currentProvider === streamProvider
     && (!streamConversationId ? currentConversationId === null : currentConversationId === streamConversationId);
-
-  let toolRenderTimer = null;
-  let toolRenderPending = false;
-  const renderLiveTools = () => {
-    toolRenderPending = false;
-    toolRenderTimer = null;
-    toolsContainerElem.innerHTML = buildToolsAccordionHtml(liveTools);
-    if (userScrolledUp) {
-      const scrollBadge = document.getElementById('scroll-bottom-badge');
-      if (scrollBadge) scrollBadge.classList.remove('hidden');
-    }
-    scrollToBottom();
-  };
-  const queueLiveToolsRender = (immediate = false) => {
-    if (immediate) {
-      if (toolRenderTimer) clearTimeout(toolRenderTimer);
-      renderLiveTools();
-      return;
-    }
-    if (toolRenderPending) return;
-    toolRenderPending = true;
-    toolRenderTimer = setTimeout(renderLiveTools, 120);
-  };
 
   let turnFinalized = false;
   function finalizeTurn(doneData = null) {
@@ -2254,7 +2284,6 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
     renderPipeline();
 
     const activityElapsedSec = ((performance.now() - startTs) / 1000).toFixed(1);
-    progressExpanded = false;
     renderProgressTimeline();
     liveStatusElem.classList.add('is-complete');
     const activityDot = liveStatusElem.querySelector('.activity-dot');
@@ -2262,7 +2291,8 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
     if (statusTextElem) {
       statusTextElem.textContent = doneData?.error
         ? '⚠️ 執行已停止'
-        : `✓ 完成 · ${progressOrder.length} 個步驟 · ${activityElapsedSec}s`;
+        : `✓ 完成 · ${progressOrder.length} steps`;
+      if (liveTimerElem) liveTimerElem.textContent = `${activityElapsedSec}s`;
     }
 
     const targetDoneConvId = doneData?.conversation_id || streamConversationId;
@@ -2285,11 +2315,6 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
     } else {
       contentElem.innerHTML = formatMessageContent(accumulatedText);
     }
-    queueLiveToolsRender(true);
-    if (liveThinking) {
-      thinkingContainerElem.innerHTML = buildThinkingBlockHtml(liveThinking);
-    }
-
     // 🧠 Refresh Context Usage Stats
     if (targetDoneConvId) {
       fetch(`/api/history?id=${targetDoneConvId}&provider=${encodeURIComponent(streamProvider)}`).then(r => r.json()).then(hData => {
@@ -2344,65 +2369,32 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
 
   scrollToBottom();
 
-  function updateLiveTicker(rawText, prefix = '') {
-    if (!liveTickerTextElem || !rawText) return;
-    const lines = rawText.trim().split('\n').filter(l => l.trim().length > 0);
-    if (lines.length === 0) return;
-    let latest = lines[lines.length - 1].trim();
-    latest = latest.replace(/^[#*`\->:\s]+/, '').trim();
-    if (latest) {
-      liveTickerTextElem.textContent = prefix ? `${prefix} ${latest}` : latest;
-    }
-  }
-
   // Pipeline State Tracker
   const pipelineSteps = new Map();
   pipelineSteps.set('init', { label: '🧠 分析需求', status: 'running' });
 
   const progressEntries = new Map();
   const progressOrder = [];
-  const MAX_VISIBLE_PROGRESS = 3;
-  let progressExpanded = false;
 
   function renderProgressTimeline() {
     if (!liveProgressListElem) return;
-    const allEntries = progressOrder
+    const entries = progressOrder
       .map(key => progressEntries.get(key))
       .filter(Boolean);
-    const visible = progressExpanded ? allEntries : allEntries.slice(-MAX_VISIBLE_PROGRESS);
 
-    liveProgressListElem.classList.toggle('hidden', visible.length === 0 || (turnFinalized && !progressExpanded));
-    liveProgressListElem.innerHTML = visible.map(entry => {
+    liveProgressListElem.innerHTML = entries.map(entry => {
       const stateIcon = entry.state === 'done'
-        ? '<span class="text-emerald-400 font-bold shrink-0">✓</span>'
+        ? '<span class="execution-step-state text-emerald-400">✓</span>'
         : entry.state === 'failed'
-        ? '<span class="text-rose-400 font-bold shrink-0">!</span>'
-        : '<span class="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse shrink-0"></span>';
-      const textClass = entry.state === 'done'
-        ? 'text-slate-400'
-        : entry.state === 'failed'
-        ? 'text-rose-300'
-        : 'text-slate-200';
-      return `<div class="flex items-center gap-1.5 text-[10px] font-mono min-w-0">
+        ? '<span class="execution-step-state text-rose-400">!</span>'
+        : '<span class="execution-step-running"></span>';
+      const textClass = entry.state === 'failed' ? 'text-rose-300' : '';
+      return `<div class="execution-step-row ${textClass}">
         ${stateIcon}
-        <span class="shrink-0">${escapeHtml(entry.icon || '⚙️')}</span>
-        <span class="truncate ${textClass}">${escapeHtml(entry.text)}</span>
+        <span class="execution-step-icon">${escapeHtml(entry.icon || '⚙️')}</span>
+        <span class="execution-step-text">${escapeHtml(entry.text)}</span>
       </div>`;
     }).join('');
-
-    if (activityToggleBtn) {
-      const hasMore = allEntries.length > MAX_VISIBLE_PROGRESS;
-      activityToggleBtn.classList.toggle('hidden', !hasMore && !turnFinalized);
-      activityToggleBtn.textContent = progressExpanded ? '收合' : (turnFinalized ? '步驟' : '展開');
-      activityToggleBtn.setAttribute('aria-expanded', String(progressExpanded));
-    }
-  }
-
-  if (activityToggleBtn) {
-    activityToggleBtn.addEventListener('click', () => {
-      progressExpanded = !progressExpanded;
-      renderProgressTimeline();
-    });
   }
 
   function upsertProgress(key, entry) {
@@ -2420,9 +2412,10 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
 
   upsertProgress('phase:analysis', {
     icon: '🧠',
-    text: '分析需求與下一步',
+    text: '分析需求與執行方案',
     state: 'running'
   });
+
   function renderPipeline() {
     if (!livePipelineElem) return;
     const html = Array.from(pipelineSteps.values()).map(step => {
@@ -2446,20 +2439,6 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
   const liveTimerInterval = setInterval(() => {
     const elapsedSec = (performance.now() - startTs) / 1000;
     if (liveTimerElem) liveTimerElem.textContent = `${elapsedSec.toFixed(1)}s`;
-    if (accumulatedText.length > 0) {
-      const estTokens = Math.round(accumulatedText.length / 2);
-      if (liveTokensElem) {
-        liveTokensElem.textContent = `🪙 ${estTokens} tok`;
-        liveTokensElem.classList.remove('hidden');
-      }
-      if (liveSpeedElem) {
-        const speed = Math.round(estTokens / Math.max(0.2, elapsedSec));
-        if (speed > 0) {
-          liveSpeedElem.textContent = `⚡ ${speed} t/s`;
-          liveSpeedElem.classList.remove('hidden');
-        }
-      }
-    }
   }, 100);
 
   let accumulatedText = '';
@@ -2521,9 +2500,7 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
               renderPipeline();
 
               liveThinking += (data.delta || data.thinking || data.fullThinking || '');
-              thinkingContainerElem.innerHTML = buildThinkingBlockHtml(liveThinking, true);
               statusTextElem.textContent = '🧠 正在分析需求與下一步…';
-              if (liveTickerTextElem) liveTickerTextElem.textContent = '🧠 正在分析可行方案與執行步驟…';
               upsertProgress('phase:analysis', {
                 icon: '🧠',
                 text: '分析需求與可行方案',
@@ -2570,12 +2547,6 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
               statusTextElem.textContent = progressState === 'running'
                 ? `${progress.icon} ${activePrefix}${progress.text}…`
                 : `${progress.icon} ${activePrefix}${progress.text}`;
-              if (liveTickerTextElem) {
-                liveTickerTextElem.textContent = progressState === 'running'
-                  ? `${progress.icon} 正在${progress.text}…`
-                  : `${progress.icon} ${activePrefix}${progress.text}`;
-              }
-              queueLiveToolsRender();
             } else if (currentEvent === 'chunk' && data.accumulated) {
               const initStep = pipelineSteps.get('init');
               if (initStep) initStep.status = 'done';
@@ -2594,8 +2565,6 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
               });
               statusTextElem.textContent = '✍️ 正在整理並輸出回覆…';
               accumulatedText = data.accumulated;
-              if (liveTickerTextElem) liveTickerTextElem.textContent = '✍️ 正在整理並輸出回覆…';
-
               if (!renderPending) {
                 renderPending = true;
                 requestAnimationFrame(() => {
@@ -2609,7 +2578,6 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
                 });
               }
 
-              if (liveThinking) thinkingContainerElem.innerHTML = buildThinkingBlockHtml(liveThinking, false);
             } else if (currentEvent === 'done') {
               finalizeTurn(data);
             }
@@ -2707,8 +2675,6 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
     }
   } finally {
     clearInterval(liveTimerInterval);
-    queueLiveToolsRender(true);
-    liveStatusElem.style.display = 'none';
     if (currentAbortController === streamAbortController) {
       currentAbortController = null;
     }
