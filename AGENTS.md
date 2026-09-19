@@ -1,26 +1,27 @@
 # Crew Pocket Web Workspace
 
-Crew Pocket is the mobile-first PWA and local Node.js service in this repository. It runs on Android Termux and supports Antigravity (`agy`) and OpenAI Codex.
+Crew Pocket is an Android APK shell backed by a local Node.js runtime in Termux. It supports Antigravity (`agy`) and OpenAI Codex.
 
 ## Scope and Architecture
 
 - `server.js` owns HTTP/SSE routes, provider dispatch, and persistence entry points.
 - `lib/` contains providers, resident sessions, conversation settings, history, and storage helpers.
-- `public/index.html` is the shell. `public/js/` owns client UI, chat/history, Live voice, tools, and PWA behavior.
-- `public/manifest.json`, `public/sw.js`, and `scripts/prepare-pwa-cache.js` must stay in sync for deployable PWA changes.
+- `public/index.html` is the WebView shell served from localhost. `public/js/` owns client UI, chat/history, Live voice, and tools.
+- The production UI is APK-first and does not use a PWA manifest or Service Worker cache.
 
 ## Required Behavior
 
 - Preserve conversation histories, `transcript.jsonl`, `transcript_full.jsonl`, compact snapshots, and user settings. Never regenerate or truncate history as a side effect of a UI change.
-- A conversation's provider, model, workspace, and role are scoped to that conversation. Do not let a previous conversation's state leak into the next one.
+- A conversation's provider, model, and workspace are scoped to that conversation. Do not let a previous conversation's state leak into the next one.
 - Live voice must clean up WebSocket, media tracks, audio contexts, timers, and UI state on every termination path. Do not interrupt an active Live call or text stream for unrelated work.
 - A workspace switch changes only the target conversation's next AI session. Validate paths under Termux Home and close only the affected resident session when needed.
 
-## PWA and UI Delivery
+## APK and UI Delivery
 
-- After changing `public/` JavaScript, CSS, HTML, manifest, icons, or service-worker inputs, run `node scripts/prepare-pwa-cache.js` then `node scripts/prepare-pwa-cache.js --check`.
-- Do not hand-edit generated cache revisions in `public/sw.js`; update `scripts/prepare-pwa-cache.js` when the cache asset set changes.
-- For app icons, keep 1024, 512, and 192 variants aligned with the manifest, favicon, Apple touch icon, splash image, and service-worker cache list.
+- The APK loads the checked-out UI from `http://127.0.0.1:8000`; localhost static assets are served with `Cache-Control: no-store`.
+- Changes under `public/`, `server.js`, or `lib/` do not require rebuilding or reinstalling the APK. Pull the latest code and restart Crew Runtime.
+- Rebuild/reinstall the APK only when `android-wrapper/` or Android-native behavior changes.
+- Do not reintroduce a PWA manifest, Service Worker cache, or generated cache revision unless the product direction explicitly changes.
 - Keep mobile UI touch-first, compact, and readable. Avoid visual redesign outside the requested surface.
 
 ## Verification and Operations
