@@ -323,7 +323,6 @@ footer {
 
 @media (max-width: 640px) {
   /* Keep the first screen focused on conversation + model, not configuration. */
-  #role-selector-btn,
   #header-rename-btn {
     display: none !important;
   }
