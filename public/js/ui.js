@@ -141,8 +141,6 @@ const workspaceOptions = document.getElementById('workspace-options');
 const closeWorkspaceModalBtn = document.getElementById('close-workspace-modal-btn');
 const workspaceIcon = document.getElementById('workspace-icon');
 const workspaceLabel = document.getElementById('workspace-label');
-const mobileWorkspaceQuickBtn = document.getElementById('mobile-workspace-quick-btn');
-const mobileWorkspaceQuickLabel = document.getElementById('mobile-workspace-quick-label');
 const roleSelectorBtn = document.getElementById('role-selector-btn');
 const roleModal = document.getElementById('role-modal');
 const roleOptions = document.getElementById('role-options');
@@ -557,13 +555,17 @@ function workspaceMeta(workspace = currentWorkspace) {
   };
 }
 
+function compactWorkspaceLabel(meta) {
+  const raw = String(meta?.label || '').trim();
+  if (!raw || raw === 'Home') return 'Home';
+  return raw.split('/').filter(Boolean).pop() || raw;
+}
+
 function updateWorkspaceUI() {
   const meta = workspaceMeta();
   if (workspaceIcon) workspaceIcon.textContent = meta.icon;
-  if (workspaceLabel) workspaceLabel.textContent = meta.label;
+  if (workspaceLabel) workspaceLabel.textContent = compactWorkspaceLabel(meta);
   if (workspaceSelectorBtn) workspaceSelectorBtn.title = `工作區：${meta.path}`;
-  if (mobileWorkspaceQuickLabel) mobileWorkspaceQuickLabel.textContent = meta.label;
-  if (mobileWorkspaceQuickBtn) mobileWorkspaceQuickBtn.title = `工作區：${meta.path} · 點擊切換`;
 }
 
 function roleMeta(role = currentRole) {
@@ -806,6 +808,13 @@ window.selectProvider = async function(providerId) {
 };
 
 // Model & Thinking Effort Handlers
+function compactModelLabel(label) {
+  return String(label || '')
+    .replace(/\s+(?:Flash|Preview|Latest)$/i, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function updateModelUI() {
   if (!currentModel) {
     if (modelBadgeIcon) modelBadgeIcon.textContent = '⌛';
@@ -815,10 +824,10 @@ function updateModelUI() {
   const found = availableModels.find(m => m.id === currentModel);
   if (found) {
     if (modelBadgeIcon) modelBadgeIcon.textContent = found.icon;
-    if (modelDisplayName) modelDisplayName.textContent = found.name;
+    if (modelDisplayName) modelDisplayName.textContent = compactModelLabel(found.name);
   } else {
     if (modelBadgeIcon) modelBadgeIcon.textContent = '✨';
-    if (modelDisplayName) modelDisplayName.textContent = currentModel.replace('gemini-', 'Gemini ').replace('claude-', 'Claude ');
+    if (modelDisplayName) modelDisplayName.textContent = compactModelLabel(currentModel.replace('gemini-', 'Gemini ').replace('claude-', 'Claude '));
   }
 }
 

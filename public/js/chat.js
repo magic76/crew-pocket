@@ -511,13 +511,19 @@ function updateContextPill(stats) {
   const pill = document.getElementById('context-pill');
   const indicator = document.getElementById('context-indicator');
   const textEl = document.getElementById('context-tokens-text');
-  const mobileIndicator = document.getElementById('mobile-context-quick-dot');
-  const mobileText = document.getElementById('mobile-context-quick-text');
-  const formatted = stats?.active_tokens_formatted
+  const fullFormatted = stats?.active_tokens_formatted
     || (typeof stats?.active_tokens === 'number' ? `${stats.active_tokens} tok` : '0 tok');
+  const activeTokens = Number(stats?.active_tokens);
+  const compactFormatted = Number.isFinite(activeTokens)
+    ? activeTokens >= 1000000
+      ? `${(activeTokens / 1000000).toFixed(1).replace(/\.0$/, '')}M`
+      : activeTokens >= 1000
+        ? `${Math.round(activeTokens / 1000)}K`
+        : `${Math.max(0, Math.round(activeTokens))}`
+    : fullFormatted.replace(/\s*tok\b/i, '').trim() || '0';
 
-  if (textEl) textEl.textContent = formatted;
-  if (mobileText) mobileText.textContent = formatted;
+  if (textEl) textEl.textContent = compactFormatted;
+  if (pill) pill.title = `Context 用量：${fullFormatted} · 點擊查看詳細資訊與記憶提煉`;
 
   const level = stats?.status_level || 'green';
   const dotClass = level === 'red'
@@ -534,11 +540,7 @@ function updateContextPill(stats) {
   if (indicator) {
     indicator.className = `w-1.5 h-1.5 rounded-full ${dotClass} shrink-0${level === 'red' ? ' animate-ping' : ''}`;
   }
-  if (mobileIndicator) {
-    mobileIndicator.className = `h-1.5 w-1.5 rounded-full ${dotClass}${level === 'red' ? ' animate-ping' : ''}`;
-  }
   if (textEl) textEl.className = `font-mono font-semibold ${textClass}`;
-  if (mobileText) mobileText.className = `font-mono font-semibold ${textClass}`;
 }
 
 function showContextModal() {

@@ -89,7 +89,12 @@ class MainActivity : Activity() {
     }
 
     private fun buildUi() {
-        val root = LinearLayout(this).apply {
+        val root = android.widget.FrameLayout(this).apply {
+            // Android 15 enforces edge-to-edge for target SDK 35. Keep the
+            // mandatory status-bar inset outside the web content and black.
+            setBackgroundColor(Color.BLACK)
+        }
+        val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(Color.rgb(7, 11, 24))
         }
@@ -109,7 +114,7 @@ class MainActivity : Activity() {
             setPadding(dp(12), dp(8), dp(12), dp(8))
             setOnClickListener { openAppSettings() }
         }
-        root.addView(
+        content.addView(
             setupText,
             LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
@@ -120,7 +125,7 @@ class MainActivity : Activity() {
         webView = WebView(this).apply {
             setBackgroundColor(Color.rgb(7, 11, 24))
         }
-        root.addView(
+        content.addView(
             webView,
             LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
@@ -128,6 +133,22 @@ class MainActivity : Activity() {
                 1f
             )
         )
+        root.addView(
+            content,
+            android.widget.FrameLayout.LayoutParams(
+                android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
+                android.widget.FrameLayout.LayoutParams.MATCH_PARENT
+            )
+        )
+        root.setOnApplyWindowInsetsListener { _, insets ->
+            val params = content.layoutParams as android.widget.FrameLayout.LayoutParams
+            val topInset = insets.systemWindowInsetTop
+            if (params.topMargin != topInset) {
+                params.topMargin = topInset
+                content.layoutParams = params
+            }
+            insets
+        }
 
         setContentView(root)
     }

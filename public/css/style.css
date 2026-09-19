@@ -323,10 +323,8 @@ footer {
 
 @media (max-width: 640px) {
   /* Keep the first screen focused on conversation + model, not configuration. */
-  #workspace-selector-btn,
   #role-selector-btn,
-  #header-rename-btn,
-  #context-pill {
+  #header-rename-btn {
     display: none !important;
   }
 
@@ -350,11 +348,30 @@ footer {
   }
 
   #model-selector-btn {
-    max-width: min(58vw, 230px) !important;
+    max-width: min(34vw, 132px) !important;
     padding-left: 0 !important;
     padding-right: 0 !important;
-    border-color: transparent !important;
-    background: transparent !important;
+  }
+
+  #model-context-control {
+    min-width: 0;
+    max-width: min(62vw, 226px) !important;
+  }
+
+  #workspace-selector-btn {
+    max-width: min(30vw, 104px) !important;
+  }
+
+  #context-pill {
+    display: flex !important;
+    max-width: min(24vw, 86px) !important;
+    overflow: hidden;
+  }
+
+  #context-tokens-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   #input-helper-row {
@@ -435,32 +452,5 @@ footer {
     animation-duration: 0.001ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
-  }
-}
-
-
-/* === Mobile session quick controls === */
-@media (max-width: 640px) {
-  #mobile-session-bar {
-    display: flex !important;
-    min-height: 36px;
-  }
-
-  #mobile-session-bar button {
-    touch-action: manipulation;
-  }
-
-  #drawer {
-    padding-top: 0 !important;
-  }
-
-  #drawer > div:first-child {
-    padding-top: 0.7rem !important;
-  }
-}
-
-@media (min-width: 641px) {
-  #mobile-session-bar {
-    display: none !important;
   }
 }
