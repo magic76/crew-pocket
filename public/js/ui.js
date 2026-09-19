@@ -141,6 +141,8 @@ const workspaceOptions = document.getElementById('workspace-options');
 const closeWorkspaceModalBtn = document.getElementById('close-workspace-modal-btn');
 const workspaceIcon = document.getElementById('workspace-icon');
 const workspaceLabel = document.getElementById('workspace-label');
+const mobileWorkspaceQuickBtn = document.getElementById('mobile-workspace-quick-btn');
+const mobileWorkspaceQuickLabel = document.getElementById('mobile-workspace-quick-label');
 const roleSelectorBtn = document.getElementById('role-selector-btn');
 const roleModal = document.getElementById('role-modal');
 const roleOptions = document.getElementById('role-options');
@@ -560,6 +562,8 @@ function updateWorkspaceUI() {
   if (workspaceIcon) workspaceIcon.textContent = meta.icon;
   if (workspaceLabel) workspaceLabel.textContent = meta.label;
   if (workspaceSelectorBtn) workspaceSelectorBtn.title = `工作區：${meta.path}`;
+  if (mobileWorkspaceQuickLabel) mobileWorkspaceQuickLabel.textContent = meta.label;
+  if (mobileWorkspaceQuickBtn) mobileWorkspaceQuickBtn.title = `工作區：${meta.path} · 點擊切換`;
 }
 
 function roleMeta(role = currentRole) {
