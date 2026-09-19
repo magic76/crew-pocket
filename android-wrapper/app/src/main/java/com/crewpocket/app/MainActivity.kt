@@ -24,6 +24,7 @@ import android.widget.TextView
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.concurrent.Executors
+import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -42,6 +43,7 @@ class MainActivity : Activity() {
     private lateinit var webView: WebView
     private val poller = Executors.newSingleThreadScheduledExecutor()
     private val pageLoaded = AtomicBoolean(false)
+    private var serverPollingTask: ScheduledFuture<*>? = null
 
     private var pendingWebPermission: PermissionRequest? = null
     private var pendingWebResources: Array<String> = emptyArray()
@@ -55,8 +57,18 @@ class MainActivity : Activity() {
         configureWebView()
         requestNotificationPermissionIfNeeded()
         requestTermuxPermissionIfPossible()
+    }
+
+    override fun onStart() {
+        super.onStart()
         startCrewRuntime()
         startServerPolling()
+    }
+
+    override fun onStop() {
+        stopServerPolling()
+        notifyRuntimeBackground()
+        super.onStop()
     }
 
     override fun onResume() {
@@ -65,6 +77,7 @@ class MainActivity : Activity() {
     }
 
     override fun onDestroy() {
+        stopServerPolling()
         poller.shutdownNow()
         webView.destroy()
         super.onDestroy()
@@ -171,7 +184,7 @@ class MainActivity : Activity() {
 
     private fun startCrewRuntime() {
         val intent = Intent(this, CrewRuntimeService::class.java)
-            .setAction(CrewRuntimeService.ACTION_START)
+            .setAction(CrewRuntimeService.ACTION_APP_FOREGROUND)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             startForegroundService(intent)
         } else {
@@ -180,7 +193,11 @@ class MainActivity : Activity() {
     }
 
     private fun startServerPolling() {
-        poller.scheduleWithFixedDelay(
+        if (serverPollingTask?.isCancelled == false && serverPollingTask?.isDone == false) {
+            return
+        }
+
+        serverPollingTask = poller.scheduleWithFixedDelay(
             {
                 val alive = serverAlive()
                 runOnUiThread {
@@ -198,6 +215,21 @@ class MainActivity : Activity() {
             1500,
             TimeUnit.MILLISECONDS
         )
+    }
+
+    private fun stopServerPolling() {
+        serverPollingTask?.cancel(false)
+        serverPollingTask = null
+    }
+
+    private fun notifyRuntimeBackground() {
+        val intent = Intent(this, CrewRuntimeService::class.java)
+            .setAction(CrewRuntimeService.ACTION_APP_BACKGROUND)
+        try {
+            startService(intent)
+        } catch (_: Exception) {
+            // The service may already have been stopped by the system.
+        }
     }
 
     private fun serverAlive(): Boolean {
