@@ -511,28 +511,34 @@ function updateContextPill(stats) {
   const pill = document.getElementById('context-pill');
   const indicator = document.getElementById('context-indicator');
   const textEl = document.getElementById('context-tokens-text');
-  if (!pill || !textEl) return;
+  const mobileIndicator = document.getElementById('mobile-context-quick-dot');
+  const mobileText = document.getElementById('mobile-context-quick-text');
+  const formatted = stats?.active_tokens_formatted
+    || (typeof stats?.active_tokens === 'number' ? `${stats.active_tokens} tok` : '0 tok');
 
-  if (!stats || typeof stats.active_tokens !== 'number' || stats.active_tokens === 0) {
-    textEl.textContent = stats?.active_tokens_formatted || '0 tok';
-    if (indicator) indicator.className = 'w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0';
-    return;
-  }
+  if (textEl) textEl.textContent = formatted;
+  if (mobileText) mobileText.textContent = formatted;
 
-  textEl.textContent = stats.active_tokens_formatted || `${stats.active_tokens} tok`;
+  const level = stats?.status_level || 'green';
+  const dotClass = level === 'red'
+    ? 'bg-rose-400'
+    : level === 'yellow'
+    ? 'bg-amber-400'
+    : 'bg-emerald-400';
+  const textClass = level === 'red'
+    ? 'text-rose-300'
+    : level === 'yellow'
+    ? 'text-amber-300'
+    : 'text-slate-300';
 
   if (indicator) {
-    if (stats.status_level === 'red') {
-      indicator.className = 'w-1.5 h-1.5 rounded-full bg-rose-400 animate-ping shrink-0';
-      textEl.className = 'font-mono font-semibold text-rose-300';
-    } else if (stats.status_level === 'yellow') {
-      indicator.className = 'w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0';
-      textEl.className = 'font-mono font-semibold text-amber-300';
-    } else {
-      indicator.className = 'w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0';
-      textEl.className = 'font-mono font-semibold text-slate-200';
-    }
+    indicator.className = `w-1.5 h-1.5 rounded-full ${dotClass} shrink-0${level === 'red' ? ' animate-ping' : ''}`;
   }
+  if (mobileIndicator) {
+    mobileIndicator.className = `h-1.5 w-1.5 rounded-full ${dotClass}${level === 'red' ? ' animate-ping' : ''}`;
+  }
+  if (textEl) textEl.className = `font-mono font-semibold ${textClass}`;
+  if (mobileText) mobileText.className = `font-mono font-semibold ${textClass}`;
 }
 
 function showContextModal() {
