@@ -156,7 +156,6 @@ doctor() {
 start_server() {
     [ -f "$TARGET_DIR/server.js" ] || { echo "找不到 Crew Pocket：$TARGET_DIR"; exit 1; }
     cd "$TARGET_DIR"
-    node scripts/prepare-pwa-cache.js
     pkill -f 'node.*server\.js' 2>/dev/null || true
     for i in 1 2 3 4 5; do
         if ! pgrep -f "node.*server\.js" >/dev/null 2>&1; then
@@ -170,8 +169,8 @@ start_server() {
     local server_pid=$!
     sleep 1
     if kill -0 "$server_pid" 2>/dev/null; then
-        echo "✓ Crew Pocket 已啟動：http://127.0.0.1:8000"
-        termux-open-url 'http://127.0.0.1:8000' 2>/dev/null || true
+        echo "✓ Crew Pocket Runtime 已啟動：http://127.0.0.1:8000"
+        echo "  請從 Crew Pocket APK 開啟主介面。"
     else
         echo "啟動失敗，請查看 $HOME/.agy-web.log" >&2
         exit 1
@@ -191,8 +190,7 @@ case "${1:-start}" in
     doctor) doctor ;;
     update)
         git -C "$TARGET_DIR" pull --ff-only origin main
-        node "$TARGET_DIR/scripts/prepare-pwa-cache.js"
-        echo "更新完成；請在需要時執行 crew start 套用新版服務。"
+        echo "更新完成；重新啟動 Crew Pocket Runtime / APK 即可套用新版。"
         ;;
     *)
         echo "用法：crew [start|stop|status|doctor|update]"
