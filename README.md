@@ -180,6 +180,12 @@ http://127.0.0.1:8000
 
 更新 Web UI 後只要 `git pull` 並重新啟動 Crew Runtime；localhost 靜態資產不做長期快取，APK 會讀取目前 checkout 的版本。
 
+### 更新規則
+
+- 修改 `public/`、`server.js`、`lib/`：只需更新 repo + 重啟 Runtime，**不需要重裝 APK**。
+- 修改 `android-wrapper/`、Android 權限、WebView/Native Bridge：才需要重新 build / 安裝 APK。
+- 正式路徑不使用 PWA manifest、Service Worker 或額外 cache revision；舊版 PWA 狀態只由 APK 做一次性清理。
+
 ### 安裝後自我檢查
 
 ```bash
