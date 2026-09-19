@@ -10,10 +10,8 @@ on:
       - "scripts/*.sh"
       - "lib/**/*.js"
       - "server.js"
-      - "public/js/auth.js"
-      - "public/js/chat.js"
-      - "public/js/app.js"
-      - "public/js/ui.js"
+      - "install.sh"
+      - "public/js/*.js"
       - "public/css/*.css"
       - "public/index.html"
       - ".github/workflows/android-wrapper.yml"
@@ -63,10 +61,7 @@ jobs:
           node --check lib/storage.js
           node --check lib/workspaces.js
           node --check server.js
-          node --check public/js/auth.js
-          node --check public/js/chat.js
-          node --check public/js/app.js
-          node --check public/js/ui.js
+          for file in public/js/*.js; do node --check "$file"; done
 
       - name: Build debug APK
         run: gradle -p android-wrapper :app:assembleDebug --stacktrace
