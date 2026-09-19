@@ -1886,6 +1886,7 @@ function clearQueuedBtwMessages() {
 // Toggle Send / Stop button appearance & state
 function setStreamingState(streaming) {
   isStreaming = streaming;
+  document.body.classList.toggle('ai-streaming', Boolean(streaming));
   updateSendButtonMode();
   window.dispatchEvent(new CustomEvent('crew:streaming-state', {
     detail: { streaming: isStreaming }
@@ -2148,43 +2149,20 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
   assistantMsgDiv.innerHTML = `
     <div class="${bubbleClass}">
       
-      <!-- Live Cyberpunk Status Bar with Universal Aurora Glow (All Models) -->
-      <div class="live-status mb-2.5 rounded-2xl bg-gradient-to-b ${statusBorderClass} ${isBtwQuery ? 'aurora-glow-box-teal' : 'aurora-glow-box'} border overflow-hidden shadow-lg select-none">
-        <div class="${shimmerClass} h-[2px] w-full"></div>
+      <!-- Compact Agent Activity Card -->
+      <div class="live-status agent-activity-card mb-2.5 rounded-2xl bg-slate-950/70 ${statusBorderClass} border overflow-hidden select-none">
         <div class="p-2.5 flex flex-col gap-2">
-          <!-- Top Row: Phase + Counters -->
-          <div class="flex items-center justify-between gap-2 flex-wrap">
+          <div class="flex items-center justify-between gap-2">
             <div class="flex items-center gap-1.5 min-w-0">
-              <span class="inline-block w-2 h-2 rounded-full ${isBtwQuery ? 'bg-teal-400' : 'bg-indigo-400'} animate-ping shrink-0"></span>
+              <span class="activity-dot inline-block w-2 h-2 rounded-full ${isBtwQuery ? 'bg-teal-400' : 'bg-indigo-400'} animate-pulse shrink-0"></span>
               <span class="text-[9px] px-1.5 py-0.5 rounded border font-mono font-semibold ${statusBadgeClass} shrink-0">${escapeHtml(modelLabel)}</span>
               <span class="status-text truncate font-medium text-[11px] text-slate-200">${statusInitText}</span>
             </div>
-            <!-- Counters: Tokens + Speed + Timer (Idea 3) -->
-            <div class="flex items-center gap-1.5 shrink-0 text-[10px] font-mono">
-              <span class="live-tokens text-emerald-300 bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-800/60 hidden">🪙 0 tok</span>
-              <span class="live-speed text-indigo-300 bg-indigo-900/40 px-1.5 py-0.5 rounded border border-indigo-700/50 hidden">⚡ 0 t/s</span>
-              <span class="live-timer font-bold text-slate-200 bg-slate-800/90 px-1.5 py-0.5 rounded border border-slate-700">0.0s</span>
+            <div class="flex items-center gap-1.5 shrink-0">
+              <span class="live-timer font-bold text-[10px] text-slate-300 font-mono">0.0s</span>
+              <button type="button" class="activity-toggle-btn hidden min-h-7 px-2 rounded-lg border border-slate-700/80 bg-slate-900/80 text-[10px] text-slate-400 active:scale-95" aria-expanded="false">步驟</button>
             </div>
           </div>
-          
-          <!-- Step-by-Step Pipeline Pills (Idea 4) -->
-          <div class="live-pipeline flex flex-wrap items-center gap-1 text-[10px] font-mono border-t border-slate-800/80 pt-1.5">
-            <span class="pipeline-pill pill-init px-2 py-0.5 rounded-full bg-indigo-950/80 border border-indigo-700/60 text-indigo-300 flex items-center gap-1">
-              <span class="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse"></span>
-              <span>🧠 思考分析</span>
-            </span>
-          </div>
-
-          <!-- ⚡ Cyberpunk Live Terminal Ticker (Realtime Output & Thinking line) -->
-          <div class="live-ticker-bar bg-black/60 border border-slate-800/80 rounded-xl px-2.5 py-1.5 flex items-center gap-1.5 text-[11px] font-mono text-slate-300">
-            <span class="text-indigo-400 font-bold shrink-0">&gt;</span>
-            <span class="live-ticker-text truncate flex-1 text-slate-200">
-              準備分析任務...
-            </span>
-            <span class="w-1.5 h-3.5 bg-indigo-400 animate-pulse shrink-0"></span>
-          </div>
-
-          <!-- Passive progress timeline: rendered from existing SSE events only. -->
           <div class="live-progress-list hidden border-t border-slate-800/70 pt-1.5 space-y-1"></div>
         </div>
       </div>
@@ -2204,6 +2182,7 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
   const livePipelineElem = assistantMsgDiv.querySelector('.live-pipeline');
   const liveTickerTextElem = assistantMsgDiv.querySelector('.live-ticker-text');
   const liveProgressListElem = assistantMsgDiv.querySelector('.live-progress-list');
+  const activityToggleBtn = assistantMsgDiv.querySelector('.activity-toggle-btn');
   const thinkingContainerElem = assistantMsgDiv.querySelector('.thinking-container');
   const toolsContainerElem = assistantMsgDiv.querySelector('.tools-container');
   const isStreamVisible = () => assistantMsgDiv.isConnected && currentProvider === streamProvider
@@ -2243,7 +2222,18 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
     const writingStep = pipelineSteps.get('writing');
     if (writingStep) writingStep.status = 'done';
     renderPipeline();
-    liveStatusElem.style.display = 'none';
+
+    const activityElapsedSec = ((performance.now() - startTs) / 1000).toFixed(1);
+    progressExpanded = false;
+    renderProgressTimeline();
+    liveStatusElem.classList.add('is-complete');
+    const activityDot = liveStatusElem.querySelector('.activity-dot');
+    if (activityDot) activityDot.classList.remove('animate-pulse');
+    if (statusTextElem) {
+      statusTextElem.textContent = doneData?.error
+        ? '⚠️ 執行已停止'
+        : `✓ 完成 · ${progressOrder.length} 個步驟 · ${activityElapsedSec}s`;
+    }
 
     const targetDoneConvId = doneData?.conversation_id || streamConversationId;
     if (targetDoneConvId && isStreamVisible()) {
@@ -2278,7 +2268,7 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
       }).catch(() => {});
     }
 
-    const totalSec = ((performance.now() - startTs) / 1000).toFixed(1);
+    const totalSec = activityElapsedSec;
     const estTokens = Math.round(accumulatedText.length / 2);
     const avgSpeed = Math.round(estTokens / Math.max(0.5, totalSec));
 
@@ -2382,14 +2372,15 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
 
   const progressEntries = new Map();
   const progressOrder = [];
-  const MAX_VISIBLE_PROGRESS = 5;
+  const MAX_VISIBLE_PROGRESS = 3;
+  let progressExpanded = false;
 
   function renderProgressTimeline() {
     if (!liveProgressListElem) return;
-    const visible = progressOrder
-      .slice(-MAX_VISIBLE_PROGRESS)
+    const allEntries = progressOrder
       .map(key => progressEntries.get(key))
       .filter(Boolean);
+    const visible = progressExpanded ? allEntries : allEntries.slice(-MAX_VISIBLE_PROGRESS);
 
     liveProgressListElem.classList.toggle('hidden', visible.length === 0);
     liveProgressListElem.innerHTML = visible.map(entry => {
@@ -2397,7 +2388,7 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
         ? '<span class="text-emerald-400 font-bold shrink-0">✓</span>'
         : entry.state === 'failed'
         ? '<span class="text-rose-400 font-bold shrink-0">!</span>'
-        : '<span class="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-ping shrink-0"></span>';
+        : '<span class="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse shrink-0"></span>';
       const textClass = entry.state === 'done'
         ? 'text-slate-400'
         : entry.state === 'failed'
@@ -2409,6 +2400,20 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
         <span class="truncate ${textClass}">${escapeHtml(entry.text)}</span>
       </div>`;
     }).join('');
+
+    if (activityToggleBtn) {
+      const hasMore = allEntries.length > MAX_VISIBLE_PROGRESS;
+      activityToggleBtn.classList.toggle('hidden', !hasMore && !turnFinalized);
+      activityToggleBtn.textContent = progressExpanded ? '收合' : (turnFinalized ? '步驟' : '展開');
+      activityToggleBtn.setAttribute('aria-expanded', String(progressExpanded));
+    }
+  }
+
+  if (activityToggleBtn) {
+    activityToggleBtn.addEventListener('click', () => {
+      progressExpanded = !progressExpanded;
+      renderProgressTimeline();
+    });
   }
 
   function upsertProgress(key, entry) {
@@ -2429,7 +2434,6 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
     text: '分析需求與下一步',
     state: 'running'
   });
-
   function renderPipeline() {
     if (!livePipelineElem) return;
     const html = Array.from(pipelineSteps.values()).map(step => {
