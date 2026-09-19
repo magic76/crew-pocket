@@ -454,3 +454,85 @@ footer {
     transition-duration: 0.001ms !important;
   }
 }
+
+
+/* === Mobile conversation polish: 2026-09 === */
+.agent-activity-card,
+.agent-activity-card.is-complete {
+  background: transparent !important;
+  border: 0 !important;
+  border-bottom: 1px solid rgba(51, 65, 85, 0.58) !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+.agent-activity-card.is-complete {
+  opacity: 0.9;
+}
+
+#conversation-search-input::-webkit-search-cancel-button {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  #sheet-quick-actions {
+    display: grid !important;
+  }
+
+  /* High-frequency actions live in the first row; hide their duplicate long-form entries. */
+  #tools-menu-dropdown > #new-chat-btn,
+  #tools-menu-dropdown > #files-btn,
+  #tools-menu-dropdown > #auth-menu-btn {
+    display: none !important;
+  }
+
+  #tools-menu-dropdown details.group > #storage-btn,
+  #tools-menu-dropdown details.group > #live-settings-btn,
+  #tools-menu-dropdown details.group > a[href="/assets.html"] {
+    margin-top: 0.25rem;
+  }
+
+  /* Thumb-friendly, fixed composer controls. */
+  #attach-menu-btn,
+  #send-btn {
+    width: 44px !important;
+    min-width: 44px !important;
+    height: 44px !important;
+    min-height: 44px !important;
+    padding: 0 !important;
+  }
+
+  #prompt-input {
+    min-height: 44px !important;
+    line-height: 1.35 !important;
+    padding-top: 0.72rem !important;
+    padding-bottom: 0.72rem !important;
+    border-radius: 0.85rem !important;
+  }
+
+  #standard-input-bar > .flex {
+    align-items: flex-end !important;
+  }
+
+  footer {
+    position: relative;
+  }
+
+  /* Keep short user turns visually lightweight. */
+  #messages-container > div[data-role="user"] > div {
+    min-width: 0 !important;
+  }
+
+  .edit-rewind-btn {
+    margin-top: 0.1rem;
+  }
+
+  /* Conversation history stays dense while workspace headers remain visible. */
+  #conv-list {
+    padding-top: 0.25rem !important;
+  }
+
+  #conv-list .swipe-item-content {
+    min-height: 52px;
+  }
+}
