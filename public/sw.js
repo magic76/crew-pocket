@@ -1,22 +1,22 @@
 // Crew Pocket app-shell cache.  Every deploy changes this revision, so an
 // activated Service Worker can never serve JavaScript from a previous build.
-const BUILD_REVISION = 'auto-0e6b0979d342';
+const BUILD_REVISION = 'auto-cd877084e90b';
 const APP_SHELL_CACHE = `crew-pocket-shell-${BUILD_REVISION}`;
 const RUNTIME_CACHE = `crew-pocket-runtime-${BUILD_REVISION}`;
 const APP_SHELL = [
   "/",
   "/manifest.json?v=085e5d3a565e",
-  "/css/style.css?v=4b97f20f874f",
+  "/css/style.css?v=9c7ae37ca77e",
   "/css/style-premium.css?v=3296e60b95a4",
   "/js/i18n.js?v=43acb0dc5acc",
   "/js/ui.js?v=4cf29e6015a0",
   "/js/tools.js?v=6ac4938ad601",
   "/js/storage.js?v=0e143c8da2fc",
-  "/js/chat.js?v=84ecafe80c56",
+  "/js/chat.js?v=4e2204bf9604",
   "/js/tasks.js?v=2e5e3f5e9e77",
   "/js/live.js?v=21194ec8d582",
   "/js/auth.js?v=a77731483ec0",
-  "/js/app.js?v=f4c7efb8ee66",
+  "/js/app.js?v=647b1dcc985f",
   "/dompurify.min.js",
   "/icon-192.png",
   "/icon-512.png",
