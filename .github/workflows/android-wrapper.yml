@@ -11,7 +11,9 @@ on:
       - "lib/**/*.js"
       - "server.js"
       - "public/js/auth.js"
+      - "public/js/chat.js"
       - "public/index.html"
+      - "public/sw.js"
       - ".github/workflows/android-wrapper.yml"
   workflow_dispatch:
 
@@ -60,6 +62,8 @@ jobs:
           node --check lib/workspaces.js
           node --check server.js
           node --check public/js/auth.js
+          node --check public/js/chat.js
+          node scripts/prepare-pwa-cache.js --check
 
       - name: Build debug APK
         run: gradle -p android-wrapper :app:assembleDebug --stacktrace
