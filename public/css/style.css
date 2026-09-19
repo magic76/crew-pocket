@@ -718,3 +718,93 @@ footer {
     display: none;
   }
 }
+
+
+/* === Conversation polish pass: 2026-09-19 === */
+/* Keep message rhythm obvious without restoring heavy cards. */
+#messages-container > .justify-start + .justify-end {
+  margin-top: 0.7rem;
+}
+
+#messages-container > .justify-end + .justify-start {
+  margin-top: 0.3rem;
+}
+
+/* Inline title editor should feel native to the compact header. */
+.header-title-editor {
+  min-width: 96px;
+}
+
+/* Context is quiet until it actually needs attention. */
+#context-pill[data-context-load="warning"] {
+  border-left-color: rgba(245, 158, 11, 0.5) !important;
+  background: rgba(120, 53, 15, 0.16) !important;
+}
+#context-pill[data-context-load="critical"] {
+  border-left-color: rgba(244, 63, 94, 0.65) !important;
+  background: rgba(127, 29, 29, 0.22) !important;
+}
+
+#header-compact-btn[data-context-load="warning"] {
+  border-color: rgba(245, 158, 11, 0.55);
+  background: rgba(120, 53, 15, 0.2);
+  color: #fcd34d;
+}
+#header-compact-btn[data-context-load="critical"] {
+  border-color: rgba(244, 63, 94, 0.7);
+  background: rgba(127, 29, 29, 0.28);
+  color: #fda4af;
+  box-shadow: 0 0 0 1px rgba(244, 63, 94, 0.08), 0 0 12px rgba(244, 63, 94, 0.14);
+}
+
+/* A heartbeat is always visible while the agent works, then disappears for
+   simple no-tool replies once completion is obvious. */
+.agent-execution-details.execution-heartbeat-only {
+  transition: opacity 180ms ease, max-height 180ms ease, margin 180ms ease, border-color 180ms ease;
+  max-height: 42px;
+}
+.agent-execution-details.execution-heartbeat-dismissed {
+  opacity: 0;
+  max-height: 0;
+  margin: 0 !important;
+  border-color: transparent !important;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* Queued follow-up should read like a lightweight "next message", not a card. */
+#queued-msg-capsule {
+  padding: 0.35rem 0.5rem !important;
+  border-radius: 0.75rem !important;
+  box-shadow: none !important;
+  background: rgba(69, 26, 3, 0.38) !important;
+}
+#queued-msg-capsule #queued-msg-body > span:first-child {
+  font-size: 0.8rem !important;
+}
+#queued-msg-capsule #queued-msg-interrupt-btn {
+  min-height: 26px !important;
+  padding-left: 0.45rem !important;
+  padding-right: 0.45rem !important;
+}
+#send-queue-count {
+  pointer-events: none;
+}
+
+@media (max-width: 640px) {
+  #messages-container > .justify-start + .justify-end {
+    margin-top: 0.8rem;
+  }
+
+  #header-compact-btn {
+    max-width: 54px;
+  }
+
+  #queued-msg-capsule {
+    margin-bottom: 0.2rem !important;
+  }
+
+  #queued-msg-capsule .text-xs {
+    font-size: 10.5px !important;
+  }
+}
