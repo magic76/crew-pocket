@@ -453,6 +453,7 @@ function initAppAndListeners() {
   const closeContextBtn = document.getElementById('close-context-btn');
   const modalTriggerCompactBtn = document.getElementById('modal-trigger-compact-btn');
   const modalTriggerCompactMaxBtn = document.getElementById('modal-trigger-compact-max-btn');
+  const headerCompactBtn = document.getElementById('header-compact-btn');
 
   const runCompactFromContext = (command) => {
     if (typeof window.hideContextModal === 'function') window.hideContextModal();
@@ -484,6 +485,12 @@ function initAppAndListeners() {
   }
   if (modalTriggerCompactBtn) {
     modalTriggerCompactBtn.addEventListener('click', () => runCompactFromContext('/compact'));
+  }
+  if (headerCompactBtn) {
+    headerCompactBtn.addEventListener('click', () => {
+      if (isStreaming) return;
+      runCompactFromContext('/compact');
+    });
   }
   if (modalTriggerCompactMaxBtn) modalTriggerCompactMaxBtn.addEventListener('click', () => {
     if (currentProvider === 'codex' && typeof window.startLowContextContinuation === 'function') {
@@ -802,17 +809,58 @@ function initAppAndListeners() {
     });
   }
 
-  // ✏️ Header Title Rename Listeners
-  const headerRenameBtn = document.getElementById('header-rename-btn');
+  // ✏️ Inline conversation title rename.
   const triggerHeaderRename = () => {
-    if (currentConversationId && typeof renameConversationDirect === 'function') {
-      renameConversationDirect(currentConversationId, headerTitle ? headerTitle.textContent : '');
-    } else {
+    if (!currentConversationId || !headerTitle) {
       alert('請先發送訊息建立對話後，即可自定義對話標題！');
+      return;
     }
+    if (headerTitle.dataset.editing === 'true') return;
+
+    const original = headerTitle.textContent.trim();
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.value = original === '新對話' ? '' : original;
+    input.maxLength = 60;
+    input.className = 'header-title-editor h-6 max-w-[150px] sm:max-w-[220px] rounded-md border border-indigo-500/70 bg-slate-950 px-1.5 text-xs font-semibold text-white outline-none ring-1 ring-indigo-500/30';
+    input.setAttribute('aria-label', '修改對話標題');
+
+    headerTitle.dataset.editing = 'true';
+    headerTitle.classList.add('hidden');
+    headerTitle.parentNode.insertBefore(input, headerTitle.nextSibling);
+    input.focus();
+    input.select();
+
+    let finished = false;
+    const finish = async (save) => {
+      if (finished) return;
+      finished = true;
+      const next = input.value.trim();
+      input.remove();
+      headerTitle.classList.remove('hidden');
+      delete headerTitle.dataset.editing;
+
+      if (!save || !next || next === original) return;
+      try {
+        if (typeof window.saveConversationTitle !== 'function') throw new Error('重新命名功能尚未就緒');
+        await window.saveConversationTitle(currentConversationId, next, currentProvider);
+      } catch (error) {
+        alert('重新命名失敗：' + (error.message || error));
+      }
+    };
+
+    input.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        finish(true);
+      } else if (event.key === 'Escape') {
+        event.preventDefault();
+        finish(false);
+      }
+    });
+    input.addEventListener('blur', () => finish(true));
   };
 
-  if (headerRenameBtn) headerRenameBtn.addEventListener('click', triggerHeaderRename);
   if (headerTitle) headerTitle.addEventListener('click', triggerHeaderRename);
 
   // Camera & Image Upload Handlers (with HEIC support & AI-vision compression)
