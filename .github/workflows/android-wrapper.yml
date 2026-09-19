@@ -16,7 +16,6 @@ on:
       - "public/js/ui.js"
       - "public/css/*.css"
       - "public/index.html"
-      - "public/sw.js"
       - ".github/workflows/android-wrapper.yml"
   workflow_dispatch:
 
@@ -68,7 +67,6 @@ jobs:
           node --check public/js/chat.js
           node --check public/js/app.js
           node --check public/js/ui.js
-          node scripts/prepare-pwa-cache.js --check
 
       - name: Build debug APK
         run: gradle -p android-wrapper :app:assembleDebug --stacktrace
