@@ -286,8 +286,8 @@ function initAppAndListeners() {
       splashScreen.classList.add('splash-dismissed');
       setTimeout(() => {
         if (splashScreen && splashScreen.parentNode) splashScreen.remove();
-      }, 500);
-    }, 950);
+      }, 260);
+    }, 220);
   }
 
   // Drawer listeners
@@ -311,17 +311,29 @@ function initAppAndListeners() {
   if (closeLightboxBtn) closeLightboxBtn.addEventListener('click', () => lightbox.classList.add('opacity-0', 'pointer-events-none'));
   if (lightbox) lightbox.addEventListener('click', (e) => { if (e.target === lightbox) lightbox.classList.add('opacity-0', 'pointer-events-none'); });
 
-  // 🧰 Tools Menu Dropdown listeners
+  // 🧰 Tools Menu: desktop popover, mobile bottom sheet.
   if (toolsMenuBtn && toolsMenuDropdown) {
+    const toolsSheetOverlay = document.getElementById('tools-sheet-overlay');
+    const toolsSheetCloseBtn = document.getElementById('tools-sheet-close-btn');
+
+    const setToolsMenuOpen = (open) => {
+      toolsMenuDropdown.classList.toggle('hidden', !open);
+      if (toolsSheetOverlay) toolsSheetOverlay.classList.toggle('hidden', !open);
+      document.body.classList.toggle('tools-sheet-open', open);
+    };
+
     toolsMenuBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       if (typeof window.haptic === 'function') window.haptic('light');
-      toolsMenuDropdown.classList.toggle('hidden');
+      setToolsMenuOpen(toolsMenuDropdown.classList.contains('hidden'));
     });
+
+    if (toolsSheetCloseBtn) toolsSheetCloseBtn.addEventListener('click', () => setToolsMenuOpen(false));
+    if (toolsSheetOverlay) toolsSheetOverlay.addEventListener('click', () => setToolsMenuOpen(false));
 
     document.addEventListener('click', (e) => {
       if (!toolsMenuDropdown.contains(e.target) && !toolsMenuBtn.contains(e.target)) {
-        toolsMenuDropdown.classList.add('hidden');
+        setToolsMenuOpen(false);
       }
     });
 
@@ -329,8 +341,25 @@ function initAppAndListeners() {
     [newChatBtn, filesBtn, storageBtn, authMenuBtn, usageBtn, cheatSheetBtn, notifyBtn, exportExtBtn].forEach(btn => {
       if (btn) btn.addEventListener('click', () => {
         if (typeof window.haptic === 'function') window.haptic('light');
-        toolsMenuDropdown.classList.add('hidden');
+        setToolsMenuOpen(false);
       });
+    });
+
+    const conversationWorkspaceMenuBtn = document.getElementById('conversation-workspace-menu-btn');
+    const conversationRoleMenuBtn = document.getElementById('conversation-role-menu-btn');
+    const conversationContextMenuBtn = document.getElementById('conversation-context-menu-btn');
+
+    if (conversationWorkspaceMenuBtn) conversationWorkspaceMenuBtn.addEventListener('click', () => {
+      setToolsMenuOpen(false);
+      document.getElementById('workspace-selector-btn')?.click();
+    });
+    if (conversationRoleMenuBtn) conversationRoleMenuBtn.addEventListener('click', () => {
+      setToolsMenuOpen(false);
+      document.getElementById('role-selector-btn')?.click();
+    });
+    if (conversationContextMenuBtn) conversationContextMenuBtn.addEventListener('click', () => {
+      setToolsMenuOpen(false);
+      document.getElementById('context-pill')?.click();
     });
   }
 
