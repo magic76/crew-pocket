@@ -931,11 +931,6 @@ function appendMessage(role, content, timestamp, tools = [], thinking = '', isBt
 
   prepareDeferredImages(msgDiv);
 
-  const ttsBtn = msgDiv.querySelector('.tts-btn');
-  if (ttsBtn) {
-    ttsBtn.addEventListener('click', () => toggleSpeech(content, ttsBtn));
-  }
-
   if (!renderOptions.deferEnhancement && typeof enhanceCodeBlocks === 'function') enhanceCodeBlocks(msgDiv);
   if (!renderOptions.deferScroll) scrollToBottom();
   return msgDiv;
@@ -977,9 +972,7 @@ async function deleteConversationDirect(convId, wrapperElement, conversationProv
           wrapperElement.remove();
         }
         if (convList && convList.children.length === 0) {
-          convList.innerHTML = query
-      ? '<div class="p-5 text-center text-xs text-slate-500">找不到符合的對話</div>'
-      : '<div class="p-4 text-center text-xs text-slate-500">尚無歷史對話</div>';
+          convList.innerHTML = '<div class="p-4 text-center text-xs text-slate-500">尚無歷史對話</div>';
         }
       }, 380);
     }
@@ -2333,47 +2326,6 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
           toggleBtn.textContent = isCollapsed ? '展開 ▼' : '收合 ▲';
         });
       }
-    }
-
-    const bubbleEl = assistantMsgDiv.querySelector('.btw-card') || assistantMsgDiv.querySelector('.bg-slate-900');
-    if (bubbleEl && !isBtwQuery && !assistantMsgDiv.querySelector('.assistant-top-header')) {
-      const header = document.createElement('div');
-      header.className = 'assistant-top-header flex items-center justify-between gap-2 mb-2 pb-1.5 border-b border-slate-800/90 text-[11px] text-slate-400 select-none';
-      header.innerHTML = `
-        <div class="flex items-center gap-1.5 font-semibold text-slate-200">
-          <span class="text-indigo-400 font-bold">🤖 Crew Pocket</span>
-          <span class="text-[10px] text-slate-400 font-mono font-normal">(${escapeHtml(modelLabel)})</span>
-        </div>
-        <span class="text-[10px] text-slate-500 font-mono">🕒 ${formatMessageTimestamp()} · ⏱️ ${totalSec}s</span>
-      `;
-      bubbleEl.insertBefore(header, bubbleEl.firstChild);
-    }
-
-    // Append Action Footer with Stats, TTS and Copy All
-    let footer = assistantMsgDiv.querySelector('.msg-footer');
-    if (!footer) {
-      footer = document.createElement('div');
-      footer.className = 'msg-footer mt-2.5 pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400 select-none';
-      const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      footer.innerHTML = `
-        <div class="flex items-center gap-2">
-          <button type="button" class="tts-btn px-2 py-0.5 rounded-md hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition flex items-center gap-1 active:scale-95">
-            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"/>
-            </svg>
-            <span class="text-[10px]">朗讀</span>
-          </button>
-        </div>
-        <div class="flex items-center gap-1.5 text-[10px] text-slate-500 font-mono">
-          <span class="text-slate-400">⏱️ ${totalSec}s</span>
-          ${avgSpeed > 0 ? `<span class="text-indigo-400/80">· ⚡ ${avgSpeed} t/s</span>` : ''}
-          <span>· ${timeStr}</span>
-        </div>
-      `;
-      const bubbleEl = assistantMsgDiv.querySelector('.btw-card') || assistantMsgDiv.querySelector('.bg-slate-900');
-      if (bubbleEl) bubbleEl.appendChild(footer);
-      const ttsBtn = footer.querySelector('.tts-btn');
-      ttsBtn.addEventListener('click', () => toggleSpeech(accumulatedText, ttsBtn));
     }
 
     if (typeof enhanceCodeBlocks === 'function') enhanceCodeBlocks(assistantMsgDiv);
