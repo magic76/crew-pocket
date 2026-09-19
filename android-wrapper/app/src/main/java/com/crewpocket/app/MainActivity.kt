@@ -47,6 +47,8 @@ class MainActivity : Activity() {
         private const val REQUEST_WEB_MEDIA = 7603
         private const val REQUEST_GEOLOCATION = 7604
         private const val REQUEST_FILE = 7605
+        private const val WEB_MIGRATION_PREFS = "crew_web_migrations"
+        private const val LEGACY_WEB_CACHE_CLEARED = "legacy_web_cache_cleared_v1"
     }
 
     private lateinit var statusText: TextView
@@ -63,11 +65,14 @@ class MainActivity : Activity() {
     private var pendingGeoOrigin: String? = null
     private var pendingGeoCallback: GeolocationPermissions.Callback? = null
     private var filePathCallback: ValueCallback<Array<Uri>>? = null
+    private val webSessionId = System.currentTimeMillis()
+    private var legacyPwaCleanupInjected = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         buildUi()
         configureWebView()
+        clearLegacyWebCacheOnce()
         requestNotificationPermissionIfNeeded()
         requestTermuxPermissionIfPossible()
     }
@@ -179,7 +184,33 @@ class MainActivity : Activity() {
             allowContentAccess = true
             allowFileAccess = false
         }
-        webView.webViewClient = WebViewClient()
+        webView.webViewClient = object : WebViewClient() {
+            override fun onPageFinished(view: WebView?, url: String?) {
+                super.onPageFinished(view, url)
+                if (legacyPwaCleanupInjected || !url.orEmpty().startsWith(SERVER_URL)) return
+
+                legacyPwaCleanupInjected = true
+                view?.evaluateJavascript(
+                    """
+                    (() => {
+                      try {
+                        if ('serviceWorker' in navigator) {
+                          navigator.serviceWorker.getRegistrations()
+                            .then(registrations => Promise.all(registrations.map(registration => registration.unregister())))
+                            .catch(() => {});
+                        }
+                        if ('caches' in window) {
+                          caches.keys()
+                            .then(keys => Promise.all(keys.map(key => caches.delete(key))))
+                            .catch(() => {});
+                        }
+                      } catch (_) {}
+                    })();
+                    """.trimIndent(),
+                    null
+                )
+            }
+        }
         webView.addJavascriptInterface(NativeWebBridge(), "CrewPocket")
         webView.webChromeClient = object : WebChromeClient() {
             override fun onPermissionRequest(request: PermissionRequest) {
@@ -218,6 +249,20 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun clearLegacyWebCacheOnce() {
+        val prefs = getSharedPreferences(WEB_MIGRATION_PREFS, MODE_PRIVATE)
+        if (prefs.getBoolean(LEGACY_WEB_CACHE_CLEARED, false)) return
+
+        // The app no longer uses a PWA shell. Clear only the legacy WebView
+        // resource cache once so old installs cannot keep serving stale assets.
+        webView.clearCache(true)
+        prefs.edit().putBoolean(LEGACY_WEB_CACHE_CLEARED, true).apply()
+    }
+
+    private fun appUrl(): String {
+        return "${SERVER_URL}?apk=${BuildConfig.VERSION_CODE}&session=$webSessionId"
+    }
+
     /** Small native escape hatch for setup tasks that should not depend on a
      *  WebView page being loaded. The web menu falls back to /extra/adb.html in
      *  a normal browser, while the APK opens the native sheet below. */
@@ -254,10 +299,11 @@ class MainActivity : Activity() {
                     if (alive) {
                         statusText.text = "Crew active · Termux engine"
                         if (pageLoaded.compareAndSet(false, true)) {
-                            webView.loadUrl(SERVER_URL)
+                            webView.loadUrl(appUrl())
                         }
                     } else {
                         statusText.text = "Waiting for Crew runtime…"
+                        pageLoaded.set(false)
                     }
                 }
             },
