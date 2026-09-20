@@ -1458,10 +1458,45 @@ async function loadConversations({ force = false } = {}) {
 }
 
 let cachedConversations = [];
+const UNASSIGNED_WORKSPACE = '__crew-pocket-unassigned-workspace__';
+const ALL_WORKSPACES = '__crew-pocket-all-workspaces__';
+const conversationWorkspaceList = document.getElementById('conversation-workspace-list');
+let selectedConversationWorkspace = ALL_WORKSPACES;
 
 function compareConversationsStable(a, b) {
   return (a.title || '').localeCompare(b.title || '', 'zh-TW')
     || String(a.id || '').localeCompare(String(b.id || ''));
+}
+
+function conversationWorkspaceLabel(workspace) {
+  if (!workspace || workspace === UNASSIGNED_WORKSPACE) return '未指定';
+  if (workspace === '/data/data/com.termux/files/home') return 'Home';
+  return String(workspace).split('/').filter(Boolean).pop() || '未指定';
+}
+
+function renderConversationWorkspaceTabs(workspaceGroups) {
+  if (!conversationWorkspaceList) return;
+  const available = new Set(workspaceGroups.map(group => group.workspace));
+  if (selectedConversationWorkspace !== ALL_WORKSPACES && !available.has(selectedConversationWorkspace)) {
+    selectedConversationWorkspace = ALL_WORKSPACES;
+  }
+
+  const options = [{ workspace: ALL_WORKSPACES, label: '全部' }, ...workspaceGroups.map(group => ({
+    workspace: group.workspace,
+    label: conversationWorkspaceLabel(group.workspace)
+  }))];
+  conversationWorkspaceList.innerHTML = options.map(option => {
+    const selected = option.workspace === selectedConversationWorkspace;
+    const icon = option.workspace === ALL_WORKSPACES ? '▦' : (option.workspace === UNASSIGNED_WORKSPACE ? '⚪' : '📁');
+    return `<button type="button" data-conversation-workspace="${escapeHtml(option.workspace)}" class="min-h-10 shrink-0 rounded-lg border px-2.5 text-[10px] font-semibold active:scale-95 ${selected ? 'border-indigo-500/70 bg-indigo-950 text-indigo-200' : 'border-slate-700 bg-slate-900 text-slate-400'}"><span class="mr-1">${icon}</span>${escapeHtml(option.label)}</button>`;
+  }).join('');
+
+  conversationWorkspaceList.querySelectorAll('[data-conversation-workspace]').forEach(button => {
+    button.addEventListener('click', () => {
+      selectedConversationWorkspace = button.dataset.conversationWorkspace || ALL_WORKSPACES;
+      renderConversationItems(cachedConversations);
+    });
+  });
 }
 
 function renderConversationItems(conversations) {
@@ -1471,11 +1506,11 @@ function renderConversationItems(conversations) {
   const filtered = (conversations || []).slice().sort(compareConversationsStable);
 
   if (filtered.length === 0) {
+    renderConversationWorkspaceTabs([]);
     convList.innerHTML = '<div class="p-4 text-center text-xs text-slate-500">尚無歷史對話</div>';
     return;
   }
 
-  const UNASSIGNED_WORKSPACE = '__crew-pocket-unassigned-workspace__';
   const groupedByWorkspace = new Map();
   filtered.forEach(conv => {
     const workspace = conv.workspace || UNASSIGNED_WORKSPACE;
@@ -1498,7 +1533,17 @@ function renderConversationItems(conversations) {
         || String(a.workspace || '').localeCompare(String(b.workspace || ''));
     });
 
-  workspaceGroups.forEach(group => {
+  renderConversationWorkspaceTabs(workspaceGroups);
+  const visibleWorkspaceGroups = selectedConversationWorkspace === ALL_WORKSPACES
+    ? workspaceGroups
+    : workspaceGroups.filter(group => group.workspace === selectedConversationWorkspace);
+
+  if (visibleWorkspaceGroups.length === 0) {
+    convList.innerHTML = '<div class="p-4 text-center text-xs text-slate-500">此資料夾沒有歷史對話</div>';
+    return;
+  }
+
+  visibleWorkspaceGroups.forEach(group => {
     const groupHeader = document.createElement('div');
     groupHeader.className = 'sticky top-0 z-10 flex items-center gap-2 px-1.5 py-1.5 text-[10px] font-semibold text-slate-500 bg-slate-900/95 backdrop-blur border-b border-slate-800/60';
     groupHeader.innerHTML = `<span class="text-xs">${group.workspace === UNASSIGNED_WORKSPACE ? '⚪' : (group.workspace === '/data/data/com.termux/files/home' ? '🏠' : '📁')}</span><span class="truncate">${escapeHtml(group.label)}</span><span class="ml-auto text-[9px] font-mono text-slate-600">${group.items.length}</span>`;
@@ -1511,10 +1556,8 @@ function renderConversationItems(conversations) {
     const providerLabel = conversationProviderConfig.shortLabel || conversationProviderConfig.label;
     const providerBadgeClass = conversationProviderConfig.badgeClass || 'bg-slate-500/20 text-slate-300 border-slate-500/40';
     const workspaceLabel = conv.workspace
-      ? (conv.workspace === '/data/data/com.termux/files/home'
-        ? 'Home'
-        : String(conv.workspace).split('/').filter(Boolean).pop())
-      : '';
+      ? conversationWorkspaceLabel(conv.workspace)
+      : '未指定';
     const wrapper = document.createElement('div');
     wrapper.className = 'swipe-item-wrapper relative overflow-hidden rounded-xl mb-1 select-none transition-all duration-200';
     wrapper.style.maxHeight = '64px';
