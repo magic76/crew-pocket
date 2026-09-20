@@ -740,6 +740,32 @@ window.selectProvider = async function(providerId) {
   window.requestProviderPrewarm();
 };
 
+window.openCrewConversation = async function(providerId, conversationId) {
+  const targetProvider = String(providerId || '').trim() || currentProvider;
+  const targetConversationId = String(conversationId || '').trim();
+  if (!targetConversationId) return false;
+
+  if (!availableProviders.some(provider => provider.id === targetProvider)) {
+    await loadProviderCatalog();
+  }
+  if (!availableProviders.some(provider => provider.id === targetProvider)) return false;
+
+  // Seed the target provider's active conversation before switching providers.
+  // selectProvider() can then restore the exact thread without briefly opening
+  // whatever that provider last had active.
+  localStorage.setItem(providerStorageKey('active_conv_id', targetProvider), targetConversationId);
+
+  if (targetProvider !== currentProvider) {
+    await window.selectProvider(targetProvider);
+  } else if (currentConversationId !== targetConversationId) {
+    await loadConversationHistory(targetConversationId);
+  } else {
+    await loadConversationHistory(targetConversationId, { preserveComposer: true });
+  }
+
+  return currentProvider === targetProvider && currentConversationId === targetConversationId;
+};
+
 // Model & Thinking Effort Handlers
 function compactModelLabel(label) {
   return String(label || '')
