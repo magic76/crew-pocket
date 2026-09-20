@@ -43,7 +43,8 @@ const { applyCors, authorizeApiRequest, maybeSetAuthCookie, securityStatus, getA
 const { createHistoryMigration } = require('./lib/runtime/history-migration');
 const { getProviderRuntimeStatus, updateProvider } = require('./lib/runtime/provider-manager');
 const { resolveExecutionPolicy } = require('./lib/execution-policy');
-const { getJevCliStatus, looksLikeContinuation, routeTaskWithJev, shouldRouteWithJev } = require('./lib/jev-router');
+const { getJevCliStatus, looksLikeContinuation, reviewExecutionIntentWithJev, routeTaskWithJev, shouldRouteWithJev } = require('./lib/jev-router');
+const { buildApprovedIntent, normalizeExecutionIntent, policyConflicts, shouldCreateExecutionIntent } = require('./lib/execution-intent');
 
 
 async function handleStorageReport(res) {
@@ -1227,6 +1228,8 @@ async function handleChat(req, res) {
     to_first_text_ms: null,
     to_first_tool_ms: null,
     jev_ms: null,
+    intent_ms: null,
+    intent_review_ms: null,
     to_done_ms: null
   };
   const elapsed = () => Date.now() - requestStartedAt;
@@ -1331,13 +1334,94 @@ async function handleChat(req, res) {
     }
   }
 
-  const executionPolicy = resolveExecutionPolicy({
+  let executionPolicy = resolveExecutionPolicy({
     provider: providerId,
     model: effectiveModel,
     executionMode: routedExecutionMode,
     executionPolicy: body.execution_policy || body.executionPolicy,
     executionSource
   });
+
+  let executionIntent = null;
+  let intentReview = null;
+  let approvedExecutionIntent = null;
+  const isContinuation = Boolean(reusableContinuationMode);
+
+  if (shouldCreateExecutionIntent({
+    provider: providerId,
+    model: effectiveModel,
+    executionPolicy,
+    explicitExecutionMode,
+    continuation: isContinuation
+  })) {
+    const planningProvider = getProvider(providerId);
+    if (typeof planningProvider.planExecutionIntent === 'function') {
+      try {
+        const intentStartedAt = Date.now();
+        const rawIntent = await planningProvider.planExecutionIntent({
+          model: effectiveModel,
+          prompt,
+          workspace,
+          executionPolicy
+        });
+        turnTiming.intent_ms = Date.now() - intentStartedAt;
+        executionIntent = normalizeExecutionIntent(rawIntent);
+        if (executionIntent) {
+          const conflicts = policyConflicts(executionIntent, executionPolicy);
+          const reviewStartedAt = Date.now();
+          intentReview = await reviewExecutionIntentWithJev({
+            task: prompt,
+            intent: executionIntent,
+            currentMode: executionPolicy.mode,
+            conflicts
+          });
+          turnTiming.intent_review_ms = Date.now() - reviewStartedAt;
+
+          if (intentReview?.accepted &&
+              intentReview.mode &&
+              intentReview.mode !== executionPolicy.mode) {
+            routedExecutionMode = intentReview.mode;
+            executionSource = 'jev-intent';
+            executionPolicy = resolveExecutionPolicy({
+              provider: providerId,
+              model: effectiveModel,
+              executionMode: routedExecutionMode,
+              executionPolicy: body.execution_policy || body.executionPolicy,
+              executionSource
+            });
+          }
+
+          approvedExecutionIntent = buildApprovedIntent(
+            executionIntent,
+            executionPolicy,
+            intentReview
+          );
+        }
+      } catch (error) {
+        intentReview = {
+          accepted: false,
+          decision: null,
+          mode: executionPolicy?.mode || null,
+          reason: 'preflight_error',
+          error: String(error.message || error).slice(0, 600)
+        };
+        console.warn('[ExecutionIntent] preflight skipped:', error.message || error);
+      }
+    }
+  }
+
+  if (executionIntent || intentReview) {
+    console.log('[ExecutionIntent] ' + JSON.stringify({
+      request_id: requestId,
+      conversation_id: conversation_id || null,
+      mode_before_review: jevRoute?.mode || routedExecutionMode || null,
+      mode_after_review: executionPolicy?.mode || null,
+      intent: executionIntent,
+      review: intentReview,
+      intent_ms: turnTiming.intent_ms,
+      review_ms: turnTiming.intent_review_ms
+    }));
+  }
 
   if (jevRoute) {
     console.log('[JevRoute] ' + JSON.stringify({
@@ -1429,6 +1513,8 @@ async function handleChat(req, res) {
           reason: jevRoute.reason || null,
           latency_ms: jevRoute.latencyMs ?? null
         } : null,
+        execution_intent: approvedExecutionIntent,
+        intent_review: intentReview,
         reason,
         elapsed_ms: elapsed(),
         turn_timing: turnTiming,
@@ -1492,6 +1578,8 @@ async function handleChat(req, res) {
           latency_ms: jevRoute.latencyMs ?? null,
           model: jevRoute.model || null
         } : undefined,
+        execution_intent: approvedExecutionIntent || undefined,
+        intent_review: intentReview || undefined,
         turn_timing: turnTiming
       };
       logToolMetrics(finalPayload.error ? 'error' : 'completed');
@@ -1567,6 +1655,7 @@ async function handleChat(req, res) {
       workspace,
       executionMode: executionPolicy?.mode || routedExecutionMode || null,
       executionPolicy,
+      executionIntent: approvedExecutionIntent,
       prompt: finalPrompt,
       imagePath: image_path,
       onAbort(handler) { abortTurn = handler; },
@@ -1600,7 +1689,9 @@ async function handleChat(req, res) {
               confidence: jevRoute.confidence ?? null,
               reason: jevRoute.reason || null,
               latency_ms: jevRoute.latencyMs ?? null
-            } : null
+            } : null,
+            execution_intent: approvedExecutionIntent,
+            intent_review: intentReview
           });
         } else if (event.type === 'text_delta') {
           markOnce('to_first_text_ms');
