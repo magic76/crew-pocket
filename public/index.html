@@ -118,11 +118,6 @@
     </div>
     
     <div class="relative flex items-center gap-1 sm:gap-1.5 shrink-0">
-      <button id="crew-home-btn" class="w-8 h-8 p-1.5 rounded-full bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-200 hover:text-white transition active:scale-95 shrink-0 border border-indigo-500/40 flex items-center justify-center" title="Crew Home · 任務與電腦連線">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 4h6v6H4V4Zm10 0h6v6h-6V4ZM4 14h6v6H4v-6Zm10 0h6v6h-6v-6Z"/>
-        </svg>
-      </button>
       <!-- 🎙️ Gemini 2.0 Live Full-Duplex Voice Call Button -->
       <button id="live-voice-btn" class="w-8 h-8 p-1.5 rounded-full bg-teal-500/15 hover:bg-teal-500/25 text-teal-300 hover:text-white transition active:scale-95 shrink-0 border border-teal-500/50 shadow-sm shadow-teal-500/20 flex items-center justify-center" title="🎙️ Gemini 2.0 Live 原生雙向全雙工通話 (端到端音訊)">
         <svg class="w-4 h-4 text-current" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -167,6 +162,18 @@
         </div>
 
         <div class="px-2 pt-1 pb-0.5 text-[10px] font-bold tracking-wider text-slate-500">操作</div>
+
+        <button id="crew-home-btn" type="button" class="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-xs text-slate-200 hover:bg-slate-800/90 hover:text-indigo-300 transition text-left group" title="任務總覽與 Remote Console">
+          <div class="w-6 h-6 rounded-lg bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center text-indigo-300 group-hover:scale-105 transition shrink-0">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 4h6v6H4V4Zm10 0h6v6h-6V4ZM4 14h6v6H4v-6Zm10 0h6v6h-6v-6Z"/>
+            </svg>
+          </div>
+          <div class="flex flex-col min-w-0">
+            <span class="font-semibold text-slate-100 group-hover:text-indigo-300">Crew Home</span>
+            <span class="text-[10px] text-slate-400">任務總覽 · Remote Console</span>
+          </div>
+        </button>
 
         <!-- 1. Start a New Conversation -->
         <button id="new-chat-btn" class="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-xs text-slate-200 hover:bg-slate-800/90 hover:text-indigo-300 transition text-left group" title="開啟新對話">
