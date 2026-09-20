@@ -45,6 +45,7 @@ const { getProviderRuntimeStatus, updateProvider } = require('./lib/runtime/prov
 const { resolveExecutionPolicy } = require('./lib/execution-policy');
 const { getJevCliStatus, looksLikeContinuation, reviewExecutionIntentWithJev, routeTaskWithJev, shouldRouteWithJev } = require('./lib/jev-router');
 const { buildApprovedIntent, normalizeExecutionIntent, policyConflicts, shouldCreateExecutionIntent } = require('./lib/execution-intent');
+const { reviewSoftBudgetWithJev, reviewToolFailureWithJev, sanitizeText: sanitizeRuntimeDecisionText, shouldUseRuntimeSnapshots } = require('./lib/runtime-decision');
 
 
 async function handleStorageReport(res) {
@@ -1183,6 +1184,10 @@ function getServerToolKey(event) {
 
 function isTerminalToolState(state) {
   return ['completed', 'done', 'failed', 'error', 'cancelled', 'canceled'].includes(String(state || '').toLowerCase());
+}
+
+function isFailedToolState(state) {
+  return ['failed', 'error', 'cancelled', 'canceled'].includes(String(state || '').toLowerCase());
 }
 
 function isPollingToolEvent(event) {
