@@ -1287,6 +1287,13 @@ async function handleChat(req, res) {
   turnTiming.workspace_ms = Date.now() - workspaceStartedAt;
 
   const effectiveModel = model || savedSettings?.model || null;
+  const jevInputSummary = String(prompt || '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/(["']?(?:api[_ -]?key|access[_ -]?token|refresh[_ -]?token|secret|password|authorization)["']?\s*[:=]\s*)[^,\s"']+/gi, '$1[REDACTED]')
+    .replace(/\b[A-Z][A-Z0-9_]{2,}\s*=\s*\S+/g, '[ENV_REDACTED]')
+    .replace(/\b(?:sk|rk|pk)-[A-Za-z0-9_-]{16,}\b/g, '[REDACTED]')
+    .slice(0, 160);
   let routedExecutionMode = explicitExecutionMode;
   let executionSource = explicitExecutionMode ? 'request' : null;
   let jevRoute = null;
@@ -1414,6 +1421,7 @@ async function handleChat(req, res) {
         execution_mode: executionPolicy?.mode || null,
         execution_policy_source: executionPolicy?.source || null,
         jev_route: jevRoute ? {
+          input_summary: jevInputSummary,
           accepted: Boolean(jevRoute.accepted),
           mode: jevRoute.mode || null,
           suggested_mode: jevRoute.suggestedMode || null,
@@ -1474,6 +1482,7 @@ async function handleChat(req, res) {
         tool_metrics: getToolMetrics(),
         execution_policy: executionPolicy || undefined,
         jev_route: jevRoute ? {
+          input_summary: jevInputSummary,
           accepted: Boolean(jevRoute.accepted),
           mode: jevRoute.mode || null,
           suggested_mode: jevRoute.suggestedMode || null,
@@ -1584,6 +1593,7 @@ async function handleChat(req, res) {
             execution_mode: executionPolicy?.mode || null,
             execution_source: executionPolicy?.source || null,
             jev_route: jevRoute ? {
+              input_summary: jevInputSummary,
               accepted: Boolean(jevRoute.accepted),
               mode: jevRoute.mode || null,
               suggested_mode: jevRoute.suggestedMode || null,
