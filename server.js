@@ -5,7 +5,7 @@ const path = require('node:path');
 const url = require('node:url');
 const crypto = require('node:crypto');
 const os = require('node:os');
-const { execFile } = require('node:child_process');
+const { execFile, spawn } = require('node:child_process');
 const { promisify } = require('node:util');
 
 const execFileAsync = promisify(execFile);
@@ -39,7 +39,7 @@ const { getConversationSettings, getProviderConversationSettings, saveConversati
 const { createTask, getTask, listTasks, updateTask } = require('./lib/tasks');
 const { listWorkspaces, resolveWorkspace, createWorkspace } = require('./lib/workspaces');
 const auth = require('./lib/auth');
-const { applyCors, authorizeApiRequest, maybeSetAuthCookie, securityStatus } = require('./lib/http-security');
+const { applyCors, authorizeApiRequest, maybeSetAuthCookie, securityStatus, getApiToken, isLoopbackAddress } = require('./lib/http-security');
 const { createHistoryMigration } = require('./lib/runtime/history-migration');
 const { getProviderRuntimeStatus, updateProvider } = require('./lib/runtime/provider-manager');
 
@@ -1734,6 +1734,141 @@ async function handleAgyToken(req, res) {
   }
 }
 
+
+const REMOTE_ACCESS_DIR = path.join(os.homedir(), '.crew-pocket');
+const REMOTE_ACCESS_FLAG = path.join(REMOTE_ACCESS_DIR, 'remote-enabled');
+
+function lanAddresses() {
+  const addresses = [];
+  const interfaces = os.networkInterfaces();
+  for (const entries of Object.values(interfaces)) {
+    for (const entry of entries || []) {
+      if (entry.internal || entry.family !== 'IPv4') continue;
+      if (!addresses.includes(entry.address)) addresses.push(entry.address);
+    }
+  }
+  return addresses;
+}
+
+function remoteAccessSnapshot(req, configuredEnabled = fs.existsSync(REMOTE_ACCESS_FLAG)) {
+  const active = !['127.0.0.1', 'localhost', '::1'].includes(String(HOST).toLowerCase());
+  const addresses = lanAddresses();
+  const urls = addresses.map(address => `http://${address}:${PORT}`);
+  const localClient = isLoopbackAddress(req.socket?.remoteAddress || '');
+  const token = getApiToken();
+  return {
+    configuredEnabled,
+    active,
+    bindHost: HOST,
+    port: Number(PORT),
+    lanAddresses: addresses,
+    urls,
+    shareUrl: localClient && configuredEnabled && urls[0]
+      ? `${urls[0]}?token=${encodeURIComponent(token)}`
+      : null,
+    tokenRequiredForRemote: configuredEnabled || active
+  };
+}
+
+async function handleCrewHome(req, res) {
+  try {
+    const tasks = await listTasks(200);
+    const counts = {
+      running: tasks.filter(task => task.status === 'running').length,
+      pending: tasks.filter(task => task.status === 'pending_confirmation').length,
+      completed: tasks.filter(task => task.status === 'completed').length,
+      failed: tasks.filter(task => task.status === 'failed').length
+    };
+    const recentTasks = tasks
+      .filter(task => task.status !== 'cancelled')
+      .slice(0, 8)
+      .map(task => ({
+        id: task.id,
+        status: task.status,
+        provider: task.provider,
+        conversationId: task.conversationId,
+        conversationTitle: task.conversationTitle,
+        title: task.title,
+        updatedAt: task.updatedAt
+      }));
+
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+    res.end(JSON.stringify({
+      success: true,
+      counts,
+      recentTasks,
+      remote: remoteAccessSnapshot(req),
+      runtime: {
+        device: os.hostname(),
+        platform: process.platform,
+        uptimeSeconds: Math.floor(process.uptime())
+      }
+    }));
+  } catch (error) {
+    res.writeHead(500, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: false, error: error.message || 'Crew Home unavailable' }));
+  }
+}
+
+function scheduleCrewRuntimeRestart() {
+  const startScript = path.join(__dirname, 'scripts', 'android-runtime-start.sh');
+  try {
+    const child = spawn(
+      'bash',
+      ['-c', 'sleep 1; exec bash "$1"', 'crew-remote-restart', startScript],
+      {
+        cwd: __dirname,
+        env: process.env,
+        detached: true,
+        stdio: 'ignore'
+      }
+    );
+    child.unref();
+    setTimeout(() => process.exit(0), 250);
+    return true;
+  } catch (error) {
+    console.error('[Remote Access Restart Error]', error);
+    return false;
+  }
+}
+
+async function handleRemoteAccess(req, res) {
+  if (req.method === 'GET') {
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+    return res.end(JSON.stringify({ success: true, remote: remoteAccessSnapshot(req) }));
+  }
+
+  try {
+    const body = await parseJsonBody(req);
+    if (typeof body.enabled !== 'boolean') {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({ success: false, error: 'enabled must be boolean' }));
+    }
+
+    await fsPromises.mkdir(REMOTE_ACCESS_DIR, { recursive: true, mode: 0o700 });
+    if (body.enabled) {
+      await fsPromises.writeFile(REMOTE_ACCESS_FLAG, 'enabled\n', { mode: 0o600 });
+    } else {
+      await fsPromises.unlink(REMOTE_ACCESS_FLAG).catch(error => {
+        if (error.code !== 'ENOENT') throw error;
+      });
+    }
+
+    const snapshot = remoteAccessSnapshot(req, body.enabled);
+    const restarting = scheduleCrewRuntimeRestart();
+    res.writeHead(restarting ? 202 : 500, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      success: restarting,
+      restarting,
+      remote: snapshot,
+      error: restarting ? undefined : 'Runtime restart could not be scheduled'
+    }));
+  } catch (error) {
+    res.writeHead(500, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: false, error: error.message || 'Remote access update failed' }));
+  }
+}
+
 // 🌐 HTTP Server Request Dispatcher
 const server = http.createServer(async (req, res) => {
   const parsedUrl = url.parse(req.url, true);
@@ -1767,7 +1902,11 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
-  if (pathname === '/api/conversations' && req.method === 'GET') {
+  if (pathname === '/api/home' && req.method === 'GET') {
+    return handleCrewHome(req, res);
+  } else if (pathname === '/api/remote-access' && (req.method === 'GET' || req.method === 'POST')) {
+    return handleRemoteAccess(req, res);
+  } else if (pathname === '/api/conversations' && req.method === 'GET') {
     return handleProviderConversations(parsedUrl, res);
   } else if (pathname === '/api/history' && req.method === 'GET') {
     return handleProviderHistory(parsedUrl, res);

@@ -8,6 +8,11 @@ LOG_FILE="$HOME/.agy-web.log"
 STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/crew-pocket"
 PID_FILE="$STATE_DIR/server.pid"
 SERVER_URL="http://127.0.0.1:8000/"
+REMOTE_ACCESS_FLAG="$HOME/.crew-pocket/remote-enabled"
+BIND_HOST="127.0.0.1"
+if [ -f "$REMOTE_ACCESS_FLAG" ]; then
+    BIND_HOST="0.0.0.0"
+fi
 
 cd "$ROOT_DIR"
 mkdir -p "$STATE_DIR"
@@ -49,7 +54,7 @@ if curl -fsS --max-time 1 "$SERVER_URL" >/dev/null 2>&1; then
     exit 2
 fi
 
-CREW_HOST_RUNTIME=termux-node CREW_CODEX_BRIDGE=off setsid node server.js </dev/null >>"$LOG_FILE" 2>&1 &
+CREW_BIND_HOST="$BIND_HOST" CREW_HOST_RUNTIME=termux-node CREW_CODEX_BRIDGE=off setsid node server.js </dev/null >>"$LOG_FILE" 2>&1 &
 SERVER_PID=$!
 printf '%s\n' "$SERVER_PID" > "$PID_FILE"
 
