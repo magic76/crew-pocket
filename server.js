@@ -1739,15 +1739,25 @@ const REMOTE_ACCESS_DIR = path.join(os.homedir(), '.crew-pocket');
 const REMOTE_ACCESS_FLAG = path.join(REMOTE_ACCESS_DIR, 'remote-enabled');
 
 function lanAddresses() {
-  const addresses = [];
   const interfaces = os.networkInterfaces();
-  for (const entries of Object.values(interfaces)) {
+  const candidates = [];
+  for (const [name, entries] of Object.entries(interfaces)) {
     for (const entry of entries || []) {
       if (entry.internal || entry.family !== 'IPv4') continue;
-      if (!addresses.includes(entry.address)) addresses.push(entry.address);
+      if (!entry.address || entry.address.startsWith('169.254.')) continue;
+      const lowerName = String(name || '').toLowerCase();
+      const priority = /^(wlan|wifi)/.test(lowerName)
+        ? 0
+        : /^(eth|en)/.test(lowerName)
+          ? 1
+          : /^(rmnet|ccmni|pdp|wwan)/.test(lowerName)
+            ? 3
+            : 2;
+      candidates.push({ address: entry.address, name, priority });
     }
   }
-  return addresses;
+  candidates.sort((a, b) => a.priority - b.priority || a.name.localeCompare(b.name));
+  return [...new Set(candidates.map(item => item.address))];
 }
 
 function remoteAccessSnapshot(req, configuredEnabled = fs.existsSync(REMOTE_ACCESS_FLAG)) {
