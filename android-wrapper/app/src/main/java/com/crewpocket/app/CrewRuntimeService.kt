@@ -30,6 +30,7 @@ class CrewRuntimeService : Service() {
         const val ACTION_APP_BACKGROUND = "com.crewpocket.app.action.APP_BACKGROUND"
         const val EXTRA_OPEN_PROVIDER = "com.crewpocket.app.extra.OPEN_PROVIDER"
         const val EXTRA_OPEN_CONVERSATION_ID = "com.crewpocket.app.extra.OPEN_CONVERSATION_ID"
+        const val EXTRA_OPEN_TASK_ID = "com.crewpocket.app.extra.OPEN_TASK_ID"
 
         private const val TAG = "CrewRuntimeService"
         private const val CHANNEL_ID = "crew_runtime"
@@ -266,6 +267,7 @@ class CrewRuntimeService : Service() {
         val openIntent = Intent(this, MainActivity::class.java)
             .putExtra(EXTRA_OPEN_PROVIDER, task.provider)
             .putExtra(EXTRA_OPEN_CONVERSATION_ID, task.conversationId)
+            .putExtra(EXTRA_OPEN_TASK_ID, task.id)
             .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
         val openPendingIntent = PendingIntent.getActivity(
             this,

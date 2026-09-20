@@ -54,9 +54,11 @@
       const detail = task.status === 'completed' ? task.result : (task.status === 'failed' ? task.error : lastEvent?.message);
       const action = task.status === 'running' || task.status === 'pending_confirmation'
         ? `<button data-task-action="cancel" data-task-id="${escapeHtml(task.id)}" class="min-h-[40px] px-3 rounded-lg border border-slate-700 bg-slate-900 text-slate-300 text-[11px] font-semibold active:scale-95">取消</button>`
-        : (task.status === 'failed' || task.status === 'cancelled'
-          ? `<button data-task-action="retry" data-task-id="${escapeHtml(task.id)}" class="min-h-[40px] px-3 rounded-lg border border-indigo-500/50 bg-indigo-500/15 text-indigo-200 text-[11px] font-semibold active:scale-95">重試</button>`
-          : '');
+        : (task.status === 'completed'
+          ? `<button data-task-action="brief" data-task-id="${escapeHtml(task.id)}" class="min-h-[40px] px-3 rounded-lg border border-teal-500/50 bg-teal-500/15 text-teal-200 text-[11px] font-semibold active:scale-95">🎧 講給我聽</button>`
+          : (task.status === 'failed' || task.status === 'cancelled'
+            ? `<button data-task-action="retry" data-task-id="${escapeHtml(task.id)}" class="min-h-[40px] px-3 rounded-lg border border-indigo-500/50 bg-indigo-500/15 text-indigo-200 text-[11px] font-semibold active:scale-95">重試</button>`
+            : ''));
       return `<article class="rounded-xl border border-slate-800 bg-slate-950/75 p-3 space-y-2">
         <div class="flex items-start justify-between gap-2">
           <div class="min-w-0"><div class="text-xs font-semibold text-slate-100 break-words">${escapeHtml(task.title)}</div><div class="mt-0.5 text-[10px] text-slate-400 truncate">對話：${escapeHtml(task.conversationTitle || task.conversationId || '未知')}</div><div class="mt-0.5 text-[10px] font-mono text-slate-500">${task.source === 'live' ? '🎙️ Live' : '💬 主對話'} · ${formatTime(task.updatedAt)}</div></div>
@@ -85,6 +87,13 @@
     if (!action || !taskId) return;
     if (button) button.disabled = true;
     try {
+      if (action === 'brief') {
+        setModalVisible(false);
+        if (typeof window.startTaskBriefing !== 'function') throw new Error('Live 語音尚未就緒');
+        const started = await window.startTaskBriefing(taskId);
+        if (!started && button) button.disabled = false;
+        return;
+      }
       const response = await fetch('/api/tasks', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action, task_id: taskId })
@@ -107,5 +116,54 @@
     const button = event.target.closest('[data-task-action]');
     if (button) handleTaskAction(button.dataset.taskAction, button.dataset.taskId, button);
   });
+  window.showTaskBriefingBanner = async function(taskId) {
+    const cleanTaskId = String(taskId || '').trim();
+    const container = document.getElementById('messages-container');
+    if (!cleanTaskId || !container) return false;
+
+    try {
+      const response = await fetch(`/api/live-delegate?job_id=${encodeURIComponent(cleanTaskId)}`);
+      const data = await response.json();
+      if (!response.ok || !data.success || data.status !== 'completed') return false;
+
+      document.getElementById('task-briefing-banner')?.remove();
+      const banner = document.createElement('div');
+      banner.id = 'task-briefing-banner';
+      banner.className = 'w-full max-w-2xl mx-auto px-1 py-1.5';
+      banner.innerHTML = `
+        <div class="rounded-2xl border border-teal-500/35 bg-teal-950/30 p-3 shadow-lg">
+          <div class="flex items-start gap-2.5">
+            <div class="text-lg leading-none pt-0.5">✅</div>
+            <div class="min-w-0 flex-1">
+              <div class="text-xs font-semibold text-teal-100">這個 AI 任務已完成</div>
+              <div class="mt-0.5 text-[10px] text-slate-400 truncate">${escapeHtml(data.task_title || data.task || '背景任務')}</div>
+              <div class="mt-2 flex items-center gap-2">
+                <button data-task-briefing-start class="min-h-[38px] px-3 rounded-xl bg-teal-500/15 border border-teal-400/50 text-teal-100 text-[11px] font-semibold active:scale-95">🎧 講給我聽</button>
+                <button data-task-briefing-dismiss class="min-h-[38px] px-3 rounded-xl border border-slate-700 text-slate-400 text-[11px] active:scale-95">稍後</button>
+              </div>
+            </div>
+          </div>
+        </div>`;
+
+      banner.querySelector('[data-task-briefing-start]')?.addEventListener('click', async event => {
+        const button = event.currentTarget;
+        button.disabled = true;
+        if (typeof window.startTaskBriefing !== 'function') {
+          button.disabled = false;
+          return;
+        }
+        const started = await window.startTaskBriefing(cleanTaskId);
+        if (started) banner.remove();
+        else button.disabled = false;
+      });
+      banner.querySelector('[data-task-briefing-dismiss]')?.addEventListener('click', () => banner.remove());
+      container.appendChild(banner);
+      banner.scrollIntoView({ block: 'end', behavior: 'smooth' });
+      return true;
+    } catch (_) {
+      return false;
+    }
+  };
+
   window.refreshTaskCenter = loadTasks;
 })();

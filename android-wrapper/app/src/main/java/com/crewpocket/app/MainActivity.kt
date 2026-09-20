@@ -68,6 +68,7 @@ class MainActivity : Activity() {
     private var legacyPwaCleanupPending = false
     private var pendingConversationProvider: String? = null
     private var pendingConversationId: String? = null
+    private var pendingTaskId: String? = null
     private var pendingConversationAttempts = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -323,10 +324,14 @@ class MainActivity : Activity() {
         val conversationId = source?.getStringExtra(CrewRuntimeService.EXTRA_OPEN_CONVERSATION_ID)
             ?.trim()
             ?.takeIf { it.matches(Regex("[A-Za-z0-9_-]+")) }
+        val taskId = source?.getStringExtra(CrewRuntimeService.EXTRA_OPEN_TASK_ID)
+            ?.trim()
+            ?.takeIf { it.matches(Regex("[A-Za-z0-9_-]+")) }
 
         if (provider != null && conversationId != null) {
             pendingConversationProvider = provider
             pendingConversationId = conversationId
+            pendingTaskId = taskId
             pendingConversationAttempts = 0
         }
     }
@@ -334,10 +339,28 @@ class MainActivity : Activity() {
     private fun dispatchPendingConversation() {
         val provider = pendingConversationProvider ?: return
         val conversationId = pendingConversationId ?: return
+        val taskId = pendingTaskId
         if (!::webView.isInitialized || !pageLoaded.get()) return
         if (!webView.url.orEmpty().startsWith(SERVER_URL)) return
 
-        val script = """
+        val script = if (taskId != null) {
+            """
+            (() => {
+              if (typeof window.openCrewTaskResult !== 'function') return 'not-ready';
+              try {
+                Promise.resolve(window.openCrewTaskResult(
+                  ${JSONObject.quote(provider)},
+                  ${JSONObject.quote(conversationId)},
+                  ${JSONObject.quote(taskId)}
+                )).catch(() => {});
+                return 'started';
+              } catch (_) {
+                return 'failed';
+              }
+            })();
+            """.trimIndent()
+        } else {
+            """
             (() => {
               if (typeof window.openCrewConversation !== 'function') return 'not-ready';
               try {
@@ -350,13 +373,15 @@ class MainActivity : Activity() {
                 return 'failed';
               }
             })();
-        """.trimIndent()
+            """.trimIndent()
+        }
 
         webView.evaluateJavascript(script) { result ->
             runOnUiThread {
                 if (result == "\"started\"") {
                     pendingConversationProvider = null
                     pendingConversationId = null
+                    pendingTaskId = null
                     pendingConversationAttempts = 0
                     return@runOnUiThread
                 }
@@ -375,6 +400,7 @@ class MainActivity : Activity() {
                     ).show()
                     pendingConversationProvider = null
                     pendingConversationId = null
+                    pendingTaskId = null
                     pendingConversationAttempts = 0
                 }
             }
