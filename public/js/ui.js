@@ -766,6 +766,16 @@ window.openCrewConversation = async function(providerId, conversationId) {
   return currentProvider === targetProvider && currentConversationId === targetConversationId;
 };
 
+window.openCrewTaskResult = async function(providerId, conversationId, taskId) {
+  const opened = await window.openCrewConversation(providerId, conversationId);
+  if (!opened) return false;
+  const cleanTaskId = String(taskId || '').trim();
+  if (cleanTaskId && typeof window.showTaskBriefingBanner === 'function') {
+    await window.showTaskBriefingBanner(cleanTaskId);
+  }
+  return true;
+};
+
 // Model & Thinking Effort Handlers
 function compactModelLabel(label) {
   return String(label || '')
