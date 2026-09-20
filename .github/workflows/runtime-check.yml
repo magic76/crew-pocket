@@ -38,7 +38,9 @@ jobs:
           node --check lib/runtime/agy-transport.js
           node --check lib/providers/codex.js
           node --check lib/jev-router.js
-          node -e "const r=require('./lib/jev-router'); const x=r.extractChoice({answers:{execution_mode:{choice:'DEBUG',confidence:0.91}}}); if(x.mode!=='DEBUG'||x.confidence!==0.91||!r.looksLikeContinuation('做吧')) process.exit(1)"
+          node --check lib/execution-intent.js
+          node -e "const r=require('./lib/jev-router'); const x=r.extractChoice({answers:{execution_mode:{choice:'DEBUG',confidence:0.91}}}); const y=r.extractNamedChoice({answers:{intent_review:{choice:'REJECT_SCOPE',confidence:0.88}}},['intent_review']); if(x.mode!=='DEBUG'||x.confidence!==0.91||y.choice!=='REJECT_SCOPE'||y.confidence!==0.88||!r.looksLikeContinuation('做吧')) process.exit(1)"
+          node -e "const i=require('./lib/execution-intent'); const x=i.normalizeExecutionIntent({summary:'x',expected_files:5,estimated_tools:14,needs_build:true,needs_dependency_change:false,destructive:false,broad_refactor:false,confidence:.8}); const p={mode:'SURGICAL_EDIT',allowWrite:true,maxFilesChanged:3,hardToolExecutions:12,allowBuild:false,allowDependencyChanges:false}; const c=i.policyConflicts(x,p); if(!c.includes('file_scope')||!c.includes('tool_budget')||!c.includes('build_not_allowed')) process.exit(1)"
           node --check lib/providers/antigravity.js
           node --check lib/session.js
           node --check lib/auth.js
