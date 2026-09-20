@@ -1291,7 +1291,9 @@ async function handleChat(req, res) {
   let executionSource = explicitExecutionMode ? 'request' : null;
   let jevRoute = null;
 
-  const reusableContinuationMode = looksLikeContinuation(prompt) &&
+  const reusableContinuationMode = providerId === 'codex' &&
+    effectiveModel === 'gpt-5.6-luna' &&
+    looksLikeContinuation(prompt) &&
     ['SURGICAL_EDIT', 'DEBUG', 'BUILD'].includes(savedSettings?.executionMode)
     ? savedSettings.executionMode
     : null;
@@ -1568,7 +1570,7 @@ async function handleChat(req, res) {
           // as well as on manual selector changes so new conversations are
           // immediately bound to their first model.
           saveConversationSettings(providerId, event.conversationId, {
-            model: event.model || effectiveModel || model || 'gpt-5.6-luna',
+            model: event.model || effectiveModel || model || savedSettings?.model || (providerId === 'codex' ? 'gpt-5.6-luna' : 'gemini-3.7-flash'),
             effort: event.effort || effort || savedSettings?.effort || 'low',
             workspace,
             role: body.role || savedSettings?.role || 'general',
