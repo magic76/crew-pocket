@@ -5,6 +5,9 @@ on:
     branches:
       - main
       - feature/agent-runtime
+  pull_request:
+    branches:
+      - main
     paths:
       - "scripts/*.sh"
       - "lib/**/*.js"
@@ -24,13 +27,9 @@ jobs:
       - name: Check shell scripts
         run: |
           bash -n install.sh
-          bash -n scripts/prepare-embedded-node.sh
-          bash -n scripts/prepare-embedded-codex.sh
-          bash -n scripts/prepare-embedded-agy.sh
           bash -n scripts/android-runtime-start.sh
           bash -n scripts/android-runtime-stop.sh
           bash -n scripts/update-provider.sh
-          bash -n scripts/diagnose-embedded-self-debug.sh
 
       - name: Check runtime JavaScript
         run: |

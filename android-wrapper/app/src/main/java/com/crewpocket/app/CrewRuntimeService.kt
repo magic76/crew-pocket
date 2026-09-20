@@ -29,7 +29,7 @@ class CrewRuntimeService : Service() {
         private const val TAG = "CrewRuntimeService"
         private const val CHANNEL_ID = "crew_runtime"
         private const val NOTIFICATION_ID = 7601
-        private const val SERVER_URL = "http://127.0.0.1:8000/"
+        private const val SERVER_HEALTH_URL = "http://127.0.0.1:8000/healthz"
         private const val RESTART_COOLDOWN_MS = 20_000L
         private const val INITIAL_MONITOR_DELAY_SEC = 4L
         private const val HEALTHY_MIN_DELAY_SEC = 10L
@@ -256,10 +256,10 @@ class CrewRuntimeService : Service() {
 
     private fun serverAlive(): Boolean {
         return try {
-            val connection = URL(SERVER_URL).openConnection() as HttpURLConnection
+            val connection = URL(SERVER_HEALTH_URL).openConnection() as HttpURLConnection
             connection.requestMethod = "GET"
-            connection.connectTimeout = 1_000
-            connection.readTimeout = 1_000
+            connection.connectTimeout = 750
+            connection.readTimeout = 750
             connection.instanceFollowRedirects = false
             connection.useCaches = false
             try {

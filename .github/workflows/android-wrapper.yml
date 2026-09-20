@@ -5,6 +5,9 @@ on:
     branches:
       - main
       - feature/agent-runtime
+  pull_request:
+    branches:
+      - main
     paths:
       - "android-wrapper/**"
       - ".github/workflows/android-wrapper.yml"
