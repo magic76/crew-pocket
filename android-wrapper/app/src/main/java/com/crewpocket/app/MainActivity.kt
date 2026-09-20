@@ -338,13 +338,14 @@ class MainActivity : Activity() {
         if (!webView.url.orEmpty().startsWith(SERVER_URL)) return
 
         val script = """
-            (async () => {
+            (() => {
               if (typeof window.openCrewConversation !== 'function') return 'not-ready';
               try {
-                return await window.openCrewConversation(
+                Promise.resolve(window.openCrewConversation(
                   ${JSONObject.quote(provider)},
                   ${JSONObject.quote(conversationId)}
-                ) ? 'ok' : 'failed';
+                )).catch(() => {});
+                return 'started';
               } catch (_) {
                 return 'failed';
               }
@@ -353,7 +354,7 @@ class MainActivity : Activity() {
 
         webView.evaluateJavascript(script) { result ->
             runOnUiThread {
-                if (result == ""ok"") {
+                if (result == "\"started\"") {
                     pendingConversationProvider = null
                     pendingConversationId = null
                     pendingConversationAttempts = 0
