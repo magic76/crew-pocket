@@ -45,6 +45,10 @@
 
   function setVisible(visible) {
     if (!modal) return;
+    if (visible) {
+      document.getElementById('tools-menu-dropdown')?.classList.add('hidden');
+      document.getElementById('tools-sheet-overlay')?.classList.add('hidden');
+    }
     modal.classList.toggle('opacity-0', !visible);
     modal.classList.toggle('pointer-events-none', !visible);
     if (visible) loadHome();
@@ -236,7 +240,22 @@
       renderRecent(data.recentTasks || []);
       renderRemote(data.remote);
     } catch (error) {
-      if (recent) recent.innerHTML = `<div class="py-8 text-center text-xs text-rose-300">${escapeHtml(error.message)}</div>`;
+      const message = String(error?.message || error || 'Crew Home 載入失敗');
+      const staleRuntime = /Unknown API endpoint/i.test(message);
+      if (recent) {
+        recent.innerHTML = staleRuntime
+          ? '<div class="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-left"><div class="text-xs font-semibold text-amber-200">Runtime 還在跑舊版</div><div class="mt-1 text-[10px] leading-relaxed text-slate-400">Web UI 已更新，但 Node Runtime 尚未重啟，所以還不認得 Crew Home / Task API。請重啟 Crew Runtime 後再開一次。</div></div>'
+          : `<div class="py-8 text-center text-xs text-rose-300">${escapeHtml(message)}</div>`;
+      }
+      if (staleRuntime && remoteStatus) {
+        remoteStatus.textContent = '需要先重啟 Crew Runtime 才能控制 Remote Console';
+        remoteStatus.className = 'mt-1 text-[10px] text-amber-300';
+      }
+      if (staleRuntime && remoteToggle) {
+        remoteToggle.disabled = true;
+        remoteToggle.textContent = '先重啟 Runtime';
+        remoteToggle.classList.add('opacity-50');
+      }
     } finally {
       loading = false;
     }
