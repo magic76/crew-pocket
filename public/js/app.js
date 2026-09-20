@@ -446,7 +446,6 @@ function initAppAndListeners() {
   const closeContextBtn = document.getElementById('close-context-btn');
   const modalTriggerCompactBtn = document.getElementById('modal-trigger-compact-btn');
   const modalTriggerCompactMaxBtn = document.getElementById('modal-trigger-compact-max-btn');
-  const headerCompactBtn = document.getElementById('header-compact-btn');
 
   const runCompactFromContext = (command) => {
     if (typeof window.hideContextModal === 'function') window.hideContextModal();
@@ -478,12 +477,6 @@ function initAppAndListeners() {
   }
   if (modalTriggerCompactBtn) {
     modalTriggerCompactBtn.addEventListener('click', () => runCompactFromContext('/compact'));
-  }
-  if (headerCompactBtn) {
-    headerCompactBtn.addEventListener('click', () => {
-      if (isStreaming) return;
-      runCompactFromContext('/compact');
-    });
   }
   if (modalTriggerCompactMaxBtn) modalTriggerCompactMaxBtn.addEventListener('click', () => {
     if (currentProvider === 'codex' && typeof window.startLowContextContinuation === 'function') {

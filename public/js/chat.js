@@ -612,17 +612,7 @@ function updateContextPill(stats) {
   const pct = Number.isFinite(activeTokens) && contextWindow > 0
     ? Math.max(0, Math.min(100, (activeTokens / contextWindow) * 100))
     : 0;
-  const compactQuickBtn = document.getElementById('header-compact-btn');
   if (pill) pill.dataset.contextLoad = pct >= 90 ? 'critical' : pct >= 70 ? 'warning' : 'normal';
-  if (compactQuickBtn) {
-    const canCompact = Boolean(providerConfig().capabilities?.compact && currentConversationId);
-    const visible = canCompact && pct >= 70;
-    compactQuickBtn.classList.toggle('hidden', !visible);
-    compactQuickBtn.dataset.contextLoad = pct >= 90 ? 'critical' : 'warning';
-    compactQuickBtn.title = pct >= 90
-      ? `Context 已使用 ${Math.round(pct)}%，建議立即 Compact`
-      : `Context 已使用 ${Math.round(pct)}%，可先 Compact`;
-  }
 }
 
 function showContextModal() {
@@ -1453,7 +1443,7 @@ async function loadConversations({ force = false } = {}) {
           return [];
         }
       }));
-      cachedConversations = results.flat().sort((a, b) => (a.title || '').localeCompare(b.title || '', 'zh-TW') || String(a.id).localeCompare(String(b.id)));
+      cachedConversations = results.flat().sort(compareConversationsStable);
       renderConversationItems(cachedConversations);
       return cachedConversations;
     } catch (err) {
@@ -1468,69 +1458,17 @@ async function loadConversations({ force = false } = {}) {
 }
 
 let cachedConversations = [];
-let conversationSearchQuery = '';
-const conversationSearchInput = document.getElementById('conversation-search-input');
-const conversationSearchClearBtn = document.getElementById('conversation-search-clear-btn');
 
-function refreshConversationSearch() {
-  if (typeof renderConversationItems === 'function') renderConversationItems(cachedConversations);
-}
-
-if (conversationSearchInput) {
-  conversationSearchInput.addEventListener('input', () => {
-    conversationSearchQuery = conversationSearchInput.value.trim().toLocaleLowerCase('zh-TW');
-    if (conversationSearchClearBtn) conversationSearchClearBtn.classList.toggle('hidden', !conversationSearchQuery);
-    refreshConversationSearch();
-  });
-}
-if (conversationSearchClearBtn) {
-  conversationSearchClearBtn.addEventListener('click', () => {
-    conversationSearchQuery = '';
-    if (conversationSearchInput) {
-      conversationSearchInput.value = '';
-      conversationSearchInput.focus();
-    }
-    conversationSearchClearBtn.classList.add('hidden');
-    refreshConversationSearch();
-  });
-}
-
-
-function conversationRelativeTime(timestamp) {
-  const value = Number(timestamp);
-  if (!Number.isFinite(value) || value <= 0) return '未記錄更新';
-  const elapsed = Math.max(0, Date.now() - value);
-  if (elapsed < 60 * 1000) return '剛剛更新';
-  if (elapsed < 60 * 60 * 1000) return `${Math.floor(elapsed / 60000)} 分鐘前`;
-  if (elapsed < 24 * 60 * 60 * 1000) return `${Math.floor(elapsed / 3600000)} 小時前`;
-  if (elapsed < 7 * 24 * 60 * 60 * 1000) return `${Math.floor(elapsed / 86400000)} 天前`;
-  return new Date(value).toLocaleDateString('zh-TW', { month: 'numeric', day: 'numeric' });
+function compareConversationsStable(a, b) {
+  return (a.title || '').localeCompare(b.title || '', 'zh-TW')
+    || String(a.id || '').localeCompare(String(b.id || ''));
 }
 
 function renderConversationItems(conversations) {
   if (!convList) return;
   convList.innerHTML = '';
 
-  const query = conversationSearchQuery;
-  const filtered = (conversations || [])
-    .filter(conv => {
-      if (!query) return true;
-      const provider = providerConfig(conv.provider || 'antigravity');
-      const haystack = [
-        conv.title,
-        conv.preview,
-        conv.workspace,
-        provider?.label,
-        provider?.shortLabel
-      ].filter(Boolean).join(' ').toLocaleLowerCase('zh-TW');
-      return haystack.includes(query);
-    })
-    .sort((a, b) => {
-      const aCurrent = a.id === currentConversationId && (a.provider || 'antigravity') === currentProvider;
-      const bCurrent = b.id === currentConversationId && (b.provider || 'antigravity') === currentProvider;
-      if (aCurrent !== bCurrent) return aCurrent ? -1 : 1;
-      return Number(b.updatedAt || 0) - Number(a.updatedAt || 0);
-    });
+  const filtered = (conversations || []).slice().sort(compareConversationsStable);
 
   if (filtered.length === 0) {
     convList.innerHTML = '<div class="p-4 text-center text-xs text-slate-500">尚無歷史對話</div>';
@@ -1550,27 +1488,14 @@ function renderConversationItems(conversations) {
       label: workspace === UNASSIGNED_WORKSPACE
         ? '未指定工作區'
         : (workspace === '/data/data/com.termux/files/home' ? 'Home' : workspace.split('/').filter(Boolean).pop()),
-      items: items.sort((a, b) => {
-        const aCurrent = a.id === currentConversationId && (a.provider || 'antigravity') === currentProvider;
-        const bCurrent = b.id === currentConversationId && (b.provider || 'antigravity') === currentProvider;
-        if (aCurrent !== bCurrent) return aCurrent ? -1 : 1;
-        return Number(b.updatedAt || 0) - Number(a.updatedAt || 0)
-          || (a.title || '').localeCompare(b.title || '', 'zh-TW');
-      })
+      items: items.sort(compareConversationsStable)
     }))
     .sort((a, b) => {
-      // 1. Unassigned workspace is strictly placed at the very end
       const aUnassigned = a.workspace === UNASSIGNED_WORKSPACE;
       const bUnassigned = b.workspace === UNASSIGNED_WORKSPACE;
       if (aUnassigned !== bUnassigned) return aUnassigned ? 1 : -1;
-
-      // 2. Currently active workspace is placed at the top of assigned folders
-      const aCurrent = a.workspace === ((typeof currentWorkspace !== 'undefined') ? currentWorkspace : '');
-      const bCurrent = b.workspace === ((typeof currentWorkspace !== 'undefined') ? currentWorkspace : '');
-      if (aCurrent !== bCurrent) return aCurrent ? -1 : 1;
-
-      // 3. Keep remaining folders in a stable name order.
-      return a.label.localeCompare(b.label, 'zh-TW');
+      return a.label.localeCompare(b.label, 'zh-TW')
+        || String(a.workspace || '').localeCompare(String(b.workspace || ''));
     });
 
   workspaceGroups.forEach(group => {
@@ -1590,7 +1515,6 @@ function renderConversationItems(conversations) {
         ? 'Home'
         : String(conv.workspace).split('/').filter(Boolean).pop())
       : '';
-    const updateLabel = conversationRelativeTime(conv.updatedAt);
     const wrapper = document.createElement('div');
     wrapper.className = 'swipe-item-wrapper relative overflow-hidden rounded-xl mb-1 select-none transition-all duration-200';
     wrapper.style.maxHeight = '64px';
@@ -1618,7 +1542,7 @@ function renderConversationItems(conversations) {
           </div>
           <div class="flex items-center gap-1.5 truncate text-[9px] text-slate-500">
             <span class="px-1 py-0.2 rounded border font-mono shrink-0 ${providerBadgeClass}">${providerLabel}</span>
-            <span class="truncate">${isCurrent && isStreaming ? '● 回覆中' : updateLabel}</span>
+            <span class="truncate">${isCurrent && isStreaming ? '● 回覆中' : (workspaceLabel || '未指定工作區')}</span>
           </div>
         </div>
         <div class="flex items-center gap-1 shrink-0 ml-1">
