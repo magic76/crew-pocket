@@ -37,6 +37,8 @@ jobs:
           node --check lib/runtime/provider-manager.js
           node --check lib/runtime/agy-transport.js
           node --check lib/providers/codex.js
+          node --check lib/jev-router.js
+          node -e "const r=require('./lib/jev-router'); const x=r.extractChoice({answers:{execution_mode:{choice:'DEBUG',confidence:0.91}}}); if(x.mode!=='DEBUG'||x.confidence!==0.91||!r.looksLikeContinuation('做吧')) process.exit(1)"
           node --check lib/providers/antigravity.js
           node --check lib/session.js
           node --check lib/auth.js

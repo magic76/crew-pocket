@@ -151,10 +151,15 @@ async function refreshAuthStatus() {
     }
 
     if (jevStatusBadge && jevStatusDesc) {
-      if (data.jev?.configured) {
+      if (data.jev?.configured && data.jev?.cliAvailable) {
         jevStatusBadge.className = 'px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40';
-        jevStatusBadge.textContent = '🟢 Key 已設定';
-        jevStatusDesc.textContent = data.jev.message || 'TypeSafe API Key 已可供 Jev 使用';
+        jevStatusBadge.textContent = '🟢 Router Ready';
+        jevStatusDesc.textContent = (data.jev.message || 'TypeSafe API Key 已設定') +
+          ' · ' + (data.jev.cliVersion || 'jev CLI 可用');
+      } else if (data.jev?.configured) {
+        jevStatusBadge.className = 'px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/40';
+        jevStatusBadge.textContent = '🟡 Key 已設定';
+        jevStatusDesc.textContent = 'Key 已設定，但 Crew Pocket 找不到 jev CLI；請先安裝或確認 PATH。';
       } else {
         jevStatusBadge.className = 'px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-slate-800 text-slate-400 border border-slate-700';
         jevStatusBadge.textContent = '⚪ 未設定';

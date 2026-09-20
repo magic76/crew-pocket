@@ -43,6 +43,7 @@ const { applyCors, authorizeApiRequest, maybeSetAuthCookie, securityStatus, getA
 const { createHistoryMigration } = require('./lib/runtime/history-migration');
 const { getProviderRuntimeStatus, updateProvider } = require('./lib/runtime/provider-manager');
 const { resolveExecutionPolicy } = require('./lib/execution-policy');
+const { getJevCliStatus, looksLikeContinuation, routeTaskWithJev, shouldRouteWithJev } = require('./lib/jev-router');
 
 
 async function handleStorageReport(res) {
@@ -1225,6 +1226,7 @@ async function handleChat(req, res) {
     to_session_ms: null,
     to_first_text_ms: null,
     to_first_tool_ms: null,
+    jev_ms: null,
     to_done_ms: null
   };
   const elapsed = () => Date.now() - requestStartedAt;
@@ -1244,12 +1246,12 @@ async function handleChat(req, res) {
 
   const { prompt, conversation_id, image_path, model, effort } = body;
   const providerId = normalizeProviderId(body.provider);
-  const executionPolicy = resolveExecutionPolicy({
-    provider: providerId,
-    model,
-    executionMode: body.execution_mode || body.executionMode,
-    executionPolicy: body.execution_policy || body.executionPolicy
-  });
+  const explicitExecutionMode =
+    body.execution_mode ||
+    body.executionMode ||
+    body.execution_policy?.mode ||
+    body.executionPolicy?.mode ||
+    null;
   if (!prompt && !image_path) {
     res.writeHead(400, { 'Content-Type': 'application/json' });
     return res.end(JSON.stringify({ error: 'Prompt or image is required' }));
@@ -1259,9 +1261,10 @@ async function handleChat(req, res) {
   // preventing accidental workspace hijacking from stale frontend state.
   const workspaceStartedAt = Date.now();
   let workspace;
+  let savedSettings = null;
   try {
     if (conversation_id) {
-      const savedSettings = await getConversationSettings(providerId, conversation_id);
+      savedSettings = await getConversationSettings(providerId, conversation_id);
       if (savedSettings?.workspace) {
         workspace = await resolveWorkspace(savedSettings.workspace);
       } else {
@@ -1282,6 +1285,68 @@ async function handleChat(req, res) {
     return res.end(JSON.stringify({ error: err.message }));
   }
   turnTiming.workspace_ms = Date.now() - workspaceStartedAt;
+
+  const effectiveModel = model || savedSettings?.model || null;
+  let routedExecutionMode = explicitExecutionMode;
+  let executionSource = explicitExecutionMode ? 'request' : null;
+  let jevRoute = null;
+
+  const reusableContinuationMode = providerId === 'codex' &&
+    effectiveModel === 'gpt-5.6-luna' &&
+    looksLikeContinuation(prompt) &&
+    ['SURGICAL_EDIT', 'DEBUG', 'BUILD'].includes(savedSettings?.executionMode)
+    ? savedSettings.executionMode
+    : null;
+
+  if (!routedExecutionMode && reusableContinuationMode) {
+    routedExecutionMode = reusableContinuationMode;
+    executionSource = 'conversation';
+    jevRoute = {
+      accepted: true,
+      mode: reusableContinuationMode,
+      source: 'conversation',
+      reason: 'continuation_reuse',
+      confidence: null,
+      latencyMs: 0
+    };
+  } else if (shouldRouteWithJev({
+    provider: providerId,
+    model: effectiveModel,
+    explicitExecutionMode,
+    prompt
+  })) {
+    const jevStartedAt = Date.now();
+    jevRoute = await routeTaskWithJev(prompt);
+    turnTiming.jev_ms = Date.now() - jevStartedAt;
+    if (jevRoute?.mode) {
+      routedExecutionMode = jevRoute.mode;
+      executionSource = 'jev';
+    }
+  }
+
+  const executionPolicy = resolveExecutionPolicy({
+    provider: providerId,
+    model: effectiveModel,
+    executionMode: routedExecutionMode,
+    executionPolicy: body.execution_policy || body.executionPolicy,
+    executionSource
+  });
+
+  if (jevRoute) {
+    console.log('[JevRoute] ' + JSON.stringify({
+      request_id: requestId,
+      conversation_id: conversation_id || null,
+      provider: providerId,
+      model: effectiveModel,
+      accepted: Boolean(jevRoute.accepted),
+      mode: jevRoute.mode || null,
+      suggested_mode: jevRoute.suggestedMode || null,
+      confidence: jevRoute.confidence ?? null,
+      threshold: jevRoute.threshold ?? null,
+      latency_ms: jevRoute.latencyMs ?? turnTiming.jev_ms,
+      reason: jevRoute.reason || null
+    }));
+  }
 
   let finalPrompt = prompt || 'Analyze this image';
 
@@ -1348,6 +1413,14 @@ async function handleChat(req, res) {
         conversation_id: conversation_id || null,
         execution_mode: executionPolicy?.mode || null,
         execution_policy_source: executionPolicy?.source || null,
+        jev_route: jevRoute ? {
+          accepted: Boolean(jevRoute.accepted),
+          mode: jevRoute.mode || null,
+          suggested_mode: jevRoute.suggestedMode || null,
+          confidence: jevRoute.confidence ?? null,
+          reason: jevRoute.reason || null,
+          latency_ms: jevRoute.latencyMs ?? null
+        } : null,
         reason,
         elapsed_ms: elapsed(),
         turn_timing: turnTiming,
@@ -1400,6 +1473,16 @@ async function handleChat(req, res) {
         request_id: requestId,
         tool_metrics: getToolMetrics(),
         execution_policy: executionPolicy || undefined,
+        jev_route: jevRoute ? {
+          accepted: Boolean(jevRoute.accepted),
+          mode: jevRoute.mode || null,
+          suggested_mode: jevRoute.suggestedMode || null,
+          confidence: jevRoute.confidence ?? null,
+          threshold: jevRoute.threshold ?? null,
+          reason: jevRoute.reason || null,
+          latency_ms: jevRoute.latencyMs ?? null,
+          model: jevRoute.model || null
+        } : undefined,
         turn_timing: turnTiming
       };
       logToolMetrics(finalPayload.error ? 'error' : 'completed');
@@ -1470,10 +1553,10 @@ async function handleChat(req, res) {
 
     await provider.startTurn({
       conversationId: conversation_id,
-      model,
+      model: effectiveModel || model,
       effort,
       workspace,
-      executionMode: executionPolicy?.mode || body.execution_mode || body.executionMode || null,
+      executionMode: executionPolicy?.mode || routedExecutionMode || null,
       executionPolicy,
       prompt: finalPrompt,
       imagePath: image_path,
@@ -1487,12 +1570,28 @@ async function handleChat(req, res) {
           // as well as on manual selector changes so new conversations are
           // immediately bound to their first model.
           saveConversationSettings(providerId, event.conversationId, {
-            model: event.model || model,
-            effort: event.effort || effort || 'low',
+            model: event.model || effectiveModel || model || savedSettings?.model || (providerId === 'codex' ? 'gpt-5.6-luna' : 'gemini-3.7-flash'),
+            effort: event.effort || effort || savedSettings?.effort || 'low',
             workspace,
-            role: body.role || 'general'
+            role: body.role || savedSettings?.role || 'general',
+            ...(executionPolicy?.mode ? { executionMode: executionPolicy.mode } : {})
           }).catch(err => console.warn('[Conversation Settings] Save failed:', err.message));
-          sendEvent('init', { conversation_id: event.conversationId, provider: providerId, model: event.model, effort: event.effort });
+          sendEvent('init', {
+            conversation_id: event.conversationId,
+            provider: providerId,
+            model: event.model || effectiveModel,
+            effort: event.effort,
+            execution_mode: executionPolicy?.mode || null,
+            execution_source: executionPolicy?.source || null,
+            jev_route: jevRoute ? {
+              accepted: Boolean(jevRoute.accepted),
+              mode: jevRoute.mode || null,
+              suggested_mode: jevRoute.suggestedMode || null,
+              confidence: jevRoute.confidence ?? null,
+              reason: jevRoute.reason || null,
+              latency_ms: jevRoute.latencyMs ?? null
+            } : null
+          });
         } else if (event.type === 'text_delta') {
           markOnce('to_first_text_ms');
           // The browser already appends deltas locally. Sending the complete
@@ -1756,11 +1855,21 @@ async function handleSaveVoiceprint(req, res) {
 
 async function handleGetAuthStatus(res) {
   try {
-    const [codexStatus, providerStatus] = await Promise.all([
+    const [codexStatus, providerStatus, jevCliStatus] = await Promise.all([
       getProvider('codex').getAuthStatus(),
-      auth.getAuthStatus()
+      auth.getAuthStatus(),
+      getJevCliStatus()
     ]);
-    const status = { ...providerStatus, codex: codexStatus };
+    const status = {
+      ...providerStatus,
+      codex: codexStatus,
+      jev: {
+        ...(providerStatus.jev || {}),
+        cliAvailable: Boolean(jevCliStatus.available),
+        cliVersion: jevCliStatus.version || null,
+        cliError: jevCliStatus.available ? null : (jevCliStatus.error || null)
+      }
+    };
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(status));
   } catch (err) {
