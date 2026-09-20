@@ -891,6 +891,9 @@ function appendMessage(role, content, timestamp, tools = [], thinking = '', isBt
       imgHtml = `<img src="${imageProxyUrl(imgP, true)}" data-full-src="${imageProxyUrl(imgP)}" loading="lazy" decoding="async" fetchpriority="low" class="max-h-48 sm:max-h-56 max-w-full rounded-xl object-contain border border-indigo-400/40 cursor-pointer shadow-md mb-2 bg-black/20 block" alt="Uploaded Photo">`;
       userText = userText.replace(/\[Uploaded Image:\s*([^\]]+)\]/, '').trim();
     }
+    // Runtime turn/steer directives are wrapped in ADDITIONAL_METADATA. Once
+    // stripped, do not leave an empty user bubble in the visible transcript.
+    if (!userText && !imgHtml) return;
     msgDiv.setAttribute('data-raw-text', userText);
 
     const editRewindBtn = providerConfig().capabilities?.rewind ? `
