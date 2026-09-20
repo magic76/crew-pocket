@@ -709,6 +709,10 @@ async function handleLiveDelegateStatus(parsedUrl, res) {
     status: task?.status || job.status,
     provider: task?.provider || job.provider,
     conversation_id: task?.conversationId || job.conversationId,
+    conversation_title: task?.conversationTitle || undefined,
+    task_id: task?.id || job.id,
+    task_title: task?.title || undefined,
+    task: task?.task || undefined,
     reply: (task?.status || job.status) === 'completed' ? (task?.result || job.reply) : undefined,
     error: (task?.status || job.status) === 'failed' ? (task?.error || job.error) : undefined
   }));
@@ -739,6 +743,20 @@ async function handleTasks(req, res, parsedUrl) {
     }
     const record = await getTask(taskId);
     if (!record) throw liveDelegateError('找不到任務。', 404);
+    if (action === 'update') {
+      if (record.status !== 'pending_confirmation') {
+        throw liveDelegateError('只有等待確認中的任務可以修改。', 409);
+      }
+      const nextTask = String(body.task || '').trim();
+      if (!nextTask) throw liveDelegateError('任務內容不可為空。', 400);
+      const updated = await updateTask(
+        taskId,
+        { task: nextTask, title: String(body.title || '').trim() || nextTask.split(/\r?\n/)[0].slice(0, 160) },
+        { type: 'updated', message: 'Live 已更新待交辦內容。' }
+      );
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({ success: true, task: updated }));
+    }
     if (action === 'cancel') {
       const job = liveDelegateJobs.get(taskId);
       if (job) {
