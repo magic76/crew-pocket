@@ -42,6 +42,7 @@ const auth = require('./lib/auth');
 const { applyCors, authorizeApiRequest, maybeSetAuthCookie, securityStatus, getApiToken, isLoopbackAddress } = require('./lib/http-security');
 const { createHistoryMigration } = require('./lib/runtime/history-migration');
 const { getProviderRuntimeStatus, updateProvider } = require('./lib/runtime/provider-manager');
+const { resolveExecutionPolicy } = require('./lib/execution-policy');
 
 
 async function handleStorageReport(res) {
@@ -1188,6 +1189,30 @@ function isPollingToolEvent(event) {
   return name.includes('write_stdin') || name.includes('poll') || parameters.includes('session_id') || parameters.includes('yield_time_ms');
 }
 
+function collectChangedFiles(event, target) {
+  if (!target || !(target instanceof Set)) return;
+  const name = String(event.name || event.tool_name || '').toLowerCase();
+  if (!/(apply|patch|edit|write|change)/.test(name)) return;
+  const parameters = event.info && event.info.parameters ? event.info.parameters : {};
+
+  const visit = (value, key = '') => {
+    if (typeof value === 'string') {
+      if (/(^|_)(path|file|filename)$/.test(String(key).toLowerCase()) && value.trim()) {
+        target.add(value.trim());
+      }
+      return;
+    }
+    if (Array.isArray(value)) {
+      for (const item of value) visit(item, key);
+      return;
+    }
+    if (!value || typeof value !== 'object') return;
+    for (const [childKey, childValue] of Object.entries(value)) visit(childValue, childKey);
+  };
+
+  visit(parameters);
+}
+
 // 💬 SSE Chat Streaming with Resident Pipe
 async function handleChat(req, res) {
   const requestId = crypto.randomUUID();
@@ -1219,6 +1244,12 @@ async function handleChat(req, res) {
 
   const { prompt, conversation_id, image_path, model, effort } = body;
   const providerId = normalizeProviderId(body.provider);
+  const executionPolicy = resolveExecutionPolicy({
+    provider: providerId,
+    model,
+    executionMode: body.execution_mode || body.executionMode,
+    executionPolicy: body.execution_policy || body.executionPolicy
+  });
   if (!prompt && !image_path) {
     res.writeHead(400, { 'Content-Type': 'application/json' });
     return res.end(JSON.stringify({ error: 'Prompt or image is required' }));
@@ -1285,11 +1316,14 @@ async function handleChat(req, res) {
   try {
     const provider = getProvider(providerId);
     const toolRuns = new Map();
+    const changedFiles = new Set();
     let toolEventCount = 0;
     let metricsLogged = false;
     let ended = false;
     let abortTurn = () => {};
     let lastContextStats = null;
+    let policyWarned = false;
+    let policyStopped = false;
     const getToolMetrics = () => {
       let executions = 0;
       let polls = 0;
@@ -1301,7 +1335,8 @@ async function handleChat(req, res) {
         events: toolEventCount,
         unique_tools: toolRuns.size,
         executions,
-        polls
+        polls,
+        changed_files: [...changedFiles]
       };
     };
     const logToolMetrics = (reason) => {
@@ -1311,6 +1346,8 @@ async function handleChat(req, res) {
         request_id: requestId,
         provider: providerId,
         conversation_id: conversation_id || null,
+        execution_mode: executionPolicy?.mode || null,
+        execution_policy_source: executionPolicy?.source || null,
         reason,
         elapsed_ms: elapsed(),
         turn_timing: turnTiming,
@@ -1346,6 +1383,7 @@ async function handleChat(req, res) {
       run.notified = true;
       toolRuns.set(key, run);
       toolEventCount += 1;
+      collectChangedFiles(event, changedFiles);
       return {
         key,
         attempts: run.attempts,
@@ -1361,11 +1399,62 @@ async function handleChat(req, res) {
         ...(payload || {}),
         request_id: requestId,
         tool_metrics: getToolMetrics(),
+        execution_policy: executionPolicy || undefined,
         turn_timing: turnTiming
       };
       logToolMetrics(finalPayload.error ? 'error' : 'completed');
       sendEvent('done', finalPayload);
       res.end();
+    };
+
+    const enforceExecutionPolicy = () => {
+      if (!executionPolicy || policyStopped || ended) return;
+      const metrics = getToolMetrics();
+      const softReached = executionPolicy.softToolExecutions > 0 &&
+        metrics.executions >= executionPolicy.softToolExecutions;
+      if (softReached && !policyWarned) {
+        policyWarned = true;
+        const warning = {
+          mode: executionPolicy.mode,
+          level: 'soft',
+          executions: metrics.executions,
+          polls: metrics.polls,
+          changed_files: metrics.changed_files.length,
+          hard_tool_limit: executionPolicy.hardToolExecutions,
+          poll_limit: executionPolicy.maxPolls,
+          file_limit: executionPolicy.maxFilesChanged
+        };
+        console.warn('[ExecutionPolicy] soft budget reached ' + JSON.stringify({ request_id: requestId, ...warning }));
+        sendEvent('policy', warning);
+      }
+
+      const violations = [];
+      if (metrics.executions > executionPolicy.hardToolExecutions) {
+        violations.push(`tool executions ${metrics.executions}/${executionPolicy.hardToolExecutions}`);
+      }
+      if (metrics.polls > executionPolicy.maxPolls) {
+        violations.push(`polls ${metrics.polls}/${executionPolicy.maxPolls}`);
+      }
+      if (executionPolicy.maxFilesChanged >= 0 && metrics.changed_files.length > executionPolicy.maxFilesChanged) {
+        violations.push(`changed files ${metrics.changed_files.length}/${executionPolicy.maxFilesChanged}`);
+      }
+      if (!violations.length) return;
+
+      policyStopped = true;
+      const message = `Execution policy stopped this turn: ${violations.join(', ')}. Keep the task narrower or retry with a broader execution mode.`;
+      console.warn('[ExecutionPolicy] hard stop ' + JSON.stringify({
+        request_id: requestId,
+        mode: executionPolicy.mode,
+        violations
+      }));
+      try { abortTurn(); } catch (_) {}
+      finish({
+        error: message,
+        provider: providerId,
+        conversation_id,
+        policy_stop: true,
+        policy_violations: violations
+      });
     };
 
     // The request body can close normally as soon as the browser has sent it.
@@ -1384,7 +1473,8 @@ async function handleChat(req, res) {
       model,
       effort,
       workspace,
-      role: body.role || 'general',
+      executionMode: executionPolicy?.mode || body.execution_mode || body.executionMode || null,
+      executionPolicy,
       prompt: finalPrompt,
       imagePath: image_path,
       onAbort(handler) { abortTurn = handler; },
@@ -1429,6 +1519,7 @@ async function handleChat(req, res) {
             tool_event_count: toolEventCount,
             unique_tool_count: toolRuns.size
           });
+          enforceExecutionPolicy();
         } else if (event.type === 'context_usage') {
           lastContextStats = event.stats || null;
           sendEvent('context', event.stats);
