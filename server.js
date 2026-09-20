@@ -1825,6 +1825,18 @@ async function handleAgyToken(req, res) {
   }
 }
 
+async function handleJevApiKey(req, res) {
+  try {
+    const body = await parseJsonBody(req);
+    const result = await auth.setJevApiKey(body.apiKey);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(result));
+  } catch (err) {
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: false, error: err.message }));
+  }
+}
+
 
 const REMOTE_ACCESS_DIR = path.join(os.homedir(), '.crew-pocket');
 const REMOTE_ACCESS_FLAG = path.join(REMOTE_ACCESS_DIR, 'remote-enabled');
@@ -2092,6 +2104,8 @@ const server = http.createServer(async (req, res) => {
     return handleCodexApiKey(req, res);
   } else if (pathname === '/api/auth/agy/token' && req.method === 'POST') {
     return handleAgyToken(req, res);
+  } else if (pathname === '/api/auth/jev/api-key' && req.method === 'POST') {
+    return handleJevApiKey(req, res);
   } else if (pathname === '/api/session-status' && req.method === 'GET') {
     return handleSessionStatus(parsedUrl, res);
   } else if (pathname === '/api/usage' && req.method === 'GET') {

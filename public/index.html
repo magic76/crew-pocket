@@ -971,7 +971,7 @@
           <div class="w-8 h-8 rounded-xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400 text-base">🔐</div>
           <div>
             <h2 id="auth-modal-title" class="text-xs sm:text-sm font-bold text-white tracking-wide">Provider 帳號認證與登入</h2>
-            <div class="text-[10px] text-slate-400">管理 OpenAI Codex 與 AGY 授權狀態</div>
+            <div class="text-[10px] text-slate-400">管理 Codex、AGY 與 TypeSafe Jev 認證</div>
           </div>
         </div>
         <button id="close-auth-modal-btn" type="button" class="min-w-9 min-h-9 flex items-center justify-center text-slate-400 hover:text-white rounded-xl hover:bg-slate-800 transition text-xs font-mono">✕</button>
@@ -1084,7 +1084,31 @@
           </details>
         </div>
 
-        <!-- 3. Termux Runtime Providers -->
+        <!-- 3. TypeSafe Jev Card -->
+        <div class="p-3 rounded-2xl bg-slate-950/80 border border-cyan-500/30 space-y-2.5">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <span class="text-base">◆</span>
+              <span class="font-bold text-slate-100">TypeSafe Jev</span>
+            </div>
+            <span id="auth-status-jev" class="px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-slate-800 text-slate-400">檢查中...</span>
+          </div>
+          <p id="auth-desc-jev" class="text-[11px] text-slate-400 leading-relaxed">
+            載入狀態中...
+          </p>
+
+          <div class="space-y-1.5">
+            <input id="jev-api-key-input" type="password" autocomplete="off" placeholder="TypeSafe API Key" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500 font-mono">
+            <button id="jev-api-key-submit-btn" type="button" class="w-full py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 active:scale-95 text-white font-semibold text-xs cursor-pointer" onclick="saveJevApiKey()">
+              儲存 Key
+            </button>
+            <div class="text-[10px] leading-relaxed text-slate-500">
+              Key 只存手機本機 Jev 設定檔，權限 600；介面不會回傳或顯示已儲存的 Key。
+            </div>
+          </div>
+        </div>
+
+        <!-- 4. Termux Runtime Providers -->
         <div class="p-3 rounded-2xl bg-slate-950/80 border border-slate-700/70 space-y-2.5">
           <div class="flex items-center justify-between">
             <div>
