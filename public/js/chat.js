@@ -878,6 +878,9 @@ function appendMessage(role, content, timestamp, tools = [], thinking = '', isBt
     let userText = (content || '')
       .replace(/^\[Crew Pocket：支援互動 HTML、Chart\.js 圖表、Google Maps、Android APK 與本機檔案；依使用者需求套用對應規則。\]\s*/u, '')
       .replace(/^\[Crew Pocket Capability Rules\]\s*[\s\S]*?\n\n/u, '')
+      .replace(/^(?:\s*<ADDITIONAL_METADATA>[\s\S]*?<\/ADDITIONAL_METADATA>\s*)+/iu, '')
+      .replace(/(?:\s*<turn_aborted>[\s\S]*?<\/turn_aborted>\s*)+/giu, '')
+      .replace(/^\s*turn_aborted\s*$/gim, '')
       .replace(/\[Context:[\s\S]*?\]/g, '')
       .replace(/<USER_REQUEST>[\s\S]*?<\/USER_REQUEST>/g, (m, g) => g || m)
       .trim();
