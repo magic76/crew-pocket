@@ -1317,6 +1317,7 @@
           action: 'create', source: 'live',
           provider: typeof currentProvider !== 'undefined' ? currentProvider : 'antigravity',
           conversation_id: currentConversationId,
+          conversation_title: (typeof headerTitle !== 'undefined' && headerTitle?.textContent?.trim()) ? headerTitle.textContent.trim() : undefined,
           model: typeof currentModel !== 'undefined' ? currentModel : undefined,
           effort: typeof currentEffort !== 'undefined' ? currentEffort : 'low',
           task: getMainTaskText(task)
@@ -1423,6 +1424,7 @@
         body: JSON.stringify({
           provider: typeof currentProvider !== 'undefined' ? currentProvider : 'antigravity',
           conversation_id: currentConversationId,
+          conversation_title: (typeof headerTitle !== 'undefined' && headerTitle?.textContent?.trim()) ? headerTitle.textContent.trim() : undefined,
           model: typeof currentModel !== 'undefined' ? currentModel : undefined,
           effort: typeof currentEffort !== 'undefined' ? currentEffort : 'low',
           task: getMainTaskText(task),
