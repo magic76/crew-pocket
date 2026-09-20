@@ -37,6 +37,7 @@ jobs:
           node --check lib/runtime/provider-manager.js
           node --check lib/runtime/agy-transport.js
           node --check lib/providers/codex.js
+          node --check lib/jev-router.js
           node --check lib/providers/antigravity.js
           node --check lib/session.js
           node --check lib/auth.js
