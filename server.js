@@ -1485,6 +1485,17 @@ async function handleChat(req, res) {
     let lastContextStats = null;
     let policyWarned = false;
     let policyStopped = false;
+    let runtimeStopped = false;
+    let softBudgetSnapshotQueued = false;
+    let activeConversationId = conversation_id || null;
+    const runtimeSnapshotsEnabled = shouldUseRuntimeSnapshots({
+      provider: providerId,
+      model: effectiveModel
+    });
+    const runtimeDecisions = [];
+    const pendingRuntimeDecisions = new Set();
+    let runtimeDecisionQueue = Promise.resolve();
+
     const getToolMetrics = () => {
       let executions = 0;
       let polls = 0;
@@ -1520,6 +1531,7 @@ async function handleChat(req, res) {
         } : null,
         execution_intent: approvedExecutionIntent,
         intent_review: intentReview,
+        runtime_decisions: runtimeDecisions.slice(-8),
         reason,
         elapsed_ms: elapsed(),
         turn_timing: turnTiming,
@@ -1560,7 +1572,10 @@ async function handleChat(req, res) {
         key,
         attempts: run.attempts,
         pollCount: run.pollCount,
-        shouldNotify
+        shouldNotify,
+        state,
+        previousState,
+        failedTransition: isFailedToolState(state) && !isFailedToolState(previousState)
       };
     };
     const finish = (payload) => {
@@ -1585,6 +1600,7 @@ async function handleChat(req, res) {
         } : undefined,
         execution_intent: approvedExecutionIntent || undefined,
         intent_review: intentReview || undefined,
+        runtime_decisions: runtimeDecisions.length ? runtimeDecisions : undefined,
         turn_timing: turnTiming
       };
       logToolMetrics(finalPayload.error ? 'error' : 'completed');
