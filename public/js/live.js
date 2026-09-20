@@ -77,6 +77,7 @@
   let pendingMainTask = null;
   let pendingMainTaskTimer = null;
   let mainTaskPollTimer = null;
+  let pendingLiveOpeningPrompt = null;
   const MAIN_TASK_CONFIRM_TTL_MS = 60000;
   let isGoAwayClosing = false;
   let isLiveResuming = false;
@@ -1311,24 +1312,37 @@
 
   async function persistPendingMainTask(task) {
     try {
+      const isUpdate = Boolean(task.centerTaskId);
+      const payload = isUpdate
+        ? {
+            action: 'update',
+            task_id: task.centerTaskId,
+            task: getMainTaskText(task)
+          }
+        : {
+            action: 'create',
+            source: 'live',
+            provider: typeof currentProvider !== 'undefined' ? currentProvider : 'antigravity',
+            conversation_id: currentConversationId,
+            conversation_title: (typeof headerTitle !== 'undefined' && headerTitle?.textContent?.trim()) ? headerTitle.textContent.trim() : undefined,
+            model: typeof currentModel !== 'undefined' ? currentModel : undefined,
+            effort: typeof currentEffort !== 'undefined' ? currentEffort : 'low',
+            task: getMainTaskText(task)
+          };
       const response = await fetch('/api/tasks', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'create', source: 'live',
-          provider: typeof currentProvider !== 'undefined' ? currentProvider : 'antigravity',
-          conversation_id: currentConversationId,
-          conversation_title: (typeof headerTitle !== 'undefined' && headerTitle?.textContent?.trim()) ? headerTitle.textContent.trim() : undefined,
-          model: typeof currentModel !== 'undefined' ? currentModel : undefined,
-          effort: typeof currentEffort !== 'undefined' ? currentEffort : 'low',
-          task: getMainTaskText(task)
-        })
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
       });
       const data = await response.json();
-      if (!response.ok || !data.success || !data.task?.id) throw new Error(data.error || '任務草稿保存失敗');
+      if (!response.ok || !data.success || !data.task?.id) {
+        throw new Error(data.error || (isUpdate ? '任務草稿更新失敗' : '任務草稿保存失敗'));
+      }
       task.centerTaskId = data.task.id;
       if (pendingMainTask !== task) {
         await fetch('/api/tasks', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action: 'cancel', task_id: task.centerTaskId })
         });
       }
@@ -1364,24 +1378,48 @@
     if (pendingMainTask && (pendingMainTask.executing || pendingMainTask.dispatched)) {
       return { success: false, error: '已有主對話任務正在背景處理，請等待完成後再交辦下一項。' };
     }
+
     if (pendingMainTaskTimer) clearTimeout(pendingMainTaskTimer);
-    pendingMainTask = {
-      id: `main-task-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      task,
-      cameraSnapshot: latestLiveCameraSnapshot,
-      expiresAt: Date.now() + MAIN_TASK_CONFIRM_TTL_MS,
-      executing: false,
-      completed: false
-    };
-    pendingMainTask.persistencePromise = persistPendingMainTask(pendingMainTask);
+    const revising = Boolean(pendingMainTask && !pendingMainTask.completed);
+    if (revising) {
+      pendingMainTask.task = task;
+      pendingMainTask.cameraSnapshot = latestLiveCameraSnapshot;
+      pendingMainTask.expiresAt = Date.now() + MAIN_TASK_CONFIRM_TTL_MS;
+      pendingMainTask.error = '';
+      pendingMainTask.persistencePromise = Promise.resolve(pendingMainTask.persistencePromise)
+        .then(() => persistPendingMainTask(pendingMainTask));
+    } else {
+      pendingMainTask = {
+        id: `main-task-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        task,
+        cameraSnapshot: latestLiveCameraSnapshot,
+        expiresAt: Date.now() + MAIN_TASK_CONFIRM_TTL_MS,
+        executing: false,
+        completed: false
+      };
+      pendingMainTask.persistencePromise = persistPendingMainTask(pendingMainTask);
+    }
+
     pendingMainTaskTimer = setTimeout(() => {
       if (pendingMainTask && !pendingMainTask.executing && !pendingMainTask.dispatched && !pendingMainTask.completed) {
         clearPendingMainTask('待交辦任務已逾時，未送出。');
       }
     }, MAIN_TASK_CONFIRM_TTL_MS + 100);
     renderPendingMainTask();
-    appendCardTranscript('system', '📨 已建立待交辦任務；請以明確語意確認或點擊確認按鈕。');
-    return { success: true, status: 'pending_confirmation', task_id: pendingMainTask.id, task, expires_in_seconds: 60 };
+    appendCardTranscript(
+      'system',
+      revising
+        ? '📝 已更新待交辦內容；請確認最新版本後再送出。'
+        : '📨 已整理成待交辦任務；請確認後交給主對話執行。'
+    );
+    return {
+      success: true,
+      status: 'pending_confirmation',
+      revised: revising,
+      task_id: pendingMainTask.id,
+      task,
+      expires_in_seconds: 60
+    };
   }
 
   function requestMainTaskConfirmation() {
@@ -2552,6 +2590,64 @@
     }
   }
 
+  function sendPendingLiveOpeningPrompt() {
+    if (!pendingLiveOpeningPrompt || !isConnected || !isLiveSetupReady || !ws || ws.readyState !== WebSocket.OPEN) return false;
+    const prompt = pendingLiveOpeningPrompt;
+    pendingLiveOpeningPrompt = null;
+    ws.send(JSON.stringify({
+      clientContent: {
+        turns: [{ role: 'user', parts: [{ text: prompt }] }],
+        turnComplete: true
+      }
+    }));
+    appendCardTranscript('system', '🎧 正在用語音整理這次完成結果…');
+    return true;
+  }
+
+  window.startTaskBriefing = async function(taskId) {
+    const cleanTaskId = String(taskId || '').trim();
+    if (!cleanTaskId) return false;
+
+    try {
+      const response = await fetch(`/api/live-delegate?job_id=${encodeURIComponent(cleanTaskId)}`);
+      const data = await response.json();
+      if (!response.ok || !data.success) throw new Error(data.error || '無法讀取任務結果');
+      if (data.status !== 'completed') throw new Error('這個任務還沒有完成');
+
+      const taskText = String(data.task || data.task_title || '未提供原始任務').slice(0, 2400);
+      const resultText = String(data.reply || '任務已完成，但沒有文字結果。').slice(0, 6200);
+      const conversationTitle = String(data.conversation_title || '目前對話').slice(0, 120);
+      pendingLiveOpeningPrompt = `【使用者主動點擊「講給我聽」】
+這是一個已完成 AI 任務的語音 briefing，不是新的執行指令。禁止呼叫任何工具或重新執行任務。
+
+對話：${conversationTitle}
+原始任務：
+${taskText}
+
+完成結果：
+${resultText}
+
+請直接用 AUDIO 在約 30 秒內講重點，依序回答：
+1. 做了什麼。
+2. 最關鍵的修改／結論是什麼。
+3. 使用者現在最值得測試或注意什麼。
+
+不要逐字念原文，不要念不重要的 commit hash 或路徑。先講結論，講完保持通話，等待使用者追問；後續追問都以這份任務結果為主要上下文。`;
+
+      if (isConnected && isLiveSetupReady) {
+        sendPendingLiveOpeningPrompt();
+      } else if (!ws || ws.readyState === WebSocket.CLOSED) {
+        await startLiveSession('operation');
+      }
+      return true;
+    } catch (error) {
+      pendingLiveOpeningPrompt = null;
+      console.warn('[Live Briefing]', error);
+      if (typeof alert === 'function') alert(`無法開始語音簡報：${error.message}`);
+      return false;
+    }
+  };
+
   async function startLiveSession(mode = 'operation', continuation = null) {
     const resumeHandle = String(continuation?.handle || '');
     const isResuming = Boolean(resumeHandle);
@@ -2859,8 +2955,8 @@
 
         const voiceName = getSelectedVoice();
         const baseSystemPrompt = (typeof getCrewLocale === 'function' && getCrewLocale() === 'en')
-          ? `You are Crew Pocket's live voice assistant. Always respond via AUDIO and match the user's language (Traditional Chinese by default). Answer normal questions directly. You can only use tools for the current Crew Pocket session: draft_message, prepare_main_task, confirm_main_task, capture_camera_frame, read_file, and write_file. Only use a tool when the user's latest utterance explicitly requests it.`
-          : `你是 Crew Pocket 的即時語音助理，最終回答一律以 AUDIO 語音說出，預設使用繁體中文。普通問題直接回答。你只可使用目前 Crew Pocket 對話內的工具：draft_message、prepare_main_task、confirm_main_task、capture_camera_frame、read_file、write_file；只有使用者本輪最新一句明確要求時才能呼叫工具。`;
+          ? `You are Crew Pocket's live voice assistant. Always respond via AUDIO and match the user's language (Traditional Chinese by default). Answer normal questions directly. When the user's latest utterance explicitly asks the main chat/AI to do, implement, check, fix, review, or handle something, immediately consolidate it into one executable task with objective, relevant context, constraints, and acceptance criteria, then call prepare_main_task. Do not ask formatting questions unless a missing fact truly blocks execution. If the user adds or changes requirements before confirmation, call prepare_main_task again with the full consolidated latest task. You can only use tools for the current Crew Pocket session: draft_message, prepare_main_task, confirm_main_task, capture_camera_frame, read_file, and write_file.`
+          : `你是 Crew Pocket 的即時語音助理，最終回答一律以 AUDIO 語音說出，預設使用繁體中文。普通問題直接回答。當使用者最新一句明確要求「幫我做、交給主對話、幫我處理、修、查、review、實作」等工作時，立即把口語整理成一個可執行任務，補齊目標、必要背景、限制與驗收條件後呼叫 prepare_main_task；除非缺少的資訊真的會阻止執行，否則不要先問格式問題。確認前若使用者補充或修改需求，再次呼叫 prepare_main_task，內容必須是合併後的完整最新版。你只可使用目前 Crew Pocket 對話內的工具：draft_message、prepare_main_task、confirm_main_task、capture_camera_frame、read_file、write_file；只有使用者本輪最新一句明確要求時才能呼叫工具。`;
         const discussionPrompt = liveSessionMode === 'discussion'
           ? "\n\n【討論模式】協助釐清需求、追問關鍵資訊並整理共識。不得操作手機、截圖或寫檔。只有使用者明確說要填入輸入框時才能使用 draft_message，而且不得自動送出；「好」「可以」不算傳送授權。"
           : "\n\n【操作模式】普通問題仍直接回答；不要為了確認答案而主動截圖、讀檔或操作手機。若本輪最新口令未明確要求手機動作，絕不可依先前對話執行截圖、點擊、滑動或按鍵。";
@@ -2917,7 +3013,7 @@
                   },
                   {
                     name: "prepare_main_task",
-                    description: "Prepare a precise task for the current main chat ONLY when the user explicitly asks the main chat to handle something. This does not execute anything. First read a short summary, then wait for a clear semantic confirmation that refers to this pending task or the confirmation button.",
+                    description: "Prepare or revise the single pending task for the current main chat when the user explicitly asks the AI/main chat to do something. Convert noisy speech into one complete executable task with objective, context, constraints, and acceptance criteria. Calling this again before confirmation replaces the draft with the full consolidated latest version. This does not execute anything; briefly summarize the prepared task, then wait for semantic confirmation.",
                     parameters: {
                       type: "OBJECT",
                       properties: {
@@ -3035,6 +3131,7 @@
           if (audioPlayer) audioPlayer.setCaptureEnabled(!isMuted);
           flushPreSetupAudio();
           updateCardStatus('listening', '🎙️ 可以開始說話');
+          sendPendingLiveOpeningPrompt();
           // Keep the Live Card persistently visible so the user has full, clear control of status and transcripts.
           return;
         }
