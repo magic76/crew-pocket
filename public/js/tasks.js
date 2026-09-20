@@ -79,7 +79,16 @@
       if (!response.ok || !data.success) throw new Error(data.error || '無法載入任務');
       renderTasks(data.tasks || []);
     } catch (error) {
-      list.innerHTML = `<div class="py-8 text-center text-xs text-rose-300">${escapeHtml(error.message)}</div>`;
+      const message = String(error?.message || error || '無法載入任務');
+      if (/Unknown API endpoint/i.test(message)) {
+        list.innerHTML = `
+          <div class="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-left">
+            <div class="text-xs font-semibold text-amber-200">Runtime 還在跑舊版</div>
+            <div class="mt-1 text-[10px] leading-relaxed text-slate-400">目前畫面已是新版，但 Node Runtime 尚未重啟，所以 /api/tasks 還不存在。請重啟 Crew Runtime 後再開 Task Center。</div>
+          </div>`;
+      } else {
+        list.innerHTML = `<div class="py-8 text-center text-xs text-rose-300">${escapeHtml(message)}</div>`;
+      }
     }
   }
 
