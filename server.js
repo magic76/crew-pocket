@@ -1800,7 +1800,7 @@ async function handleChat(req, res) {
             return snapshot;
           } catch (error) {
             const snapshot = {
-              type: trigger,
+              type: trigger === 'tool_failure' ? 'TOOL_FAILURE' : 'SOFT_BUDGET',
               ok: false,
               reason: 'snapshot_error',
               error: String(error.message || error).slice(0, 600)
