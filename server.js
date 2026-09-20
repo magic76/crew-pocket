@@ -1187,7 +1187,7 @@ function isTerminalToolState(state) {
 }
 
 function isFailedToolState(state) {
-  return ['failed', 'error', 'cancelled', 'canceled'].includes(String(state || '').toLowerCase());
+  return ['failed', 'error'].includes(String(state || '').toLowerCase());
 }
 
 function isPollingToolEvent(event) {
@@ -1893,6 +1893,7 @@ async function handleChat(req, res) {
         };
         console.warn('[ExecutionPolicy] soft budget reached ' + JSON.stringify({ request_id: requestId, ...warning }));
         sendEvent('policy', warning);
+        queueSoftBudgetDecision();
       }
 
       const violations = [];
@@ -1951,6 +1952,7 @@ async function handleChat(req, res) {
         markOnce('to_first_event_ms');
         if (event.type === 'session_started') {
           markOnce('to_session_ms');
+          activeConversationId = event.conversationId || activeConversationId;
           // A new thread only has an id after its provider starts. Persist here
           // as well as on manual selector changes so new conversations are
           // immediately bound to their first model.
@@ -2006,6 +2008,7 @@ async function handleChat(req, res) {
             tool_event_count: toolEventCount,
             unique_tool_count: toolRuns.size
           });
+          queueToolFailureDecision(event, tracking);
           enforceExecutionPolicy();
         } else if (event.type === 'context_usage') {
           lastContextStats = event.stats || null;
@@ -2013,7 +2016,12 @@ async function handleChat(req, res) {
         } else if (event.type === 'error') {
           finish({ error: event.message, provider: providerId, conversation_id });
         } else if (event.type === 'turn_completed') {
-          finish({ response: event.response, conversation_id: event.conversationId, provider: providerId, status: event.status });
+          finishAfterRuntimeDecisions({
+            response: event.response,
+            conversation_id: event.conversationId,
+            provider: providerId,
+            status: event.status
+          });
         }
       }
     });
