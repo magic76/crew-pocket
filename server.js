@@ -1828,7 +1828,11 @@ async function handleChat(req, res) {
           attempts: tracking.attempts,
           parameters: sanitizeRuntimeDecisionText(stableToolSerialize(parameters), 1400),
           output: sanitizeRuntimeDecisionText(
-            typeof output === 'string' ? output : stableToolSerialize(output || {}),
+            stableToolSerialize({
+              output: typeof output === 'string' ? output : (output || null),
+              exitCode: event.info?.exitCode ?? null,
+              error: event.info?.error ?? null
+            }),
             2200
           )
         },
