@@ -118,6 +118,8 @@ async function refreshAuthStatus() {
   const codexStatusDesc = document.getElementById('auth-desc-codex');
   const agyStatusBadge = document.getElementById('auth-status-agy');
   const agyStatusDesc = document.getElementById('auth-desc-agy');
+  const jevStatusBadge = document.getElementById('auth-status-jev');
+  const jevStatusDesc = document.getElementById('auth-desc-jev');
 
   try {
     const res = await fetch('/api/auth/status');
@@ -147,9 +149,22 @@ async function refreshAuthStatus() {
         agyStatusDesc.textContent = data.antigravity?.message || '尚未建立 OAuth 憑證';
       }
     }
+
+    if (jevStatusBadge && jevStatusDesc) {
+      if (data.jev?.configured) {
+        jevStatusBadge.className = 'px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40';
+        jevStatusBadge.textContent = '🟢 Key 已設定';
+        jevStatusDesc.textContent = data.jev.message || 'TypeSafe API Key 已可供 Jev 使用';
+      } else {
+        jevStatusBadge.className = 'px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-slate-800 text-slate-400 border border-slate-700';
+        jevStatusBadge.textContent = '⚪ 未設定';
+        jevStatusDesc.textContent = data.jev?.message || '尚未設定 TypeSafe API Key';
+      }
+    }
   } catch (err) {
     if (codexStatusDesc) codexStatusDesc.textContent = '查詢失敗: ' + err.message;
     if (agyStatusDesc) agyStatusDesc.textContent = '查詢失敗: ' + err.message;
+    if (jevStatusDesc) jevStatusDesc.textContent = '查詢失敗: ' + err.message;
   }
 }
 
@@ -376,6 +391,42 @@ async function saveCodexApiKey() {
   }
 }
 
+async function saveJevApiKey() {
+  const input = document.getElementById('jev-api-key-input');
+  const btn = document.getElementById('jev-api-key-submit-btn');
+  if (!input || !input.value.trim()) {
+    alert('請輸入 TypeSafe API Key');
+    return;
+  }
+
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = '儲存中...';
+  }
+
+  try {
+    const res = await fetch('/api/auth/jev/api-key', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ apiKey: input.value.trim() })
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) throw new Error(data.error || '設定失敗');
+
+    input.value = '';
+    await refreshAuthStatus();
+    if (typeof window.haptic === 'function') window.haptic([30, 50, 30]);
+    alert('✅ TypeSafe Jev Key 已儲存');
+  } catch (err) {
+    alert('設定失敗：' + err.message);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = '儲存 Key';
+    }
+  }
+}
+
 async function saveAgyToken() {
   const input = document.getElementById('agy-token-input');
   const btn = document.getElementById('agy-token-submit-btn');
@@ -490,6 +541,7 @@ window.startCodexDeviceFlow = startCodexDeviceFlow;
 window.copyCodexUserCode = copyCodexUserCode;
 window.saveCodexApiKey = saveCodexApiKey;
 window.saveAgyToken = saveAgyToken;
+window.saveJevApiKey = saveJevApiKey;
 window.refreshProviderRuntime = refreshProviderRuntime;
 window.updateRuntimeProvider = updateRuntimeProvider;
 window.renderAuthRecoveryCard = renderAuthRecoveryCard;
