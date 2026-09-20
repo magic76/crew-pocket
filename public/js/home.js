@@ -12,14 +12,22 @@
   const pending = document.getElementById('crew-home-pending');
   const completed = document.getElementById('crew-home-completed');
   const remoteStatus = document.getElementById('crew-home-remote-status');
+  const remoteBadge = document.getElementById('crew-home-remote-badge');
   const remoteToggle = document.getElementById('crew-home-remote-toggle');
   const remoteUrlWrap = document.getElementById('crew-home-remote-url-wrap');
+  const remoteBaseUrl = document.getElementById('crew-home-remote-base-url');
+  const remoteSecureWrap = document.getElementById('crew-home-remote-secure-wrap');
   const remoteUrl = document.getElementById('crew-home-remote-url');
   const copyUrlButton = document.getElementById('crew-home-copy-url');
+  const remoteQrWrap = document.getElementById('crew-home-remote-qr-wrap');
+  const remoteQr = document.getElementById('crew-home-remote-qr');
+  const remoteAltWrap = document.getElementById('crew-home-remote-alt-wrap');
+  const remoteAlt = document.getElementById('crew-home-remote-alt');
   const subtitle = document.getElementById('crew-home-subtitle');
 
   let latestRemote = null;
   let loading = false;
+  let renderedQrValue = '';
 
   const escapeHtml = value => String(value || '').replace(/[&<>'"]/g, char => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
@@ -100,23 +108,74 @@
     return !['127.0.0.1', 'localhost', '::1', '[::1]'].includes(host);
   }
 
+  function renderRemoteQr(value) {
+    if (!remoteQrWrap || !remoteQr) return;
+    const text = String(value || '').trim();
+    if (!text) {
+      renderedQrValue = '';
+      remoteQr.innerHTML = '';
+      remoteQrWrap.classList.add('hidden');
+      return;
+    }
+
+    remoteQrWrap.classList.remove('hidden');
+    if (renderedQrValue === text && remoteQr.childNodes.length > 0) return;
+    renderedQrValue = text;
+    remoteQr.innerHTML = '';
+
+    if (typeof QRCode !== 'function') {
+      remoteQr.innerHTML = '<div class="max-w-[180px] text-center text-[10px] text-slate-500">QR 元件未載入，請直接使用上方 URL。</div>';
+      return;
+    }
+
+    try {
+      new QRCode(remoteQr, {
+        text,
+        width: 164,
+        height: 164,
+        colorDark: '#0f172a',
+        colorLight: '#ffffff',
+        correctLevel: QRCode.CorrectLevel.M
+      });
+    } catch (error) {
+      console.warn('[Crew Home] QR generation failed:', error);
+      remoteQr.innerHTML = '<div class="max-w-[180px] text-center text-[10px] text-slate-500">QR 產生失敗，請直接使用上方 URL。</div>';
+    }
+  }
+
   function renderRemote(remote) {
     latestRemote = remote || null;
     if (!remote) return;
 
     const remoteClient = isRemoteBrowser();
+    const urls = Array.isArray(remote.urls) ? remote.urls.filter(Boolean) : [];
+    const primaryUrl = urls[0] || '';
+
     if (remoteStatus) {
       if (remote.active) {
         remoteStatus.textContent = remoteClient
           ? '已連到手機主機 · 此電腦已授權'
           : '已開放給同一個 Wi-Fi 的電腦';
-        remoteStatus.className = 'mt-0.5 text-[10px] text-teal-300';
+        remoteStatus.className = 'mt-1 text-[10px] text-teal-300';
       } else if (remote.configuredEnabled) {
         remoteStatus.textContent = '設定已開啟，Runtime 正在切換連線模式';
-        remoteStatus.className = 'mt-0.5 text-[10px] text-amber-300';
+        remoteStatus.className = 'mt-1 text-[10px] text-amber-300';
       } else {
         remoteStatus.textContent = '目前只有手機本機可以連線';
-        remoteStatus.className = 'mt-0.5 text-[10px] text-slate-500';
+        remoteStatus.className = 'mt-1 text-[10px] text-slate-500';
+      }
+    }
+
+    if (remoteBadge) {
+      if (remote.active) {
+        remoteBadge.textContent = remoteClient ? '已連線' : '已開啟';
+        remoteBadge.className = 'rounded-full border border-teal-500/35 bg-teal-500/10 px-2 py-0.5 text-[9px] font-semibold text-teal-300';
+      } else if (remote.configuredEnabled) {
+        remoteBadge.textContent = '切換中';
+        remoteBadge.className = 'rounded-full border border-amber-500/35 bg-amber-500/10 px-2 py-0.5 text-[9px] font-semibold text-amber-300';
+      } else {
+        remoteBadge.textContent = '已關閉';
+        remoteBadge.className = 'rounded-full border border-slate-700 bg-slate-800 px-2 py-0.5 text-[9px] font-semibold text-slate-400';
       }
     }
 
@@ -127,18 +186,34 @@
         remoteToggle.classList.add('opacity-50');
       } else {
         remoteToggle.disabled = false;
-        remoteToggle.textContent = remote.configuredEnabled ? '關閉' : '開啟';
+        remoteToggle.textContent = remote.configuredEnabled ? '關閉連線' : '開啟連線';
         remoteToggle.classList.remove('opacity-50');
       }
     }
 
-    if (remoteUrlWrap && remoteUrl) {
-      if (remote.shareUrl) {
-        remoteUrl.textContent = remote.shareUrl;
-        remoteUrlWrap.classList.remove('hidden');
+    if (remoteUrlWrap) {
+      const showConnectionInfo = Boolean(remote.configuredEnabled && primaryUrl);
+      remoteUrlWrap.classList.toggle('hidden', !showConnectionInfo);
+    }
+    if (remoteBaseUrl) remoteBaseUrl.textContent = primaryUrl;
+
+    if (remoteSecureWrap && remoteUrl) {
+      const hasSecureUrl = Boolean(remote.shareUrl);
+      remoteSecureWrap.classList.toggle('hidden', !hasSecureUrl);
+      remoteUrl.textContent = remote.shareUrl || '';
+      renderRemoteQr(remote.shareUrl || '');
+    }
+
+    if (remoteAltWrap && remoteAlt) {
+      const alternatives = urls.slice(1, 4);
+      if (alternatives.length) {
+        remoteAlt.innerHTML = alternatives
+          .map(address => `<div class="break-all">${escapeHtml(address)}</div>`)
+          .join('');
+        remoteAltWrap.classList.remove('hidden');
       } else {
-        remoteUrl.textContent = '';
-        remoteUrlWrap.classList.add('hidden');
+        remoteAlt.innerHTML = '';
+        remoteAltWrap.classList.add('hidden');
       }
     }
   }
