@@ -40,58 +40,58 @@ class WirelessDebugController(private val activity: Activity) {
     fun show() {
         if (adbDialog?.isShowing == true) return
     
-        val container = LinearLayout(this).apply {
+        val container = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(20), dp(4), dp(20), dp(4))
         }
-        val targetInput = EditText(this).apply {
+        val targetInput = EditText(activity).apply {
             hint = "192.0.2.1:37753 或 37753"
             inputType = InputType.TYPE_CLASS_TEXT
             setSingleLine(true)
             textSize = 16f
             setSelectAllOnFocus(true)
         }
-        val pairingTargetInput = EditText(this).apply {
+        val pairingTargetInput = EditText(activity).apply {
             hint = "配對 IP:Port（第一次設定才需要）"
             inputType = InputType.TYPE_CLASS_TEXT
             setSingleLine(true)
             textSize = 15f
         }
-        val pairingCodeInput = EditText(this).apply {
+        val pairingCodeInput = EditText(activity).apply {
             hint = "6 位配對碼"
             inputType = InputType.TYPE_CLASS_NUMBER
             setSingleLine(true)
             textSize = 15f
         }
-        val helperText = TextView(this).apply {
+        val helperText = TextView(activity).apply {
             text = "輸入連線 IP:Port；第一次配對時再填配對 IP:Port 與 6 位配對碼。"
             setTextColor(Color.rgb(100, 116, 139))
             textSize = 12f
             setPadding(0, dp(4), 0, dp(4))
         }
-        val statusText = TextView(this).apply {
+        val statusText = TextView(activity).apply {
             text = "正在讀取目前 ADB 狀態…"
             setTextColor(Color.rgb(148, 163, 184))
             textSize = 12f
             setPadding(0, dp(8), 0, dp(8))
         }
-        val saveButton = Button(this).apply {
+        val saveButton = Button(activity).apply {
             text = "儲存並連線"
             minHeight = dp(48)
         }
-        val pairButton = Button(this).apply {
+        val pairButton = Button(activity).apply {
             text = "配對並連線"
             minHeight = dp(48)
         }
-        val secondaryRow = LinearLayout(this).apply {
+        val secondaryRow = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
         }
-        val openSettingsButton = Button(this).apply {
+        val openSettingsButton = Button(activity).apply {
             text = "開啟無線偵錯"
             minHeight = dp(48)
         }
-        val copyButton = Button(this).apply {
+        val copyButton = Button(activity).apply {
             text = "複製指令"
             minHeight = dp(48)
         }
@@ -116,11 +116,11 @@ class WirelessDebugController(private val activity: Activity) {
         container.addView(saveButton)
         container.addView(pairButton)
         container.addView(secondaryRow)
-        val scrollContainer = ScrollView(this).apply {
+        val scrollContainer = ScrollView(activity).apply {
             addView(container)
         }
     
-        val dialog = AlertDialog.Builder(this)
+        val dialog = AlertDialog.Builder(activity)
             .setTitle("無線偵錯設定")
             .setView(scrollContainer)
             .setNegativeButton("關閉", null)
@@ -254,7 +254,7 @@ class WirelessDebugController(private val activity: Activity) {
         adbStatusTask = scheduler.schedule({
             val status = readAdbStatus()
             activity.runOnUiThread {
-                if (adbDialog?.isShowing != true) return@activity.runOnUiThread
+                if (adbDialog?.isShowing != true) return@runOnUiThread
                 if (status != null) {
                     if (targetInput.text.isNullOrBlank() && status.target.isNotBlank()) {
                         targetInput.setText(status.target)
