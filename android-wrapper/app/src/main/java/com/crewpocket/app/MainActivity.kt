@@ -66,9 +66,13 @@ class MainActivity : Activity() {
     private var filePathCallback: ValueCallback<Array<Uri>>? = null
     private val webSessionId = System.currentTimeMillis()
     private var legacyPwaCleanupPending = false
+    private var pendingConversationProvider: String? = null
+    private var pendingConversationId: String? = null
+    private var pendingConversationAttempts = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        captureConversationIntent(intent)
         buildUi()
         wirelessDebugController = WirelessDebugController(this)
         runtimeHealthMonitor = RuntimeHealthMonitor(
@@ -91,6 +95,13 @@ class MainActivity : Activity() {
         prepareLegacyPwaRetirement()
         requestNotificationPermissionIfNeeded()
         requestTermuxPermissionIfPossible()
+    }
+
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        captureConversationIntent(intent)
+        dispatchPendingConversation()
     }
 
     override fun onStart() {
@@ -225,32 +236,36 @@ class MainActivity : Activity() {
 
             override fun onPageFinished(view: WebView?, url: String?) {
                 super.onPageFinished(view, url)
-                if (!legacyPwaCleanupPending || !url.orEmpty().startsWith(SERVER_URL)) return
+                val isCrewPage = url.orEmpty().startsWith(SERVER_URL)
 
-                legacyPwaCleanupPending = false
-                view?.evaluateJavascript(
-                    """
-                    (() => {
-                      try {
-                        if ('serviceWorker' in navigator) {
-                          navigator.serviceWorker.getRegistrations()
-                            .then(registrations => Promise.all(registrations.map(registration => registration.unregister())))
-                            .catch(() => {});
-                        }
-                        if ('caches' in window) {
-                          caches.keys()
-                            .then(keys => Promise.all(keys.map(key => caches.delete(key))))
-                            .catch(() => {});
-                        }
-                      } catch (_) {}
-                    })();
-                    """.trimIndent(),
-                    null
-                )
-                getSharedPreferences(WEB_MIGRATION_PREFS, MODE_PRIVATE)
-                    .edit()
-                    .putBoolean(LEGACY_PWA_RETIRED, true)
-                    .apply()
+                if (legacyPwaCleanupPending && isCrewPage) {
+                    legacyPwaCleanupPending = false
+                    view?.evaluateJavascript(
+                        """
+                        (() => {
+                          try {
+                            if ('serviceWorker' in navigator) {
+                              navigator.serviceWorker.getRegistrations()
+                                .then(registrations => Promise.all(registrations.map(registration => registration.unregister())))
+                                .catch(() => {});
+                            }
+                            if ('caches' in window) {
+                              caches.keys()
+                                .then(keys => Promise.all(keys.map(key => caches.delete(key))))
+                                .catch(() => {});
+                            }
+                          } catch (_) {}
+                        })();
+                        """.trimIndent(),
+                        null
+                    )
+                    getSharedPreferences(WEB_MIGRATION_PREFS, MODE_PRIVATE)
+                        .edit()
+                        .putBoolean(LEGACY_PWA_RETIRED, true)
+                        .apply()
+                }
+
+                if (isCrewPage) dispatchPendingConversation()
             }
         }
         webView.addJavascriptInterface(NativeWebBridge(), "CrewPocket")
@@ -299,6 +314,71 @@ class MainActivity : Activity() {
         // legacy localhost service worker after the first page has loaded.
         webView.clearCache(true)
         legacyPwaCleanupPending = true
+    }
+
+    private fun captureConversationIntent(source: Intent?) {
+        val provider = source?.getStringExtra(CrewRuntimeService.EXTRA_OPEN_PROVIDER)
+            ?.trim()
+            ?.takeIf { it == "antigravity" || it == "codex" }
+        val conversationId = source?.getStringExtra(CrewRuntimeService.EXTRA_OPEN_CONVERSATION_ID)
+            ?.trim()
+            ?.takeIf { it.matches(Regex("[A-Za-z0-9_-]+")) }
+
+        if (provider != null && conversationId != null) {
+            pendingConversationProvider = provider
+            pendingConversationId = conversationId
+            pendingConversationAttempts = 0
+        }
+    }
+
+    private fun dispatchPendingConversation() {
+        val provider = pendingConversationProvider ?: return
+        val conversationId = pendingConversationId ?: return
+        if (!::webView.isInitialized || !pageLoaded.get()) return
+        if (!webView.url.orEmpty().startsWith(SERVER_URL)) return
+
+        val script = """
+            (() => {
+              if (typeof window.openCrewConversation !== 'function') return 'not-ready';
+              try {
+                Promise.resolve(window.openCrewConversation(
+                  ${JSONObject.quote(provider)},
+                  ${JSONObject.quote(conversationId)}
+                )).catch(() => {});
+                return 'started';
+              } catch (_) {
+                return 'failed';
+              }
+            })();
+        """.trimIndent()
+
+        webView.evaluateJavascript(script) { result ->
+            runOnUiThread {
+                if (result == "\"started\"") {
+                    pendingConversationProvider = null
+                    pendingConversationId = null
+                    pendingConversationAttempts = 0
+                    return@runOnUiThread
+                }
+
+                pendingConversationAttempts += 1
+                if (pendingConversationAttempts < 12) {
+                    Handler(Looper.getMainLooper()).postDelayed(
+                        { dispatchPendingConversation() },
+                        250L
+                    )
+                } else {
+                    Toast.makeText(
+                        this,
+                        "無法自動開啟指定對話，請從對話列表重新選擇。",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                    pendingConversationProvider = null
+                    pendingConversationId = null
+                    pendingConversationAttempts = 0
+                }
+            }
+        }
     }
 
     private fun appUrl(): String {

@@ -620,6 +620,27 @@ async function launchLiveDelegateJob(taskRecord) {
   return job;
 }
 
+async function resolveTaskConversationTitle(providerId, conversationId, providedTitle = '') {
+  const explicit = String(providedTitle || '').trim().slice(0, 160);
+  if (explicit) return explicit;
+
+  try {
+    const settings = await getConversationSettings(providerId, conversationId);
+    if (settings?.title) return String(settings.title).trim().slice(0, 160);
+  } catch (_) {}
+
+  try {
+    const provider = getProvider(providerId);
+    if (provider.metadata.capabilities.history && typeof provider.listConversations === 'function') {
+      const conversations = await provider.listConversations();
+      const match = conversations.find(item => item.id === conversationId);
+      if (match?.title) return String(match.title).trim().slice(0, 160);
+    }
+  } catch (_) {}
+
+  return conversationId ? `對話 ${conversationId.slice(0, 8)}` : '未知對話';
+}
+
 async function handleLiveDelegate(req, res) {
   try {
     const body = await parseJsonBody(req);
@@ -639,15 +660,20 @@ async function handleLiveDelegate(req, res) {
     if (taskRecord && taskRecord.status === 'running') throw liveDelegateError('這個任務已在背景處理。', 409);
     if (taskRecord && taskRecord.status === 'completed') throw liveDelegateError('這個任務已完成。', 409);
     if (taskRecord && taskRecord.status === 'cancelled') throw liveDelegateError('這個任務已取消，請重新建立。', 409);
+    const conversationTitle = await resolveTaskConversationTitle(
+      providerId,
+      conversationId,
+      body.conversation_title || taskRecord?.conversationTitle
+    );
     if (!taskRecord) {
       taskRecord = await createTask({
-        source: 'live', provider: providerId, conversationId, model: body.model,
+        source: 'live', provider: providerId, conversationId, conversationTitle, model: body.model,
         effort: body.effort, task, status: 'pending_confirmation',
         event: 'Live 已確認交辦，等待主對話接手。'
       });
     }
     taskRecord = await updateTask(taskRecord.id, {
-      provider: providerId, conversationId, model: body.model || taskRecord.model,
+      provider: providerId, conversationId, conversationTitle, model: body.model || taskRecord.model,
       effort: body.effort || taskRecord.effort, status: 'pending_confirmation'
     }) || taskRecord;
     const job = await launchLiveDelegateJob(taskRecord);
@@ -702,8 +728,10 @@ async function handleTasks(req, res, parsedUrl) {
       const task = String(body.task || '').trim();
       const conversationId = String(body.conversation_id || '').trim();
       if (!task || !conversationId) throw liveDelegateError('任務內容與主對話不可為空。', 400);
+      const providerId = normalizeProviderId(body.provider);
+      const conversationTitle = await resolveTaskConversationTitle(providerId, conversationId, body.conversation_title);
       const record = await createTask({
-        source: body.source || 'main_chat', provider: normalizeProviderId(body.provider), conversationId,
+        source: body.source || 'main_chat', provider: providerId, conversationId, conversationTitle,
         model: body.model, effort: body.effort, task, status: 'pending_confirmation'
       });
       res.writeHead(201, { 'Content-Type': 'application/json' });
