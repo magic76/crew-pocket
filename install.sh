@@ -156,6 +156,8 @@ doctor() {
 start_server() {
     [ -f "$TARGET_DIR/server.js" ] || { echo "找不到 Crew Pocket：$TARGET_DIR"; exit 1; }
     cd "$TARGET_DIR"
+    local bind_host="127.0.0.1"
+    [ -f "$HOME/.crew-pocket/remote-enabled" ] && bind_host="0.0.0.0"
     pkill -f 'node.*server\.js' 2>/dev/null || true
     for i in 1 2 3 4 5; do
         if ! pgrep -f "node.*server\.js" >/dev/null 2>&1; then
@@ -165,11 +167,16 @@ start_server() {
     done
     pkill -9 -f 'node.*server\.js' 2>/dev/null || true
     sleep 0.2
-    setsid node server.js </dev/null >> "$HOME/.agy-web.log" 2>&1 &
+    CREW_BIND_HOST="$bind_host" setsid node server.js </dev/null >> "$HOME/.agy-web.log" 2>&1 &
     local server_pid=$!
     sleep 1
     if kill -0 "$server_pid" 2>/dev/null; then
         echo "✓ Crew Pocket Runtime 已啟動：http://127.0.0.1:8000"
+        if [ "$bind_host" = "0.0.0.0" ]; then
+            echo "  電腦連線模式：已開啟（安全網址請從 Crew Home 複製）"
+        else
+            echo "  電腦連線模式：關閉"
+        fi
         echo "  請從 Crew Pocket APK 開啟主介面。"
     else
         echo "啟動失敗，請查看 $HOME/.agy-web.log" >&2
