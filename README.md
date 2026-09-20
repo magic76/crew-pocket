@@ -180,6 +180,25 @@ http://127.0.0.1:8000
 
 更新 Web UI 後只要 `git pull` 並重新啟動 Crew Runtime；localhost 靜態資產不做長期快取，APK 會讀取目前 checkout 的版本。
 
+### Crew Home 與電腦遠端介面
+
+Crew Pocket 採用 **手機主機、電腦當遠端操作介面** 的模式。手機上的 Termux Runtime、對話、任務與 Provider 狀態仍是唯一來源，不需要把資料同步到 Mac / PC。
+
+1. 在 APK 右上角開啟 **Crew Home**。
+2. 可以直接看到「處理中 / 等確認 / 已完成」與最近背景任務。
+3. 在「Mac / 電腦連手機」按 **開啟**。Runtime 會自動重啟並改成 LAN 模式。
+4. 手機會顯示一個帶安全 token 的連結；把它複製到同一 Wi-Fi 的 Mac / PC 瀏覽器。
+5. 第一次成功開啟後，瀏覽器會以 SameSite cookie 保存授權，網址列會移除 token。
+
+安全行為：
+
+- 預設仍只綁定 `127.0.0.1`。
+- LAN 模式才綁定 `0.0.0.0`。
+- 手機本機（loopback）永遠不需要 token，所以 APK 不會因 LAN 模式而失效。
+- 區網裝置必須提供 Crew Pocket token，API 與 WebSocket 都套用同樣驗證。
+- 關閉電腦連線後 Runtime 會自動恢復 localhost-only。
+- 遠端模式狀態持久化於 `~/.crew-pocket/remote-enabled`，APK Runtime 或新版 `crew start` 都會遵守。
+
 ### 更新規則
 
 - 修改 `public/`、`server.js`、`lib/`：只需更新 repo + 重啟 Runtime，**不需要重裝 APK**。
