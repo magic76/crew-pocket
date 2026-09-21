@@ -1909,6 +1909,7 @@ async function sendBtwConcurrentSidecard(customText = null, customImgPath = null
         </div>
       </div>
       <div class="btw-content msg-content leading-relaxed min-w-0"><span class="inline-block w-2 h-4 bg-teal-400 animate-pulse"></span></div>
+      <div class="btw-response-time mt-2 border-t border-teal-900/60 pt-1.5 text-right text-[10px] text-slate-500 font-mono select-none"></div>
     </div>
   `;
   messagesContainer.appendChild(btwMsgDiv);
@@ -1917,6 +1918,7 @@ async function sendBtwConcurrentSidecard(customText = null, customImgPath = null
   const contentElem = btwMsgDiv.querySelector('.msg-content');
   const liveStatusElem = btwMsgDiv.querySelector('.live-status');
   const timerElem = btwMsgDiv.querySelector('.btw-timer');
+  const responseTimeElem = btwMsgDiv.querySelector('.btw-response-time');
 
   const timerInterval = setInterval(() => {
     if (timerElem) timerElem.textContent = ((performance.now() - startTs) / 1000).toFixed(1) + 's';
@@ -1977,6 +1979,9 @@ async function sendBtwConcurrentSidecard(customText = null, customImgPath = null
     }
   } finally {
     clearInterval(timerInterval);
+    if (responseTimeElem) {
+      responseTimeElem.textContent = `🕒 回覆時間 ${formatMessageTimestamp()}`;
+    }
     if (liveStatusElem) liveStatusElem.style.display = 'none';
     if (accumulated) {
       contentElem.innerHTML = formatMessageContent(accumulated);
@@ -2275,12 +2280,14 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
         </summary>
         <div class="execution-detail-body">
           <div class="live-jev-route"></div>
+          <div class="live-execution-metrics"></div>
           <div class="live-runtime-decisions"></div>
           <div class="live-progress-list"></div>
         </div>
       </details>
 
       <div class="btw-content msg-content min-w-0"><span class="inline-block w-2 h-4 ${isBtwQuery ? 'bg-teal-400' : 'bg-indigo-400'} animate-pulse"></span></div>
+      <div class="response-time mt-2 border-t border-slate-800 pt-1.5 text-right text-[10px] text-slate-500 font-mono select-none"></div>
     </div>
   `;
   messagesContainer.appendChild(assistantMsgDiv);
@@ -2288,7 +2295,9 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
   const liveStatusElem = assistantMsgDiv.querySelector('.live-status');
   const statusTextElem = assistantMsgDiv.querySelector('.status-text');
   const liveTimerElem = assistantMsgDiv.querySelector('.live-timer');
+  const responseTimeElem = assistantMsgDiv.querySelector('.response-time');
   const liveJevRouteElem = assistantMsgDiv.querySelector('.live-jev-route');
+  const liveExecutionMetricsElem = assistantMsgDiv.querySelector('.live-execution-metrics');
   const liveRuntimeDecisionsElem = assistantMsgDiv.querySelector('.live-runtime-decisions');
   const liveProgressListElem = assistantMsgDiv.querySelector('.live-progress-list');
   const isStreamVisible = () => assistantMsgDiv.isConnected && currentProvider === streamProvider
@@ -2375,6 +2384,7 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
         : '✓ 完成';
       if (liveTimerElem) liveTimerElem.textContent = `${activityElapsedSec}s`;
     }
+    if (responseTimeElem) responseTimeElem.textContent = `🕒 回覆時間 ${formatMessageTimestamp()}`;
     if (!doneData?.error && liveTools.length === 0 && !liveJevRouteElem?.innerHTML && !liveRuntimeDecisionsElem?.innerHTML) {
       liveStatusElem.classList.add('execution-heartbeat-only');
       window.setTimeout(() => {
@@ -2534,6 +2544,19 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
     `;
   }
 
+  function renderExecutionMetrics(metrics) {
+    if (!liveExecutionMetricsElem || !metrics) return;
+    const rows = [
+      ['工具執行', metrics.executions, metrics.hard_tool_limit],
+      ['Polling', metrics.polls, metrics.poll_limit],
+      ['修改檔案', metrics.changed_files_count, metrics.file_limit]
+    ].filter(([, current]) => Number.isFinite(Number(current)));
+    liveExecutionMetricsElem.innerHTML = rows.length ? `<div class="my-1 px-2.5 py-1.5 rounded-lg border border-amber-800/50 bg-amber-950/20 text-[10px] font-mono text-slate-400">${rows.map(([label, current, limit]) => {
+      const over = Number.isFinite(Number(limit)) && Number(current) > Number(limit);
+      return `<span class="mr-3 ${over ? 'text-amber-300' : ''}">${escapeHtml(label)} ${current}${Number.isFinite(Number(limit)) ? ` / ${limit}` : ''}</span>`;
+    }).join('')}</div>` : '';
+  }
+
   upsertProgress('phase:analysis', {
     icon: '🧠',
     text: '分析需求與執行方案',
@@ -2620,6 +2643,7 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
             } else if (currentEvent === 'decision') {
               renderRuntimeDecision(data);
             } else if (currentEvent === 'tool') {
+              renderExecutionMetrics(data.execution_metrics);
               const mergedTool = mergeToolEventIntoMap(liveToolMap, liveTools, data);
               const progressTool = mergedTool || data;
               const progress = getPassiveToolProgress(progressTool);

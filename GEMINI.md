@@ -1,5 +1,3 @@
-# Crew Pocket Web Workspace
-
 Crew Pocket is an Android APK shell backed by a local Node.js runtime in Termux. It supports Antigravity (`agy`) and OpenAI Codex.
 
 ## Scope and Architecture

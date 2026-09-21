@@ -50,13 +50,16 @@ crew start   # 啟動服務並開啟 Crew Pocket
 - 🎙️ **Gemini 2.0 Flash Realtime 語音對話 (Live Mode)**：低延遲雙向 Web Audio PCM 即時語音串流，支援多種風格音色。
 - 🧠 **思考強度自訂 (Thinking Effort)**：3 段式推理深度調節（`Low 極速` / `Medium 平衡` / `High 深度`）。
 - 🤖 **雙 Agent Provider**：可在介面中切換既有的 **Antigravity / agy** 與可選的 **OpenAI Codex CLI**；兩者的對話、Session 與歷史紀錄完全隔離。
-- 🧩 **持久 Codex 工作階段**：透過 `codex app-server` 常駐連線，支援串流回答、thinking、工具事件、檔案圖片輸入、模型清單、原生 context compaction 與對話回朔。
+- 🧩 **持久 Codex 工作階段**：透過 `codex app-server` 常駐連線，支援串流回答、thinking、工具事件、檔案圖片輸入、模型清單與原生 context compaction。
 - 🔐 **Codex 全自動執行模式**：Codex 工作回合使用 `approvalPolicy: never` 與 `dangerFullAccess` sandbox，等效於非互動式全權限開發流程；請只在你信任的本機環境與專案中使用。
 - 📈 **Context 與用量**：對話頁與歷史側欄顯示目前 context 用量；Codex 另提供前往 ChatGPT Codex 用量設定頁的連結。
 - 🤖 **多模型選單**：Antigravity 提供既有模型；Codex 啟動後會由本機 CLI 動態讀取可用模型（例如 Sol、Terra、Luna）與其支援的 reasoning effort。
 - 📎 **多模態相機與相簿附加**：支援 iPhone / Android 原生 **HEIC/HEIF** 解碼與 AI 視覺專用輕量自動壓縮。
 - 📍 **GPS 即時定位與地圖**：一鍵獲取手機 GPS 並生成可於新分頁開啟的 Google Maps 導航卡片。
 - 📁 **Termux 本地檔案總管**：行動端目錄導航、代碼預覽與直接送入 AI 對話。
+- 🗑️ **檔案批次管理**：檔案總管支援多選檔案／資料夾後一次刪除。
+- 🧭 **JEV 路由摘要**：Codex 回覆的執行資訊可查看本次路由模式、信心、接受狀態與延遲。
+- ⚡ **Codex Session 預熱**：可選擇在設定中預熱 Codex session，閒置後自動釋放。
 - 📊 **模型用量監控 (`/usage`)**：即時掌握各模型重置週期與配額進度。
 - 🛡️ **會話隔離與無損日誌引擎**：徹底杜絕多 Session 切換串台 Race Condition，並優先讀取完整日誌避免代碼截斷。
 
@@ -186,16 +189,17 @@ Crew Pocket 採用 **手機主機、電腦當遠端操作介面** 的模式。�
 
 1. 在 APK 右上角開啟 **Crew Home**。
 2. 可以直接看到「處理中 / 等確認 / 已完成」與最近背景任務。
-3. 在「Mac / 電腦連手機」按 **開啟**。Runtime 會自動重啟並改成 LAN 模式。
-4. 手機會顯示一個帶安全 token 的連結；把它複製到同一 Wi-Fi 的 Mac / PC 瀏覽器。
-5. 第一次成功開啟後，瀏覽器會以 SameSite cookie 保存授權，網址列會移除 token。
+3. 在「Remote Console」按 **開啟**。Runtime 會自動重啟並改成 LAN 模式。
+4. Runtime 恢復後，使用同一 Wi-Fi 的 Mac / PC 開啟手機顯示的區網網址。
+5. 手機會顯示目前有幾台電腦活躍，並可單獨或全部中斷。
 
 安全行為：
 
 - 預設仍只綁定 `127.0.0.1`。
 - LAN 模式才綁定 `0.0.0.0`。
-- 手機本機（loopback）永遠不需要 token，所以 APK 不會因 LAN 模式而失效。
-- 區網裝置必須提供 Crew Pocket token，API 與 WebSocket 都套用同樣驗證。
+- 手機本機保留管理權限，所以 APK 不會因 LAN 模式而失效。
+- Remote Console 不顯示或要求配對碼；是否接受區網連線由手機端開關控制。
+- API 與 WebSocket 只在 Remote Console 開啟、且請求通過同源／主機檢查時提供服務。
 - 關閉電腦連線後 Runtime 會自動恢復 localhost-only。
 - 遠端模式狀態持久化於 `~/.crew-pocket/remote-enabled`，APK Runtime 或新版 `crew start` 都會遵守。
 
@@ -242,7 +246,7 @@ AGY 每次 compact 前會把 active `transcript.jsonl` 的新增 records 依完�
 | Provider | 預設狀態 | 對話與 Session | 特有能力 |
 | :--- | :--- | :--- | :--- |
 | Antigravity / agy | 預設，原有行為不變 | 既有 resident session 與本機 brain 歷史 | `/compact` 記憶摘要、`/usage` 用量彈窗、Gemini Live 語音 |
-| OpenAI Codex | 可選 | `codex app-server` thread，與 AGY 完全隔離 | 動態模型、工具／reasoning 串流、context 用量、原生 compact、回朔到任一使用者回合 |
+| OpenAI Codex | 可選 | `codex app-server` thread，與 AGY 完全隔離 | 動態模型、工具／reasoning 串流、context 用量、原生 compact、JEV 路由摘要 |
 
 切換 Provider 不會遷移、覆寫或刪除另一個 Provider 的對話。左側歷史列表會以 `AGY` 或 `Codex` 標籤區分來源。
 

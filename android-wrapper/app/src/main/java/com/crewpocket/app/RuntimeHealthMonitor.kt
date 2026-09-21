@@ -13,7 +13,7 @@ class RuntimeHealthMonitor(
     companion object {
         private const val HEALTH_URL = "http://127.0.0.1:8000/healthz"
         private const val QUICK_RECHECK_MS = 1_500L
-        private const val HEALTHY_RECHECK_MS = 30_000L
+        private const val HEALTHY_RECHECK_MS = 60_000L
     }
 
     private val scheduler = Executors.newSingleThreadScheduledExecutor()

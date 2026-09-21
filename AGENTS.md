@@ -1,5 +1,3 @@
-# Crew Pocket Web Workspace
-
 Crew Pocket is an Android APK shell backed by a local Node.js runtime in Termux. It supports Antigravity (`agy`) and OpenAI Codex.
 
 ## Scope and Architecture
@@ -35,7 +33,7 @@ Crew Pocket is an Android APK shell backed by a local Node.js runtime in Termux.
 
 - Do not web-search to explain Crew Pocket itself; this repository is the primary source of truth.
 - Interactive tools require a complete self-contained HTML sandbox. Charts use Chart.js. Maps use Google Maps links.
-- When the user asks to install, update, or test an Android APK: ALWAYS execute `~/install-apk.sh <path-to-apk>`. APK management strictly uses Wireless Debugging (ADB) for silent, background installation and real-time logcat debugging. If `~/install-apk.sh` exits with an error (ADB offline / not configured), immediately inform the user that Wireless Debugging is closed or the Port changed, and ask the user to turn on Wireless Debugging in Developer Options and provide the current Port (or run `~/set-adb.sh <port>`).
+- When the user asks to install, update, or test an Android APK: ALWAYS execute `~/install-apk.sh <path-to-apk>`. APK management strictly uses Wireless Debugging (ADB) for silent, background installation and real-time logcat debugging. If ADB is online but the script stalls at `Performing Streamed Install` or the streaming install fails, do not ask the user to repeat the request: use the same Wireless Debugging target to `adb push` the APK to `/data/local/tmp/crew-pocket-app-debug.apk`, then run `adb -s <target> shell pm install -r -d /data/local/tmp/crew-pocket-app-debug.apk` and wait for an explicit `Success` or error. If `~/install-apk.sh` exits with an error because ADB is offline / not configured, immediately inform the user that Wireless Debugging is closed or the Port changed, and ask the user to turn on Wireless Debugging in Developer Options and provide the current Port (or run `~/set-adb.sh <port>`).
 - When the user mentions another conversation using `[@Title](conversation://<conversation-id>)` with an instruction to delegate or transfer a message/task to it:
   1. Inspect the referenced conversation's transcripts under `/data/data/com.termux/files/home/.gemini/antigravity-cli/brain/<conversation-id>/.system_generated/logs/transcript.jsonl` if context is needed.
   2. You can delegate or enqueue the task to the target conversation via HTTP `POST http://127.0.0.1:8000/api/tasks` with `{ action: "create", conversation_id: "<conversation-id>", task: "<task message>" }`, or spawn a subagent referencing that conversation ID.
