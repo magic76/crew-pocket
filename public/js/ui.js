@@ -921,25 +921,12 @@ function toggleModelModal(open) {
   modelModal.classList.toggle('hidden', !open);
   modelModal.setAttribute('aria-hidden', open ? 'false' : 'true');
   if (open) {
-    const warmupToggle = document.getElementById('codex-warmup-toggle');
-    if (warmupToggle) warmupToggle.checked = localStorage.getItem('codex_session_warmup') === 'true';
+    if (typeof window.syncCodexWarmup === 'function') window.syncCodexWarmup();
     renderProviderOptions();
     loadModelsList();
     renderEffortOptions();
   }
 }
-
-window.toggleCodexWarmup = async function(enabled) {
-  localStorage.setItem('codex_session_warmup', enabled ? 'true' : 'false');
-  try {
-    const res = await fetch('/api/codex-warmup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled }) });
-    if (!res.ok) throw new Error('warmup update failed');
-  } catch (_) {
-    localStorage.removeItem('codex_session_warmup');
-    const toggle = document.getElementById('codex-warmup-toggle');
-    if (toggle) toggle.checked = !enabled;
-  }
-};
 
 async function loadModelsList() {
   if (!modelOptionsContainer) return;
