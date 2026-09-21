@@ -186,17 +186,6 @@
           </div>
         </button>
 
-        <div class="border-t border-slate-800 my-1"></div>
-        <div class="px-2 pt-1 pb-0.5 text-[10px] font-bold tracking-wider text-indigo-400/80">對話設定</div>
-        <div class="grid grid-cols-2 gap-1.5 px-1 pb-1">
-          <button id="conversation-workspace-menu-btn" type="button" class="min-h-[58px] rounded-xl border border-teal-500/25 bg-teal-500/10 px-2 py-2 text-[10px] text-teal-200 active:scale-95">
-            <span class="block text-base mb-0.5">📁</span><span>工作區</span>
-          </button>
-          <button id="conversation-context-menu-btn" type="button" class="min-h-[58px] rounded-xl border border-cyan-500/25 bg-cyan-500/10 px-2 py-2 text-[10px] text-cyan-200 active:scale-95">
-            <span class="block text-base mb-0.5">🧠</span><span>Context</span>
-          </button>
-        </div>
-
         <div class="px-2 pt-1 pb-0.5 text-[10px] font-bold tracking-wider text-teal-500/80">LIVE 語音</div>
 
         <!-- Live Voice Settings -->
@@ -929,6 +918,11 @@
         </div>
       </div>
 
+      <div class="px-3 py-2.5 border-b border-slate-800 bg-slate-950/40 flex items-center justify-between gap-3">
+        <div class="min-w-0"><div class="text-[11px] font-bold text-slate-300">⚡ Codex Session 預熱</div><div class="text-[10px] text-slate-500">減少首次 Codex 回覆等待，閒置後自動關閉</div></div>
+        <label class="relative inline-flex items-center cursor-pointer shrink-0"><input id="codex-warmup-toggle" type="checkbox" class="sr-only peer" onchange="toggleCodexWarmup(this.checked)"><span class="w-10 h-5 bg-slate-700 rounded-full peer-checked:bg-emerald-600 transition"></span><span class="absolute left-0.5 top-0.5 w-4 h-4 bg-white rounded-full transition peer-checked:translate-x-5"></span></label>
+      </div>
+
       <!-- Thinking Effort Section -->
       <div class="p-3 border-b border-slate-800 bg-slate-950/40 shrink-0">
         <div class="flex items-center justify-between mb-2">
@@ -1557,38 +1551,26 @@
             </button>
           </div>
 
+          <div id="crew-home-remote-connections" class="hidden rounded-xl border border-slate-800 bg-black/20 p-3">
+            <div class="flex items-center justify-between gap-2">
+              <div>
+                <div id="crew-home-remote-connection-count" class="text-[11px] font-semibold text-slate-100">0 台電腦連線</div>
+                <div class="mt-0.5 text-[9px] text-slate-500">最近 2 分鐘有活動的瀏覽器</div>
+              </div>
+              <button id="crew-home-remote-revoke-all" class="hidden min-h-8 px-2.5 rounded-lg border border-rose-500/35 bg-rose-500/10 text-rose-200 text-[10px] font-semibold active:scale-95">中斷全部</button>
+            </div>
+            <div id="crew-home-remote-connection-list" class="mt-2 space-y-1.5"></div>
+          </div>
+
           <div id="crew-home-remote-url-wrap" class="hidden space-y-2.5">
             <div class="rounded-xl border border-indigo-500/25 bg-indigo-500/5 p-3">
               <div class="text-[9px] font-semibold text-indigo-300">電腦網址</div>
               <code id="crew-home-remote-base-url" class="mt-1 block break-all text-[13px] font-semibold text-slate-100 select-text"></code>
-              <div class="mt-1 text-[9px] text-slate-500">已授權過的瀏覽器之後直接開這個網址即可。</div>
-            </div>
-
-            <div id="crew-home-remote-secure-wrap" class="rounded-xl border border-teal-500/25 bg-teal-500/5 p-3">
-              <div class="flex items-center justify-between gap-2">
-                <div>
-                  <div class="text-[9px] font-semibold text-teal-300">首次連線安全網址</div>
-                  <div class="text-[9px] text-slate-500">第一次在電腦開啟時使用；包含授權 token。</div>
-                </div>
-                <button id="crew-home-copy-url" class="shrink-0 min-h-8 px-2.5 rounded-lg border border-teal-500/35 bg-teal-500/10 text-teal-200 text-[10px] font-semibold active:scale-95">複製 URL</button>
-              </div>
-              <code id="crew-home-remote-url" class="mt-2 block max-h-20 overflow-y-auto break-all rounded-lg bg-black/25 p-2 text-[10px] leading-relaxed text-teal-200 select-text"></code>
-            </div>
-
-            <div id="crew-home-remote-qr-wrap" class="rounded-xl border border-slate-800 bg-white p-3">
-              <div class="flex flex-col items-center gap-2">
-                <div id="crew-home-remote-qr" class="min-h-[164px] min-w-[164px] flex items-center justify-center"></div>
-                <div class="text-center text-[9px] text-slate-600">同一 Wi-Fi 的其他手機 / 平板可掃描；電腦直接用上面的 URL。</div>
-              </div>
-            </div>
-
-            <div id="crew-home-remote-alt-wrap" class="hidden rounded-xl border border-slate-800 bg-black/20 p-2.5">
-              <div class="text-[9px] text-slate-500">其他可用區網網址</div>
-              <div id="crew-home-remote-alt" class="mt-1 space-y-1 text-[9px] font-mono text-slate-400"></div>
+              <div class="mt-1 text-[9px] text-slate-500">同一區域網路的電腦可直接開啟此網址。</div>
             </div>
           </div>
 
-          <p class="text-[9px] leading-relaxed text-slate-500">手機本機不需要 token；只有區網裝置需要。關閉 Remote Console 後 Runtime 會恢復只接受手機本機連線。</p>
+          <p class="text-[9px] leading-relaxed text-slate-500">只有手機開啟 Remote Console 時才會接受區網連線；可在這裡查看連線數量並隨時中斷。</p>
         </section>
       </div>
     </div>

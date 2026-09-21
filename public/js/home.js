@@ -19,15 +19,24 @@
   const remoteSecureWrap = document.getElementById('crew-home-remote-secure-wrap');
   const remoteUrl = document.getElementById('crew-home-remote-url');
   const copyUrlButton = document.getElementById('crew-home-copy-url');
+  const remotePairButton = document.getElementById('crew-home-remote-pair');
+  const remotePairHint = document.getElementById('crew-home-remote-pair-hint');
   const remoteQrWrap = document.getElementById('crew-home-remote-qr-wrap');
   const remoteQr = document.getElementById('crew-home-remote-qr');
   const remoteAltWrap = document.getElementById('crew-home-remote-alt-wrap');
   const remoteAlt = document.getElementById('crew-home-remote-alt');
+  const remoteConnections = document.getElementById('crew-home-remote-connections');
+  const remoteConnectionCount = document.getElementById('crew-home-remote-connection-count');
+  const remoteConnectionList = document.getElementById('crew-home-remote-connection-list');
+  const remoteRevokeAllButton = document.getElementById('crew-home-remote-revoke-all');
   const subtitle = document.getElementById('crew-home-subtitle');
 
   let latestRemote = null;
   let loading = false;
   let renderedQrValue = '';
+  let pairingUrl = '';
+  let pairingExpiresAt = 0;
+  let pairingLoading = false;
 
   const escapeHtml = value => String(value || '').replace(/[&<>'"]/g, char => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
@@ -36,8 +45,9 @@
   function stripTokenFromAddressBar() {
     try {
       const current = new URL(window.location.href);
-      if (!current.searchParams.has('token')) return;
+      if (!current.searchParams.has('token') && !current.searchParams.has('pair')) return;
       current.searchParams.delete('token');
+      current.searchParams.delete('pair');
       const query = current.searchParams.toString();
       history.replaceState({}, '', current.pathname + (query ? `?${query}` : '') + current.hash);
     } catch (_) {}
@@ -110,6 +120,45 @@
   function isRemoteBrowser() {
     const host = String(location.hostname || '').toLowerCase();
     return !['127.0.0.1', 'localhost', '::1', '[::1]'].includes(host);
+  }
+
+  function renderRemoteConnections(remote, remoteClient) {
+    if (!remoteConnections) return;
+    const count = Number(remote.connectionCount || 0);
+    const current = remote.currentConnection;
+    if (remoteConnectionCount) {
+      remoteConnectionCount.textContent = remoteClient && current
+        ? '此電腦已連線'
+        : `${count} 台電腦連線`;
+    }
+
+    if (remoteConnectionList) {
+      const connections = Array.isArray(remote.connections) ? remote.connections : [];
+      remoteConnectionList.innerHTML = connections.length
+        ? connections.map(connection => {
+          const device = escapeHtml(connection.userAgent || '未知瀏覽器');
+          const address = escapeHtml(connection.address || '未知位址');
+          const lastSeen = formatTime(connection.lastSeen) || '剛剛';
+          return `<div class="flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-950/50 px-2.5 py-2">
+            <div class="min-w-0 flex-1">
+              <div class="truncate text-[10px] font-semibold text-slate-200">${device}</div>
+              <div class="mt-0.5 truncate text-[9px] text-slate-500">${address} · ${lastSeen}</div>
+            </div>
+            <button data-remote-revoke="${escapeHtml(connection.id)}" class="shrink-0 min-h-8 px-2 rounded-lg border border-rose-500/30 bg-rose-500/10 text-[10px] text-rose-200 active:scale-95">中斷</button>
+          </div>`;
+        }).join('')
+        : (remoteClient && current
+          ? '<div class="text-[9px] text-slate-500">這個瀏覽器已取得自己的工作階段。</div>'
+          : '<div class="text-[9px] text-slate-500">目前沒有活躍的電腦連線。</div>');
+    }
+
+    const showSummary = Boolean(remote.active || remote.configuredEnabled || remoteClient);
+    remoteConnections.classList.toggle('hidden', !showSummary);
+    if (remoteRevokeAllButton) {
+      const canManage = !remoteClient && count > 0;
+      remoteRevokeAllButton.classList.toggle('hidden', !canManage);
+      remoteRevokeAllButton.disabled = !canManage;
+    }
   }
 
   function renderRemoteQr(value) {
@@ -195,6 +244,8 @@
       }
     }
 
+    renderRemoteConnections(remote, remoteClient);
+
     if (remoteUrlWrap) {
       const showConnectionInfo = Boolean(remote.configuredEnabled && primaryUrl);
       remoteUrlWrap.classList.toggle('hidden', !showConnectionInfo);
@@ -202,10 +253,27 @@
     if (remoteBaseUrl) remoteBaseUrl.textContent = primaryUrl;
 
     if (remoteSecureWrap && remoteUrl) {
-      const hasSecureUrl = Boolean(remote.shareUrl);
-      remoteSecureWrap.classList.toggle('hidden', !hasSecureUrl);
-      remoteUrl.textContent = remote.shareUrl || '';
-      renderRemoteQr(remote.shareUrl || '');
+      const canPair = !remoteClient && Boolean(remote.pairingAvailable);
+      remoteSecureWrap.classList.toggle('hidden', !canPair);
+      remoteUrl.textContent = pairingUrl || '';
+      if (remotePairButton) {
+        remotePairButton.disabled = pairingLoading || !canPair;
+        remotePairButton.textContent = pairingLoading
+          ? '產生中…'
+          : (pairingUrl && pairingExpiresAt > Date.now() ? '重新產生' : '產生 QR');
+        remotePairButton.classList.toggle('opacity-50', remotePairButton.disabled);
+      }
+      if (copyUrlButton) {
+        const canCopy = Boolean(pairingUrl && pairingExpiresAt > Date.now());
+        copyUrlButton.classList.toggle('hidden', !canCopy);
+        copyUrlButton.disabled = !canCopy;
+      }
+      if (remotePairHint) {
+        remotePairHint.textContent = pairingUrl && pairingExpiresAt > Date.now()
+          ? `此連結將於 ${new Date(pairingExpiresAt).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })} 到期，且只能使用一次。`
+          : '產生 QR，讓電腦首次連線；2 分鐘內有效且只能使用一次。';
+      }
+      renderRemoteQr(pairingUrl);
     }
 
     if (remoteAltWrap && remoteAlt) {
@@ -219,6 +287,37 @@
         remoteAlt.innerHTML = '';
         remoteAltWrap.classList.add('hidden');
       }
+    }
+  }
+
+  async function createPairing() {
+    if (pairingLoading || !latestRemote?.pairingAvailable || isRemoteBrowser()) return false;
+    pairingLoading = true;
+    renderRemote(latestRemote);
+    try {
+      const response = await fetch('/api/remote-pairing', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store'
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success || !data.pairing?.url) {
+        throw new Error(data.error || '配對連結產生失敗');
+      }
+      pairingUrl = String(data.pairing.url);
+      pairingExpiresAt = Number(data.pairing.expiresAt || 0);
+      return true;
+    } catch (error) {
+      pairingUrl = '';
+      pairingExpiresAt = 0;
+      if (remoteStatus) {
+        remoteStatus.textContent = String(error?.message || error || '配對連結產生失敗');
+        remoteStatus.className = 'mt-1 text-[10px] text-rose-300';
+      }
+      return false;
+    } finally {
+      pairingLoading = false;
+      renderRemote(latestRemote);
     }
   }
 
@@ -287,6 +386,8 @@
       : '關閉後，電腦會立刻失去 Crew Pocket 連線，只保留手機本機。確定關閉？';
     if (!confirm(message)) return;
 
+    pairingUrl = '';
+    pairingExpiresAt = 0;
     remoteToggle.disabled = true;
     remoteToggle.textContent = '套用中…';
     try {
@@ -329,6 +430,38 @@
     }
   }
 
+  async function revokeRemoteConnection(id) {
+    if (!id) return;
+    try {
+      const response = await fetch('/api/remote-connections/revoke', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id })
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) throw new Error(data.error || '中斷連線失敗');
+      await loadHome();
+    } catch (error) {
+      alert(error.message || '中斷連線失敗');
+    }
+  }
+
+  async function revokeAllRemoteConnections() {
+    if (!confirm('要中斷全部電腦連線嗎？它們需要重新配對才能再次使用。')) return;
+    try {
+      const response = await fetch('/api/remote-connections/revoke', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ all: true })
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) throw new Error(data.error || '中斷連線失敗');
+      await loadHome();
+    } catch (error) {
+      alert(error.message || '中斷連線失敗');
+    }
+  }
+
   async function openTask(button) {
     const conversationId = button.dataset.homeTaskConversation;
     const provider = button.dataset.homeTaskProvider || 'antigravity';
@@ -355,9 +488,15 @@
   refreshButton?.addEventListener('click', loadHome);
   allTasksButton?.addEventListener('click', () => setVisible(false));
   remoteToggle?.addEventListener('click', toggleRemote);
+  remotePairButton?.addEventListener('click', createPairing);
   copyUrlButton?.addEventListener('click', copyRemoteUrl);
+  remoteRevokeAllButton?.addEventListener('click', revokeAllRemoteConnections);
   modal?.addEventListener('click', event => {
     if (event.target === modal) setVisible(false);
+  });
+  remoteConnectionList?.addEventListener('click', event => {
+    const button = event.target.closest('[data-remote-revoke]');
+    if (button) revokeRemoteConnection(button.dataset.remoteRevoke);
   });
   recent?.addEventListener('click', event => {
     const button = event.target.closest('[data-home-task-id]');
