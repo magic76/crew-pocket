@@ -1975,11 +1975,14 @@ async function handleChat(req, res) {
         revisedCandidate
       });
 
+      const finalDecision = finalReview.decision === 'REPLAN' ? 'BLOCK' : finalReview.decision;
       return {
         ...finalReview,
+        decision: finalDecision,
+        reason: finalReview.decision === 'REPLAN' ? 'replan_limit_reached' : finalReview.reason,
         initialDecision: firstReview.decision,
         revisedCandidate,
-        reviewChain: [firstReview, finalReview]
+        reviewChain: [firstReview, { ...finalReview, decision: finalDecision }]
       };
     };
 
