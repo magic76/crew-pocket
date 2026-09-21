@@ -55,9 +55,8 @@ const {
 } = require('./lib/http-security');
 const { createHistoryMigration } = require('./lib/runtime/history-migration');
 const { getProviderRuntimeStatus, updateProvider } = require('./lib/runtime/provider-manager');
-const { resolveExecutionPolicy } = require('./lib/execution-policy');
-const { getJevCliStatus, looksLikeContinuation, reviewExecutionIntentWithJev } = require('./lib/jev-router');
-const { buildApprovedIntent, normalizeExecutionIntent, policyConflicts, shouldCreateExecutionIntent } = require('./lib/execution-intent');
+const { getJevCliStatus } = require('./lib/jev-router');
+const { prepareTurnExecution } = require('./lib/runtime/turn-orchestrator');
 const { reviewSoftBudgetWithJev, reviewToolFailureWithJev, sanitizeText: sanitizeRuntimeDecisionText, shouldUseRuntimeSnapshots } = require('./lib/runtime-decision');
 
 
@@ -1236,13 +1235,17 @@ function collectChangedFiles(event, target) {
 // 💬 SSE Chat Streaming with Resident Pipe
 async function handleCodexWarmup(req, res) {
   try {
-    const body = await parseJsonBody(req);
-    const enabled = body.enabled === true;
     const codex = getProvider('codex');
-    if (enabled) await codex.warmup();
-    else codex.stopWarmup();
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ success: true, enabled }));
+    if (req.method === 'POST') {
+      const body = await parseJsonBody(req);
+      if (body.enabled === true) await codex.warmup();
+      else codex.stopWarmup();
+    }
+    const status = typeof codex.getWarmupStatus === 'function'
+      ? codex.getWarmupStatus()
+      : { enabled: false, running: false, busy: false };
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+    res.end(JSON.stringify({ success: true, ...status }));
   } catch (error) {
     res.writeHead(400, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ success: false, error: error.message }));
@@ -1323,199 +1326,27 @@ async function handleChat(req, res) {
   turnTiming.workspace_ms = Date.now() - workspaceStartedAt;
 
   const effectiveModel = model || savedSettings?.model || null;
-  const jevInputSummary = String(prompt || '')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .replace(/(["']?(?:api[_ -]?key|access[_ -]?token|refresh[_ -]?token|secret|password|authorization)["']?\s*[:=]\s*)[^,\s"']+/gi, '$1[REDACTED]')
-    .replace(/\b[A-Z][A-Z0-9_]{2,}\s*=\s*\S+/g, '[ENV_REDACTED]')
-    .replace(/\b(?:sk|rk|pk)-[A-Za-z0-9_-]{16,}\b/g, '[REDACTED]')
-    .slice(0, 160);
-  let routedExecutionMode = explicitExecutionMode;
-  let executionSource = explicitExecutionMode ? 'request' : null;
-  let jevRoute = null;
-
-  const conversationExecutionMode = providerId === 'codex' &&
-    effectiveModel === 'gpt-5.6-luna' &&
-    !explicitExecutionMode &&
-    ['CHAT', 'INSPECT', 'SURGICAL_EDIT', 'DEBUG', 'BUILD'].includes(savedSettings?.executionMode)
-    ? savedSettings.executionMode
-    : null;
-  const reusableContinuationMode = conversationExecutionMode && looksLikeContinuation(prompt)
-    ? conversationExecutionMode
-    : null;
-
-  if (!routedExecutionMode && reusableContinuationMode) {
-    routedExecutionMode = reusableContinuationMode;
-    executionSource = 'conversation';
-    jevRoute = {
-      accepted: true,
-      mode: reusableContinuationMode,
-      source: 'conversation',
-      reason: 'continuation_reuse',
-      confidence: null,
-      latencyMs: 0
-    };
-  } else if (!routedExecutionMode && conversationExecutionMode) {
-    routedExecutionMode = conversationExecutionMode;
-    executionSource = 'conversation';
-  }
-
-  let executionPolicy = resolveExecutionPolicy({
-    provider: providerId,
-    model: effectiveModel,
-    executionMode: routedExecutionMode,
-    executionPolicy: body.execution_policy || body.executionPolicy,
-    executionSource
-  });
-
-  let executionIntent = null;
-  let intentReview = null;
-  let approvedExecutionIntent = null;
-  const isContinuation = Boolean(conversationExecutionMode);
-
-  if (shouldCreateExecutionIntent({
-    provider: providerId,
-    model: effectiveModel,
+  const {
+    jevInputSummary,
+    routedExecutionMode,
+    executionSource,
     executionPolicy,
+    executionIntent,
+    intentReview,
+    approvedExecutionIntent,
+    jevRoute,
+    planningOutcome
+  } = await prepareTurnExecution({
+    providerId,
+    effectiveModel,
     explicitExecutionMode,
-    continuation: isContinuation
-  })) {
-    const planningProvider = getProvider(providerId);
-    if (typeof planningProvider.planExecutionIntent === 'function') {
-      try {
-        const intentStartedAt = Date.now();
-        const rawIntent = await planningProvider.planExecutionIntent({
-          model: effectiveModel,
-          prompt,
-          workspace,
-          executionPolicy
-        });
-        turnTiming.intent_ms = Date.now() - intentStartedAt;
-        const rawCandidates = Array.isArray(rawIntent?.candidates)
-          ? rawIntent.candidates.slice(0, 3)
-          : [rawIntent];
-        const usedCandidateIds = new Set();
-        const candidateEntries = rawCandidates.map((candidate, index) => {
-          const intent = normalizeExecutionIntent(candidate);
-          if (!intent) return null;
-          const baseId = String(candidate?.id || candidate?.candidate_id || `candidate_${index + 1}`)
-            .replace(/[^A-Za-z0-9_-]/g, '_')
-            .slice(0, 48) || `candidate_${index + 1}`;
-          let id = baseId;
-          let suffix = 2;
-          while (usedCandidateIds.has(id)) id = `${baseId}_${suffix++}`;
-          usedCandidateIds.add(id);
-          return { id, intent };
-        }).filter(Boolean);
-        if (!candidateEntries.length) throw new Error('Execution intent preflight returned no candidates');
-
-        {
-          if (!routedExecutionMode && !conversationExecutionMode) {
-            const hasWriteCandidate = candidateEntries.some(({ intent }) => intent.expectedFiles > 0 ||
-              intent.needsBuild ||
-              intent.needsDependencyChange ||
-              intent.destructive ||
-              intent.broadRefactor);
-            const hasInspectCandidate = candidateEntries.some(({ intent }) => intent.estimatedTools > 0);
-            const inferredMode = hasWriteCandidate
-              ? 'SURGICAL_EDIT'
-              : hasInspectCandidate
-                ? 'INSPECT'
-                : 'CHAT';
-            routedExecutionMode = inferredMode;
-            executionSource = 'luna-intent';
-            executionPolicy = resolveExecutionPolicy({
-              provider: providerId,
-              model: effectiveModel,
-              executionMode: inferredMode,
-              executionPolicy: body.execution_policy || body.executionPolicy,
-              executionSource
-            });
-          }
-          const reviewStartedAt = Date.now();
-          intentReview = await reviewExecutionIntentWithJev({
-            task: prompt,
-            candidates: candidateEntries.map(candidate => ({
-              id: candidate.id,
-              intent: candidate.intent,
-              conflicts: policyConflicts(candidate.intent, executionPolicy)
-            })),
-            currentMode: executionPolicy.mode
-          });
-          turnTiming.intent_review_ms = Date.now() - reviewStartedAt;
-          turnTiming.jev_ms = turnTiming.intent_review_ms;
-          const selectedCandidate = candidateEntries.find(candidate => candidate.id === intentReview?.candidateId);
-          const acceptedIntent = Boolean(
-            selectedCandidate &&
-            intentReview?.accepted &&
-            intentReview?.decision !== 'REJECT_SCOPE'
-          );
-          executionIntent = acceptedIntent ? selectedCandidate.intent : null;
-          const suggestedMode = intentReview?.mode || executionPolicy?.mode || null;
-
-          if (acceptedIntent &&
-              intentReview.mode &&
-              intentReview.mode !== executionPolicy.mode) {
-            routedExecutionMode = intentReview.mode;
-            executionSource = 'jev-intent';
-            executionPolicy = resolveExecutionPolicy({
-              provider: providerId,
-              model: effectiveModel,
-              executionMode: routedExecutionMode,
-              executionPolicy: body.execution_policy || body.executionPolicy,
-              executionSource
-            });
-          } else if (!acceptedIntent) {
-            routedExecutionMode = 'CHAT';
-            executionSource = 'jev-intent';
-            executionPolicy = resolveExecutionPolicy({
-              provider: providerId,
-              model: effectiveModel,
-              executionMode: 'CHAT',
-              executionPolicy: body.execution_policy || body.executionPolicy,
-              executionSource
-            });
-          }
-
-          jevRoute = {
-            accepted: acceptedIntent,
-            mode: executionPolicy?.mode || null,
-            suggestedMode,
-            confidence: intentReview?.confidence ?? null,
-            reason: intentReview?.reason || intentReview?.decision || null,
-            latencyMs: intentReview?.latencyMs ?? turnTiming.intent_review_ms,
-            source: 'jev-intent'
-          };
-
-          if (acceptedIntent) {
-            approvedExecutionIntent = buildApprovedIntent(
-              executionIntent,
-              executionPolicy,
-              intentReview
-            );
-          }
-        }
-      } catch (error) {
-        intentReview = {
-          accepted: false,
-          decision: null,
-          mode: executionPolicy?.mode || null,
-          reason: 'preflight_error',
-          error: String(error.message || error).slice(0, 600)
-        };
-        routedExecutionMode = 'CHAT';
-        executionSource = 'luna-intent';
-        executionPolicy = resolveExecutionPolicy({
-          provider: providerId,
-          model: effectiveModel,
-          executionMode: 'CHAT',
-          executionPolicy: body.execution_policy || body.executionPolicy,
-          executionSource
-        });
-        console.warn('[ExecutionIntent] preflight skipped:', error.message || error);
-      }
-    }
-  }
+    savedSettings,
+    prompt,
+    workspace,
+    body,
+    getProvider,
+    turnTiming
+  });
 
   if (executionIntent || intentReview) {
     console.log('[ExecutionIntent] ' + JSON.stringify({
@@ -1525,6 +1356,7 @@ async function handleChat(req, res) {
       mode_after_review: executionPolicy?.mode || null,
       intent: executionIntent,
       review: intentReview,
+      outcome: planningOutcome,
       intent_ms: turnTiming.intent_ms,
       review_ms: turnTiming.intent_review_ms
     }));
@@ -1537,6 +1369,7 @@ async function handleChat(req, res) {
       provider: providerId,
       model: effectiveModel,
       accepted: Boolean(jevRoute.accepted),
+      outcome: jevRoute.outcome || planningOutcome || null,
       mode: jevRoute.mode || null,
       suggested_mode: jevRoute.suggestedMode || null,
       confidence: jevRoute.confidence ?? null,
@@ -2713,7 +2546,7 @@ const server = http.createServer(async (req, res) => {
     return handleProviderDelete(parsedUrl, res);
   } else if (pathname === '/api/conversation-settings' && req.method === 'POST') {
     return handleConversationSettings(req, res);
-  } else if (pathname === '/api/codex-warmup' && req.method === 'POST') {
+  } else if (pathname === '/api/codex-warmup' && (req.method === 'GET' || req.method === 'POST')) {
     return handleCodexWarmup(req, res);
   } else if (pathname === '/api/workspaces' && req.method === 'GET') {
     return handleWorkspaces(res);
