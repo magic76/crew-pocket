@@ -198,8 +198,8 @@ Crew Pocket 採用 **手機主機、電腦當遠端操作介面** 的模式。�
 - 預設仍只綁定 `127.0.0.1`。
 - LAN 模式才綁定 `0.0.0.0`。
 - 手機本機保留管理權限，所以 APK 不會因 LAN 模式而失效。
-- Remote Console 不顯示或要求配對碼；是否接受區網連線由手機端開關控制。
-- API 與 WebSocket 只在 Remote Console 開啟、且請求通過同源／主機檢查時提供服務。
+- Remote Console 是否接受區網連線由手機端開關控制；Runtime 仍會對遠端瀏覽器建立自己的授權 session。
+- API 與 WebSocket 只在 Remote Console 開啟、且請求通過主機與遠端 session 驗證時提供服務。
 - 關閉電腦連線後 Runtime 會自動恢復 localhost-only。
 - 遠端模式狀態持久化於 `~/.crew-pocket/remote-enabled`，APK Runtime 或新版 `crew start` 都會遵守。
 
