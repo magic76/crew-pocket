@@ -92,7 +92,7 @@
       return;
     }
 
-    recent.innerHTML = tasks.map(task => {
+    recent.innerHTML = tasks.slice(0, 3).map(task => {
       const [label, badgeClass] = taskStatus(task);
       const canOpen = Boolean(task.conversationId);
       const actionLabel = task.status === 'completed' ? '查看結果' : '開啟對話';
@@ -366,7 +366,7 @@
       try {
         const response = await fetch('/healthz', { cache: 'no-store' });
         if (response.ok || response.status === 204) {
-          await loadHome();
+          window.setTimeout(() => window.location.reload(), 250);
           return true;
         }
       } catch (_) {}

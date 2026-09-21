@@ -11,6 +11,8 @@ const { promisify } = require('node:util');
 const execFileAsync = promisify(execFile);
 const RUNTIME_HOME = path.resolve(process.env.HOME || '/data/data/com.termux/files/home');
 const REUSABLE_TOOL_DIR = process.env.CREW_REUSABLE_TOOL_DIR || path.join(__dirname, 'public', 'extra');
+const TURN_METRICS_DIR = path.join(os.homedir(), '.crew-pocket');
+const TURN_METRICS_FILE = path.join(TURN_METRICS_DIR, 'turn-metrics.jsonl');
 
 const {
   PORT,
@@ -39,11 +41,22 @@ const { getConversationSettings, getProviderConversationSettings, saveConversati
 const { createTask, getTask, listTasks, updateTask } = require('./lib/tasks');
 const { listWorkspaces, resolveWorkspace, createWorkspace } = require('./lib/workspaces');
 const auth = require('./lib/auth');
-const { applyCors, authorizeApiRequest, maybeSetAuthCookie, securityStatus, getApiToken, isLoopbackAddress } = require('./lib/http-security');
+const {
+  applyCors,
+  authorizeApiRequest,
+  maybeSetAuthCookie,
+  maybeSetPairingCookie,
+  securityStatus,
+  isLoopbackAddress,
+  createRemotePairing,
+  getRemoteConnectionSummary,
+  revokeRemoteConnection,
+  revokeAllRemoteConnections
+} = require('./lib/http-security');
 const { createHistoryMigration } = require('./lib/runtime/history-migration');
 const { getProviderRuntimeStatus, updateProvider } = require('./lib/runtime/provider-manager');
 const { resolveExecutionPolicy } = require('./lib/execution-policy');
-const { getJevCliStatus, looksLikeContinuation, reviewExecutionIntentWithJev, routeTaskWithJev, shouldRouteWithJev } = require('./lib/jev-router');
+const { getJevCliStatus, looksLikeContinuation, reviewExecutionIntentWithJev } = require('./lib/jev-router');
 const { buildApprovedIntent, normalizeExecutionIntent, policyConflicts, shouldCreateExecutionIntent } = require('./lib/execution-intent');
 const { reviewSoftBudgetWithJev, reviewToolFailureWithJev, sanitizeText: sanitizeRuntimeDecisionText, shouldUseRuntimeSnapshots } = require('./lib/runtime-decision');
 
@@ -1221,6 +1234,21 @@ function collectChangedFiles(event, target) {
 }
 
 // 💬 SSE Chat Streaming with Resident Pipe
+async function handleCodexWarmup(req, res) {
+  try {
+    const body = await parseJsonBody(req);
+    const enabled = body.enabled === true;
+    const codex = getProvider('codex');
+    if (enabled) await codex.warmup();
+    else codex.stopWarmup();
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: true, enabled }));
+  } catch (error) {
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: false, error: error.message }));
+  }
+}
+
 async function handleChat(req, res) {
   const requestId = crypto.randomUUID();
   const requestStartedAt = Date.now();
@@ -1306,11 +1334,14 @@ async function handleChat(req, res) {
   let executionSource = explicitExecutionMode ? 'request' : null;
   let jevRoute = null;
 
-  const reusableContinuationMode = providerId === 'codex' &&
+  const conversationExecutionMode = providerId === 'codex' &&
     effectiveModel === 'gpt-5.6-luna' &&
-    looksLikeContinuation(prompt) &&
-    ['SURGICAL_EDIT', 'DEBUG', 'BUILD'].includes(savedSettings?.executionMode)
+    !explicitExecutionMode &&
+    ['CHAT', 'INSPECT', 'SURGICAL_EDIT', 'DEBUG', 'BUILD'].includes(savedSettings?.executionMode)
     ? savedSettings.executionMode
+    : null;
+  const reusableContinuationMode = conversationExecutionMode && looksLikeContinuation(prompt)
+    ? conversationExecutionMode
     : null;
 
   if (!routedExecutionMode && reusableContinuationMode) {
@@ -1324,19 +1355,9 @@ async function handleChat(req, res) {
       confidence: null,
       latencyMs: 0
     };
-  } else if (shouldRouteWithJev({
-    provider: providerId,
-    model: effectiveModel,
-    explicitExecutionMode,
-    prompt
-  })) {
-    const jevStartedAt = Date.now();
-    jevRoute = await routeTaskWithJev(prompt);
-    turnTiming.jev_ms = Date.now() - jevStartedAt;
-    if (jevRoute?.mode) {
-      routedExecutionMode = jevRoute.mode;
-      executionSource = 'jev';
-    }
+  } else if (!routedExecutionMode && conversationExecutionMode) {
+    routedExecutionMode = conversationExecutionMode;
+    executionSource = 'conversation';
   }
 
   let executionPolicy = resolveExecutionPolicy({
@@ -1350,7 +1371,7 @@ async function handleChat(req, res) {
   let executionIntent = null;
   let intentReview = null;
   let approvedExecutionIntent = null;
-  const isContinuation = Boolean(reusableContinuationMode);
+  const isContinuation = Boolean(conversationExecutionMode);
 
   if (shouldCreateExecutionIntent({
     provider: providerId,
@@ -1370,19 +1391,69 @@ async function handleChat(req, res) {
           executionPolicy
         });
         turnTiming.intent_ms = Date.now() - intentStartedAt;
-        executionIntent = normalizeExecutionIntent(rawIntent);
-        if (executionIntent) {
-          const conflicts = policyConflicts(executionIntent, executionPolicy);
+        const rawCandidates = Array.isArray(rawIntent?.candidates)
+          ? rawIntent.candidates.slice(0, 3)
+          : [rawIntent];
+        const usedCandidateIds = new Set();
+        const candidateEntries = rawCandidates.map((candidate, index) => {
+          const intent = normalizeExecutionIntent(candidate);
+          if (!intent) return null;
+          const baseId = String(candidate?.id || candidate?.candidate_id || `candidate_${index + 1}`)
+            .replace(/[^A-Za-z0-9_-]/g, '_')
+            .slice(0, 48) || `candidate_${index + 1}`;
+          let id = baseId;
+          let suffix = 2;
+          while (usedCandidateIds.has(id)) id = `${baseId}_${suffix++}`;
+          usedCandidateIds.add(id);
+          return { id, intent };
+        }).filter(Boolean);
+        if (!candidateEntries.length) throw new Error('Execution intent preflight returned no candidates');
+
+        {
+          if (!routedExecutionMode && !conversationExecutionMode) {
+            const hasWriteCandidate = candidateEntries.some(({ intent }) => intent.expectedFiles > 0 ||
+              intent.needsBuild ||
+              intent.needsDependencyChange ||
+              intent.destructive ||
+              intent.broadRefactor);
+            const hasInspectCandidate = candidateEntries.some(({ intent }) => intent.estimatedTools > 0);
+            const inferredMode = hasWriteCandidate
+              ? 'SURGICAL_EDIT'
+              : hasInspectCandidate
+                ? 'INSPECT'
+                : 'CHAT';
+            routedExecutionMode = inferredMode;
+            executionSource = 'luna-intent';
+            executionPolicy = resolveExecutionPolicy({
+              provider: providerId,
+              model: effectiveModel,
+              executionMode: inferredMode,
+              executionPolicy: body.execution_policy || body.executionPolicy,
+              executionSource
+            });
+          }
           const reviewStartedAt = Date.now();
           intentReview = await reviewExecutionIntentWithJev({
             task: prompt,
-            intent: executionIntent,
-            currentMode: executionPolicy.mode,
-            conflicts
+            candidates: candidateEntries.map(candidate => ({
+              id: candidate.id,
+              intent: candidate.intent,
+              conflicts: policyConflicts(candidate.intent, executionPolicy)
+            })),
+            currentMode: executionPolicy.mode
           });
           turnTiming.intent_review_ms = Date.now() - reviewStartedAt;
+          turnTiming.jev_ms = turnTiming.intent_review_ms;
+          const selectedCandidate = candidateEntries.find(candidate => candidate.id === intentReview?.candidateId);
+          const acceptedIntent = Boolean(
+            selectedCandidate &&
+            intentReview?.accepted &&
+            intentReview?.decision !== 'REJECT_SCOPE'
+          );
+          executionIntent = acceptedIntent ? selectedCandidate.intent : null;
+          const suggestedMode = intentReview?.mode || executionPolicy?.mode || null;
 
-          if (intentReview?.accepted &&
+          if (acceptedIntent &&
               intentReview.mode &&
               intentReview.mode !== executionPolicy.mode) {
             routedExecutionMode = intentReview.mode;
@@ -1394,13 +1465,35 @@ async function handleChat(req, res) {
               executionPolicy: body.execution_policy || body.executionPolicy,
               executionSource
             });
+          } else if (!acceptedIntent) {
+            routedExecutionMode = 'CHAT';
+            executionSource = 'jev-intent';
+            executionPolicy = resolveExecutionPolicy({
+              provider: providerId,
+              model: effectiveModel,
+              executionMode: 'CHAT',
+              executionPolicy: body.execution_policy || body.executionPolicy,
+              executionSource
+            });
           }
 
-          approvedExecutionIntent = buildApprovedIntent(
-            executionIntent,
-            executionPolicy,
-            intentReview
-          );
+          jevRoute = {
+            accepted: acceptedIntent,
+            mode: executionPolicy?.mode || null,
+            suggestedMode,
+            confidence: intentReview?.confidence ?? null,
+            reason: intentReview?.reason || intentReview?.decision || null,
+            latencyMs: intentReview?.latencyMs ?? turnTiming.intent_review_ms,
+            source: 'jev-intent'
+          };
+
+          if (acceptedIntent) {
+            approvedExecutionIntent = buildApprovedIntent(
+              executionIntent,
+              executionPolicy,
+              intentReview
+            );
+          }
         }
       } catch (error) {
         intentReview = {
@@ -1410,6 +1503,15 @@ async function handleChat(req, res) {
           reason: 'preflight_error',
           error: String(error.message || error).slice(0, 600)
         };
+        routedExecutionMode = 'CHAT';
+        executionSource = 'luna-intent';
+        executionPolicy = resolveExecutionPolicy({
+          provider: providerId,
+          model: effectiveModel,
+          executionMode: 'CHAT',
+          executionPolicy: body.execution_policy || body.executionPolicy,
+          executionSource
+        });
         console.warn('[ExecutionIntent] preflight skipped:', error.message || error);
       }
     }
@@ -1514,7 +1616,7 @@ async function handleChat(req, res) {
     const logToolMetrics = (reason) => {
       if (metricsLogged) return;
       metricsLogged = true;
-      console.log('[ToolMetrics] ' + JSON.stringify({
+      const metrics = {
         request_id: requestId,
         provider: providerId,
         conversation_id: conversation_id || null,
@@ -1542,7 +1644,11 @@ async function handleChat(req, res) {
           status_level: lastContextStats.status_level
         } : null,
         ...getToolMetrics()
-      }));
+      };
+      console.log('[ToolMetrics] ' + JSON.stringify(metrics));
+      fsPromises.mkdir(TURN_METRICS_DIR, { recursive: true })
+        .then(() => fsPromises.appendFile(TURN_METRICS_FILE, JSON.stringify(metrics) + '\n'))
+        .catch(error => console.warn('[ToolMetrics] Persist failed:', error.message));
     };
     const recordToolEvent = (event) => {
       const key = getServerToolKey(event);
@@ -1912,20 +2018,23 @@ async function handleChat(req, res) {
       }
       if (!violations.length) return;
 
-      policyStopped = true;
-      const message = `Execution policy stopped this turn: ${violations.join(', ')}. Keep the task narrower or retry with a broader execution mode.`;
-      console.warn('[ExecutionPolicy] hard stop ' + JSON.stringify({
+      const message = `Execution policy warning: ${violations.join(', ')}. Continuing because the runtime budget is advisory.`;
+      console.warn('[ExecutionPolicy] budget warning ' + JSON.stringify({
         request_id: requestId,
         mode: executionPolicy.mode,
         violations
       }));
-      try { abortTurn(); } catch (_) {}
-      finish({
-        error: message,
-        provider: providerId,
-        conversation_id,
-        policy_stop: true,
-        policy_violations: violations
+      sendEvent('policy', {
+        mode: executionPolicy.mode,
+        level: 'warning',
+        message,
+        executions: metrics.executions,
+        polls: metrics.polls,
+        changed_files: metrics.changed_files.length,
+        hard_tool_limit: executionPolicy.hardToolExecutions,
+        poll_limit: executionPolicy.maxPolls,
+        file_limit: executionPolicy.maxFilesChanged,
+        violations
       });
     };
 
@@ -2010,7 +2119,16 @@ async function handleChat(req, res) {
             attempts: tracking.attempts,
             poll_count: tracking.pollCount,
             tool_event_count: toolEventCount,
-            unique_tool_count: toolRuns.size
+            unique_tool_count: toolRuns.size,
+            execution_metrics: {
+              executions: [...toolRuns.values()].reduce((sum, run) => sum + run.attempts, 0),
+              polls: [...toolRuns.values()].reduce((sum, run) => sum + run.pollCount, 0),
+              changed_files_count: changedFiles.size,
+              soft_tool_limit: executionPolicy?.softToolExecutions ?? null,
+              hard_tool_limit: executionPolicy?.hardToolExecutions ?? null,
+              poll_limit: executionPolicy?.maxPolls ?? null,
+              file_limit: executionPolicy?.maxFilesChanged ?? null
+            }
           });
           queueToolFailureDecision(event, tracking);
           enforceExecutionPolicy();
@@ -2377,7 +2495,7 @@ function remoteAccessSnapshot(req, configuredEnabled = fs.existsSync(REMOTE_ACCE
   const addresses = lanAddresses();
   const urls = addresses.map(address => `http://${address}:${PORT}`);
   const localClient = isLoopbackAddress(req.socket?.remoteAddress || '');
-  const token = getApiToken();
+  const connections = getRemoteConnectionSummary(req);
   return {
     configuredEnabled,
     active,
@@ -2385,10 +2503,11 @@ function remoteAccessSnapshot(req, configuredEnabled = fs.existsSync(REMOTE_ACCE
     port: Number(PORT),
     lanAddresses: addresses,
     urls,
-    shareUrl: localClient && configuredEnabled && urls[0]
-      ? `${urls[0]}?token=${encodeURIComponent(token)}`
-      : null,
-    tokenRequiredForRemote: configuredEnabled || active
+    pairingAvailable: localClient && configuredEnabled && active && urls.length > 0,
+    connectionCount: connections.connectionCount,
+    connections: localClient ? connections.connections : [],
+    currentConnection: localClient ? null : connections.currentConnection,
+    activeWindowSeconds: connections.activeWindowSeconds
   };
 }
 
@@ -2471,6 +2590,7 @@ async function handleRemoteAccess(req, res) {
     if (body.enabled) {
       await fsPromises.writeFile(REMOTE_ACCESS_FLAG, 'enabled\n', { mode: 0o600 });
     } else {
+      revokeAllRemoteConnections();
       await fsPromises.unlink(REMOTE_ACCESS_FLAG).catch(error => {
         if (error.code !== 'ENOENT') throw error;
       });
@@ -2491,10 +2611,63 @@ async function handleRemoteAccess(req, res) {
   }
 }
 
+function isLocalAdminRequest(req) {
+  return isLoopbackAddress(req.socket?.remoteAddress || '');
+}
+
+async function handleRemotePairing(req, res) {
+  if (!isLocalAdminRequest(req)) {
+    res.writeHead(403, { 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify({ success: false, error: 'Pairing can only be created on the phone' }));
+  }
+
+  const snapshot = remoteAccessSnapshot(req);
+  if (!snapshot.pairingAvailable) {
+    res.writeHead(409, { 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify({ success: false, error: 'Remote Console is not active' }));
+  }
+
+  const pairing = createRemotePairing();
+  const urls = snapshot.urls.map(baseUrl => `${baseUrl}?pair=${encodeURIComponent(pairing.ticket)}`);
+  res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+  return res.end(JSON.stringify({
+    success: true,
+    pairing: {
+      url: urls[0] || null,
+      urls,
+      expiresAt: pairing.expiresAt,
+      ttlSeconds: Math.floor((pairing.expiresAt - Date.now()) / 1000)
+    }
+  }));
+}
+
+async function handleRemoteConnectionRevoke(req, res) {
+  if (!isLocalAdminRequest(req)) {
+    res.writeHead(403, { 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify({ success: false, error: 'Connections can only be managed on the phone' }));
+  }
+
+  try {
+    const body = await parseJsonBody(req);
+    let revoked = 0;
+    if (body.all === true) {
+      revoked = revokeAllRemoteConnections();
+    } else if (body.id) {
+      revoked = revokeRemoteConnection(body.id) ? 1 : 0;
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+    return res.end(JSON.stringify({ success: true, revoked, remote: remoteAccessSnapshot(req) }));
+  } catch (error) {
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify({ success: false, error: error.message || 'Connection revoke failed' }));
+  }
+}
+
 // 🌐 HTTP Server Request Dispatcher
 const server = http.createServer(async (req, res) => {
   const parsedUrl = url.parse(req.url, true);
   const pathname = parsedUrl.pathname;
+  maybeSetPairingCookie(req, res, parsedUrl);
   maybeSetAuthCookie(res, parsedUrl);
   applyCors(req, res);
 
@@ -2526,6 +2699,10 @@ const server = http.createServer(async (req, res) => {
 
   if (pathname === '/api/home' && req.method === 'GET') {
     return handleCrewHome(req, res);
+  } else if (pathname === '/api/remote-pairing' && req.method === 'POST') {
+    return handleRemotePairing(req, res);
+  } else if (pathname === '/api/remote-connections/revoke' && req.method === 'POST') {
+    return handleRemoteConnectionRevoke(req, res);
   } else if (pathname === '/api/remote-access' && (req.method === 'GET' || req.method === 'POST')) {
     return handleRemoteAccess(req, res);
   } else if (pathname === '/api/conversations' && req.method === 'GET') {
@@ -2536,6 +2713,8 @@ const server = http.createServer(async (req, res) => {
     return handleProviderDelete(parsedUrl, res);
   } else if (pathname === '/api/conversation-settings' && req.method === 'POST') {
     return handleConversationSettings(req, res);
+  } else if (pathname === '/api/codex-warmup' && req.method === 'POST') {
+    return handleCodexWarmup(req, res);
   } else if (pathname === '/api/workspaces' && req.method === 'GET') {
     return handleWorkspaces(res);
   } else if (pathname === '/api/workspaces' && req.method === 'POST') {
@@ -2676,8 +2855,12 @@ server.listen(PORT, HOST, () => {
   console.log(`🚀 Crew Pocket Web UI (Resident Pipe) at: http://${HOST}:${PORT}`);
   const runtimeSecurity = securityStatus();
   if (runtimeSecurity.tokenRequired) {
-    console.log(`🔐 LAN API token: ${runtimeSecurity.token}`);
-    console.log(`   第一次開啟 LAN UI 時在網址加上 ?token=<上方 token>，之後瀏覽器會記住。`);
+    console.log(`🔐 LAN access uses one-time pairing QR; no API token is shown to remote users.`);
   }
   console.log(`=================================================`);
+  if (process.env.CREW_CODEX_SESSION_WARMUP === '1') {
+    getProvider('codex').warmup()
+      .then(() => console.log('[Codex Provider] session warmup ready'))
+      .catch(error => console.warn('[Codex Provider] session warmup failed:', error.message));
+  }
 });
