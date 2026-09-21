@@ -145,7 +145,7 @@ function getToolDetails(tool) {
     badgeColor = 'bg-amber-950/40 text-amber-300 border-amber-800/60';
     const rawCommand = args.CommandLine || args.command || args.cmd || '';
     const cmd = Array.isArray(rawCommand) ? rawCommand.join(' ') : String(rawCommand || '');
-    desc = cmd ? `$ ${cmd.slice(0, 45)}${cmd.length > 45 ? '...' : ''}` : '執行終端命令';
+    desc = cmd ? `$ ${compactCommandText(cmd, 54)}` : '執行終端命令';
   } else if (name === 'view_file' || /read_file|readfile|file_read|imageview/.test(normalizedName)) {
     icon = '📄';
     label = '檢視檔案';
@@ -213,6 +213,12 @@ function compactProgressText(value, maxLength = 64) {
   return text.length > maxLength ? `${text.slice(0, maxLength - 1)}…` : text;
 }
 
+function compactCommandText(value, maxLength = 64) {
+  const text = String(value || '').replace(/\s+/g, ' ').trim();
+  if (!text) return '';
+  return text.length > maxLength ? `…${text.slice(-(maxLength - 1))}` : text;
+}
+
 function firstToolPath(args) {
   if (!args || typeof args !== 'object') return '';
   const direct = args.TargetFile || args.AbsolutePath || args.path || args.file_path || args.file || args.target;
@@ -240,7 +246,7 @@ function getPassiveToolProgress(tool) {
   const path = firstToolPath(args);
   const query = compactProgressText(args.Query || args.query || args.Pattern || args.pattern || '', 46);
   const rawCommand = args.CommandLine || args.command || args.cmd || '';
-  const command = compactProgressText(Array.isArray(rawCommand) ? rawCommand.join(' ') : rawCommand, 54);
+  const command = compactCommandText(Array.isArray(rawCommand) ? rawCommand.join(' ') : rawCommand, 54);
 
   if (/run_command|commandexecution|exec_command|shell_command|shellcommand/.test(normalizedName)) {
     return { icon: '💻', text: command ? `執行指令 · ${command}` : '執行終端指令' };
