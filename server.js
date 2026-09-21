@@ -13,6 +13,7 @@ const RUNTIME_HOME = path.resolve(process.env.HOME || '/data/data/com.termux/fil
 const REUSABLE_TOOL_DIR = process.env.CREW_REUSABLE_TOOL_DIR || path.join(__dirname, 'public', 'extra');
 const TURN_METRICS_DIR = path.join(os.homedir(), '.crew-pocket');
 const TURN_METRICS_FILE = path.join(TURN_METRICS_DIR, 'turn-metrics.jsonl');
+const JEV_ELAPSED_CHECKPOINT_MS = 2 * 60 * 1000;
 
 const {
   PORT,
@@ -57,7 +58,8 @@ const { createHistoryMigration } = require('./lib/runtime/history-migration');
 const { getProviderRuntimeStatus, updateProvider } = require('./lib/runtime/provider-manager');
 const { getJevCliStatus } = require('./lib/jev-router');
 const { prepareTurnExecution } = require('./lib/runtime/turn-orchestrator');
-const { reviewSoftBudgetWithJev, reviewToolFailureWithJev, sanitizeText: sanitizeRuntimeDecisionText, shouldUseRuntimeSnapshots } = require('./lib/runtime-decision');
+const { normalizeExecutionIntent } = require('./lib/execution-intent');
+const { reviewElapsedCheckpointWithJev, reviewSoftBudgetWithJev, reviewToolFailureWithJev, sanitizeText: sanitizeRuntimeDecisionText, shouldUseRuntimeSnapshots } = require('./lib/runtime-decision');
 
 
 async function handleStorageReport(res) {
@@ -1422,7 +1424,10 @@ async function handleChat(req, res) {
     let policyStopped = false;
     let runtimeStopped = false;
     let softBudgetSnapshotQueued = false;
+    let elapsedCheckpointTimer = null;
     let activeConversationId = conversation_id || null;
+    let currentAssistantTail = '';
+    const recentToolEvents = [];
     const runtimeSnapshotsEnabled = shouldUseRuntimeSnapshots({
       provider: providerId,
       model: effectiveModel
@@ -1507,6 +1512,16 @@ async function handleChat(req, res) {
       toolRuns.set(key, run);
       toolEventCount += 1;
       collectChangedFiles(event, changedFiles);
+      recentToolEvents.push({
+        name: event.name || event.tool_name || 'tool',
+        state,
+        output: sanitizeRuntimeDecisionText(stableToolSerialize({
+          output: event.info?.output ?? null,
+          exitCode: event.info?.exitCode ?? null,
+          error: event.info?.error ?? null
+        }), 1200)
+      });
+      if (recentToolEvents.length > 6) recentToolEvents.splice(0, recentToolEvents.length - 6);
       return {
         key,
         attempts: run.attempts,
@@ -1520,6 +1535,10 @@ async function handleChat(req, res) {
     const finish = (payload) => {
       if (ended) return;
       ended = true;
+      if (elapsedCheckpointTimer) {
+        clearTimeout(elapsedCheckpointTimer);
+        elapsedCheckpointTimer = null;
+      }
       markOnce('to_done_ms');
       const finalPayload = {
         ...(payload || {}),
@@ -1690,6 +1709,27 @@ async function handleChat(req, res) {
         return;
       }
 
+      if (snapshot.type === 'ELAPSED_CHECKPOINT') {
+        if (snapshot.askUser || snapshot.decision === 'BLOCK') {
+          return stopForRuntimeDecision(
+            snapshot,
+            snapshot.askUser
+              ? 'Crew Runtime paused after the two-minute Jev checkpoint because user input is required before useful work can continue.'
+              : 'Crew Runtime stopped after the two-minute Jev checkpoint because the current autonomous path was not justified.'
+          );
+        }
+        if (snapshot.decision === 'ACCEPT' && snapshot.revisedCandidate) {
+          const candidate = snapshot.revisedCandidate;
+          await steerRuntime([
+            'Jev requested one Luna replan and accepted the revised candidate.',
+            `Re-anchor the active turn on this revised candidate: ${candidate.summary || 'continue with the narrower revised plan'}.`,
+            `Expected files: ${candidate.expectedFiles}; estimated tools: ${candidate.estimatedTools}.`,
+            'Do not restart completed work. Continue from the current runtime state using only the minimum remaining actions.'
+          ]);
+        }
+        return;
+      }
+
       if (snapshot.type === 'SOFT_BUDGET') {
         if (snapshot.askUser) {
           return stopForRuntimeDecision(
@@ -1809,6 +1849,145 @@ async function handleChat(req, res) {
       }));
     };
 
+    const loadRecentConversationTurns = async () => {
+      const messages = [];
+      if (activeConversationId && typeof provider.getHistory === 'function') {
+        try {
+          const history = await provider.getHistory(activeConversationId);
+          for (const message of history?.messages || []) {
+            if (!['user', 'assistant'].includes(message?.role)) continue;
+            const content = sanitizeRuntimeDecisionText(message.content, 1200);
+            if (content) messages.push({ role: message.role, content });
+          }
+        } catch (error) {
+          console.warn('[RuntimeDecision] recent history unavailable:', error.message);
+        }
+      }
+      if (currentAssistantTail.trim()) {
+        messages.push({
+          role: 'assistant',
+          content: sanitizeRuntimeDecisionText(currentAssistantTail, 1200)
+        });
+      }
+      return messages.slice(-10);
+    };
+
+    const runElapsedCheckpoint = async () => {
+      const recentTurns = await loadRecentConversationTurns();
+      const policySnapshot = {
+        mode: executionPolicy?.mode || null,
+        softToolExecutions: executionPolicy?.softToolExecutions ?? null,
+        hardToolExecutions: executionPolicy?.hardToolExecutions ?? null,
+        maxPolls: executionPolicy?.maxPolls ?? null,
+        maxFilesChanged: executionPolicy?.maxFilesChanged ?? null,
+        allowBuild: executionPolicy?.allowBuild ?? null,
+        allowDependencyChanges: executionPolicy?.allowDependencyChanges ?? null
+      };
+      const metrics = getToolMetrics();
+      const firstReview = await reviewElapsedCheckpointWithJev({
+        task: prompt,
+        mode: executionPolicy?.mode,
+        metrics,
+        policy: policySnapshot,
+        intent: approvedExecutionIntent,
+        recentTurns,
+        recentTools: recentToolEvents,
+        elapsedMs: elapsed(),
+        stage: 'CHECKPOINT'
+      });
+
+      if (!firstReview.ok || firstReview.askUser || firstReview.decision !== 'REPLAN') {
+        return firstReview;
+      }
+
+      if (typeof provider.planExecutionIntent !== 'function') {
+        return {
+          ...firstReview,
+          decision: 'BLOCK',
+          reason: 'replan_unavailable',
+          reviewChain: [firstReview]
+        };
+      }
+
+      const replanPrompt = [
+        '[Crew Runtime Replan Request]',
+        'The active user turn has been running for at least two minutes.',
+        'Do not use tools. Generate exactly ONE revised bounded execution candidate.',
+        'The candidate must continue the same user goal, respect the recent conversation, and remove unnecessary scope.',
+        '',
+        '[Original user request]',
+        sanitizeRuntimeDecisionText(prompt, 3500),
+        '',
+        '[Recent conversation]',
+        JSON.stringify(recentTurns),
+        '',
+        '[Current approved intent]',
+        JSON.stringify(approvedExecutionIntent || null),
+        '',
+        '[Runtime evidence]',
+        JSON.stringify({ metrics, recent_tools: recentToolEvents.slice(-4) }),
+        '',
+        '[Jev checkpoint review]',
+        JSON.stringify(firstReview)
+      ].join('\n');
+
+      let rawIntent;
+      try {
+        rawIntent = await provider.planExecutionIntent({
+          model: effectiveModel,
+          prompt: replanPrompt,
+          workspace,
+          executionPolicy
+        });
+      } catch (error) {
+        return {
+          ...firstReview,
+          decision: 'BLOCK',
+          reason: 'luna_replan_failed',
+          error: String(error.message || error).slice(0, 600),
+          reviewChain: [firstReview]
+        };
+      }
+
+      const rawCandidate = Array.isArray(rawIntent?.candidates)
+        ? rawIntent.candidates[0]
+        : rawIntent;
+      const revisedCandidate = normalizeExecutionIntent(rawCandidate);
+      if (!revisedCandidate) {
+        return {
+          ...firstReview,
+          decision: 'BLOCK',
+          reason: 'invalid_replan_candidate',
+          reviewChain: [firstReview]
+        };
+      }
+
+      const finalReview = await reviewElapsedCheckpointWithJev({
+        task: prompt,
+        mode: executionPolicy?.mode,
+        metrics: getToolMetrics(),
+        policy: policySnapshot,
+        intent: approvedExecutionIntent,
+        recentTurns,
+        recentTools: recentToolEvents,
+        elapsedMs: elapsed(),
+        stage: 'REPLAN_REVIEW',
+        revisedCandidate
+      });
+
+      return {
+        ...finalReview,
+        initialDecision: firstReview.decision,
+        revisedCandidate,
+        reviewChain: [firstReview, finalReview]
+      };
+    };
+
+    const queueElapsedCheckpointDecision = () => {
+      if (!runtimeSnapshotsEnabled || !executionPolicy || ended || runtimeStopped) return;
+      queueRuntimeDecision('elapsed_120s', runElapsedCheckpoint);
+    };
+
     const finishAfterRuntimeDecisions = (payload) => {
       const pending = [...pendingRuntimeDecisions];
       if (!pending.length) return finish(payload);
@@ -1876,11 +2055,22 @@ async function handleChat(req, res) {
     res.on('close', () => {
       if (!ended && !res.writableEnded) {
         ended = true;
+        if (elapsedCheckpointTimer) {
+          clearTimeout(elapsedCheckpointTimer);
+          elapsedCheckpointTimer = null;
+        }
         abortTurn();
         markOnce('to_done_ms');
         logToolMetrics('client_closed');
       }
     });
+
+    if (runtimeSnapshotsEnabled) {
+      elapsedCheckpointTimer = setTimeout(() => {
+        elapsedCheckpointTimer = null;
+        queueElapsedCheckpointDecision();
+      }, JEV_ELAPSED_CHECKPOINT_MS);
+    }
 
     await provider.startTurn({
       conversationId: conversation_id,
@@ -1930,6 +2120,7 @@ async function handleChat(req, res) {
           });
         } else if (event.type === 'text_delta') {
           markOnce('to_first_text_ms');
+          currentAssistantTail = `${currentAssistantTail}${event.delta || ''}`.slice(-2400);
           // The browser already appends deltas locally. Sending the complete
           // response on every token makes one long answer O(n²) in SSE bytes
           // and JSON serialization work on the phone.
