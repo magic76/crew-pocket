@@ -921,11 +921,25 @@ function toggleModelModal(open) {
   modelModal.classList.toggle('hidden', !open);
   modelModal.setAttribute('aria-hidden', open ? 'false' : 'true');
   if (open) {
+    const warmupToggle = document.getElementById('codex-warmup-toggle');
+    if (warmupToggle) warmupToggle.checked = localStorage.getItem('codex_session_warmup') === 'true';
     renderProviderOptions();
     loadModelsList();
     renderEffortOptions();
   }
 }
+
+window.toggleCodexWarmup = async function(enabled) {
+  localStorage.setItem('codex_session_warmup', enabled ? 'true' : 'false');
+  try {
+    const res = await fetch('/api/codex-warmup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled }) });
+    if (!res.ok) throw new Error('warmup update failed');
+  } catch (_) {
+    localStorage.removeItem('codex_session_warmup');
+    const toggle = document.getElementById('codex-warmup-toggle');
+    if (toggle) toggle.checked = !enabled;
+  }
+};
 
 async function loadModelsList() {
   if (!modelOptionsContainer) return;
@@ -1115,6 +1129,7 @@ async function loadDirectory(relPath = '', showLoading = true) {
     if (filesBasePath) filesBasePath.textContent = `~/${data.currentPath || ''}`;
     if (filesCountBadge) filesCountBadge.textContent = `${data.entries ? data.entries.length : 0} 個項目`;
     renderExplorerTransferBar();
+    const selectedCount = filesListContainer.querySelectorAll('.file-bulk-select:checked').length;
 
     // Render Breadcrumbs
     renderBreadcrumbs(data.currentPath);
@@ -1126,7 +1141,7 @@ async function loadDirectory(relPath = '', showLoading = true) {
       return;
     }
 
-    let itemsHtml = '';
+    let itemsHtml = `<div class="flex items-center justify-between gap-2 mb-2 px-1"><span class="text-[10px] text-slate-500">可勾選多個檔案或資料夾</span><button type="button" class="file-bulk-delete min-h-9 px-2 rounded-lg bg-rose-700/80 text-white text-[10px] font-bold disabled:opacity-40" ${selectedCount ? '' : 'disabled'}>刪除選取 <span class="file-bulk-count">${selectedCount}</span></button></div>`;
 
     // Up level item if not at root
     if (!data.isRoot) {
@@ -1144,13 +1159,14 @@ async function loadDirectory(relPath = '', showLoading = true) {
       const safeRelPath = encodeURIComponent(item.relPath);
       const safeName = encodeURIComponent(item.name);
       const deleteAction = `<div class="absolute inset-0 bg-rose-600 text-white flex items-center justify-end pr-7"><button type="button" class="file-swipe-delete min-w-12 min-h-12 hover:bg-rose-500 active:bg-rose-700 rounded-xl text-[11px] font-bold flex flex-col items-center justify-center gap-1" data-file-path="${safeRelPath}" data-file-name="${safeName}" data-file-directory="${item.isDirectory}"><span class="text-base leading-none">🗑️</span><span>刪除</span></button></div>`;
+      const bulkSelect = `<input type="checkbox" class="file-bulk-select accent-rose-500 w-4 h-4 shrink-0" data-file-path="${safeRelPath}" data-file-name="${safeName}" data-file-directory="${item.isDirectory}" aria-label="選取 ${escapeHtml(item.name)}" onclick="event.stopPropagation()">`;
       const actionButton = `<button type="button" class="file-transfer-action min-w-10 min-h-10 rounded-lg bg-slate-800 text-slate-300 active:bg-slate-700 text-base" data-file-path="${safeRelPath}" data-file-name="${safeName}" data-file-directory="${item.isDirectory}" title="複製或移動">⋮</button>`;
       if (item.isDirectory) {
         itemsHtml += `
           <div class="file-swipe-row relative overflow-hidden rounded-xl" data-file-path="${safeRelPath}">
             ${deleteAction}
             <div class="file-swipe-content relative p-2 rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-800/80 transition flex items-center justify-between cursor-pointer group select-none touch-pan-y" onclick="loadDirectory('${escapeHtml(item.relPath)}')">
-              <div class="flex items-center gap-2 min-w-0">
+              <div class="flex items-center gap-2 min-w-0">${bulkSelect}
                 <span class="text-base shrink-0">${item.icon}</span>
                 <div class="min-w-0"><div class="font-bold text-slate-200 font-mono truncate">${escapeHtml(item.name)}/</div><div class="text-[10px] text-slate-500 font-mono">${item.sizeFormatted || '計算大小中…'}</div></div>
               </div>
@@ -1163,13 +1179,13 @@ async function loadDirectory(relPath = '', showLoading = true) {
           <div class="file-swipe-row relative overflow-hidden rounded-xl" data-file-path="${safeRelPath}">
             ${deleteAction}
             <div class="file-swipe-content relative p-2 rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-800/60 transition flex items-center justify-between gap-2 group select-none touch-pan-y">
-              <div class="flex items-center gap-2 min-w-0 flex-1 cursor-pointer" onclick="previewFile('${escapeHtml(item.relPath)}')">
+              <div class="flex items-center gap-2 min-w-0 flex-1 cursor-pointer">${bulkSelect}<span class="flex items-center gap-2 min-w-0 flex-1" onclick="previewFile('${escapeHtml(item.relPath)}')">
                 <span class="text-base shrink-0">${item.icon}</span>
                 <div class="min-w-0">
                   <div class="font-mono text-slate-200 truncate group-hover:text-emerald-300 transition">${escapeHtml(item.name)}</div>
                   <div class="text-[10px] text-slate-500 font-mono">${item.sizeFormatted}</div>
                 </div>
-              </div>
+              </span></div>
               <div class="flex items-center gap-1 shrink-0">
                 ${actionButton}
                 <button type="button" class="px-2 py-1 rounded-lg bg-indigo-600/80 hover:bg-indigo-500 active:bg-indigo-700 text-white text-[10px] font-medium flex items-center gap-1 transition active:scale-95 shadow-sm" onclick="sendPathToAI('${escapeHtml(item.fullPath)}', '${escapeHtml(item.name)}')">
@@ -1186,12 +1202,48 @@ async function loadDirectory(relPath = '', showLoading = true) {
     });
 
     filesListContainer.innerHTML = itemsHtml;
+    bindExplorerBulkDelete();
     bindExplorerSwipeDelete();
     bindExplorerTransferActions();
 
   } catch (err) {
     filesListContainer.innerHTML = `<div class="p-3 text-rose-400 text-xs">請求異常：${escapeHtml(err.message)}</div>`;
   }
+}
+
+function bindExplorerBulkDelete() {
+  if (!filesListContainer) return;
+  const update = () => {
+    const selected = [...filesListContainer.querySelectorAll('.file-bulk-select:checked')];
+    const button = filesListContainer.querySelector('.file-bulk-delete');
+    if (!button) return;
+    button.disabled = selected.length === 0;
+    const count = button.querySelector('.file-bulk-count');
+    if (count) count.textContent = selected.length;
+  };
+  filesListContainer.querySelectorAll('.file-bulk-select').forEach(input => input.addEventListener('change', update));
+  filesListContainer.querySelector('.file-bulk-delete')?.addEventListener('click', async () => {
+    const selected = [...filesListContainer.querySelectorAll('.file-bulk-select:checked')].map(input => ({
+      path: decodeURIComponent(input.dataset.filePath || ''),
+      name: decodeURIComponent(input.dataset.fileName || ''),
+      isDirectory: input.dataset.fileDirectory === 'true'
+    }));
+    if (!selected.length || !window.confirm(`確定刪除選取的 ${selected.length} 個項目？\n此動作無法復原。`)) return;
+    const button = filesListContainer.querySelector('.file-bulk-delete');
+    if (button) button.disabled = true;
+    try {
+      for (const item of selected) {
+        const res = await fetch('/api/file/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: item.path }) });
+        const data = await res.json();
+        if (!res.ok || !data.success) throw new Error(`${item.name}: ${data.error || '刪除失敗'}`);
+      }
+      if (navigator.vibrate) navigator.vibrate([25, 30, 25]);
+      await loadDirectory(currentExplorerPath);
+    } catch (err) {
+      window.alert(`部分刪除失敗：${err.message}`);
+      await loadDirectory(currentExplorerPath);
+    }
+  });
 }
 
 function renderExplorerTransferBar() {
