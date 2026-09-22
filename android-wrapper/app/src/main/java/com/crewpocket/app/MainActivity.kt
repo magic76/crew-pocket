@@ -5,7 +5,10 @@ import android.app.Activity
 import android.app.AlertDialog
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.net.Uri
@@ -70,6 +73,13 @@ class MainActivity : Activity() {
     private var pendingConversationId: String? = null
     private var pendingTaskId: String? = null
     private var pendingConversationAttempts = 0
+    private val runtimeReloadReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == CrewRuntimeService.ACTION_RELOAD_WEBVIEW && ::webView.isInitialized) {
+                webView.reload()
+            }
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -93,6 +103,7 @@ class MainActivity : Activity() {
             }
         )
         configureWebView()
+        registerReceiver(runtimeReloadReceiver, IntentFilter(CrewRuntimeService.ACTION_RELOAD_WEBVIEW), Context.RECEIVER_NOT_EXPORTED)
         prepareLegacyPwaRetirement()
         requestNotificationPermissionIfNeeded()
         requestTermuxPermissionIfPossible()
@@ -123,6 +134,7 @@ class MainActivity : Activity() {
     }
 
     override fun onDestroy() {
+        unregisterReceiver(runtimeReloadReceiver)
         runtimeHealthMonitor.close()
         wirelessDebugController.close()
         webView.destroy()

@@ -26,6 +26,7 @@ class CrewRuntimeService : Service() {
         const val ACTION_STOP = "com.crewpocket.app.action.STOP_RUNTIME"
         const val ACTION_REFRESH_EMBEDDED = "com.crewpocket.app.action.REFRESH_EMBEDDED"
         const val ACTION_RESTART_EMBEDDED = "com.crewpocket.app.action.RESTART_EMBEDDED"
+        const val ACTION_RELOAD_WEBVIEW = "com.crewpocket.app.action.RELOAD_WEBVIEW"
         const val ACTION_APP_FOREGROUND = "com.crewpocket.app.action.APP_FOREGROUND"
         const val ACTION_APP_BACKGROUND = "com.crewpocket.app.action.APP_BACKGROUND"
         const val EXTRA_OPEN_PROVIDER = "com.crewpocket.app.extra.OPEN_PROVIDER"
@@ -388,6 +389,11 @@ class CrewRuntimeService : Service() {
             failedChecks = 0
             lastRestartAt = 0L
             ensureTermuxRuntime("manual restart")
+            scheduler.schedule({
+                if (serverAlive()) {
+                    sendBroadcast(Intent(ACTION_RELOAD_WEBVIEW).setPackage(packageName))
+                }
+            }, 1500L, TimeUnit.MILLISECONDS)
         }
     }
 

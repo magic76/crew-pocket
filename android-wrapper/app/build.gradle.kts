@@ -7,6 +7,12 @@ android {
     namespace = "com.crewpocket.app"
     compileSdk = 35
 
+    packaging {
+        jniLibs {
+            excludes += "**/*.so"
+        }
+    }
+
     buildFeatures {
         buildConfig = true
     }
