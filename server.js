@@ -1328,7 +1328,7 @@ async function handleChat(req, res) {
   }
   turnTiming.workspace_ms = Date.now() - workspaceStartedAt;
 
-  const effectiveModel = model || savedSettings?.model || null;
+  const effectiveModel = model || savedSettings?.model || getDefaultModel(providerId);
   const {
     jevInputSummary,
     routedExecutionMode,
