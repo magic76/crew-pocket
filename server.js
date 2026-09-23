@@ -1570,7 +1570,7 @@ async function handleChat(req, res) {
     const persistRuntimeMode = () => {
       if (!activeConversationId || !executionPolicy?.mode) return;
       saveConversationSettings(providerId, activeConversationId, {
-        model: effectiveModel || model || savedSettings?.model || 'gpt-5.6-luna',
+        model: effectiveModel || model || savedSettings?.model || getDefaultModel(providerId),
         effort: effort || savedSettings?.effort || 'low',
         workspace,
         role: body.role || savedSettings?.role || 'general',
