@@ -8,30 +8,32 @@
   <link rel="apple-touch-icon" href="/icon-192.png">
   <title>Crew Pocket</title>
   
-  <!-- Tailwind CSS -->
-  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Tailwind CSS (Local Vendor) -->
+  <script src="/vendor/tailwindcss.js"></script>
   <script>
-    tailwind.config = {
-      darkMode: 'class',
-      theme: {
-        extend: {
-          colors: {
-            brand: { 500: '#6366f1', 600: '#4f46e5', 700: '#4338ca' }
+    if (typeof tailwind !== 'undefined') {
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            colors: {
+              brand: { 500: '#6366f1', 600: '#4f46e5', 700: '#4338ca' }
+            }
           }
         }
-      }
+      };
     }
   </script>
   
-  <!-- Marked.js for Markdown -->
-  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <!-- Marked.js for Markdown (Local Vendor) -->
+  <script src="/vendor/marked.min.js"></script>
   
-  <!-- Chart.js for Live Data Visualization -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Chart.js for Live Data Visualization (Local Vendor) -->
+  <script src="/vendor/chart.umd.min.js"></script>
   
-  <!-- Highlight.js for Code Highlighting -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <!-- Highlight.js for Code Highlighting (Local Vendor) -->
+  <link rel="stylesheet" href="/vendor/highlight/atom-one-dark.min.css">
+  <script src="/vendor/highlight/highlight.min.js"></script>
   
   <!-- DOMPurify Local for Offline & Zero-Latency Sanitization -->
   <script src="/dompurify.min.js"></script>

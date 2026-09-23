@@ -84,7 +84,7 @@ function formatMessageContent(content) {
     return codeBlocks[index];
   });
 
-  const rawHtml = marked.parse(formatted);
+  const rawHtml = typeof marked !== 'undefined' && typeof marked.parse === 'function' ? marked.parse(formatted) : formatted;
   if (typeof DOMPurify !== 'undefined') {
     return DOMPurify.sanitize(rawHtml, {
       ADD_ATTR: ['target', 'rel', 'class', 'style', 'data-enhanced', 'data-cmd', 'data-desc', 'data-fill'],

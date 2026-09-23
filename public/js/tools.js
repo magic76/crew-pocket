@@ -128,7 +128,7 @@ function runInBrowserSandbox(rawCode, pre) {
 <html>
 <head>
   <meta charset="utf-8">
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"><\/script>
+  <script src="/vendor/chart.umd.min.js"><\/script>
   <style>
     body { margin: 0; padding: 4px; display: flex; flex-direction: column; align-items: center; background: transparent; color: white; font-family: monospace; }
     canvas { max-width: 100%; border-radius: 0.5rem; border: 1px solid #1e293b; background: rgba(15, 23, 42, 0.6); }
