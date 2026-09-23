@@ -59,6 +59,7 @@ const { getProviderRuntimeStatus, updateProvider } = require('./lib/runtime/prov
 const { getJevCliStatus } = require('./lib/jev-router');
 const { prepareTurnExecution } = require('./lib/runtime/turn-orchestrator');
 const { normalizeExecutionIntent } = require('./lib/execution-intent');
+const { getDefaultModel } = require('./lib/model-runtime');
 const { reviewElapsedCheckpointWithJev, reviewSoftBudgetWithJev, reviewToolFailureWithJev, sanitizeText: sanitizeRuntimeDecisionText, shouldUseRuntimeSnapshots } = require('./lib/runtime-decision');
 
 
@@ -1312,7 +1313,7 @@ async function handleChat(req, res) {
         workspace = await resolveWorkspace(body.workspace);
         // Backfill workspace in settings so this conversation remains locked to it
         saveConversationSettings(providerId, conversation_id, {
-          model: model || savedSettings?.model || 'gemini-3.7-flash',
+          model: model || savedSettings?.model || getDefaultModel(providerId),
           effort: effort || savedSettings?.effort || 'low',
           workspace,
           role: body.role || savedSettings?.role || 'general'
@@ -1651,7 +1652,7 @@ async function handleChat(req, res) {
     };
 
     const applyRuntimeDecision = async (snapshot, trigger) => {
-      if (!snapshot) return;
+      if (!snapshot || ended) return;
       const record = {
         ...snapshot,
         trigger,
@@ -1779,7 +1780,9 @@ async function handleChat(req, res) {
             return snapshot;
           } catch (error) {
             const snapshot = {
-              type: trigger === 'tool_failure' ? 'TOOL_FAILURE' : 'SOFT_BUDGET',
+              type: trigger === 'tool_failure'
+                ? 'TOOL_FAILURE'
+                : (trigger === 'elapsed_120s' ? 'ELAPSED_CHECKPOINT' : 'SOFT_BUDGET'),
               ok: false,
               reason: 'snapshot_error',
               error: String(error.message || error).slice(0, 600)
@@ -1992,11 +1995,10 @@ async function handleChat(req, res) {
     };
 
     const finishAfterRuntimeDecisions = (payload) => {
-      const pending = [...pendingRuntimeDecisions];
-      if (!pending.length) return finish(payload);
-      Promise.allSettled(pending).then(() => {
-        if (!ended) finish(payload);
-      });
+      // The provider has already completed the user-visible turn. Runtime
+      // snapshots that are still in flight can no longer steer it, so never
+      // hold the final SSE event open waiting for Jev.
+      finish(payload);
     };
 
     const enforceExecutionPolicy = () => {
@@ -2096,7 +2098,7 @@ async function handleChat(req, res) {
           // as well as on manual selector changes so new conversations are
           // immediately bound to their first model.
           saveConversationSettings(providerId, event.conversationId, {
-            model: event.model || effectiveModel || model || savedSettings?.model || (providerId === 'codex' ? 'gpt-5.6-luna' : 'gemini-3.7-flash'),
+            model: event.model || effectiveModel || model || savedSettings?.model || getDefaultModel(providerId),
             effort: event.effort || effort || savedSettings?.effort || 'low',
             workspace,
             role: body.role || savedSettings?.role || 'general',
