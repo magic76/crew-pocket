@@ -99,13 +99,30 @@ object EmbeddedAgyRuntime {
             throw IllegalStateException("Native AGY command is empty")
         }
 
+        val nativeFilesDir = File(context.filesDir, "agy-runtime/native-files")
+        val marker = File(context.filesDir, "agy-runtime/native-manifest.json")
+        val manifestText = manifest.toString()
+        val packagedFiles = context.assets.list("agy-runtime/files") ?: emptyArray()
+        if (
+            packagedFiles.isNotEmpty() &&
+            (!marker.isFile || marker.readText() != manifestText || !nativeFilesDir.isDirectory)
+        ) {
+            nativeFilesDir.deleteRecursively()
+            nativeFilesDir.mkdirs()
+            copyAssetTree(context, "agy-runtime/files", nativeFilesDir)
+            marker.parentFile?.mkdirs()
+            marker.writeText(manifestText)
+        } else if (packagedFiles.isEmpty()) {
+            nativeFilesDir.mkdirs()
+        }
+
         val command = buildList {
             for (index in 0 until commandJson.length()) {
                 val value = commandJson.optString(index, "").trim()
                 if (value.isBlank()) {
                     throw IllegalStateException("Native AGY command contains an empty argument")
                 }
-                add(expandPathTokens(context, value))
+                add(expandPathTokens(context, nativeFilesDir, value))
             }
         }
 
@@ -125,9 +142,10 @@ object EmbeddedAgyRuntime {
         )
     }
 
-    private fun expandPathTokens(context: Context, value: String): String {
+    private fun expandPathTokens(context: Context, agyDir: File, value: String): String {
         return value
             .replace("\${NATIVE_DIR}", context.applicationInfo.nativeLibraryDir)
+            .replace("\${AGY_DIR}", agyDir.absolutePath)
             .replace("\${FILES_DIR}", context.filesDir.absolutePath)
             .replace("\${CACHE_DIR}", context.cacheDir.absolutePath)
     }
