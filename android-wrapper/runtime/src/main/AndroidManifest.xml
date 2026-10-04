@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+
+    <permission
+        android:name="com.crewpocket.permission.CONTROL_RUNTIME"
+        android:protectionLevel="signature" />
+
+    <application
+        android:allowBackup="false"
+        android:label="Crew Runtime"
+        android:supportsRtl="true"
+        android:theme="@android:style/Theme.Material.NoActionBar">
+
+        <meta-data
+            android:name="com.crewpocket.runtime.PROTOCOL_VERSION"
+            android:value="1" />
+        <meta-data
+            android:name="com.crewpocket.runtime.READY"
+            android:value="false" />
+
+        <service
+            android:name=".CrewRuntimeHostService"
+            android:exported="true"
+            android:permission="com.crewpocket.permission.CONTROL_RUNTIME"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Hosts the user-started local Crew agent runtime independently from the Crew Pocket UI app." />
+            <intent-filter>
+                <action android:name="com.crewpocket.runtime.action.START" />
+                <action android:name="com.crewpocket.runtime.action.STOP" />
+            </intent-filter>
+        </service>
+    </application>
+</manifest>

@@ -90,7 +90,7 @@ class MainActivity : Activity() {
         runtimeHealthMonitor = RuntimeHealthMonitor(
             onHealthy = {
                 runOnUiThread {
-                    statusText.text = "Crew active · Termux engine"
+                    statusText.text = "Crew active · ${RuntimeManager.productionHost(this@MainActivity).label}"
                     if (pageLoaded.compareAndSet(false, true)) {
                         webView.loadUrl(appUrl())
                     }
@@ -470,6 +470,10 @@ class MainActivity : Activity() {
     }
 
     private fun requestTermuxPermissionIfPossible() {
+        if (RuntimeManager.productionHost(this).id != TermuxAgentRuntime.id) {
+            refreshSetupStatus()
+            return
+        }
         if (!TermuxBridge.isInstalled(this)) {
             refreshSetupStatus()
             return
@@ -495,11 +499,16 @@ class MainActivity : Activity() {
     }
 
     private fun refreshSetupStatus() {
+        val selected = RuntimeManager.productionHost(this)
+        val companionInstalled = CompanionAgentRuntime.isInstalled(this)
         val message = when {
-            !TermuxBridge.isInstalled(this) ->
-                "Termux is required as the Crew Pocket runtime engine."
-            !TermuxBridge.hasRunCommandPermission(this) ->
-                "Grant “Run commands in Termux environment” so Crew Pocket can start and recover the runtime."
+            selected.id == CompanionAgentRuntime.id -> null
+            !TermuxBridge.isInstalled(this) && !companionInstalled ->
+                "Crew Runtime is not installed. Termux remains a temporary fallback during the runtime migration."
+            !TermuxBridge.isInstalled(this) && companionInstalled ->
+                "Crew Runtime is installed but this build is not ready to replace the fallback runtime yet."
+            selected.id == TermuxAgentRuntime.id && !TermuxBridge.hasRunCommandPermission(this) ->
+                "Grant “Run commands in Termux environment” while Crew Runtime migration is still in progress."
             else -> null
         }
         setupText.text = message ?: ""

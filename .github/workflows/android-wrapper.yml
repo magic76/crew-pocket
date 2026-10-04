@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - main
-      - feature/agent-runtime
+      - feature/agent-runtime\n      - feature/companion-runtime
   pull_request:
     branches:
       - main
@@ -32,10 +32,16 @@ jobs:
           gradle-version: "8.10.2"
 
       - name: Build debug APK
-        run: gradle -p android-wrapper :app:assembleDebug --stacktrace
+        run: gradle -p android-wrapper :app:assembleDebug :runtime:assembleDebug --stacktrace
 
-      - name: Upload APK
+      - name: Upload Crew Pocket APK
         uses: actions/upload-artifact@v4
         with:
           name: crew-pocket-android-wrapper-debug
           path: android-wrapper/app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Upload Crew Runtime APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: crew-pocket-runtime-debug
+          path: android-wrapper/runtime/build/outputs/apk/debug/runtime-debug.apk
