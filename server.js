@@ -370,11 +370,16 @@ function handleGetProviders(res) {
 async function handleRuntimeStatus(res) {
   try {
     const providerRuntime = await getProviderRuntimeStatus();
+    const companionRuntime = providerRuntime.delivery === 'runtime-apk';
     const host = {
-      runtime: 'termux-node',
+      runtime: companionRuntime
+        ? (process.env.CREW_HOST_RUNTIME || 'companion-runtime')
+        : 'termux-node',
       pid: process.pid,
       home: RUNTIME_HOME,
-      updateModel: 'provider-managed'
+      runtimeVersion: providerRuntime.runtimeVersion || null,
+      runtimePackage: providerRuntime.runtimePackage || null,
+      updateModel: companionRuntime ? 'runtime-app' : 'provider-managed'
     };
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ host, providers: providerRuntime.providers }));
@@ -399,6 +404,22 @@ async function handleRuntimeProviders(req, res) {
       return res.end(JSON.stringify({ error: 'provider must be codex or antigravity' }));
     }
 
+    const runtimeStatus = await getProviderRuntimeStatus();
+    const providerRuntime = runtimeStatus.providers?.[providerId];
+    if (providerRuntime?.updateMode === 'runtime-app') {
+      res.writeHead(409, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({
+        success: false,
+        code: 'RUNTIME_APP_UPDATE_REQUIRED',
+        error: 'Codex and AGY are bundled with Crew Runtime on Android.',
+        action: {
+          type: 'update-runtime-app',
+          packageName: runtimeStatus.runtimePackage || 'com.crewpocket.runtime',
+          runtimeVersion: runtimeStatus.runtimeVersion || null
+        }
+      }));
+    }
+
     if (providerId === 'codex') {
       const codex = getProvider('codex');
       if (typeof codex.shutdownRuntime === 'function') {
@@ -415,9 +436,11 @@ async function handleRuntimeProviders(req, res) {
     res.end(JSON.stringify({ success: true, ...result }));
   } catch (err) {
     const details = String(err.stderr || err.stdout || err.message || err).trim();
-    res.writeHead(500, { 'Content-Type': 'application/json' });
+    res.writeHead(err.statusCode || 500, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
       success: false,
+      code: err.code || null,
+      action: err.action || null,
       error: err.message || 'Provider update failed',
       details: details.slice(-8000)
     }));
