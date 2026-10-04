@@ -32,6 +32,22 @@ jobs:
         with:
           gradle-version: "8.10.2"
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Install runtime packaging tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y patchelf
+
+      - name: Prepare Android Node payload
+        run: bash android-wrapper/runtime/scripts/fetch-termux-node-payload.sh
+
+      - name: Prepare Android Codex payload
+        run: bash android-wrapper/runtime/scripts/fetch-codex-payload.sh
+
       - name: Build debug APK
         run: gradle -p android-wrapper :app:assembleDebug :runtime:assembleDebug --stacktrace
 
