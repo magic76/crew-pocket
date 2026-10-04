@@ -27,17 +27,17 @@ done
 mkdir -p "$WORK_DIR/debs" "$WORK_DIR/root"
 
 python3 - "$APT_BASE" "$NODE_PACKAGE" "$WORK_DIR/debs" <<'PY'
-import lzma
+import gzip
 import os
 import re
 import sys
 import urllib.request
 
 base, root_package, dest = sys.argv[1:]
-index_url = base.rstrip('/') + '/dists/stable/main/binary-aarch64/Packages.xz'
+index_url = base.rstrip('/') + '/dists/stable/main/binary-aarch64/Packages.gz'
 request = urllib.request.Request(index_url, headers={'User-Agent': 'Crew-Runtime-Packager/1'})
 with urllib.request.urlopen(request, timeout=60) as response:
-    raw = lzma.decompress(response.read()).decode('utf-8', errors='replace')
+    raw = gzip.decompress(response.read()).decode('utf-8', errors='replace')
 
 records = {}
 for paragraph in raw.split('\n\n'):
