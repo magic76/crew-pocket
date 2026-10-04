@@ -15,11 +15,6 @@ if ! command -v patchelf >/dev/null 2>&1; then
     exit 1
 fi
 
-if ! command -v ldd >/dev/null 2>&1; then
-    echo "ldd is required." >&2
-    exit 1
-fi
-
 PREFIX_DIR="${PREFIX:-/data/data/com.termux/files/usr}"
 mkdir -p "$DEST"
 rm -f "$DEST/libnode_exec.so" "$DEST"/libcrew_node_*.so
@@ -43,25 +38,23 @@ safe_name() {
 }
 
 resolve_needed() {
-    local binary="$1"
-    local needed="$2"
-    local resolved
+    local needed="$1"
+    local candidate resolved=""
 
-    resolved="$(ldd "$binary" 2>/dev/null | awk -v n="$needed" '
-        $1 == n && $2 == "=>" { print $3; exit }
-        $1 == n && $2 ~ /^\// { print $2; exit }
-    ')"
+    for candidate in \
+        "$PREFIX_DIR/lib/$needed" \
+        "$PREFIX_DIR/lib64/$needed"; do
+        if [ -e "$candidate" ]; then
+            resolved="$(readlink -f "$candidate")"
+            break
+        fi
+    done
 
-    if [ -z "$resolved" ] || [ "$resolved" = "not" ]; then
-        for candidate in             "$PREFIX_DIR/lib/$needed"             "$PREFIX_DIR/lib64/$needed"; do
-            if [ -e "$candidate" ]; then
-                resolved="$(readlink -f "$candidate")"
-                break
-            fi
-        done
+    if [ -z "$resolved" ]; then
+        resolved="$(find "$PREFIX_DIR" -type f -name "$needed" -print -quit 2>/dev/null || true)"
     fi
 
-    [ -n "$resolved" ] && printf '%s\n' "$(readlink -f "$resolved")"
+    [ -n "$resolved" ] && printf '%s\n' "$resolved"
 }
 
 collect_binary() {
@@ -69,7 +62,7 @@ collect_binary() {
     local needed resolved safe
     while read -r needed; do
         [ -n "$needed" ] || continue
-        resolved="$(resolve_needed "$binary" "$needed" || true)"
+        resolved="$(resolve_needed "$needed" || true)"
         if [ -z "$resolved" ]; then
             echo "warning: could not resolve $needed required by $binary" >&2
             continue
@@ -130,11 +123,16 @@ for needed in "${!SOURCE_BY_NEEDED[@]}"; do
     patchelf --set-soname "${SAFE_BY_NEEDED[$needed]}" "$target" || true
 done
 
-echo "Validating patched Node runtime..."
-if ! NODE_VERSION="$(LD_LIBRARY_PATH="$DEST" "$DEST/libnode_exec.so" --version 2>&1)"; then
-    echo "Patched embedded Node failed to start:" >&2
-    echo "$NODE_VERSION" >&2
-    exit 1
+if [ "${NODE_EMBED_SKIP_RUN_CHECK:-0}" = "1" ]; then
+    NODE_VERSION="${NODE_EMBED_VERSION:-unknown}"
+    echo "Skipping local execution check for cross-architecture Node payload."
+else
+    echo "Validating patched Node runtime..."
+    if ! NODE_VERSION="$(LD_LIBRARY_PATH="$DEST" "$DEST/libnode_exec.so" --version 2>&1)"; then
+        echo "Patched embedded Node failed to start:" >&2
+        echo "$NODE_VERSION" >&2
+        exit 1
+    fi
 fi
 
 echo "✓ Embedded Node runtime prepared"
