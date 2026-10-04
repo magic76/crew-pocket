@@ -47,8 +47,12 @@ echo
 echo "These files are gitignored. Rebuild the APK now:"
 echo "  gradle -p android-wrapper :runtime:assembleDebug"
 
-CODEX_VERSION="$(LD_LIBRARY_PATH="$DEST" "$DEST/libcodex_exec.so" --version 2>/dev/null | head -n 1 || true)"
-[ -n "$CODEX_VERSION" ] || CODEX_VERSION="unknown"
+if [ "${CODEX_EMBED_SKIP_RUN_CHECK:-0}" = "1" ]; then
+    CODEX_VERSION="${CODEX_EMBED_VERSION:-unknown}"
+else
+    CODEX_VERSION="$(LD_LIBRARY_PATH="$DEST" "$DEST/libcodex_exec.so" --version 2>/dev/null | head -n 1 || true)"
+    [ -n "$CODEX_VERSION" ] || CODEX_VERSION="unknown"
+fi
 MANIFEST_DIR="$ROOT_DIR/android-wrapper/runtime/src/main/assets/provider-manifests"
 mkdir -p "$MANIFEST_DIR"
 printf '{"version":"%s","codeModeHost":true}\n' "$CODEX_VERSION" > "$MANIFEST_DIR/codex.json"
