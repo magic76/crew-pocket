@@ -35,3 +35,23 @@ Crew Pocket only switches to the companion when the declared runtime is ready an
 6. Remove the Termux permission/bridge from Crew Pocket once fallback is no longer needed.
 
 The old experiments remain under `android-wrapper/experimental-runtime/` until their code has been migrated and verified.
+
+
+## Packaging a runnable local Runtime APK
+
+The checked-in companion builds as a safe shell in CI. Provider binaries are deliberately not committed.
+
+For a device build, prepare the runtime payloads first:
+
+```bash
+bash android-wrapper/runtime/scripts/prepare-embedded-node.sh
+bash android-wrapper/runtime/scripts/prepare-embedded-codex.sh
+bash android-wrapper/runtime/scripts/prepare-embedded-agy.sh
+gradle -p android-wrapper :runtime:assembleDebug
+```
+
+These are developer packaging helpers only. End users do not need Termux. The resulting Crew Runtime APK owns Node, Codex, AGY, auth state, and the localhost host.
+
+At build time the module packages the current `server.js`, `lib/`, `public/`, `extensions/`, and supporting scripts into the Runtime APK. It does not download Crew source from GitHub at runtime.
+
+When all three provider payloads are present, the manifest advertises `READY=true`; Crew Pocket can then select the companion automatically. Otherwise Pocket keeps the migration fallback.

@@ -30,3 +30,8 @@ public/extra/
 
 # Locally-vendored Antigravity CLI package for embedded APK builds.
 android-wrapper/app/src/main/assets/agy-runtime/
+
+# Crew Runtime companion locally-vendored provider payloads.
+android-wrapper/runtime/src/main/jniLibs/arm64-v8a/
+android-wrapper/runtime/src/main/assets/agy-runtime/
+android-wrapper/runtime/src/main/assets/provider-manifests/
