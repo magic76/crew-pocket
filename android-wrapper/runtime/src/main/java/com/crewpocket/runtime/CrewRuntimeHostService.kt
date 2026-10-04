@@ -116,16 +116,18 @@ class CrewRuntimeHostService : Service() {
             }
 
             val bytes = body.toByteArray(Charsets.UTF_8)
-            client.getOutputStream().bufferedWriter().use { writer ->
-                writer.write("HTTP/1.1 $status\r\n")
-                writer.write("Content-Type: application/json; charset=utf-8\r\n")
-                writer.write("Content-Length: ${bytes.size}\r\n")
-                writer.write("Connection: close\r\n")
-                writer.write("\r\n")
-                writer.flush()
+            val headers = buildString {
+                append("HTTP/1.1 $status\r\n")
+                append("Content-Type: application/json; charset=utf-8\r\n")
+                append("Content-Length: ${bytes.size}\r\n")
+                append("Connection: close\r\n")
+                append("\r\n")
+            }.toByteArray(Charsets.UTF_8)
+            client.getOutputStream().use { output ->
+                output.write(headers)
+                output.write(bytes)
+                output.flush()
             }
-            client.getOutputStream().write(bytes)
-            client.getOutputStream().flush()
         }
     }
 

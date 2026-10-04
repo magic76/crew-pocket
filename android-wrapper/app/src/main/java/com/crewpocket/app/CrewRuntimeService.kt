@@ -378,7 +378,7 @@ class CrewRuntimeService : Service() {
     private fun restartRuntime() {
         scheduler.execute {
             updateNotification("Restarting ${RuntimeManager.productionHost(this).label}…")
-            RuntimeManager.productionHost.stopCrewHost(this)
+            RuntimeManager.productionHost(this).stopCrewHost(this)
 
             val deadline = System.currentTimeMillis() + 3_000L
             while (serverAlive() && System.currentTimeMillis() < deadline) {
