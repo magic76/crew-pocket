@@ -3,6 +3,7 @@ package com.crewpocket.runtime
 import android.content.Context
 import android.os.Build
 import android.util.Log
+import org.json.JSONObject
 import java.io.File
 import java.net.InetAddress
 import java.net.InetSocketAddress
@@ -20,6 +21,7 @@ class EmbeddedCodexBridge(private val context: Context, private val bridgeToken:
         const val PORT = 8767
         private const val TAG = "EmbeddedCodexBridge"
         private const val CODEX_LIBRARY = "libcodex_exec.so"
+        private const val MANIFEST_ASSET = "provider-manifests/codex.json"
         private const val HANDSHAKE_PREFIX = "CREW-CODEX-BRIDGE/1 "
 
         fun generateToken(): String {
@@ -35,6 +37,14 @@ class EmbeddedCodexBridge(private val context: Context, private val bridgeToken:
         fun isBinaryBundled(context: Context): Boolean {
             return Build.SUPPORTED_ABIS.contains("arm64-v8a") &&
                 binaryFile(context).let { it.isFile && it.canRead() }
+        }
+
+        fun bundledVersion(context: Context): String? {
+            return runCatching {
+                context.assets.open(MANIFEST_ASSET).bufferedReader().use { reader ->
+                    JSONObject(reader.readText()).optString("version").ifBlank { null }
+                }
+            }.getOrNull()
         }
     }
 
