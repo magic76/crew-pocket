@@ -4,7 +4,8 @@ on:
   push:
     branches:
       - main
-      - feature/agent-runtime\n      - feature/companion-runtime
+      - feature/agent-runtime
+      - feature/companion-runtime
   pull_request:
     branches:
       - main
