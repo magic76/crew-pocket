@@ -36,6 +36,7 @@ jobs:
           bash -n android-wrapper/runtime/scripts/prepare-embedded-agy.sh
           bash -n android-wrapper/runtime/scripts/fetch-termux-node-payload.sh
           bash -n android-wrapper/runtime/scripts/fetch-codex-payload.sh
+          bash -n android-wrapper/runtime/scripts/fetch-official-agy-payload.sh
 
       - name: Check runtime JavaScript
         run: |
