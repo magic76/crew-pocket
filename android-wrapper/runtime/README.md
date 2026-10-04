@@ -27,6 +27,10 @@ The runtime status contract reports:
 - provider delivery/version/state
 - host readiness
 
+### Signing requirement
+
+Crew Pocket controls the companion service through the signature-level permission `com.crewpocket.permission.CONTROL_RUNTIME`. Release builds of `com.crewpocket.app` and `com.crewpocket.runtime` must therefore be signed by the same certificate. If both apps are distributed through Google Play, configure Play App Signing so they keep a shared signing identity; otherwise Pocket will see the Runtime package but Android will reject service control.
+
 Crew Pocket only switches to the companion when the declared runtime is ready and the protocol is compatible.
 
 ## Migration sequence
@@ -51,9 +55,30 @@ For a device build, prepare the runtime payloads first:
 ```bash
 bash android-wrapper/runtime/scripts/prepare-embedded-node.sh
 bash android-wrapper/runtime/scripts/prepare-embedded-codex.sh
+
+# Legacy Node-script AGY:
 bash android-wrapper/runtime/scripts/prepare-embedded-agy.sh
+
+# Modern native AGY:
+AGY_ANDROID_BUNDLE_DIR=/path/to/verified-android-agy-bundle \
+  bash android-wrapper/runtime/scripts/prepare-embedded-agy.sh
+
 gradle -p android-wrapper :runtime:assembleDebug
 ```
+
+Modern Antigravity releases are native Linux executables. A raw Linux/glibc AGY binary must not be copied into the APK and assumed to work on Android/Bionic. The packaging script accepts a pre-verified Android compatibility bundle with this boundary:
+
+```text
+verified-android-agy-bundle/
+├── manifest.json
+├── jniLibs/
+│   └── arm64-v8a/
+│       ├── lib<launcher>.so
+│       └── lib<support>.so ...
+└── files/                 # optional non-executable support data
+```
+
+The manifest must use `"type": "native-command"`, include a version, and provide a command array whose first item is an APK-owned executable under `${NATIVE_DIR}`. Additional command arguments may reference `${NATIVE_DIR}`, `${AGY_DIR}`, `${FILES_DIR}`, or `${CACHE_DIR}`. This lets the Runtime host a verified compatibility chain such as a launcher/loader/shim without downloading executable code after installation.
 
 These are developer packaging helpers only. End users do not need Termux. The resulting Crew Runtime APK owns Node, Codex, AGY, auth state, and the localhost host.
 
