@@ -447,6 +447,30 @@ class MainActivity : Activity() {
                 }
             }
         }
+
+        @JavascriptInterface
+        fun openRuntimeUpdate() {
+            runOnUiThread {
+                if (!webView.url.orEmpty().startsWith(SERVER_URL)) return@runOnUiThread
+
+                val runtimePackage = CompanionAgentRuntime.PACKAGE_NAME
+                val marketIntent = Intent(
+                    Intent.ACTION_VIEW,
+                    Uri.parse("market://details?id=$runtimePackage")
+                ).setPackage("com.android.vending")
+
+                try {
+                    startActivity(marketIntent)
+                } catch (_: Exception) {
+                    startActivity(
+                        Intent(
+                            Intent.ACTION_VIEW,
+                            Uri.parse("https://play.google.com/store/apps/details?id=$runtimePackage")
+                        )
+                    )
+                }
+            }
+        }
     }
 
     private fun startCrewRuntime() {
