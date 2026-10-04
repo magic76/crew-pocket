@@ -1,3 +1,5 @@
+import groovy.json.JsonSlurper
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -6,12 +8,37 @@ plugins {
 val repoRoot = rootProject.projectDir.parentFile
 val generatedRuntimeAssets = layout.buildDirectory.dir("generated/runtime-assets")
 val runtimeJniDir = file("src/main/jniLibs/arm64-v8a")
+
+fun agyPayloadReady(): Boolean {
+    val manifestFile = file("src/main/assets/agy-runtime/manifest.json")
+    if (!manifestFile.isFile) return false
+
+    return runCatching {
+        val manifest = JsonSlurper().parseText(manifestFile.readText()) as Map<*, *>
+        when (manifest["type"]?.toString()) {
+            "node-script" -> {
+                val entry = manifest["entry"]?.toString().orEmpty()
+                entry.isNotBlank() && file("src/main/assets/agy-runtime/package/$entry").isFile
+            }
+            "native-command" -> {
+                val command = manifest["command"] as? List<*> ?: return@runCatching false
+                val first = command.firstOrNull()?.toString().orEmpty()
+                val nativePrefix = "\${NATIVE_DIR}/"
+                if (!first.startsWith(nativePrefix)) return@runCatching false
+                val launcher = first.removePrefix(nativePrefix)
+                launcher.matches(Regex("lib[A-Za-z0-9._+-]+\\.so")) &&
+                    File(runtimeJniDir, launcher).isFile
+            }
+            else -> false
+        }
+    }.getOrDefault(false)
+}
+
 val runtimeReady = listOf(
     File(runtimeJniDir, "libnode_exec.so"),
     File(runtimeJniDir, "libcodex_exec.so"),
-    file("src/main/assets/provider-manifests/codex.json"),
-    file("src/main/assets/agy-runtime/manifest.json")
-).all { it.isFile }
+    file("src/main/assets/provider-manifests/codex.json")
+).all { it.isFile } && agyPayloadReady()
 
 val prepareCrewWorkspaceAssets = tasks.register<Sync>("prepareCrewWorkspaceAssets") {
     into(generatedRuntimeAssets)
