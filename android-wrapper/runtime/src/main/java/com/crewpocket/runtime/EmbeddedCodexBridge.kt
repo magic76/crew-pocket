@@ -21,6 +21,7 @@ class EmbeddedCodexBridge(private val context: Context, private val bridgeToken:
         const val PORT = 8767
         private const val TAG = "EmbeddedCodexBridge"
         private const val CODEX_LIBRARY = "libcodex_exec.so"
+        private const val CODE_MODE_HOST_LIBRARY = "libcodex_code_mode_host.so"
         private const val MANIFEST_ASSET = "provider-manifests/codex.json"
         private const val HANDSHAKE_PREFIX = "CREW-CODEX-BRIDGE/1 "
 
@@ -34,9 +35,14 @@ class EmbeddedCodexBridge(private val context: Context, private val bridgeToken:
             return File(context.applicationInfo.nativeLibraryDir, CODEX_LIBRARY)
         }
 
+        fun codeModeHostFile(context: Context): File {
+            return File(context.applicationInfo.nativeLibraryDir, CODE_MODE_HOST_LIBRARY)
+        }
+
         fun isBinaryBundled(context: Context): Boolean {
             return Build.SUPPORTED_ABIS.contains("arm64-v8a") &&
-                binaryFile(context).let { it.isFile && it.canRead() }
+                binaryFile(context).let { it.isFile && it.canRead() } &&
+                codeModeHostFile(context).let { it.isFile && it.canRead() }
         }
 
         fun bundledVersion(context: Context): String? {
@@ -221,6 +227,7 @@ class EmbeddedCodexBridge(private val context: Context, private val bridgeToken:
                 put("PATH", "/system/bin:/system/xbin:/product/bin")
             }
             put("CODEX_SELF_EXE", binary.absolutePath)
+            put("CODEX_CODE_MODE_HOST_PATH", codeModeHostFile(context).absolutePath)
             put("LD_LIBRARY_PATH", context.applicationInfo.nativeLibraryDir)
         }
         return builder.start()
