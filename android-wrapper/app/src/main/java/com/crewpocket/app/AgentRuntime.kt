@@ -18,6 +18,9 @@ object CompanionAgentRuntime : AgentRuntime {
     const val PACKAGE_NAME = "com.crewpocket.runtime"
     private const val SERVICE_NAME = "com.crewpocket.runtime.CrewRuntimeHostService"
     private const val META_READY = "com.crewpocket.runtime.READY"
+    private const val META_PROTOCOL = "com.crewpocket.runtime.PROTOCOL_VERSION"
+    private const val MIN_PROTOCOL = 1
+    private const val MAX_PROTOCOL = 1
     private const val ACTION_START = "com.crewpocket.runtime.action.START"
     private const val ACTION_STOP = "com.crewpocket.runtime.action.STOP"
 
@@ -34,6 +37,20 @@ object CompanionAgentRuntime : AgentRuntime {
     }
 
     @Suppress("DEPRECATION")
+    fun protocolVersion(context: Context): Int? {
+        if (!isInstalled(context)) return null
+        return try {
+            val info = context.packageManager.getApplicationInfo(
+                PACKAGE_NAME,
+                PackageManager.GET_META_DATA
+            )
+            info.metaData?.getInt(META_PROTOCOL)
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    @Suppress("DEPRECATION")
     fun isReady(context: Context): Boolean {
         if (!isInstalled(context)) return false
         return try {
@@ -41,7 +58,9 @@ object CompanionAgentRuntime : AgentRuntime {
                 PACKAGE_NAME,
                 PackageManager.GET_META_DATA
             )
-            info.metaData?.getBoolean(META_READY, false) == true
+            val ready = info.metaData?.getBoolean(META_READY, false) == true
+            val protocol = info.metaData?.getInt(META_PROTOCOL) ?: return false
+            ready && protocol in MIN_PROTOCOL..MAX_PROTOCOL
         } catch (_: Exception) {
             false
         }

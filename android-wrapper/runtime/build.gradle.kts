@@ -34,6 +34,14 @@ android {
         buildConfig = true
     }
 
+    packaging {
+        jniLibs {
+            // The runtime launches Node/Codex directly from nativeLibraryDir.
+            // Keep real installer-owned files on disk instead of mmap-only APK entries.
+            useLegacyPackaging = true
+        }
+    }
+
     sourceSets {
         getByName("main").assets.srcDir(generatedRuntimeAssets)
     }
