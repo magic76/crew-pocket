@@ -48,6 +48,8 @@ class CrewRuntimeService : Service() {
         private const val BACKGROUND_GRACE_SEC = 30L
         private const val BACKGROUND_TASK_POLL_SEC = 5L
         private const val BACKGROUND_TASK_MAX_WATCH_MS = 30L * 60L * 1000L
+        private const val COMPANION_FALLBACK_GRACE_MS = 15_000L
+        private const val COMPANION_FALLBACK_FAILURES = 3
     }
 
     private val scheduler = Executors.newSingleThreadScheduledExecutor()
@@ -60,6 +62,8 @@ class CrewRuntimeService : Service() {
     @Volatile private var appInForeground = true
     @Volatile private var backgroundStartedAt = 0L
     @Volatile private var sawRunningBackgroundTask = false
+    @Volatile private var activeRuntime: AgentRuntime? = null
+    @Volatile private var companionStartRequestedAt = 0L
     private val notifiedTaskIds = mutableSetOf<String>()
     private var idleStopTask: ScheduledFuture<*>? = null
 
@@ -73,7 +77,7 @@ class CrewRuntimeService : Service() {
             .putBoolean("embedded_runtime_enabled", false)
             .putBoolean("embedded_ready", false)
             .putString("runtime_mode", "in-use")
-            .putString("host_mode", RuntimeManager.productionHost(this).id)
+            .putString("host_mode", currentHost().id)
             .apply()
     }
 
@@ -82,7 +86,7 @@ class CrewRuntimeService : Service() {
             ACTION_STOP -> {
                 cancelIdleStop()
                 updateNotification("Stopping Crew runtime…")
-                RuntimeManager.productionHost(this).stopCrewHost(this)
+                currentHost().stopCrewHost(this)
                 getSharedPreferences("crew_runtime", MODE_PRIVATE)
                     .edit()
                     .putString("host_mode", "stopped")
@@ -210,7 +214,7 @@ class CrewRuntimeService : Service() {
         if (appInForeground) return
         getSharedPreferences("crew_runtime", MODE_PRIVATE)
             .edit()
-            .putString("host_mode", "${RuntimeManager.productionHost(this).id}-idle")
+            .putString("host_mode", "${currentHost().id}-idle")
             .putLong("monitor_interval_ms", 0L)
             .apply()
 
@@ -349,12 +353,15 @@ class CrewRuntimeService : Service() {
         if (serverAlive()) {
             failedChecks = 0
             healthyChecks += 1
-            updateNotification("Crew runtime active · ${RuntimeManager.productionHost(this).label}")
+            updateNotification("Crew runtime active · ${currentHost().label}")
             return healthyDelaySeconds(healthyChecks)
         }
 
         healthyChecks = 0
         failedChecks += 1
+        if (maybeFallbackToTermux("health check")) {
+            return 1L
+        }
         ensureRuntime("health check")
         return failureDelaySeconds(failedChecks)
     }
@@ -379,8 +386,9 @@ class CrewRuntimeService : Service() {
 
     private fun restartRuntime() {
         scheduler.execute {
-            updateNotification("Restarting ${RuntimeManager.productionHost(this).label}…")
-            RuntimeManager.productionHost(this).stopCrewHost(this)
+            val previousHost = currentHost()
+            updateNotification("Restarting ${previousHost.label}…")
+            previousHost.stopCrewHost(this)
 
             val deadline = System.currentTimeMillis() + 3_000L
             while (serverAlive() && System.currentTimeMillis() < deadline) {
@@ -390,6 +398,8 @@ class CrewRuntimeService : Service() {
             healthyChecks = 0
             failedChecks = 0
             lastRestartAt = 0L
+            companionStartRequestedAt = 0L
+            activeRuntime = RuntimeManager.productionHost(this)
             ensureRuntime("manual restart")
             scheduler.schedule({
                 if (serverAlive()) {
@@ -401,7 +411,7 @@ class CrewRuntimeService : Service() {
 
     private fun ensureRuntime(reason: String) {
         if (serverAlive()) {
-            updateNotification("Crew runtime active · ${RuntimeManager.productionHost(this).label}")
+            updateNotification("Crew runtime active · ${currentHost().label}")
             return
         }
 
@@ -409,20 +419,72 @@ class CrewRuntimeService : Service() {
         if (now - lastRestartAt < RESTART_COOLDOWN_MS) return
         lastRestartAt = now
 
+        val host = currentHost()
+        if (host === CompanionAgentRuntime && companionStartRequestedAt == 0L) {
+            companionStartRequestedAt = now
+        }
+
         getSharedPreferences("crew_runtime", MODE_PRIVATE)
             .edit()
-            .putString("host_mode", RuntimeManager.productionHost(this).id)
+            .putString("host_mode", host.id)
             .apply()
 
-        RuntimeManager.productionHost(this).startCrewHost(this)
+        host.startCrewHost(this)
             .onSuccess {
-                Log.i(TAG, "Requested ${RuntimeManager.productionHost(this).label} start: $reason")
-                updateNotification("Starting ${RuntimeManager.productionHost(this).label}…")
+                Log.i(TAG, "Requested ${host.label} start: $reason")
+                updateNotification("Starting ${host.label}…")
             }
             .onFailure { error ->
-                Log.w(TAG, "${RuntimeManager.productionHost(this).label} start failed: $reason", error)
+                Log.w(TAG, "${host.label} start failed: $reason", error)
                 updateNotification("Crew runtime unavailable · ${error.message}")
             }
+    }
+
+    private fun currentHost(): AgentRuntime {
+        activeRuntime?.let { return it }
+        return RuntimeManager.productionHost(this).also { activeRuntime = it }
+    }
+
+    private fun maybeFallbackToTermux(reason: String): Boolean {
+        val host = currentHost()
+        if (host !== CompanionAgentRuntime) return false
+        if (failedChecks < COMPANION_FALLBACK_FAILURES) return false
+
+        val startedAt = companionStartRequestedAt
+        if (startedAt <= 0L || System.currentTimeMillis() - startedAt < COMPANION_FALLBACK_GRACE_MS) {
+            return false
+        }
+
+        val fallback = RuntimeManager.fallbackHost(this)
+        if (!fallback.isAvailable(this)) return false
+
+        Log.w(
+            TAG,
+            "Companion runtime did not become healthy; falling back to Termux for this service session: $reason"
+        )
+        host.stopCrewHost(this)
+
+        val fallbackResult = fallback.startCrewHost(this)
+        if (fallbackResult.isFailure) {
+            Log.w(TAG, "Termux fallback failed", fallbackResult.exceptionOrNull())
+            return false
+        }
+
+        activeRuntime = fallback
+        companionStartRequestedAt = 0L
+        lastRestartAt = System.currentTimeMillis()
+        healthyChecks = 0
+        failedChecks = 0
+
+        getSharedPreferences("crew_runtime", MODE_PRIVATE)
+            .edit()
+            .putString("host_mode", "termux-fallback")
+            .putString("fallback_reason", reason)
+            .putLong("fallback_at", System.currentTimeMillis())
+            .apply()
+
+        updateNotification("Crew Runtime unavailable · using Termux fallback")
+        return true
     }
 
     private fun serverAlive(): Boolean {
