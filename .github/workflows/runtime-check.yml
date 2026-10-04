@@ -31,6 +31,9 @@ jobs:
           bash -n scripts/android-runtime-start.sh
           bash -n scripts/android-runtime-stop.sh
           bash -n scripts/update-provider.sh
+          bash -n android-wrapper/runtime/scripts/prepare-embedded-node.sh
+          bash -n android-wrapper/runtime/scripts/prepare-embedded-codex.sh
+          bash -n android-wrapper/runtime/scripts/prepare-embedded-agy.sh
 
       - name: Check runtime JavaScript
         run: |
