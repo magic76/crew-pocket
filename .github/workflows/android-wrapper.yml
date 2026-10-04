@@ -48,6 +48,21 @@ jobs:
       - name: Prepare Android Codex payload
         run: bash android-wrapper/runtime/scripts/fetch-codex-payload.sh
 
+      - name: Probe official Android AGY payload
+        id: agy_payload
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: bash android-wrapper/runtime/scripts/fetch-official-agy-payload.sh
+
+      - name: Report AGY payload state
+        run: |
+          if [ "${{ steps.agy_payload.outcome }}" = "success" ]; then
+            echo "Official Android AGY payload packaged; Runtime can advertise READY when all gates pass."
+          else
+            echo "Official Android AGY payload probe did not resolve a directly runnable ELF; Runtime stays on safe fallback."
+          fi
+
       - name: Build debug APK
         run: gradle -p android-wrapper :app:assembleDebug :runtime:assembleDebug --stacktrace
 
