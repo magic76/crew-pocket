@@ -9,8 +9,8 @@ This module is the migration target for removing Crew Pocket's production depend
 - The apps communicate through a small versioned contract instead of sharing implementation details.
 - Crew Pocket must depend on the runtime **protocol**, not a Codex or AGY version.
 
-The companion currently exposes a loopback status contract on `127.0.0.1:8768/status`.
-It deliberately declares `com.crewpocket.runtime.READY=false`, so production continues to use the existing Termux fallback until the embedded host is complete.
+The companion exposes a loopback status contract on `127.0.0.1:8768/status`.
+Runtime activation is deliberately separate from payload packaging: a build can contain all providers while still declaring `com.crewpocket.runtime.READY=false`. Production keeps the Termux fallback until the companion has passed device verification and the release build explicitly enables it.
 
 ## Update model
 
@@ -48,25 +48,31 @@ The old experiments remain under `android-wrapper/experimental-runtime/` until t
 
 ## Packaging a runnable local Runtime APK
 
-The checked-in companion builds as a safe shell in CI. Provider binaries are deliberately not committed.
+Provider binaries are generated during packaging and are not committed to the repository.
 
-For a device build, prepare the runtime payloads first:
+### CI / cross-architecture packaging
+
+A normal Linux GitHub runner can prepare the Android ARM64 payloads without Termux:
 
 ```bash
-bash android-wrapper/runtime/scripts/prepare-embedded-node.sh
-bash android-wrapper/runtime/scripts/prepare-embedded-codex.sh
+# Downloads current Termux ARM64 Node + dependencies and repackages them for the APK.
+bash android-wrapper/runtime/scripts/fetch-termux-node-payload.sh
 
-# Legacy Node-script AGY:
-bash android-wrapper/runtime/scripts/prepare-embedded-agy.sh
+# Downloads the current Android Codex npm tarball, including codex-code-mode-host.
+bash android-wrapper/runtime/scripts/fetch-codex-payload.sh
 
-# Modern native AGY:
-AGY_ANDROID_BUNDLE_DIR=/path/to/verified-android-agy-bundle \
-  bash android-wrapper/runtime/scripts/prepare-embedded-agy.sh
-
-gradle -p android-wrapper :runtime:assembleDebug
+# Downloads the latest official Antigravity release, verifies its GitHub SHA-256
+# digest, and only accepts an ARM64 ELF that is directly Android-compatible.
+bash android-wrapper/runtime/scripts/fetch-official-agy-payload.sh
 ```
 
-Modern Antigravity releases are native Linux executables. A raw Linux/glibc AGY binary must not be copied into the APK and assumed to work on Android/Bionic. The packaging script accepts a pre-verified Android compatibility bundle with this boundary:
+Antigravity CLI 1.2.15 added official prebuilt Android support. The official fetcher is therefore the preferred AGY path. It deliberately rejects a plain glibc ELF instead of silently packaging something that cannot start on Android.
+
+The Android workflow packages Node and Codex automatically and probes the official AGY release. If the AGY probe does not find a directly runnable Android ELF, the build still completes but the companion remains disabled.
+
+### Verified AGY bundle fallback
+
+For an AGY build that needs an additional compatibility launcher or support files, use a pre-verified bundle:
 
 ```text
 verified-android-agy-bundle/
@@ -78,12 +84,34 @@ verified-android-agy-bundle/
 └── files/                 # optional non-executable support data
 ```
 
-The manifest must use `"type": "native-command"`, include a version, and provide a command array whose first item is an APK-owned executable under `${NATIVE_DIR}`. Additional command arguments may reference `${NATIVE_DIR}`, `${AGY_DIR}`, `${FILES_DIR}`, or `${CACHE_DIR}`. This lets the Runtime host a verified compatibility chain such as a launcher/loader/shim without downloading executable code after installation.
+```bash
+AGY_ANDROID_BUNDLE_DIR=/path/to/verified-android-agy-bundle \
+  bash android-wrapper/runtime/scripts/prepare-embedded-agy.sh
+```
+
+The manifest must use `"type": "native-command"`, include a version, and provide a command array whose first item is an APK-owned executable under `${NATIVE_DIR}`. Additional command arguments may reference `${NATIVE_DIR}`, `${AGY_DIR}`, `${FILES_DIR}`, or `${CACHE_DIR}`.
+
+Legacy Node-script AGY payloads remain supported by `prepare-embedded-agy.sh`, but they are no longer the primary distribution model.
+
+### Activation gate
+
+Packaging and activation are separate:
+
+- `BuildConfig.PAYLOAD_READY` means Node, Codex, the Codex code-mode host, provider metadata, and AGY passed build-time payload checks.
+- `BuildConfig.COMPANION_ENABLED` is controlled by `CREW_RUNTIME_ENABLE_COMPANION=true`.
+- The manifest advertises `READY=true` only when **both** are true.
+
+For a manually verified debug build:
+
+```bash
+CREW_RUNTIME_ENABLE_COMPANION=true \
+  gradle -p android-wrapper :runtime:assembleDebug
+```
+
+The feature-branch CI may enable the companion for its test artifact when all payload probes pass. Main/release builds remain disabled until device verification is explicitly complete.
 
 These are developer packaging helpers only. End users do not need Termux. The resulting Crew Runtime APK owns Node, Codex, AGY, auth state, and the localhost host.
 
 At build time the module packages the current `server.js`, `lib/`, `public/`, `extensions/`, and supporting scripts into the Runtime APK. It does not download Crew source from GitHub at runtime.
 
-When Node, Codex, the Codex version manifest, and AGY payloads are present, the manifest advertises `READY=true`; Crew Pocket can then select the companion automatically. Otherwise Pocket keeps the migration fallback.
-
-Do not add an in-app native-binary downloader as an update mechanism. If Codex or another executable provider needs a new native build, ship a new Crew Runtime version through the normal app update channel.
+Do not add an in-app native-binary downloader as an update mechanism. Executable provider upgrades ship as a new Crew Runtime version through the normal app update channel.
