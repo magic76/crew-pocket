@@ -48,25 +48,40 @@ import sys
 release = json.load(open(sys.argv[1], encoding='utf-8'))
 tag = str(release.get('tag_name') or '').strip()
 assets = release.get('assets') or []
-asset = next((item for item in assets if item.get('name') == 'agy_cli_linux_arm64.tar.gz'), None)
+preferred = [
+    'agy_cli_android_arm64.tar.gz',
+    'agy_cli_linux_arm64_musl.tar.gz',
+    'agy_cli_linux_arm64.tar.gz',
+]
+asset = next(
+    (item for name in preferred for item in assets if item.get('name') == name),
+    None,
+)
 if not tag or not asset:
-    raise SystemExit('Official release is missing tag or agy_cli_linux_arm64.tar.gz')
+    raise SystemExit(
+        'Official release is missing a supported ARM64 AGY asset: '
+        + ', '.join(preferred)
+    )
+name = str(asset.get('name') or '').strip()
 url = str(asset.get('browser_download_url') or '')
 digest = str(asset.get('digest') or '')
-if not url:
-    raise SystemExit('Official AGY asset has no download URL')
+if not name or not url:
+    raise SystemExit('Official AGY asset has no name or download URL')
 print(tag)
+print(name)
 print(url)
 print(digest)
 PY
 )
 
 VERSION="${RELEASE_INFO[0]}"
-URL="${RELEASE_INFO[1]}"
-DIGEST="${RELEASE_INFO[2]:-}"
-ARCHIVE="$WORK_DIR/agy_cli_linux_arm64.tar.gz"
+ASSET_NAME="${RELEASE_INFO[1]}"
+URL="${RELEASE_INFO[2]}"
+DIGEST="${RELEASE_INFO[3]:-}"
+ARCHIVE="$WORK_DIR/$ASSET_NAME"
 
 echo "Downloading official Antigravity CLI $VERSION"
+echo "  asset: $ASSET_NAME"
 curl -fL --retry 3 "${AUTH[@]}" "$URL" -o "$ARCHIVE"
 
 if [[ "$DIGEST" == sha256:* ]]; then
@@ -100,27 +115,35 @@ while IFS= read -r item; do
     *) continue ;;
   esac
 
+  RELATIVE="${item#"$WORK_DIR/extract/"}"
   INTERP="$(readelf -l "$item" 2>/dev/null | sed -n 's/.*Requesting program interpreter: \(.*\)]/\1/p' | head -n 1)"
+  NEEDED="$(readelf -d "$item" 2>/dev/null | sed -n 's/.*Shared library: \[\(.*\)\].*/\1/p' | paste -sd, - || true)"
+
   if [ -z "$INTERP" ]; then
-    echo "Candidate Android/static ELF: ${item#"$WORK_DIR/extract/"} (no PT_INTERP)"
+    if [ -n "$NEEDED" ]; then
+      echo "Skipping ambiguous ARM64 ELF: $RELATIVE (no PT_INTERP; NEEDED=$NEEDED)"
+      continue
+    fi
+    echo "Candidate Android/static ELF: $RELATIVE (no PT_INTERP, no shared-library dependencies)"
     CANDIDATE="$item"
     break
   fi
+
   case "$INTERP" in
     /system/bin/linker64|/apex/*/bin/linker64)
-      echo "Candidate Android ELF: ${item#"$WORK_DIR/extract/"} ($INTERP)"
+      echo "Candidate Android ELF: $RELATIVE ($INTERP; NEEDED=${NEEDED:-none})"
       CANDIDATE="$item"
       break
       ;;
     *)
-      echo "Skipping non-Android ELF: ${item#"$WORK_DIR/extract/"} ($INTERP)"
+      echo "Skipping non-Android ELF: $RELATIVE ($INTERP; NEEDED=${NEEDED:-none})"
       ;;
   esac
-done < <(find "$WORK_DIR/extract" -type f -perm -u+x -o -type f -name 'agy*')
+done < <(find "$WORK_DIR/extract" -type f \( -perm -u+x -o -name 'agy*' \) -print)
 
 if [ -z "$CANDIDATE" ]; then
-  echo "No directly runnable Android ARM64 AGY ELF was found in the official release archive." >&2
-  echo "The release may require a different Android artifact/layout; refusing to package the Linux/glibc binary." >&2
+  echo "No directly runnable Android-compatible ARM64 AGY ELF was found in $ASSET_NAME." >&2
+  echo "Refusing to package a binary that depends on a non-Android loader." >&2
   exit 3
 fi
 
@@ -129,7 +152,7 @@ rm -rf "$ASSET_DIR/package" "$ASSET_DIR/files"
 cp "$CANDIDATE" "$JNI_DIR/libagy_exec.so"
 chmod 0755 "$JNI_DIR/libagy_exec.so"
 
-# Copy native shared-library companions if the official archive ships them.
+# Copy native shared-library companions when an Android-linked release ships them.
 while IFS= read -r library; do
   name="$(basename "$library")"
   case "$name" in
@@ -149,10 +172,12 @@ cat > "$ASSET_DIR/manifest.json" <<EOF
   "type": "native-command",
   "version": "$VERSION",
   "source": "official-github-release",
+  "asset": "$ASSET_NAME",
   "command": ["\${NATIVE_DIR}/libagy_exec.so"]
 }
 EOF
 
-echo "✓ Official Android AGY payload prepared"
+echo "✓ Official Android-compatible AGY payload prepared"
 echo "  version: $VERSION"
+echo "  asset:   $ASSET_NAME"
 echo "  binary:  $JNI_DIR/libagy_exec.so"
