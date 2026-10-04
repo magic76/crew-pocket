@@ -14,7 +14,11 @@ It deliberately declares `com.crewpocket.runtime.READY=false`, so production con
 
 ## Update model
 
-Codex and AGY will be delivered by the companion APK. Updating those agents therefore updates Crew Runtime, not Crew Pocket. This keeps the UI APK stable while the executable runtime can ship on its own cadence.
+Codex and AGY are executable runtime payloads delivered by the companion APK. They are intentionally **not** downloaded and executed from writable app storage: Android 10+ blocks executing binaries from the writable app home, and Google Play does not allow Play-distributed apps to fetch native executable code from outside Play.
+
+Provider upgrades therefore happen by updating **Crew Runtime**, not Crew Pocket. Crew Pocket only depends on the versioned runtime protocol, so its UI release cadence stays independent from Codex / AGY changes.
+
+The web UI reports the installed provider versions and, when the companion runtime is active, routes the update action to the Crew Runtime app listing instead of trying to overwrite provider binaries in place.
 
 The runtime status contract reports:
 
@@ -31,8 +35,9 @@ Crew Pocket only switches to the companion when the declared runtime is ready an
 2. Move the archived Embedded Node host and workspace manager into this module.
 3. Move the archived Codex bridge and AGY runtime into this module.
 4. Package provider native dependencies in Crew Runtime and report their actual versions.
-5. Mark `READY=true` after device verification.
-6. Remove the Termux permission/bridge from Crew Pocket once fallback is no longer needed.
+5. Publish/update Crew Runtime independently from Crew Pocket.
+6. Mark `READY=true` after device verification.
+7. Remove the Termux permission/bridge from Crew Pocket once fallback is no longer needed.
 
 The old experiments remain under `android-wrapper/experimental-runtime/` until their code has been migrated and verified.
 
@@ -54,4 +59,6 @@ These are developer packaging helpers only. End users do not need Termux. The re
 
 At build time the module packages the current `server.js`, `lib/`, `public/`, `extensions/`, and supporting scripts into the Runtime APK. It does not download Crew source from GitHub at runtime.
 
-When all three provider payloads are present, the manifest advertises `READY=true`; Crew Pocket can then select the companion automatically. Otherwise Pocket keeps the migration fallback.
+When Node, Codex, the Codex version manifest, and AGY payloads are present, the manifest advertises `READY=true`; Crew Pocket can then select the companion automatically. Otherwise Pocket keeps the migration fallback.
+
+Do not add an in-app native-binary downloader as an update mechanism. If Codex or another executable provider needs a new native build, ship a new Crew Runtime version through the normal app update channel.
