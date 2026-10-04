@@ -25,7 +25,8 @@ class CrewRuntimeService : Service() {
         const val ACTION_START = "com.crewpocket.app.action.START_RUNTIME"
         const val ACTION_STOP = "com.crewpocket.app.action.STOP_RUNTIME"
         const val ACTION_REFRESH_EMBEDDED = "com.crewpocket.app.action.REFRESH_EMBEDDED"
-        const val ACTION_RESTART_EMBEDDED = "com.crewpocket.app.action.RESTART_EMBEDDED"\n        const val ACTION_RESTART_RUNTIME = "com.crewpocket.app.action.RESTART_RUNTIME"
+        const val ACTION_RESTART_EMBEDDED = "com.crewpocket.app.action.RESTART_EMBEDDED"
+        const val ACTION_RESTART_RUNTIME = "com.crewpocket.app.action.RESTART_RUNTIME"
         const val ACTION_RELOAD_WEBVIEW = "com.crewpocket.app.action.RELOAD_WEBVIEW"
         const val ACTION_APP_FOREGROUND = "com.crewpocket.app.action.APP_FOREGROUND"
         const val ACTION_APP_BACKGROUND = "com.crewpocket.app.action.APP_BACKGROUND"
@@ -111,7 +112,8 @@ class CrewRuntimeService : Service() {
             }
 
             ACTION_REFRESH_EMBEDDED,
-            ACTION_RESTART_EMBEDDED,\n            ACTION_RESTART_RUNTIME -> {
+            ACTION_RESTART_EMBEDDED,
+            ACTION_RESTART_RUNTIME -> {
                 appInForeground = true
                 cancelIdleStop()
                 restartRuntime()
