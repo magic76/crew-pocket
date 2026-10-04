@@ -192,12 +192,15 @@ class CrewRuntimeHostService : Service() {
     }
 
     private fun runtimeStatus(): JSONObject {
-        val ready = runtimeComponentsReady()
+        val payloadReady = runtimeComponentsReady()
+        val ready = payloadReady && BuildConfig.COMPANION_ENABLED
         return JSONObject()
             .put("protocolVersion", PROTOCOL_VERSION)
             .put("runtimeVersion", BuildConfig.VERSION_NAME)
             .put("delivery", "companion-apk")
             .put("ready", ready)
+            .put("payloadReady", payloadReady)
+            .put("companionEnabled", BuildConfig.COMPANION_ENABLED)
             .put("hostState", hostState)
             .put("lastError", lastError ?: JSONObject.NULL)
             .put("providers", JSONObject()
