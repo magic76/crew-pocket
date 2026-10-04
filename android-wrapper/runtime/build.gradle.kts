@@ -34,12 +34,16 @@ fun agyPayloadReady(): Boolean {
     }.getOrDefault(false)
 }
 
-val runtimeReady = listOf(
+val runtimePayloadReady = listOf(
     File(runtimeJniDir, "libnode_exec.so"),
     File(runtimeJniDir, "libcodex_exec.so"),
     File(runtimeJniDir, "libcodex_code_mode_host.so"),
     file("src/main/assets/provider-manifests/codex.json")
 ).all { it.isFile } && agyPayloadReady()
+
+val companionEnabled = System.getenv("CREW_RUNTIME_ENABLE_COMPANION")
+    ?.equals("true", ignoreCase = true) == true
+val runtimeReady = runtimePayloadReady && companionEnabled
 
 val prepareCrewWorkspaceAssets = tasks.register<Sync>("prepareCrewWorkspaceAssets") {
     into(generatedRuntimeAssets)
@@ -82,6 +86,8 @@ android {
         versionCode = 2
         versionName = "0.2.0"
         manifestPlaceholders["runtimeReady"] = runtimeReady.toString()
+        buildConfigField("boolean", "PAYLOAD_READY", runtimePayloadReady.toString())
+        buildConfigField("boolean", "COMPANION_ENABLED", companionEnabled.toString())
     }
 
     buildTypes {
