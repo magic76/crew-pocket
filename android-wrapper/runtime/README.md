@@ -66,7 +66,7 @@ bash android-wrapper/runtime/scripts/fetch-codex-payload.sh
 bash android-wrapper/runtime/scripts/fetch-official-agy-payload.sh
 ```
 
-Antigravity CLI 1.2.15 added official prebuilt Android support. The official fetcher is therefore the preferred AGY path. It deliberately rejects a plain glibc ELF instead of silently packaging something that cannot start on Android.
+Antigravity CLI 1.2.15 release notes added native Android/Termux support. Current releases expose the ARM64-compatible build through the musl archive rather than a separately named Android asset. The official fetcher therefore prefers an Android-named asset if one appears in a future release, then the ARM64 musl archive, and only falls back to the regular Linux ARM64 archive for inspection. It still validates the ELF loader/dependencies and refuses glibc or other non-Android binaries instead of trusting the asset name.
 
 The Android workflow packages Node and Codex automatically and probes the official AGY release. If the AGY probe does not find a directly runnable Android ELF, the build still completes but the companion remains disabled.
 
