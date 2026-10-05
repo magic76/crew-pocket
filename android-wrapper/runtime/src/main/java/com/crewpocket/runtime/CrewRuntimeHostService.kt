@@ -17,6 +17,7 @@ import java.net.ServerSocket
 import java.net.Socket
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
 
 class CrewRuntimeHostService : Service() {
     companion object {
@@ -29,7 +30,10 @@ class CrewRuntimeHostService : Service() {
         private val NOTIFICATION_ID: Int get() = BuildConfig.STATUS_PORT
     }
 
-    private val workers: ExecutorService = Executors.newCachedThreadPool()
+    // Status requests and startup must not create one 4 MB-stack thread per
+    // incoming service command while the embedded Node process is booting.
+    private val workers: ExecutorService = Executors.newFixedThreadPool(4)
+    private val agentStartScheduled = AtomicBoolean(false)
     @Volatile private var statusServer: ServerSocket? = null
     @Volatile private var hostState = "stopped"
     @Volatile private var lastError: String? = null
@@ -49,9 +53,27 @@ class CrewRuntimeHostService : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
-        promoteToForeground()
+        try {
+            promoteToForeground()
+        } catch (error: Exception) {
+            // Android may redeliver a sticky service after the app has moved
+            // to the background. If foreground promotion is no longer allowed,
+            // stop cleanly instead of crashing and entering a restart loop.
+            if (intent != null) throw error
+            Log.w(TAG, "Ignoring sticky restart that cannot enter foreground", error)
+            stopSelf(startId)
+            return START_NOT_STICKY
+        }
         startStatusServer()
-        workers.execute { startAgentRuntime() }
+        if (agentStartScheduled.compareAndSet(false, true)) {
+            workers.execute {
+                try {
+                    startAgentRuntime()
+                } finally {
+                    agentStartScheduled.set(false)
+                }
+            }
+        }
         return START_STICKY
     }
 

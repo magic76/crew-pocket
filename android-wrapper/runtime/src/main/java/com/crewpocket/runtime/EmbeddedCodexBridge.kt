@@ -54,7 +54,10 @@ class EmbeddedCodexBridge(private val context: Context, private val bridgeToken:
         }
     }
 
-    private val workers: ExecutorService = Executors.newCachedThreadPool()
+    // One bridge session needs at most five workers (accept, relay, stdout,
+    // stderr). Bound client concurrency so local reconnects cannot grow an
+    // unbounded pool of Android 4 MB-stack threads.
+    private val workers: ExecutorService = Executors.newFixedThreadPool(6)
     @Volatile private var serverSocket: ServerSocket? = null
     @Volatile private var closed = false
 
