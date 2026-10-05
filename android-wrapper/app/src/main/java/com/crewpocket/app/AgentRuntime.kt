@@ -15,7 +15,7 @@ interface AgentRuntime {
 }
 
 object CompanionAgentRuntime : AgentRuntime {
-    const val PACKAGE_NAME = "com.crewpocket.runtime"
+    val PACKAGE_NAME: String get() = BuildConfig.RUNTIME_PACKAGE
     private const val SERVICE_NAME = "com.crewpocket.runtime.CrewRuntimeHostService"
     private const val META_READY = "com.crewpocket.runtime.READY"
     private const val META_PROTOCOL = "com.crewpocket.runtime.PROTOCOL_VERSION"
@@ -25,7 +25,7 @@ object CompanionAgentRuntime : AgentRuntime {
     private const val ACTION_STOP = "com.crewpocket.runtime.action.STOP"
 
     override val id: String = "companion-runtime"
-    override val label: String = "Crew Runtime"
+    override val label: String = if (BuildConfig.DEBUG) "Crew Runtime Dev" else "Crew Runtime"
 
     fun isInstalled(context: Context): Boolean {
         return try {
@@ -132,9 +132,15 @@ object RuntimeManager {
         if (isCompanionEnabled(context) && CompanionAgentRuntime.isAvailable(context)) {
             return CompanionAgentRuntime
         }
+        // Debug builds intentionally stay on their isolated companion stack.
+        // Falling back to the stable Termux host would make Dev appear healthy
+        // by connecting to the user's everyday runtime on another port.
+        if (!BuildConfig.ALLOW_TERMUX_FALLBACK) {
+            return CompanionAgentRuntime
+        }
         return TermuxAgentRuntime
     }
 
-    // Compatibility helper while the companion runtime is being brought online.
+    // Compatibility helper while the production companion runtime is being brought online.
     fun fallbackHost(context: Context): AgentRuntime = TermuxAgentRuntime
 }
