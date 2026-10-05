@@ -24,7 +24,7 @@ import java.util.concurrent.TimeUnit
 
 class WirelessDebugController(private val activity: Activity) {
     companion object {
-        private const val SERVER_URL = "http://127.0.0.1:8000/"
+        private val SERVER_URL = "http://127.0.0.1:${BuildConfig.SERVER_PORT}/"
     }
 
     private val scheduler = Executors.newSingleThreadScheduledExecutor()
