@@ -73,11 +73,11 @@ jobs:
       - name: Upload Crew Pocket APK
         uses: actions/upload-artifact@v4
         with:
-          name: crew-pocket-android-wrapper-debug
+          name: crew-pocket-dev-debug
           path: android-wrapper/app/build/outputs/apk/debug/app-debug.apk
 
       - name: Upload Crew Runtime APK
         uses: actions/upload-artifact@v4
         with:
-          name: crew-pocket-runtime-debug
+          name: crew-pocket-runtime-dev-debug
           path: android-wrapper/runtime/build/outputs/apk/debug/runtime-debug.apk
