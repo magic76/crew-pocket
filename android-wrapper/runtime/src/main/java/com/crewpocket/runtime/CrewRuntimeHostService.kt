@@ -23,10 +23,10 @@ class CrewRuntimeHostService : Service() {
         const val ACTION_START = "com.crewpocket.runtime.action.START"
         const val ACTION_STOP = "com.crewpocket.runtime.action.STOP"
         const val PROTOCOL_VERSION = 1
-        const val STATUS_PORT = 8768
+        val STATUS_PORT: Int get() = BuildConfig.STATUS_PORT
         private const val TAG = "CrewRuntimeHost"
         private const val CHANNEL_ID = "crew_runtime_host"
-        private const val NOTIFICATION_ID = 8768
+        private val NOTIFICATION_ID: Int get() = BuildConfig.STATUS_PORT
     }
 
     private val workers: ExecutorService = Executors.newCachedThreadPool()
@@ -104,7 +104,7 @@ class CrewRuntimeHostService : Service() {
         nodeHost = node
         hostState = "running"
         updateNotification("Crew Runtime active")
-        Log.i(TAG, "Companion runtime owns localhost:8000")
+        Log.i(TAG, "Companion runtime owns localhost:${BuildConfig.SERVER_PORT}")
     }
 
     @Synchronized
@@ -232,7 +232,7 @@ class CrewRuntimeHostService : Service() {
     }
 
     private fun promoteToForeground() {
-        val launchIntent = packageManager.getLaunchIntentForPackage("com.crewpocket.app")
+        val launchIntent = packageManager.getLaunchIntentForPackage(BuildConfig.POCKET_PACKAGE)
         val pendingIntent = launchIntent?.let {
             PendingIntent.getActivity(
                 this, 1, it,
@@ -240,7 +240,7 @@ class CrewRuntimeHostService : Service() {
             )
         }
         val notification = notificationBuilder()
-            .setContentTitle("Crew Runtime")
+            .setContentTitle(if (BuildConfig.DEBUG) "Crew Runtime Dev" else "Crew Runtime")
             .setContentText("Starting local agent runtime…")
             .setSmallIcon(android.R.drawable.stat_notify_sync_noanim)
             .setOnlyAlertOnce(true)
