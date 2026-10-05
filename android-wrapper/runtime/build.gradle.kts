@@ -85,12 +85,34 @@ android {
         targetSdk = 35
         versionCode = 2
         versionName = "0.2.0"
+
         manifestPlaceholders["runtimeReady"] = runtimeReady.toString()
+        manifestPlaceholders["appLabel"] = "Crew Runtime"
+        manifestPlaceholders["runtimeControlPermission"] = "com.crewpocket.permission.CONTROL_RUNTIME"
+        manifestPlaceholders["pocketPackage"] = "com.crewpocket.app"
+
         buildConfigField("boolean", "PAYLOAD_READY", runtimePayloadReady.toString())
         buildConfigField("boolean", "COMPANION_ENABLED", companionEnabled.toString())
+        buildConfigField("int", "SERVER_PORT", "8000")
+        buildConfigField("int", "CODEX_BRIDGE_PORT", "8767")
+        buildConfigField("int", "STATUS_PORT", "8768")
+        buildConfigField("String", "POCKET_PACKAGE", "\"com.crewpocket.app\"")
     }
 
     buildTypes {
+        getByName("debug") {
+            applicationIdSuffix = ".dev"
+            versionNameSuffix = "-dev"
+            manifestPlaceholders["appLabel"] = "Crew Runtime Dev"
+            manifestPlaceholders["runtimeControlPermission"] = "com.crewpocket.permission.CONTROL_RUNTIME_DEV"
+            manifestPlaceholders["pocketPackage"] = "com.crewpocket.app.dev"
+
+            buildConfigField("int", "SERVER_PORT", "8100")
+            buildConfigField("int", "CODEX_BRIDGE_PORT", "8867")
+            buildConfigField("int", "STATUS_PORT", "8868")
+            buildConfigField("String", "POCKET_PACKAGE", "\"com.crewpocket.app.dev\"")
+        }
+
         release {
             isMinifyEnabled = false
             proguardFiles(
