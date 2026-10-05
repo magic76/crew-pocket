@@ -1,5 +1,19 @@
 # Crew Runtime companion
 
+## Parallel Dev stack
+
+Android debug builds are intentionally installable alongside the existing stable setup so Runtime migration work does not disrupt the daily-use app:
+
+| Build | Pocket package | Runtime package | Crew server | Codex bridge | Runtime status |
+| --- | --- | --- | ---: | ---: | ---: |
+| Stable / release | `com.crewpocket.app` | `com.crewpocket.runtime` | 8000 | 8767 | 8768 |
+| Debug / Dev | `com.crewpocket.app.dev` | `com.crewpocket.runtime.dev` | 8100 | 8867 | 8868 |
+
+The debug apps are labeled **Crew Pocket Dev** and **Crew Runtime Dev**. The Dev Pocket only talks to the Dev Runtime and does not fall back to the stable Termux host; this prevents a broken Dev runtime from accidentally appearing healthy by connecting to the user's daily-use server.
+
+Pocket and Runtime in each stack must be signed with a compatible certificate because Runtime control uses a signature-level permission. The Dev stack uses its own `com.crewpocket.permission.CONTROL_RUNTIME_DEV` permission so it cannot cross-control the stable Runtime.
+
+
 This module is the migration target for removing Crew Pocket's production dependency on Termux.
 
 ## Boundary
