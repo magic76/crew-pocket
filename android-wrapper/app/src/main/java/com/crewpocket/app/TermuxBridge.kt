@@ -134,7 +134,7 @@ object TermuxBridge {
             fi
             tar -czf - ${'$'}items | curl --fail --silent --show-error --max-time 900 \
                 -X POST -H 'X-Crew-History-Import-Token: $token' \
-                --data-binary @- http://127.0.0.1:8000/api/runtime/history-migration
+                --data-binary @- http://127.0.0.1:${BuildConfig.SERVER_PORT}/api/runtime/history-migration
         """.trimIndent()
         return runCrewScript(context, command)
     }
