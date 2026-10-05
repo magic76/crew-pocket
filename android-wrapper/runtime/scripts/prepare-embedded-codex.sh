@@ -34,14 +34,16 @@ fi
 
 mkdir -p "$DEST"
 cp "$CODEX_BIN" "$DEST/libcodex_exec.so"
-cp "$CODE_MODE_HOST" "$DEST/libcodex_code_mode_host.so"
+cp "$CODE_MODE_HOST" "$DEST/libcode_mode_host.so"
+node "$ROOT_DIR/android-wrapper/runtime/scripts/patch-codex-helper-name.js" "$DEST/libcodex_exec.so"
+rm -f "$DEST/libcodex_code_mode_host.so"
 cp "$CXX_LIB" "$DEST/libc++_shared.so"
-chmod 0755 "$DEST/libcodex_exec.so" "$DEST/libcodex_code_mode_host.so"
+chmod 0755 "$DEST/libcodex_exec.so" "$DEST/libcode_mode_host.so"
 chmod 0644 "$DEST/libc++_shared.so"
 
 echo "✓ Embedded Codex runtime prepared"
 echo "  binary: $DEST/libcodex_exec.so"
-echo "  code-mode host: $DEST/libcodex_code_mode_host.so"
+echo "  code-mode host: $DEST/libcode_mode_host.so"
 echo "  libc++: $DEST/libc++_shared.so"
 echo
 echo "These files are gitignored. Rebuild the APK now:"

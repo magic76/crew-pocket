@@ -21,7 +21,7 @@ class EmbeddedCodexBridge(private val context: Context, private val bridgeToken:
         val PORT: Int get() = BuildConfig.CODEX_BRIDGE_PORT
         private const val TAG = "EmbeddedCodexBridge"
         private const val CODEX_LIBRARY = "libcodex_exec.so"
-        private const val CODE_MODE_HOST_LIBRARY = "libcodex_code_mode_host.so"
+        private const val CODE_MODE_HOST_LIBRARY = "libcode_mode_host.so"
         private const val MANIFEST_ASSET = "provider-manifests/codex.json"
         private const val HANDSHAKE_PREFIX = "CREW-CODEX-BRIDGE/1 "
 
@@ -242,7 +242,6 @@ class EmbeddedCodexBridge(private val context: Context, private val bridgeToken:
                 put("PATH", "/system/bin:/system/xbin:/product/bin")
             }
             put("CODEX_SELF_EXE", binary.absolutePath)
-            put("CODEX_CODE_MODE_HOST_PATH", codeModeHostFile(context).absolutePath)
             put("LD_LIBRARY_PATH", context.applicationInfo.nativeLibraryDir)
             put("SSL_CERT_FILE", certificates.absolutePath)
             put("CODEX_CA_CERTIFICATE", certificates.absolutePath)

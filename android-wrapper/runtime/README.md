@@ -64,6 +64,22 @@ The old experiments remain under `android-wrapper/experimental-runtime/` until t
 
 Provider binaries are generated during packaging and are not committed to the repository.
 
+Codex 0.160 discovers its code-mode helper by a fixed sibling filename; it does
+not recognize `CODEX_CODE_MODE_HOST_PATH`. During packaging,
+`patch-codex-helper-name.js` changes the embedded `codex-code-mode-host` filename
+to the equal-length `libcode_mode_host.so`. This preserves ELF offsets and Rust
+string lengths and matches Android's extracted native library filename. The
+preparer fails if it cannot recognize that layout, so new Codex layouts require
+inspection rather than silently shipping a missing helper.
+
+The runtime exports Android's trusted CA certificates to an app-private PEM
+bundle and passes it through `SSL_CERT_FILE` and `CODEX_CA_CERTIFICATE`. Native
+Codex WebSocket requests otherwise fail with `UnknownIssuer` on the tested
+Android device even when its HTTPS login succeeds.
+
+See [the companion dependency audit](dependency-audit.md) for remaining tooling
+that is not supplied by the companion APK.
+
 ### CI / cross-architecture packaging
 
 A normal Linux GitHub runner can prepare the Android ARM64 payloads without Termux:

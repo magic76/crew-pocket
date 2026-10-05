@@ -37,7 +37,7 @@ fun agyPayloadReady(): Boolean {
 val runtimePayloadReady = listOf(
     File(runtimeJniDir, "libnode_exec.so"),
     File(runtimeJniDir, "libcodex_exec.so"),
-    File(runtimeJniDir, "libcodex_code_mode_host.so"),
+    File(runtimeJniDir, "libcode_mode_host.so"),
     file("src/main/assets/provider-manifests/codex.json")
 ).all { it.isFile } && agyPayloadReady()
 
