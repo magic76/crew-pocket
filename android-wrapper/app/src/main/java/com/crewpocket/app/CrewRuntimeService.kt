@@ -38,8 +38,8 @@ class CrewRuntimeService : Service() {
         private const val CHANNEL_ID = "crew_runtime"
         private const val TASK_CHANNEL_ID = "crew_tasks"
         private const val NOTIFICATION_ID = 7601
-        private const val SERVER_HEALTH_URL = "http://127.0.0.1:8000/healthz"
-        private const val SERVER_TASKS_URL = "http://127.0.0.1:8000/api/tasks?limit=80"
+        private val SERVER_HEALTH_URL = "http://127.0.0.1:${BuildConfig.SERVER_PORT}/healthz"
+        private val SERVER_TASKS_URL = "http://127.0.0.1:${BuildConfig.SERVER_PORT}/api/tasks?limit=80"
         private const val RESTART_COOLDOWN_MS = 20_000L
         private const val INITIAL_MONITOR_DELAY_SEC = 4L
         private const val HEALTHY_MIN_DELAY_SEC = 10L
@@ -446,6 +446,8 @@ class CrewRuntimeService : Service() {
     }
 
     private fun maybeFallbackToTermux(reason: String): Boolean {
+        if (!BuildConfig.ALLOW_TERMUX_FALLBACK) return false
+
         val host = currentHost()
         if (host !== CompanionAgentRuntime) return false
         if (failedChecks < COMPANION_FALLBACK_FAILURES) return false
@@ -574,7 +576,7 @@ class CrewRuntimeService : Service() {
         }
 
         return builder
-            .setContentTitle("Crew Pocket")
+            .setContentTitle(if (BuildConfig.DEBUG) "Crew Pocket Dev" else "Crew Pocket")
             .setContentText(text)
             .setSmallIcon(android.R.drawable.stat_notify_sync_noanim)
             .setContentIntent(openPendingIntent)
