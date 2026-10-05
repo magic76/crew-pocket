@@ -223,6 +223,7 @@ class EmbeddedCodexBridge(private val context: Context, private val bridgeToken:
         val codexHome = File(context.filesDir, ".codex")
         codexHome.mkdirs()
         ensureCodexConfig(codexHome)
+        val certificates = EmbeddedTrustStore.certificateBundle(context)
 
         val builder = ProcessBuilder(
             binary.absolutePath,
@@ -243,6 +244,8 @@ class EmbeddedCodexBridge(private val context: Context, private val bridgeToken:
             put("CODEX_SELF_EXE", binary.absolutePath)
             put("CODEX_CODE_MODE_HOST_PATH", codeModeHostFile(context).absolutePath)
             put("LD_LIBRARY_PATH", context.applicationInfo.nativeLibraryDir)
+            put("SSL_CERT_FILE", certificates.absolutePath)
+            put("CODEX_CA_CERTIFICATE", certificates.absolutePath)
         }
         return builder.start()
     }
