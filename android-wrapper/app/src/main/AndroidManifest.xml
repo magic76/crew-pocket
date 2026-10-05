@@ -13,11 +13,11 @@
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="com.termux.permission.RUN_COMMAND" />
-    <uses-permission android:name="com.crewpocket.permission.CONTROL_RUNTIME" />
+    <uses-permission android:name="${runtimeControlPermission}" />
 
     <queries>
         <package android:name="com.termux" />
-        <package android:name="com.crewpocket.runtime" />
+        <package android:name="${runtimePackage}" />
     </queries>
 
     <application
@@ -25,7 +25,7 @@
         android:hardwareAccelerated="true"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
-        android:label="Crew Pocket"
+        android:label="${appLabel}"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.NoActionBar"
         android:usesCleartextTraffic="true">
