@@ -260,7 +260,7 @@ class CrewRuntimeHostService : Service() {
         getSystemService(NotificationManager::class.java).notify(
             NOTIFICATION_ID,
             notificationBuilder()
-                .setContentTitle("Crew Runtime")
+                .setContentTitle(if (BuildConfig.DEBUG) "Crew Runtime Dev" else "Crew Runtime")
                 .setContentText(text)
                 .setSmallIcon(android.R.drawable.stat_notify_sync_noanim)
                 .setOnlyAlertOnce(true)
