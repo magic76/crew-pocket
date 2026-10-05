@@ -46,7 +46,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 class MainActivity : Activity() {
     companion object {
-        private const val SERVER_URL = "http://127.0.0.1:8000/"
+        private val SERVER_URL = "http://127.0.0.1:${BuildConfig.SERVER_PORT}/"
+        private val LOCALHOST_SERVER_URL = "http://localhost:${BuildConfig.SERVER_PORT}/"
         private const val REQUEST_TERMUX = 7601
         private const val REQUEST_NOTIFICATION = 7602
         private const val REQUEST_WEB_MEDIA = 7603
@@ -232,7 +233,7 @@ class MainActivity : Activity() {
                 val target = uri.toString()
                 if (
                     target.startsWith(SERVER_URL) ||
-                    target.startsWith("http://localhost:8000/")
+                    target.startsWith(LOCALHOST_SERVER_URL)
                 ) {
                     return false
                 }
@@ -525,7 +526,12 @@ class MainActivity : Activity() {
     private fun refreshSetupStatus() {
         val selected = RuntimeManager.productionHost(this)
         val companionInstalled = CompanionAgentRuntime.isInstalled(this)
+        val companionReady = CompanionAgentRuntime.isReady(this)
         val message = when {
+            !BuildConfig.ALLOW_TERMUX_FALLBACK && !companionInstalled ->
+                "Crew Runtime Dev is not installed. Install the matching Dev Runtime APK to use this isolated build."
+            !BuildConfig.ALLOW_TERMUX_FALLBACK && !companionReady ->
+                "Crew Runtime Dev is installed but is not ready. Check the matching Dev Runtime build and payloads."
             selected.id == CompanionAgentRuntime.id -> null
             !TermuxBridge.isInstalled(this) && !companionInstalled ->
                 "Crew Runtime is not installed. Termux remains a temporary fallback during the runtime migration."
