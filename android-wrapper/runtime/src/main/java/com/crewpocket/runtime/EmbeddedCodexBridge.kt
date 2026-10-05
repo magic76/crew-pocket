@@ -18,7 +18,7 @@ import java.util.concurrent.Future
 class EmbeddedCodexBridge(private val context: Context, private val bridgeToken: String) {
     companion object {
         // 8766 belongs to Crew Helper's private bridge. Keep Crew Pocket isolated.
-        const val PORT = 8767
+        val PORT: Int get() = BuildConfig.CODEX_BRIDGE_PORT
         private const val TAG = "EmbeddedCodexBridge"
         private const val CODEX_LIBRARY = "libcodex_exec.so"
         private const val CODE_MODE_HOST_LIBRARY = "libcodex_code_mode_host.so"
