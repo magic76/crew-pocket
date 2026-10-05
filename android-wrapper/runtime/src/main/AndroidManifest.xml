@@ -7,13 +7,17 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
 
     <permission
-        android:name="com.crewpocket.permission.CONTROL_RUNTIME"
+        android:name="${runtimeControlPermission}"
         android:protectionLevel="signature" />
+
+    <queries>
+        <package android:name="${pocketPackage}" />
+    </queries>
 
     <application
         android:allowBackup="false"
         android:extractNativeLibs="true"
-        android:label="Crew Runtime"
+        android:label="${appLabel}"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.NoActionBar">
 
@@ -27,7 +31,7 @@
         <service
             android:name=".CrewRuntimeHostService"
             android:exported="true"
-            android:permission="com.crewpocket.permission.CONTROL_RUNTIME"
+            android:permission="${runtimeControlPermission}"
             android:foregroundServiceType="specialUse">
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
