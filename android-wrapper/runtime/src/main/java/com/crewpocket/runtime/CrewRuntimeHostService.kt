@@ -175,10 +175,18 @@ class CrewRuntimeHostService : Service() {
 
     private fun acceptLoop(server: ServerSocket) {
         while (!server.isClosed) {
-            try {
-                workers.execute { handleClient(server.accept()) }
+            val client = try {
+                server.accept()
             } catch (error: Exception) {
                 if (!server.isClosed) Log.w(TAG, "Status accept failed", error)
+                break
+            }
+
+            try {
+                workers.execute { handleClient(client) }
+            } catch (error: Exception) {
+                runCatching { client.close() }
+                if (!server.isClosed) Log.w(TAG, "Status client rejected", error)
             }
         }
     }
