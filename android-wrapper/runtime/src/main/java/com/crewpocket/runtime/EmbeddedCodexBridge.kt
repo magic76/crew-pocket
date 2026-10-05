@@ -126,7 +126,18 @@ class EmbeddedCodexBridge(private val context: Context, private val bridgeToken:
 
             upstream = workers.submit {
                 try {
-                    client.getInputStream().copyTo(codex.outputStream)
+                    // Process stdin is buffered. Flush each socket read so a
+                    // short JSON-RPC line reaches Codex without waiting for
+                    // the buffer to fill or for the client to disconnect.
+                    val input = client.getInputStream()
+                    val output = codex.outputStream
+                    val buffer = ByteArray(8192)
+                    while (true) {
+                        val count = input.read(buffer)
+                        if (count < 0) break
+                        output.write(buffer, 0, count)
+                        output.flush()
+                    }
                 } finally {
                     try {
                         codex.outputStream.close()
