@@ -75,6 +75,12 @@ html, body {
   text-align: left;
 }
 .prose th { background-color: #1e293b; font-weight: 600; }
+#local-file-reader .prose th:first-child,
+#local-file-reader .prose td:first-child {
+  min-width: 6.5rem;
+  overflow-wrap: normal;
+  word-break: normal;
+}
 .prose tr:nth-child(even) { background-color: #0f172a; }
 
 .prose blockquote { border-left: 3px solid #6366f1; padding-left: 0.6rem; color: #94a3b8; margin: 0.65rem 0; font-size: 0.9em; }

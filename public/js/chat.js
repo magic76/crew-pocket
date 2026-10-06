@@ -16,7 +16,10 @@ if (typeof marked !== 'undefined' && marked.use) {
           text = arg3 || '';
         }
         const titleAttr = title ? ` title="${escapeHtml(title)}"` : '';
-        return `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer"${titleAttr} class="text-indigo-400 hover:text-indigo-300 underline underline-offset-2 transition">${text}</a>`;
+        const localFile = window.CrewLocalFiles?.parse(href);
+        const destination = localFile ? window.CrewLocalFiles.url(localFile) : href;
+        const target = localFile ? '' : ' target="_blank" rel="noopener noreferrer"';
+        return `<a href="${escapeHtml(destination)}"${target}${titleAttr} class="text-indigo-400 hover:text-indigo-300 underline underline-offset-2 transition">${text}</a>`;
       }
     }
   });
@@ -2851,7 +2854,7 @@ document.addEventListener('click', (e) => {
   const link = e.target.closest('#messages-container a[href]');
   if (link && link.href) {
     const hrefAttr = link.getAttribute('href') || '';
-    if (!hrefAttr.startsWith('#') && !hrefAttr.startsWith('javascript:')) {
+    if (!window.CrewLocalFiles?.parse(hrefAttr) && !hrefAttr.startsWith('#') && !hrefAttr.startsWith('javascript:')) {
       link.target = '_blank';
       link.rel = 'noopener noreferrer';
     }

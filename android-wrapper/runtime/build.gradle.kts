@@ -52,6 +52,7 @@ val prepareCrewWorkspaceAssets = tasks.register<Sync>("prepareCrewWorkspaceAsset
         include("server.js")
         include("AGENTS.md")
         include("GEMINI.md")
+        include("android-wrapper/runtime/dependency-audit.md")
         include("lib/**")
         include("public/**")
         include("extensions/**")
