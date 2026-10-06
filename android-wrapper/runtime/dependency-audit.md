@@ -381,3 +381,31 @@ The output APK was downloaded successfully through Dev Node's
 The native Android build pipeline is verified under the Runtime app UID. This
 does not supersede the separate AGY authentication/task and full Pocket shutdown
 verification gates above.
+
+### Crew Helper signed CI update (2026-10-06)
+
+Runtime `~/crew-helper` main was at 71106ab, version 1.8.104. Its AGP9.4 /
+compileSdk37 build exceeds the bundled SDK36 / Build Tools35 toolchain. This
+update used the existing CI unsigned release APK rather than claiming a local
+SDK37 build. Platform37 and Build Tools36 remain unbundled.
+
+The installed Helper 1.8.103 certificate SHA256 was
+`fdf3c9351b55a2dfb403d7892ec933acdf5850aa18f22d18bf85e9155cec3db7`.
+The locally retained Helper release keystore matched it. The CI APK was signed
+with that key outside Runtime; the private key was not copied into Runtime or
+committed. The signed APK passed `apksigner verify`, identified package
+`com.crewpocket.helper`, versionCode141, versionName1.8.104, and was delivered to
+Termux Downloads as `CrewHelper-v1.8.104.apk`. Required `~/install-apk.sh`
+returned `Success`; installed package inspection confirmed 1.8.104 with the
+same signature. No uninstall/data reset was performed. App functionality was
+not revalidated during this installation.
+
+Runtime HOME contained an ad hoc install script hardcoded to Teacher Dev.
+`scripts/runtime-install-apk.sh` now provides a reusable replacement: derive the
+package from the APK, optionally require an expected package, verify the APK,
+select a connected Wireless ADB target, and compare installed/new certificate
+SHA256 before updating. It refuses mismatched certificates without uninstalling.
+Run with bundled Bash: `bash ~/install-apk.sh <apk> [wireless-target] [expected-package]`.
+The previous Runtime HOME script was backed up before replacement. The signed
+APK was also saved beside the original CI unsigned APK in Runtime HOME
+`/.crew-pocket/crew-helper-ci-71106ab/CrewHelper-Release-APK/`.
