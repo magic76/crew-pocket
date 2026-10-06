@@ -56,6 +56,7 @@ const {
 } = require('./lib/http-security');
 const { createHistoryMigration } = require('./lib/runtime/history-migration');
 const { getProviderRuntimeStatus, updateProvider } = require('./lib/runtime/provider-manager');
+const { findExecutable, toolchainSnapshot } = require('./lib/runtime/toolchain');
 const { getJevCliStatus } = require('./lib/jev-router');
 const { prepareTurnExecution } = require('./lib/runtime/turn-orchestrator');
 const { normalizeExecutionIntent } = require('./lib/execution-intent');
@@ -125,7 +126,9 @@ async function handleAdbStatus(res) {
     } catch (_) {}
 
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ target, connected, devices: devicesOutput.trim(), last_output: lastOutput }));
+    const available = Boolean(findExecutable('adb'));
+    res.end(JSON.stringify({ available, target, connected, devices: devicesOutput.trim(), last_output: lastOutput,
+      error: available ? undefined : '目前 Runtime 未提供 ADB' }));
   } catch (err) {
     res.writeHead(500, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: err.message }));
@@ -134,6 +137,10 @@ async function handleAdbStatus(res) {
 
 async function handleAdbUpdate(req, res) {
   try {
+    if (!findExecutable('adb')) {
+      res.writeHead(409, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({ success: false, code: 'RUNTIME_DEPENDENCY_UNAVAILABLE', error: '目前 Runtime 未提供 ADB' }));
+    }
     const body = await parseJsonBody(req);
     let target = (body.target || body.port || '').toString().trim();
     let pairingTarget = (body.pairing_target || body.pair_target || '').toString().trim();
@@ -313,7 +320,10 @@ const extensionBridge = createExtensionBridge({ onInboundMessage: enqueueInbound
 // 📦 Export / Copy Browser Extension to custom location
 async function handleExportExtension(req, res) {
   try {
-    const { execSync } = require('node:child_process');
+    if (!findExecutable('python3')) {
+      res.writeHead(409, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({ success: false, code: 'RUNTIME_DEPENDENCY_UNAVAILABLE', error: '匯出 ZIP 需要 Python；目前 Runtime 未提供 Python' }));
+    }
     const body = await parseJsonBody(req);
     const targetDir = body.targetDir || '/sdcard/crew-pocket-extension';
     const sourceDir = path.join(__dirname, 'extensions', 'crew-pocket-bridge');
@@ -321,17 +331,16 @@ async function handleExportExtension(req, res) {
     await fsPromises.mkdir(targetDir, { recursive: true });
 
     // Dynamic repack of all latest files and icons
-    const zipScript = `python3 -c "
-import zipfile, os
-src = '${sourceDir}'
-tgt = '${targetDir}'
+    const zipScript = `
+import zipfile, os, sys
+src, tgt = sys.argv[1:3]
 files = [f for f in os.listdir(src) if not f.endswith('.zip') and not f.endswith('.log') and os.path.isfile(os.path.join(src, f))]
 for d in [src, tgt]:
     with zipfile.ZipFile(os.path.join(d, 'crew-pocket-bridge.zip'), 'w') as z:
         for f in files:
             z.write(os.path.join(src, f), arcname=f)
-"`;
-    try { execSync(zipScript); } catch (e) {}
+`;
+    await execFileAsync('python3', ['-c', zipScript, sourceDir, targetDir]);
 
     const files = await fsPromises.readdir(sourceDir);
     for (const f of files) {
@@ -382,7 +391,7 @@ async function handleRuntimeStatus(res) {
       updateModel: companionRuntime ? 'runtime-app' : 'provider-managed'
     };
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ host, providers: providerRuntime.providers }));
+    res.end(JSON.stringify({ host, providers: providerRuntime.providers, toolchain: toolchainSnapshot() }));
   } catch (err) {
     res.writeHead(500, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: err.message }));
@@ -2636,6 +2645,12 @@ async function handleRemoteAccess(req, res) {
     if (typeof body.enabled !== 'boolean') {
       res.writeHead(400, { 'Content-Type': 'application/json' });
       return res.end(JSON.stringify({ success: false, error: 'enabled must be boolean' }));
+    }
+
+    if (process.env.CREW_HOST_RUNTIME === 'companion-runtime') {
+      res.writeHead(409, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({ success: false, restarting: false, code: 'COMPANION_REMOTE_ACCESS_UNSUPPORTED',
+        error: 'Companion Runtime 尚未支援遠端存取；此操作需要原生服務重啟流程' }));
     }
 
     await fsPromises.mkdir(REMOTE_ACCESS_DIR, { recursive: true, mode: 0o700 });

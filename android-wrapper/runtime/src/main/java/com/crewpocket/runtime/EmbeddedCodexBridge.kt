@@ -14,6 +14,8 @@ import java.security.SecureRandom
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.Future
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Semaphore
 
 class EmbeddedCodexBridge(private val context: Context, private val bridgeToken: String) {
     companion object {
@@ -54,10 +56,12 @@ class EmbeddedCodexBridge(private val context: Context, private val bridgeToken:
         }
     }
 
-    // One bridge session needs at most five workers (accept, relay, stdout,
-    // stderr). Bound client concurrency so local reconnects cannot grow an
-    // unbounded pool of Android 4 MB-stack threads.
-    private val workers: ExecutorService = Executors.newFixedThreadPool(6)
+    // One accept worker plus four workers per admitted session. Merely
+    // bounding the pool lets multiple handlers occupy every worker while
+    // their relay jobs wait in the queue forever.
+    private val workers: ExecutorService = Executors.newFixedThreadPool(9)
+    private val sessions = Semaphore(2)
+    private val clients = ConcurrentHashMap.newKeySet<Socket>()
     @Volatile private var serverSocket: ServerSocket? = null
     @Volatile private var closed = false
 
@@ -92,6 +96,7 @@ class EmbeddedCodexBridge(private val context: Context, private val bridgeToken:
         } catch (_: Exception) {
         }
         serverSocket = null
+        clients.forEach { client -> runCatching { client.close() } }
         workers.shutdownNow()
     }
 
@@ -99,7 +104,20 @@ class EmbeddedCodexBridge(private val context: Context, private val bridgeToken:
         while (!closed && !server.isClosed) {
             try {
                 val client = server.accept()
-                workers.execute { handleClient(client) }
+                if (!sessions.tryAcquire()) {
+                    client.close()
+                    Log.w(TAG, "Rejected bridge client: session capacity reached")
+                    continue
+                }
+                clients.add(client)
+                try {
+                    workers.execute { handleClient(client) }
+                } catch (error: Exception) {
+                    clients.remove(client)
+                    sessions.release()
+                    client.close()
+                    throw error
+                }
             } catch (error: Exception) {
                 if (!closed) Log.e(TAG, "Accept failed", error)
             }
@@ -176,6 +194,8 @@ class EmbeddedCodexBridge(private val context: Context, private val bridgeToken:
                 if (process?.isAlive == true) process.destroyForcibly()
             } catch (_: Exception) {
             }
+            clients.remove(client)
+            sessions.release()
         }
     }
 
@@ -242,6 +262,8 @@ class EmbeddedCodexBridge(private val context: Context, private val bridgeToken:
             put("CODEX_SELF_EXE", binary.absolutePath)
             put("LD_LIBRARY_PATH", context.applicationInfo.nativeLibraryDir)
             put("SSL_CERT_FILE", certificates.absolutePath)
+            // Propagate to Node invoked by provider command tools as well.
+            put("OPENSSL_CONF", "/dev/null")
             put("CODEX_CA_CERTIFICATE", certificates.absolutePath)
         }
         return builder.start()

@@ -92,6 +92,9 @@ class EmbeddedNodeHost(
                 put("SHELL", File(EmbeddedExecutablePaths.prepare(context), "bash").absolutePath)
                 put("LD_LIBRARY_PATH", context.applicationInfo.nativeLibraryDir)
                 put("SSL_CERT_FILE", certificates.absolutePath)
+                // The bundled Termux OpenSSL build otherwise reads its
+                // compiled-in, inaccessible Termux openssl.cnf on node -e.
+                put("OPENSSL_CONF", "/dev/null")
                 put("CODEX_CA_CERTIFICATE", certificates.absolutePath)
                 EmbeddedAgyRuntime.environment(context).forEach { (key, value) ->
                     put(key, value)
