@@ -95,7 +95,7 @@ Sources: [Termux recipes](https://github.com/termux/termux-packages),
 
 Open **Tools → Terminal** in Pocket. The terminal uses vendored xterm.js and an
 APK-owned `libcrew_terminal_host.so` PTY host running bundled Bash, initially in
-`$HOME/projects`. Terminal commands run as the Runtime app, without the code
+`$HOME`. Create projects directly at `~/project-name`. Terminal commands run as the Runtime app, without the code
 sandbox's 15-second timeout. Directory changes, interactive prompts and Ctrl+C
 work through the PTY. Returning to chat retains the session; **End** closes the
 shell and its foreground command. Runtime restart loses live terminal sessions,
@@ -115,18 +115,27 @@ registry integrity metadata under `public/vendor/xterm/`.
 
 Ask the Agent to build an Android project under Runtime HOME. Use
 `crew-build <workspace>` (default `assembleDebug`) or pass Gradle task/options,
-for example `crew-build ~/projects/my-app --offline assembleDebug` after a first
+for example `crew-build ~/my-app --offline assembleDebug` after a first
 online build. The CLI prints `CREW_BUILD_RESULT` with completion/error status,
 artifact SHA256 and a download URL. Return the URL as a clickable Markdown link.
 Logs and copied APKs stay under `~/.crew-pocket/builds/<id>`; debug signing keys
 remain in private `~/.android`. Native payload updates preserve these directories.
 
-The build payload provides JDK21, Gradle9.8, Android SDK35, build-tools34 data,
+The build payload provides JDK21, Gradle8.13 and Gradle9.8, Android SDK35/36, build-tools34/35 data,
 ARM64 AAPT2/AIDL/zipalign and apksigner. Official Google SDK archives are pinned
 in `android-build-sdk.lock.json` and verified against SHA256 and upstream SHA1.
 Desktop SDK ELF tools are excluded. Termux Android packages are build inputs;
 Agent commands execute APK-owned binaries and private data. New SDK/native tools
-require reviewed payload updates. No NDK/C/C++ compiler or pip is included.
+require reviewed payload updates. Android ARM64 NDK28.2.13676358, CMake3.22.1
+and Ninja are bundled; pip is not included. Their pinned archives and SHA256
+are in `native-build.lock.json`. NDK sysroot libraries remain compilation data;
+host executables run from installer-owned nativeLibraryDir. The NDK host folder
+uses AGP's `linux-x86_64` layout name but contains ARM64 Android binaries.
+
+The Gradle launcher respects `gradle-wrapper.properties` when its version is
+bundled. Without a wrapper, an AGP8 project uses 8.13; other projects use 9.8.
+Set `CREW_GRADLE_VERSION=8.13` or `9.8.0` explicitly when needed. Unsupported
+wrapper versions fail with an actionable message rather than running 9.8 silently.
 
 OpenJDK needs the private logical JDK layout even though ELF files are installed
 in a flat directory. The Java launcher applies its path adapter only to Java
@@ -136,7 +145,7 @@ AAPT2; `--no-daemon` prevents a long-lived Gradle daemon after builds. Upstream
 Gradle wrappers are app-data scripts: use the bundled `gradle`/`crew-build` entry.
 
 The Java Activity sample and a real Codex edit/build request passed on Android16.
-Kotlin, Flutter, NDK and arbitrary Gradle/AGP combinations need separate checks.
+Kotlin, Flutter and arbitrary Gradle/AGP combinations need separate checks.
 SDK dexdump/split-select legacy inspection commands fail explicitly as unsupported.
 APK download links in Pocket use Android's download notification; installation
 remains a separate user action.

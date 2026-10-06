@@ -288,3 +288,48 @@ readiness and task completion are not proof of every tool succeeding.
 
 The runtime must not be labelled `Termux-independent runtime verified` until AGY
 authentication/task execution and the full Pocket/Termux-shutdown flow also pass.
+
+## Native Android build payload (2026-10-06)
+
+Added pinned Gradle 8.13 alongside existing Gradle 9.8, official SDK Platform 36
+and Build Tools 35.0.0 alongside 35/34, Android ARM64 NDK r28c
+(28.2.13676358), CMake 3.22.1 and Ninja. Registry and archive locks are under
+`toolchain/`; upstream checksum verification runs before extraction.
+
+NDK host executables are statically linked ARM64 Android binaries from
+HomuHomu833/android-ndk-custom; CMake/Ninja are Android binaries from
+MrIkso/AndroidIDE-NDK. Their source archives, revisions and SHA256 are recorded in
+`native-build.lock.json` and the generated manifest. The `linux-x86_64` NDK host
+folder is an AGP-compatible layout name, not the binary architecture.
+Cross-compilation sysroot libraries stay in private assets without ELF rewriting.
+Only host executables are relocated to installer-owned JNI entries.
+
+Pre-install checks on the development phone:
+
+- Gradle 8.13 launcher loaded successfully with JDK21.
+- Flattening CMake into a JNI-like directory first reproduced `Could not find
+  CMAKE_ROOT`. The native launcher/path adapter restored its logical module path;
+  `--system-information` then reported the correct `share/cmake-3.22` directory.
+- Flattened NDK Clang invoked through the native launcher compiled and linked a
+  C++17 ARM64 Android shared library using `<vector>` and `<android/log.h>`.
+  `DT_NEEDED` included `libc++_shared.so`, libc, libm and libdl.
+- Runtime Dev APK built successfully. These checks ran under the development
+  Termux UID; they are not proof of execution under the Runtime app UID.
+
+Wireless ADB was offline and the required install script refused installation.
+Runtime UID execution and the complete `~/crew-teacher` AGP8.11.1 / SDK36 / Oboe
+APK build are pending reconnection and installation. Do not mark this project
+or the native build payload verified until the real app UID build succeeds.
+
+New Terminal sessions start at Runtime HOME. Opening Terminal no longer creates
+`~/projects`; existing terminal sessions are left alone.
+
+The isolated `crew-teacher` checkout subsequently completed `assembleDebug` in
+27 seconds with Gradle8.13, AGP8.11.1, SDK36, NDK r28c and CMake3.22.1/Ninja.
+CMake identified both compilers as Clang19, and the signed APK includes
+`lib/arm64-v8a/libcrewaudio.so`. This is a development UID
+integration check using the packaged tool layout, not Runtime UID certification.
+The integration also caught CMake resolving the launcher symlink instead of the
+actual tool; the path adapter now preserves its logical argv[0] path. Gradle now
+passes the SDK alias for APK-owned AAPT2 as a project property, preventing a
+legacy global/project Termux AAPT2 path from taking precedence.

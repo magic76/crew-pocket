@@ -42,6 +42,11 @@ object EmbeddedToolchain {
             marker.writeText(revision)
         }
         val manifest = JSONObject(File(target, "manifest.json").readText())
+        val nativeLaunchers = manifest.optJSONObject("nativeLaunchers")
+        nativeLaunchers?.keys()?.forEach { name ->
+            val library = File(context.applicationInfo.nativeLibraryDir, nativeLaunchers.getJSONObject(name).getString("library"))
+            check(library.isFile && library.canRead() && library.canExecute()) { "Missing native build tool: $library" }
+        }
         for (section in listOf("links", "commands")) {
             val values = manifest.getJSONObject(section)
             for (name in values.keys()) {
@@ -62,8 +67,7 @@ object EmbeddedToolchain {
             val platformTools = File(sdk, "platform-tools").apply { mkdirs() }
             link(File(platformTools, "adb"), File(bin, "adb"))
             File(platformTools, "source.properties").writeText("Pkg.Desc=Crew Runtime Android Platform Tools\nPkg.Revision=37.0.0\n")
-            val buildTools = File(sdk, "build-tools/34.0.0")
-            if (buildTools.isDirectory) {
+            for (buildTools in File(sdk, "build-tools").listFiles().orEmpty().filter { it.isDirectory }) {
                 for (name in listOf("aapt", "aapt2", "aidl", "zipalign", "apksigner")) link(File(buildTools, name), File(bin, name))
                 // SDK validation checks legacy inspection entries even when the
                 // Android plugin never uses them. Calls fail explicitly.
@@ -95,6 +99,8 @@ object EmbeddedToolchain {
                 put("GRADLE_USER_HOME", File(context.filesDir, ".gradle").absolutePath)
                 put("ANDROID_HOME", File(target, "android-sdk").absolutePath)
                 put("ANDROID_SDK_ROOT", File(target, "android-sdk").absolutePath)
+                put("ANDROID_NDK_HOME", File(target, "android-sdk/ndk/28.2.13676358").absolutePath)
+                put("ANDROID_NDK_ROOT", File(target, "android-sdk/ndk/28.2.13676358").absolutePath)
                 put("JAVA_TOOL_OPTIONS", "-Djava.home=${javaHome.absolutePath} -Duser.home=${context.filesDir.absolutePath} -Djava.io.tmpdir=${context.cacheDir.absolutePath} -Djdk.lang.Process.launchMechanism=FORK -Djavax.net.ssl.trustStore=${EmbeddedTrustStore.javaTrustStore(context).absolutePath} -Djavax.net.ssl.trustStoreType=JKS -Djavax.net.ssl.trustStorePassword=changeit")
             }
             put("PYTHONHOME", target.absolutePath)

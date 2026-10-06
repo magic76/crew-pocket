@@ -6,7 +6,7 @@
   panel.id = 'terminal-panel'; panel.hidden = true;
   panel.setAttribute('aria-label', 'Terminal');
   panel.innerHTML = `<header><strong>Terminal</strong><span id="terminal-status" role="status">尚未啟動</span><button type="button" id="terminal-start">開啟</button><button type="button" id="terminal-end">結束</button><button type="button" id="terminal-hide">返回對話</button></header>
-    <p class="terminal-note">專案預設放在 ~/projects。返回對話會保留終端；結束會停止 shell 與前景命令。</p>
+    <p class="terminal-note">專案放在 Home 根目錄（~/專案名稱）。返回對話會保留終端；結束會停止 shell 與前景命令。</p>
     <div id="terminal-screen"></div>
     <nav aria-label="終端快捷鍵"><button data-input="interrupt">Ctrl+C</button><button data-input="tab">Tab</button><button data-input="up">↑</button><button data-input="down">↓</button><button data-input="escape">Esc</button><button data-input="eof">Ctrl+D</button><button id="terminal-paste">貼上</button></nav>
     <form id="terminal-command"><input id="terminal-command-input" aria-label="輸入終端指令" placeholder="git clone https://github.com/帳號/專案.git" autocomplete="off" autocapitalize="off" spellcheck="false"><button type="submit">送出 ↵</button></form>`;

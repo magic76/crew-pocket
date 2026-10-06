@@ -99,12 +99,16 @@ def main():
         subprocess.run(['dpkg-deb', '-x', str(deb), str(stage)], check=True)
         provenance.append({k: record[k] for k in ['Package', 'Version', 'SHA256', 'Filename']})
     prefix = stage / 'data/data/com.termux/files/usr'
+    native_spec = importlib.util.spec_from_file_location('crew_native_build', RUNTIME / 'scripts/fetch-native-build.py')
+    native_build = importlib.util.module_from_spec(native_spec)
+    native_spec.loader.exec_module(native_build)
+    build_packages = native_build.stage(work, prefix)
     assets = RUNTIME / 'src/main/assets/toolchain'
     jni = RUNTIME / 'src/main/jniLibs/arm64-v8a'
     shutil.rmtree(assets, ignore_errors=True); assets.mkdir(parents=True); jni.mkdir(parents=True, exist_ok=True)
     for old in jni.glob('libcrew_tool_*.so'): old.unlink()
     # Preserve logical names in data. ELF entries become links to JNI files at runtime.
-    elf = {}; links = {}; commands = {}; scripts = dict(registry['scripts'])
+    elf = {}; links = {}; commands = {}; scripts = dict(registry['scripts']); native_launchers = {}
     def library_name(source):
         return 'libcrew_tool_' + hashlib.sha256(str(source.relative_to(prefix)).encode()).hexdigest()[:16] + '.so'
     def is_elf(path):
@@ -122,23 +126,34 @@ def main():
         if source.is_dir():
             for child in source.iterdir(): copy_data(child, relative / child.name)
         elif source.is_file():
-            if is_elf(source): links[str(relative)] = add_elf(source)
+            # NDK sysroot/shared libraries are cross-compilation inputs, not
+            # host executables. Preserve their original names and architectures.
+            target_data = str(relative).startswith('android-sdk/ndk/') and ('sysroot' in relative.parts or '/lib/clang/' in str(relative))
+            if is_elf(source) and not target_data:
+                library = add_elf(source)
+                if relative.name in {'clang', 'clang++', 'clang-19', 'cmake', 'ctest', 'cpack'} and str(relative).startswith('android-sdk/'):
+                    native_launchers[relative.name] = (library, str(relative), 'clang' if relative.name.startswith('clang') else 'cmake')
+                    library = 'libcrew_native_launcher.so'
+                links[str(relative)] = library
             else:
                 target.parent.mkdir(parents=True, exist_ok=True); shutil.copyfile(source, target)
                 if re.match(rb'#![^\n]*(?:/sh|/bash)(?:\s|$)', source.read_bytes().split(b'\n', 1)[0]) and str(relative).startswith('libexec/git-core/'):
                     scripts[source.name] = ['bash', str(relative)]
     for pattern in registry['data']:
         for source in prefix.glob(pattern): copy_data(source, source.relative_to(prefix))
-    for name, relative in registry['commands'].items(): commands[name] = add_elf(prefix / relative)
+    for name, relative in registry['commands'].items():
+        commands[name] = 'libcrew_native_launcher.so' if name in native_launchers else add_elf(prefix / relative)
+    (assets / 'native-launchers.tsv').write_text(''.join(f'{name}\t{library}\t{relative}\t{kind}\n' for name, (library, relative, kind) in native_launchers.items()))
     for relative, library in links.items():
         if relative.startswith('libexec/git-core/'): commands[pathlib.Path(relative).name] = library
     # DT_NEEDED closure; all missing Android dependencies stop the build.
-    pending = list(elf); visited = set(); rewrites = {}
+    pending = list(elf); visited = set(); rewrites = {}; dynamic = {}
     while pending:
         source = pending.pop(0)
         if source in visited: continue
         visited.add(source)
-        needed = run('patchelf', '--print-needed', str(source)).splitlines()
+        dynamic[source] = 'Dynamic section at offset' in run('readelf', '-d', str(source))
+        needed = run('patchelf', '--print-needed', str(source)).splitlines() if dynamic[source] else []
         rewrites[source] = {}
         for name in needed:
             if name in SYSTEM: continue
@@ -153,8 +168,8 @@ def main():
         if source.relative_to(prefix) == pathlib.Path('bin/git'):
             print('Relocated Git credential-helper shell', relocate_git_shell(target), flush=True)
         for old, new in rewrites[source].items(): subprocess.run(['patchelf', '--replace-needed', old, new, str(target)], check=True)
-        subprocess.run(['patchelf', '--set-rpath', '$ORIGIN', str(target)], check=True)
-        if run('patchelf', '--print-soname', str(target)):
+        if dynamic[source]: subprocess.run(['patchelf', '--set-rpath', '$ORIGIN', str(target)], check=True)
+        if dynamic[source] and run('patchelf', '--print-soname', str(target)):
             subprocess.run(['patchelf', '--set-soname', library, str(target)], check=True)
     # Android's verneed resolver requires rewritten DT_NEEDED and SONAME to
     # agree. Update Python's runtime metadata used by ctypes.PyDLL as well.
@@ -186,7 +201,9 @@ def main():
     relocation.relocate(assets)
     # Upstream license/copyright data travels with the payload, not just versions.
     copy_data(prefix / 'share/doc', pathlib.Path('share/doc')) if (prefix / 'share/doc').exists() else None
-    manifest = {'schemaVersion': 1, 'limitations': registry.get('limitations', []), 'tools': list(registry['commands']) + list(registry['scripts']), 'commands': commands, 'links': links, 'packages': provenance,
+    manifest = {'schemaVersion': 1, 'limitations': registry.get('limitations', []), 'buildPackages': build_packages,
+                'nativeLaunchers': {name: {'library': library, 'path': relative, 'kind': kind} for name, (library, relative, kind) in native_launchers.items()},
+                'tools': list(registry['commands']) + list(registry['scripts']), 'commands': commands, 'links': links, 'packages': provenance,
                 'nativeOverrides': {'libandroid-posix-semaphore.so': {'source': 'crew/posix-semaphore.c', 'sha256': hashlib.sha256((RUNTIME / 'toolchain/posix-semaphore.c').read_bytes()).hexdigest()}},
                 'dataAliases': {name: 'libexec/git-core/' + name for name in ['git-sh-setup', 'git-sh-i18n'] if (assets / 'libexec/git-core' / name).exists()},
                 'pythonHome': '.', 'pythonVersion': next((x.name for x in (assets / 'lib').glob('python*')), None)}

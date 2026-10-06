@@ -33,7 +33,13 @@
     "zipalign": "bin/zipalign",
     "aapt": "bin/aapt",
     "aidl": "bin/aidl",
-    "gh": "bin/gh"
+    "gh": "bin/gh",
+    "clang": "android-sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/linux-x86_64/bin/clang",
+    "clang++": "android-sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++",
+    "cmake": "android-sdk/cmake/3.22.1/bin/cmake",
+    "ctest": "android-sdk/cmake/3.22.1/bin/ctest",
+    "cpack": "android-sdk/cmake/3.22.1/bin/cpack",
+    "ninja": "android-sdk/cmake/3.22.1/bin/ninja"
   },
   "data": [
     "lib/python*",
@@ -53,7 +59,12 @@
     "lib/jvm/java-21-openjdk/jmods/java.base.jmod",
     "opt/gradle/lib",
     "share/java/apksigner.jar",
-    "share/doc/gh"
+    "share/doc/gh",
+    "opt/gradle-8.13/lib",
+    "opt/gradle-8.13/LICENSE",
+    "opt/gradle-8.13/NOTICE",
+    "android-sdk/ndk/28.2.13676358",
+    "android-sdk/cmake/3.22.1"
   ],
   "scripts": {
     "npm": [
@@ -82,7 +93,7 @@
     ]
   },
   "limitations": [
-    "Java/Gradle Android builds use bundled JDK21, Gradle9.8, SDK35 and build-tools34. Native npm/Python addons and NDK/C/C++ compilation still require compatible Android payloads; no C/C++ compiler or pip is bundled.",
+    "Java/Android builds bundle JDK21, Gradle8.13 and Gradle9.8, SDK35/36, build-tools34/35, Android ARM64 NDK28.2.13676358, CMake3.22.1 and Ninja. Native npm/Python addons still require compatible build configuration; no pip is bundled.",
     "App-data shebang executables cannot run directly. Invoke installed JS/Python entries with bundled node/python3; arbitrary npx CLI execution is not certified.",
     "Git SSH/Perl extensions and ImageMagick external Ghostscript/Graphviz delegates are not bundled.",
     "Runtime ADB requires its own Wireless Debugging pairing. Jev requires a TypeSafe API key.",

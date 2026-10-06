@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "packages": [
+    {
+      "kind": "gradle",
+      "url": "https://services.gradle.org/distributions/gradle-8.13-bin.zip",
+      "sha256": "20f1b1176237254a6fc204d8434196fa11a4cfb387567519c61556e8710aed78",
+      "root": "gradle-8.13",
+      "destination": "opt/gradle-8.13"
+    },
+    {
+      "kind": "ndk",
+      "url": "https://github.com/HomuHomu833/android-ndk-custom/releases/download/r28/android-ndk-r28c-aarch64-linux-android.tar.xz",
+      "sha256": "d4ebdab59e894785a2879bc9b01967cba52a8b170b1d18befc117b1eeabadd88",
+      "root": "android-ndk-r28c",
+      "destination": "android-sdk/ndk/28.2.13676358"
+    },
+    {
+      "kind": "cmake",
+      "url": "https://github.com/MrIkso/AndroidIDE-NDK/releases/download/cmake/cmake-3.22.1-android-aarch64.zip",
+      "sha256": "5936755e4d2b28701f1195252188519cd0db18db100fe3406a5738decbe842cc",
+      "root": "3.22.1",
+      "destination": "android-sdk/cmake/3.22.1"
+    }
+  ]
+}

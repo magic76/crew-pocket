@@ -37,6 +37,7 @@ jobs:
           bash -n android-wrapper/runtime/scripts/fetch-toolchain.sh
           python3 -c "import ast; ast.parse(open('android-wrapper/runtime/scripts/check-toolchain-apk.py').read()); ast.parse(open('android-wrapper/runtime/scripts/relocate-python.py').read())"
           python3 -c "import ast; ast.parse(open('android-wrapper/runtime/scripts/fetch-toolchain.py').read())"
+          python3 -c "import ast; ast.parse(open('android-wrapper/runtime/scripts/fetch-native-build.py').read())"
           bash -n android-wrapper/runtime/scripts/fetch-termux-node-payload.sh
           bash -n android-wrapper/runtime/scripts/fetch-codex-payload.sh
           bash -n android-wrapper/runtime/scripts/fetch-official-agy-payload.sh
