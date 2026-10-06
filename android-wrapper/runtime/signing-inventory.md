@@ -74,3 +74,19 @@ Future Dev requests can refer to `.crew-pocket/signing-inventory.md` in Runtime
 HOME and use the project-local release key copy above. Always compare the signer
 with the installed APK before updating. Public certificate information may be
 committed; private keys must remain excluded.
+
+## Runtime signing password files (2026-10-07)
+
+At the user's request the previously successful signing passwords were delivered
+as private Runtime files, without putting their contents in conversation text:
+
+- Keystore password: Runtime HOME `/.crew-pocket/crew-helper-keystore.pass`.
+- Private key password: Runtime HOME `/.crew-pocket/crew-helper-key.pass`.
+
+Both files are mode0600. `keytool -storepass:file` successfully opened the
+project-local Helper release keystore using the password file and reported the
+matching Helper certificate. For apksigner use:
+`--ks-pass file:<absolute-keystore-password-path>` and
+`--key-pass file:<absolute-key-password-path>`, with key alias `crew`.
+Only these file paths are documented in Git; the password files are outside the
+project checkout and their contents are not committed.
