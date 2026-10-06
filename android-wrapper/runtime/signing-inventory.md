@@ -1,6 +1,6 @@
 # Android signing inventory
 
-Verified 2026-10-06 on SM-S938B / Android16. This document contains public
+Verified 2026-10-06 on SM-S938B / Android16; key copy updated 2026-10-07. This document contains public
 certificate fingerprints and file locations only. Keystore passwords and private
 keys are not stored here or committed.
 
@@ -40,9 +40,18 @@ release key. They have not been renamed, moved or deleted by this inventory.
 - Runtime Dev HOME: `/data/user/0/com.crewpocket.runtime.dev/files`.
 
 Identical relative filenames in these directories refer to different files.
-Runtime Dev cannot directly read Termux's private release keystore. In this
-update the CI APK was signed in Termux and only the signed APK was returned to
-Runtime. The private release key was not copied to Runtime.
+Runtime Dev cannot directly read Termux's private release keystore. The initial
+CI APK updates were signed in Termux. On 2026-10-07 the user explicitly requested
+copying the key to Dev, and a matching copy was placed at:
+`/data/user/0/com.crewpocket.runtime.dev/files/crew-helper/.signing/CrewHelper-release.keystore`.
+
+The `.signing` directory is mode0700 and the key mode0600. The project's local
+`.git/info/exclude` includes `/.signing/`; `git check-ignore` passed and the
+checkout remained clean. Runtime keytool verified alias `crew` and the current
+Helper update certificate above. No private key was committed. The original
+Termux key remains in its canonical location. For the project's lightweight
+build script, `CREW_HELPER_KEYSTORE` can point at this Runtime copy; Gradle/CI
+signing still requires explicit project configuration.
 
 ## Other credentials are separate
 
@@ -62,6 +71,6 @@ Runtime. The private release key was not copied to Runtime.
   `apksigner verify` passes with the current Helper update certificate above.
 
 Future Dev requests can refer to `.crew-pocket/signing-inventory.md` in Runtime
-HOME and ask for the Helper release certificate shown above. An unsigned CI APK
-can be signed externally and then installed by Runtime without giving Runtime
-access to the private key.
+HOME and use the project-local release key copy above. Always compare the signer
+with the installed APK before updating. Public certificate information may be
+committed; private keys must remain excluded.
