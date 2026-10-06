@@ -12,6 +12,15 @@ fi
 
 patchelf --set-rpath '$ORIGIN' "$ROOT_DIR/android-wrapper/runtime/src/main/jniLibs/arm64-v8a/libcrew_tool_launcher.so"
 
+"$COMPILER" -O2 -fPIE -pie "$ROOT_DIR/android-wrapper/runtime/toolchain/terminal-host.c" -o "$ROOT_DIR/android-wrapper/runtime/src/main/jniLibs/arm64-v8a/libcrew_terminal_host.so"
+patchelf --set-rpath '$ORIGIN' "$ROOT_DIR/android-wrapper/runtime/src/main/jniLibs/arm64-v8a/libcrew_terminal_host.so"
+
+"$COMPILER" -O2 -fPIE -pie "$ROOT_DIR/android-wrapper/runtime/toolchain/java-launcher.c" -o "$ROOT_DIR/android-wrapper/runtime/src/main/jniLibs/arm64-v8a/libcrew_java_launcher.so"
+"$COMPILER" -O2 -fPIC -shared "$ROOT_DIR/android-wrapper/runtime/toolchain/java-paths.c" -ldl -o "$ROOT_DIR/android-wrapper/runtime/src/main/jniLibs/arm64-v8a/libcrew_java_paths.so"
+"$COMPILER" -O2 -fPIE -pie "$ROOT_DIR/android-wrapper/runtime/toolchain/sdk-unsupported.c" -o "$ROOT_DIR/android-wrapper/runtime/src/main/jniLibs/arm64-v8a/libcrew_sdk_unsupported.so"
+
 SEMAPHORE_LIBRARY="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["links"]["lib/libandroid-posix-semaphore.so"])' "$ROOT_DIR/android-wrapper/runtime/src/main/assets/toolchain/manifest.json")"
 "$COMPILER" -O2 -fPIC -shared "$ROOT_DIR/android-wrapper/runtime/toolchain/posix-semaphore.c" -Wl,-soname,"$SEMAPHORE_LIBRARY" -o "$ROOT_DIR/android-wrapper/runtime/src/main/jniLibs/arm64-v8a/$SEMAPHORE_LIBRARY"
 patchelf --set-rpath '$ORIGIN' "$ROOT_DIR/android-wrapper/runtime/src/main/jniLibs/arm64-v8a/$SEMAPHORE_LIBRARY"
+
+CREW_TOOLCHAIN_WORK_DIR="$WORK_DIR" python3 "$ROOT_DIR/android-wrapper/runtime/scripts/fetch-build-sdk.py"

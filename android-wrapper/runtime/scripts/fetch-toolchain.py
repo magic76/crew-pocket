@@ -63,8 +63,20 @@ def main():
         if not deb.exists():
             print('Download', name, record['Version'], flush=True)
             temporary = deb.with_suffix('.partial')
-            temporary.write_bytes(download(args.base + '/' + record['Filename']))
-            temporary.replace(deb)
+            last_error = None
+            for attempt in range(3):
+                base = 'https://packages-cf.termux.dev/apt/termux-main' if attempt and args.base == 'https://packages.termux.dev/apt/termux-main' else args.base
+                try:
+                    with urllib.request.urlopen(base + '/' + record['Filename'], timeout=120) as response, temporary.open('wb') as output:
+                        shutil.copyfileobj(response, output, 256 * 1024)
+                    if hashlib.sha256(temporary.read_bytes()).hexdigest() != record['SHA256']:
+                        raise RuntimeError('SHA256 mismatch: ' + name)
+                    temporary.replace(deb)
+                    break
+                except (OSError, RuntimeError) as error:
+                    last_error = error
+                    print('Retry package', name, attempt + 1, str(error), flush=True)
+            else: raise last_error
         if hashlib.sha256(deb.read_bytes()).hexdigest() != record['SHA256']: raise RuntimeError('SHA256 mismatch: ' + name)
         return deb
     with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
@@ -140,8 +152,15 @@ def main():
     interpreters = {'node': 'libnode_exec.so', 'bash': 'libbash_exec.so', 'python3': commands['python3']}
     (assets / 'launchers.tsv').write_text(''.join(f'{name}\t{interpreters[interpreter]}\t{entry}\n' for name, (interpreter, entry) in scripts.items()))
     for name in scripts: commands[name] = 'libcrew_tool_launcher.so'
+    java_tools = {name: commands[name] for name in ['java', 'javac', 'jar', 'keytool', 'jlink', 'jmod'] if name in commands}
+    if java_tools:
+        java_tools['jvm'] = links['lib/jvm/java-21-openjdk/lib/server/libjvm.so']
+        (assets / 'java-native.tsv').write_text(''.join(f'{name}\t{library}\n' for name, library in java_tools.items()))
+        for name in java_tools:
+            if name != 'jvm': commands[name] = 'libcrew_java_launcher.so'
     (assets / 'crew').mkdir(exist_ok=True)
-    shutil.copyfile(RUNTIME / 'toolchain/jev.cjs', assets / 'crew/jev.cjs')
+    for script in (RUNTIME / 'toolchain').glob('*.cjs'):
+        shutil.copyfile(script, assets / 'crew' / script.name)
     shutil.copyfile(RUNTIME / 'toolchain/sources.json', assets / 'crew/sources.json')
     shutil.copyfile(RUNTIME / 'toolchain/posix-semaphore.c', assets / 'crew/posix-semaphore.c')
     for name, (_, entry) in scripts.items():

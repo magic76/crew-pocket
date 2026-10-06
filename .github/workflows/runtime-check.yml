@@ -70,5 +70,9 @@ jobs:
           node --check lib/sandbox.js
           node --check lib/storage.js
           node --check lib/workspaces.js
+          node --check lib/terminal.js
+          node --check lib/build-artifacts.js
+          for file in android-wrapper/runtime/toolchain/*.cjs; do node --check "$file"; done
+          python3 -c "import ast,pathlib; ast.parse(pathlib.Path('android-wrapper/runtime/scripts/fetch-build-sdk.py').read_text())"
           node --check server.js
           for file in public/js/*.js; do node --check "$file"; done

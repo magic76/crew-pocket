@@ -3,6 +3,7 @@ package com.crewpocket.app
 import android.Manifest
 import android.app.Activity
 import android.app.AlertDialog
+import android.app.DownloadManager
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.BroadcastReceiver
@@ -14,6 +15,7 @@ import android.graphics.Color
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Environment
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
@@ -21,6 +23,7 @@ import android.text.InputType
 import android.view.Gravity
 import android.view.View
 import android.webkit.GeolocationPermissions
+import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
 import android.webkit.PermissionRequest
 import android.webkit.ValueCallback
@@ -223,6 +226,32 @@ class MainActivity : Activity() {
             setGeolocationEnabled(true)
             allowContentAccess = true
             allowFileAccess = false
+        }
+        webView.setDownloadListener { target, _, _, _, _ ->
+            val uri = Uri.parse(target)
+            val artifact = uri.path?.matches(Regex("/api/build-artifacts/[a-f0-9-]{36}/[A-Za-z0-9._-]+\\.apk")) == true
+            if (uri.scheme != "http" || uri.host !in listOf("127.0.0.1", "localhost") || uri.port != BuildConfig.SERVER_PORT || !artifact) {
+                Toast.makeText(this, "此下載連結不屬於目前 Runtime", Toast.LENGTH_SHORT).show()
+            } else {
+                runCatching {
+                    val filename = "crew-${System.currentTimeMillis()}-${uri.lastPathSegment}"
+                    val request = DownloadManager.Request(uri)
+                        .setTitle(filename)
+                        .setMimeType("application/vnd.android.package-archive")
+                        .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                    CookieManager.getInstance().getCookie(target)?.let { request.addRequestHeader("Cookie", it) }
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        request.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, filename)
+                    } else {
+                        request.setDestinationInExternalFilesDir(this, Environment.DIRECTORY_DOWNLOADS, filename)
+                    }
+                    (getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager).enqueue(request)
+                }.onSuccess {
+                    Toast.makeText(this, "正在下載 APK，可從下載通知開啟", Toast.LENGTH_SHORT).show()
+                }.onFailure {
+                    Toast.makeText(this, "APK 下載失敗：${it.message}", Toast.LENGTH_LONG).show()
+                }
+            }
         }
         webView.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(

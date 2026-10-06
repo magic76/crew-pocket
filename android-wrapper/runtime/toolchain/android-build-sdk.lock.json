@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "packages": [
+    {
+      "path": "platforms/android-35",
+      "url": "https://dl.google.com/android/repository/platform-35_r02.zip",
+      "sha1": "0bb560a90a7a2cbd0dd8348224d518b638fe7949",
+      "sha256": "0988cacad01b38a18a47bac14a0695f246bc76c1b06c0eeb8eb0dc825ab0c8e0"
+    },
+    {
+      "path": "build-tools/34.0.0",
+      "url": "https://dl.google.com/android/repository/build-tools_r34-linux.zip",
+      "sha1": "d6d58e0c6925a9e4d9a541e84cd1f405c2f9d2a9",
+      "sha256": "e858c4b60069d0431051b225d384413b1643e1289b00a4825aed347f25bd510f"
+    }
+  ]
+}

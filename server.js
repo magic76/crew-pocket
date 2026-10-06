@@ -33,6 +33,8 @@ const { getProvider, normalizeProviderId, listProviders, listProviderMetadata } 
 const { handleLiveSync, handleLiveTranscribe, handleQuickTranscribe } = require('./lib/history');
 const { generateCompactedSummary, buildCompactionSource } = require('./lib/compact');
 const { handleRunCode } = require('./lib/sandbox');
+const { handleTerminal } = require('./lib/terminal');
+const { handleBuildArtifact } = require('./lib/build-artifacts');
 const { handleUsage } = require('./lib/usage');
 const { handleListFiles, handleReadFile, handleSaveFile, handleDeleteFile, handleTransferFile } = require('./lib/files');
 const { handleListPublicAssets } = require('./lib/public-assets');
@@ -2764,7 +2766,11 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
-  if (pathname === '/api/home' && req.method === 'GET') {
+  if (pathname.startsWith('/api/build-artifacts/')) {
+    return handleBuildArtifact(req, res, pathname);
+  } else if (pathname === '/api/terminal' || pathname.startsWith('/api/terminal/')) {
+    return handleTerminal(req, res, parsedUrl);
+  } else if (pathname === '/api/home' && req.method === 'GET') {
     return handleCrewHome(req, res);
   } else if (pathname === '/api/remote-pairing' && req.method === 'POST') {
     return handleRemotePairing(req, res);

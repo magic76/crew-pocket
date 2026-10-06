@@ -7,7 +7,13 @@
     "ripgrep",
     "imagemagick",
     "android-tools",
-    "termux-licenses"
+    "termux-licenses",
+    "openjdk-21",
+    "gradle",
+    "aapt2",
+    "aapt",
+    "apksigner",
+    "aidl"
   ],
   "commands": {
     "python3": "bin/python3",
@@ -15,7 +21,17 @@
     "git": "bin/git",
     "rg": "bin/rg",
     "magick": "bin/magick",
-    "adb": "bin/adb"
+    "adb": "bin/adb",
+    "java": "lib/jvm/java-21-openjdk/bin/java",
+    "javac": "lib/jvm/java-21-openjdk/bin/javac",
+    "jar": "lib/jvm/java-21-openjdk/bin/jar",
+    "keytool": "lib/jvm/java-21-openjdk/bin/keytool",
+    "jlink": "lib/jvm/java-21-openjdk/bin/jlink",
+    "jmod": "lib/jvm/java-21-openjdk/bin/jmod",
+    "aapt2": "bin/aapt2",
+    "zipalign": "bin/zipalign",
+    "aapt": "bin/aapt",
+    "aidl": "bin/aidl"
   },
   "data": [
     "lib/python*",
@@ -27,7 +43,14 @@
     "share/ImageMagick*",
     "etc/fonts",
     "share/fonts",
-    "share/LICENSES"
+    "share/LICENSES",
+    "lib/jvm/java-21-openjdk/lib",
+    "lib/jvm/java-21-openjdk/conf",
+    "lib/jvm/java-21-openjdk/legal",
+    "lib/jvm/java-21-openjdk/release",
+    "lib/jvm/java-21-openjdk/jmods/java.base.jmod",
+    "opt/gradle/lib",
+    "share/java/apksigner.jar"
   ],
   "scripts": {
     "npm": [
@@ -41,12 +64,25 @@
     "jev": [
       "node",
       "crew/jev.cjs"
+    ],
+    "gradle": [
+      "node",
+      "crew/gradle.cjs"
+    ],
+    "apksigner": [
+      "node",
+      "crew/apksigner.cjs"
+    ],
+    "crew-build": [
+      "node",
+      "crew/crew-build.cjs"
     ]
   },
   "limitations": [
-    "Native npm/Python addons and native compilation require Android payloads in a Runtime APK update; no general compiler or pip is bundled.",
+    "Java/Gradle Android builds use bundled JDK21, Gradle9.8, SDK35 and build-tools34. Native npm/Python addons and NDK/C/C++ compilation still require compatible Android payloads; no C/C++ compiler or pip is bundled.",
     "App-data shebang executables cannot run directly. Invoke installed JS/Python entries with bundled node/python3; arbitrary npx CLI execution is not certified.",
     "Git SSH/Perl extensions and ImageMagick external Ghostscript/Graphviz delegates are not bundled.",
-    "Runtime ADB requires its own Wireless Debugging pairing. Jev requires a TypeSafe API key."
+    "Runtime ADB requires its own Wireless Debugging pairing. Jev requires a TypeSafe API key.",
+    "For APK builds use crew-build <workspace> [Gradle tasks], default assembleDebug. Use bundled gradle rather than executing app-data gradlew. Read CREW_BUILD_RESULT and return its artifact download URL as a clickable Markdown link. Dexdump/split-select legacy inspection commands are unsupported."
   ]
 }

@@ -20,7 +20,9 @@ with zipfile.ZipFile(sys.argv[1]) as apk:
             if gzip.decompress(path.read_bytes()) == apk.read(name[:-3]): continue
         missing.append(name)
     manifest = json.loads((payload / 'manifest.json').read_text())
-    libraries = set(manifest['commands'].values()) | set(manifest['links'].values())
+    libraries = set(manifest['commands'].values()) | set(manifest['links'].values()) | {'libcrew_terminal_host.so', 'libcrew_java_paths.so', 'libcrew_sdk_unsupported.so'}
+    java_map = payload / 'java-native.tsv'
+    if java_map.exists(): libraries.update(line.split('\t')[1] for line in java_map.read_text().splitlines())
     missing.extend('lib/arm64-v8a/' + name for name in libraries
                    if 'lib/arm64-v8a/' + name not in names)
     if missing:

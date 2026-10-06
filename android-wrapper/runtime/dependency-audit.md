@@ -4,6 +4,48 @@ Inspected on 2026-10-06 for `feature/companion-runtime`, Dev packages on Samsung
 SM-S938B / Android 16. Runtime ports are 8100 (server), 8867 (Codex bridge), and
 8868 (status). Dev disables Termux fallback.
 
+## Agent APK build delivery (2026-10-06)
+
+On Samsung SM-S938B / Android 16, Runtime Dev now provides OpenJDK 21.0.12,
+Gradle 9.8.0, ARM64 AAPT/AAPT2/AIDL/zipalign, apksigner, SDK platform 35 and
+build-tools 34 Java resources. Build tools use private HOME/JAVA_HOME/SDK/Gradle
+cache; Termux paths are only development/package sources.
+
+Actual gate: a new Java Android Activity project was created under Runtime HOME.
+`crew-build` downloaded its Android Gradle plugin dependencies into Runtime's
+private cache and completed all 31 Gradle tasks in 42.9 seconds. The APK contained
+AndroidManifest.xml and classes.dex; Runtime apksigner verified its APK v2
+signature and Runtime zipalign returned 0. Artifact download returned matching
+SHA256. A second request went through Dev `/api/chat` to Codex `gpt-6-sol`:
+Agent edited the Activity text and ran `crew-build . --offline assembleDebug`.
+The build completed in 12.1 seconds and the Agent turn completed in 37.6 seconds,
+with three executions and one changed file.
+
+Agent-produced artifact: build `509b4867-5857-4d1f-813a-2c2e98042bb2`,
+7375 bytes, SHA256 `b52f825cdf628167db71b1e5ee5f84c57bdedbc3001216966311af8d035d7f12`.
+The proof conversation is `01a10fdc-40ef-7770-b6f8-76df4eef3ec4`.
+
+First Java failure was `could not find libjava.so`: the installer owns ELF files
+in a flat native directory. A Java-only launcher/path adapter exposes the private
+logical JDK layout to JLI and HotSpot, while every executable remains APK-owned.
+Javac and Java child processes then executed successfully. Android-generated
+PKCS12 exported certificates lacked OpenJDK trusted-certificate attributes;
+OpenJDK saw zero entries. Runtime now exports certificate-only JKS data; keytool
+reads all 143 Android roots and Gradle dependency downloads succeed.
+
+`crew-build` retains per-build logs, reports and APK copies in private HOME,
+with authenticated `/api/build-artifacts/<id>/<filename>` downloads. Projects,
+authentication data and signing keys are outside the immutable payload directory.
+The Java/Gradle payload is used on demand and Gradle runs without a persistent
+build daemon. A basic PTY terminal is also available; it is secondary to Agent
+execution.
+
+Scope: the actual proof covers Java APK builds with AGP 8.6.1 / SDK35. NDK/C/C++,
+Flutter, arbitrary SDK versions and Kotlin projects are not yet certified.
+Legacy SDK dexdump/split-select inspection entries return explicit unsupported
+errors; they are not certified tools. Runtime ADB still requires separate pairing.
+AGY authentication and the complete Termux-shutdown gate remain pending.
+
 ## Toolchain delivery update (2026-10-06)
 
 Python, Git, npm, ripgrep, ImageMagick, ADB and a Crew Jev CLI adapter are now
