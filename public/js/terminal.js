@@ -23,6 +23,24 @@
   function loadScript(src) {
     return new Promise((resolve, reject) => { const script = document.createElement('script'); script.src = src; script.onload = resolve; script.onerror = () => { script.remove(); reject(new Error('無法載入終端元件')); }; document.head.appendChild(script); });
   }
+  function calibrateTextScale() {
+    const screen = panel.querySelector('#terminal-screen');
+    // Android WebView applies the system font scale to DOM text, while xterm's
+    // canvas glyph measurements remain unscaled. Keep both on the same grid.
+    const probe = document.createElement('span');
+    probe.style.cssText = 'position:absolute;visibility:hidden;font-size:13px;-webkit-text-size-adjust:100%;text-size-adjust:100%';
+    probe.textContent = 'W'; screen.appendChild(probe);
+    const measured = parseFloat(getComputedStyle(probe).fontSize);
+    probe.remove();
+    if (!Number.isFinite(measured) || measured <= 0) return;
+    const percentage = 100 * 13 / measured;
+    const adjustment = `${percentage}%`;
+    if (Math.abs(parseFloat(screen.style.webkitTextSizeAdjust) - percentage) > 0.001 || !screen.style.webkitTextSizeAdjust) {
+      screen.style.webkitTextSizeAdjust = adjustment;
+      screen.style.textSizeAdjust = adjustment;
+      if (term) term.refresh(0, term.rows - 1);
+    }
+  }
   async function initialize() {
     if (term) return;
     const stylesheet = document.createElement('link'); stylesheet.rel = 'stylesheet'; stylesheet.href = '/vendor/xterm/xterm.css'; document.head.appendChild(stylesheet);
@@ -32,7 +50,7 @@
     fit = new window.FitAddon.FitAddon(); term.loadAddon(fit); term.open(panel.querySelector('#terminal-screen'));
     term.onData(data => input(data));
     term.onResize(size => { if (id && !ended) enqueue('/resize', { rows: size.rows, cols: size.cols }); });
-    new ResizeObserver(() => { if (!panel.hidden) fit.fit(); }).observe(panel.querySelector('#terminal-screen'));
+    new ResizeObserver(() => { if (!panel.hidden) { calibrateTextScale(); fit.fit(); } }).observe(panel.querySelector('#terminal-screen'));
   }
   function enqueue(suffix, body) {
     const target = id;
@@ -61,6 +79,7 @@
   }
   async function open() {
     document.getElementById('tools-sheet-close-btn')?.click(); panel.hidden = false; viewport();
+    calibrateTextScale();
     if (opening) return opening;
     opening = (async () => {
       await initialize();
