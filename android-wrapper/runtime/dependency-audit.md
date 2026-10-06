@@ -316,10 +316,9 @@ Pre-install checks on the development phone:
 - Runtime Dev APK built successfully. These checks ran under the development
   Termux UID; they are not proof of execution under the Runtime app UID.
 
-Wireless ADB was offline and the required install script refused installation.
-Runtime UID execution and the complete `~/crew-teacher` AGP8.11.1 / SDK36 / Oboe
-APK build are pending reconnection and installation. Do not mark this project
-or the native build payload verified until the real app UID build succeeds.
+Wireless ADB was initially offline and the required install script refused
+installation. After reconnection and explicit approval to interrupt the Dev
+Terminal, installation and the Runtime UID build succeeded as recorded below.
 
 New Terminal sessions start at Runtime HOME. Opening Terminal no longer creates
 `~/projects`; existing terminal sessions are left alone.
@@ -333,3 +332,52 @@ The integration also caught CMake resolving the launcher symlink instead of the
 actual tool; the path adapter now preserves its logical argv[0] path. Gradle now
 passes the SDK alias for APK-owned AAPT2 as a project property, preventing a
 legacy global/project Termux AAPT2 path from taking precedence.
+
+### Installed Runtime UID verification
+
+On Samsung SM-S938B, Android 16, the required `~/install-apk.sh` installed the
+Runtime Dev APK successfully. The APK SHA256 was
+`aa630ca62e407c88bdf5852f673fe3ffea47f1940627f59055446ca9f560658b`;
+its signing certificate matched Dev Pocket. Stable Pocket remained installed.
+Dev Pocket normally started the companion through its signature permission.
+
+Commands launched through Dev server `/api/run-code` ran as Runtime UID 10608:
+
+- HOME: `/data/user/0/com.crewpocket.runtime.dev/files`.
+- PATH: Runtime HOME `/.crew-pocket/bin`, `/system/bin`, `/system/xbin`,
+  `/product/bin`; no Termux directory.
+- Node: installer-owned Runtime Dev `lib/arm64/libnode_exec.so`.
+- Gradle 8.13 selected for `crew-teacher`; explicit Gradle 9.8.0 also exited 0.
+- CMake 3.22.1, Ninja 1.11.1 and Clang 19.0.0 each executed successfully.
+- Java, SDK and NDK paths were under Runtime HOME `/.crew-pocket/toolchain`.
+- Status on 8868 reported `ready`, `payloadReady`, `companionEnabled` true,
+  `hostState: running`, `lastError: null`; providers were bundled Codex
+  `0.160.0-termux.3` and Antigravity `1.2.16`.
+- Dev Node `/healthz` on 8100 returned HTTP 204.
+
+The project fetches Oboe in CI rather than through a Git submodule. Its missing
+ignored `third_party/oboe` directory was populated with bundled Git using the
+same tag 1.9.3 (commit `b15f5e39c01a7ada306d959e5129620b145fb8b4`).
+The checkout retains a debug `.dev` application ID/version suffix modification;
+the native build also generates untracked `app/.cxx/` data. These project files
+were not reverted or committed during verification.
+
+Bundled `crew-build ~/crew-teacher --max-workers=2 assembleDebug` then completed
+under the Runtime UID with `CMAKE_BUILD_PARALLEL_LEVEL=2`, exit 0, duration
+56,575 ms. Gradle reported 35 executed tasks and `BUILD SUCCESSFUL in 55s`,
+including ARM64 CMake configuration, compilation, native library merge and APK
+packaging. Report ID: `eab4ca38-981b-40bc-995b-75bd452e798a`.
+
+The output APK was downloaded successfully through Dev Node's
+`/api/build-artifacts/eab4ca38-981b-40bc-995b-75bd452e798a/1-app-debug.apk`:
+
+- Size: 4,358,294 bytes.
+- SHA256: `c409318754c85f90d166940e559a9633cd0f5fe48230bc4d3fe165a6cf2326c0`.
+- Contains `lib/arm64-v8a/libcrewaudio.so` (AArch64).
+- Native `DT_NEEDED`: liblog.so, libOpenSLES.so, libm.so, libdl.so, libc.so;
+  all Android system libraries. This project links its C++ runtime statically.
+- Teacher APK was built and downloaded, not installed.
+
+The native Android build pipeline is verified under the Runtime app UID. This
+does not supersede the separate AGY authentication/task and full Pocket shutdown
+verification gates above.
