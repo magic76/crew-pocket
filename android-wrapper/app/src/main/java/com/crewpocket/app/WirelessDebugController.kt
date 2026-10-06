@@ -64,7 +64,8 @@ class WirelessDebugController(private val activity: Activity) {
             textSize = 15f
         }
         val helperText = TextView(activity).apply {
-            text = "輸入連線 IP:Port；第一次配對時再填配對 IP:Port 與 6 位配對碼。"
+            text = "連線 Port 與配對 Port 不同。第一次使用，請在 Android 無線偵錯選「使用配對碼配對裝置」，填入配對位址與 6 位碼後按「配對並連線」。" +
+                if (BuildConfig.APPLICATION_ID.endsWith(".dev")) "\nDev 需要獨立配對；Termux 的配對不會自動沿用。" else ""
             setTextColor(Color.rgb(100, 116, 139))
             textSize = 12f
             setPadding(0, dp(4), 0, dp(4))
@@ -243,15 +244,14 @@ class WirelessDebugController(private val activity: Activity) {
                             .filter { it.isNotBlank() }
                             .takeLast(2)
                             .joinToString("\n")
-                        statusView.text = "🔴 尚未連線：${status.target.ifBlank { "尚未設定" }}\n" +
-                            (detail.ifBlank { "儲存後會由 Termux 執行 adb connect。" })
+                        statusView.text = adbConnectionHelp(status.target, detail)
                         statusView.setTextColor(Color.rgb(248, 113, 113))
                     }
                     if (!status.connected && retries > 0) {
                         refreshAdbStatus(targetInput, statusView, retries - 1, 500L)
                     }
                 } else {
-                    statusView.text = "⚠️ Crew runtime 尚未回應；仍可先儲存設定。"
+                    statusView.text = "⚠️ Crew Runtime 尚未回應，請稍候再試；若持續無回應，請使用 Restart。"
                     statusView.setTextColor(Color.rgb(251, 191, 36))
                     if (retries > 0) refreshAdbStatus(targetInput, statusView, retries - 1, 500L)
                 }
@@ -259,6 +259,26 @@ class WirelessDebugController(private val activity: Activity) {
         }, delayMs, TimeUnit.MILLISECONDS)
     }
     
+    private fun adbConnectionHelp(target: String, detail: String): String {
+        val output = detail.lowercase()
+        val guidance = when {
+            "successfully paired" in output ->
+                "配對已成功，但尚未連線。請把連線欄改成 Android 無線偵錯首頁的 IP:Port，再按「儲存並連線」。"
+            "certificate_unknown" in output || "unauthorized" in output || "authentication failed" in output ->
+                "手機尚未信任目前的 Runtime。請在 Android 無線偵錯選「使用配對碼配對裝置」，填入新的配對位址與 6 位碼，再按「配對並連線」。"
+            "pair:" in output && ("failed" in output || "error" in output) ->
+                "配對未完成。請保持 Android 配對碼畫面開啟，重新填入該畫面的配對 IP:Port 與 6 位碼，再按「配對並連線」。"
+            target.isBlank() ->
+                "請填入 Android 無線偵錯首頁的連線 IP:Port。第一次使用請先配對。"
+            else ->
+                "請確認無線偵錯已開啟，連線 IP:Port 與 Android 顯示的一致。第一次使用或尚未配對時，請填入新的配對位址與 6 位碼，按「配對並連線」。"
+        }
+        val devNote = if (BuildConfig.APPLICATION_ID.endsWith(".dev"))
+            "\nDev 需要獨立配對，不會沿用 Termux 的配對。" else ""
+        val raw = if (detail.isBlank()) "" else "\n\n錯誤詳情：\n${detail.takeLast(2000)}"
+        return "尚未連線：${target.ifBlank { "尚未設定" }}\n$guidance$devNote$raw"
+    }
+
     private fun submitAdbRequest(
         target: String,
         pairingTarget: String?,
@@ -311,9 +331,12 @@ class WirelessDebugController(private val activity: Activity) {
                         statusView.text = "ADB 已連線：$target"
                         statusView.setTextColor(Color.rgb(74, 222, 128))
                     } else {
-                        statusView.text = listOf(json.optString("pair_output"), json.optString("output"))
+                        val detail = listOf(
+                            json.optString("pair_output").takeIf { it.isNotBlank() }?.let { "pair: $it" }.orEmpty(),
+                            json.optString("output")
+                        )
                             .filter { it.isNotBlank() }.joinToString("\n")
-                            .ifBlank { "尚未連線；請確認無線偵錯 Port 與配對狀態。" }
+                        statusView.text = adbConnectionHelp(target, detail)
                         statusView.setTextColor(Color.rgb(248, 113, 113))
                     }
                 }, onFailure = { error ->
