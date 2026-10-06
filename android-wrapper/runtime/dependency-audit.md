@@ -43,7 +43,10 @@ Further useful-command checks exposed shared packaging issues:
   entry against the APK (including AAPT's verified gzip expansion).
 - Python shell subprocesses still named the Termux shell; standard-library
   defaults now select Android/private paths, and ctypes library discovery prefers
-  bundled native aliases. Package-manager-only Python helpers are excluded.
+  bundled native aliases. Frozen `os.defpath` is corrected through sitecustomize.
+  Actual shell execution returned Node v26.4.0, ctypes lookup/load passed, MIME
+  detection returned text/html, and default PATH was /system/bin. Package-manager-only
+  Python helpers are excluded.
 - Named semaphore support contained a compiled temporary path. The vendored
   MIT implementation now uses private TMPDIR; the actual semaphore check passed.
 - Git needs sourced shell files in addition to executable helpers; both are aliased.

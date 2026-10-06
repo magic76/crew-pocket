@@ -11,7 +11,7 @@ def relocate(root):
             'subprocess.py': ("'/data/data/com.termux/files/usr/bin/sh'", "'/system/bin/sh'"),
             'posixpath.py': ("'/data/data/com.termux/files/usr/bin'", "'/system/bin'"),
             'tempfile.py': ("'/data/data/com.termux/files/usr/tmp'", "_os.environ.get('TMPDIR', _os.getcwd())"),
-            'mimetypes.py': ('"/data/data/com.termux/files/usr/etc/mime.types"', 'os.path.join(sys.prefix, "etc", "mime.types")'),
+            'mimetypes.py': ('"/data/data/com.termux/files/usr/etc/mime.types"', '"/system/etc/mime.types"'),
             'ctypes/util.py': ("'/data/data/com.termux/files/usr/bin/ldconfig'", "'/system/bin/ldconfig'"),
         }
         for relative, (old, new) in replacements.items():
@@ -37,5 +37,6 @@ def find_library(name):
         return 'lib' + name + '.so'
     return _crew_original_find_library(name)
 ''')
+        (home / 'sitecustomize.py').write_text('import os, posixpath\nos.defpath = posixpath.defpath = \'/system/bin\'\n')
         # These Debian/Termux package-manager helpers are not Python's stdlib.
         shutil.rmtree(home / 'debpython', ignore_errors=True)
