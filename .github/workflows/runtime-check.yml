@@ -34,12 +34,17 @@ jobs:
           bash -n android-wrapper/runtime/scripts/prepare-embedded-node.sh
           bash -n android-wrapper/runtime/scripts/prepare-embedded-codex.sh
           bash -n android-wrapper/runtime/scripts/prepare-embedded-agy.sh
+          bash -n android-wrapper/runtime/scripts/fetch-toolchain.sh
+          python3 -c "import ast; ast.parse(open('android-wrapper/runtime/scripts/check-toolchain-apk.py').read()); ast.parse(open('android-wrapper/runtime/scripts/relocate-python.py').read())"
+          python3 -c "import ast; ast.parse(open('android-wrapper/runtime/scripts/fetch-toolchain.py').read())"
           bash -n android-wrapper/runtime/scripts/fetch-termux-node-payload.sh
           bash -n android-wrapper/runtime/scripts/fetch-codex-payload.sh
           bash -n android-wrapper/runtime/scripts/fetch-official-agy-payload.sh
 
       - name: Check runtime JavaScript
         run: |
+          node --check android-wrapper/runtime/toolchain/jev.cjs
+          node --check lib/runtime/toolchain.js
           node --check lib/runtime/codex-transport.js
           node --check lib/runtime/provider-manager.js
           CREW_PROVIDER_DELIVERY=runtime-apk CREW_RUNTIME_VERSION=0.2.0 CREW_RUNTIME_PACKAGE=com.crewpocket.runtime CREW_CODEX_VERSION=codex-test CREW_AGY_VERSION=agy-test node -e "const p=require('./lib/runtime/provider-manager'); (async()=>{const s=await p.getProviderRuntimeStatus(); if(s.runtime!=='companion-runtime'||s.runtimeVersion!=='0.2.0'||s.providers.codex.version!=='codex-test'||s.providers.antigravity.version!=='agy-test'||s.providers.codex.updateMode!=='runtime-app') process.exit(1); try{await p.updateProvider('codex');process.exit(1)}catch(e){if(e.code!=='RUNTIME_APP_UPDATE_REQUIRED'||e.statusCode!==409||e.action?.packageName!=='com.crewpocket.runtime') process.exit(1)}})().catch(()=>process.exit(1))"

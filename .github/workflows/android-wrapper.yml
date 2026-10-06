@@ -41,9 +41,14 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y patchelf
+          sdkmanager "ndk;27.2.12479018"
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/27.2.12479018" >> "$GITHUB_ENV"
 
       - name: Prepare Android Node payload
         run: bash android-wrapper/runtime/scripts/fetch-termux-node-payload.sh
+
+      - name: Prepare Android toolchain payload
+        run: bash android-wrapper/runtime/scripts/fetch-toolchain.sh
 
       - name: Prepare Android Codex payload
         run: bash android-wrapper/runtime/scripts/fetch-codex-payload.sh
@@ -69,6 +74,9 @@ jobs:
         run: |
           echo "Crew Runtime companion enabled for this artifact: $CREW_RUNTIME_ENABLE_COMPANION"
           gradle -p android-wrapper :app:assembleDebug :runtime:assembleDebug --stacktrace
+
+      - name: Check packaged toolchain completeness
+        run: python3 android-wrapper/runtime/scripts/check-toolchain-apk.py android-wrapper/runtime/build/outputs/apk/debug/runtime-debug.apk
 
       - name: Upload Crew Pocket APK
         uses: actions/upload-artifact@v4

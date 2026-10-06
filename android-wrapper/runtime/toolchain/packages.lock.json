@@ -1,0 +1,690 @@
+{
+  "schemaVersion": 1,
+  "roots": [
+    "python",
+    "git",
+    "npm",
+    "ripgrep",
+    "imagemagick",
+    "android-tools",
+    "termux-licenses"
+  ],
+  "packages": [
+    {
+      "Package": "python",
+      "Version": "3.14.6-1",
+      "Filename": "pool/main/p/python/python_3.14.6-1_aarch64.deb",
+      "SHA256": "3166e56c2b6c03fff41191fbb9d736302978e7c484702814d9f6dc99dd6006bd",
+      "Depends": "gdbm, libandroid-posix-semaphore, libandroid-support, libbz2, libcrypt, libexpat, libffi, liblzma, libsqlite, ncurses, ncurses-ui-libs, openssl, readline, zlib, zstd"
+    },
+    {
+      "Package": "git",
+      "Version": "2.56.0",
+      "Filename": "pool/main/g/git/git_2.56.0_aarch64.deb",
+      "SHA256": "dcdd22c5fdf7bdb5b825a03a17441d43858ed8515fea57fbb37eb42e733ca82f",
+      "Depends": "libcurl, libexpat, libiconv, less, openssl, pcre2, zlib"
+    },
+    {
+      "Package": "npm",
+      "Version": "11.20.0",
+      "Filename": "pool/main/n/npm/npm_11.20.0_all.deb",
+      "SHA256": "a2775653a0626749138ccd6e37a7b63239f36a9e3c62a9e6740818ca4b2d088b",
+      "Depends": "nodejs | nodejs-lts"
+    },
+    {
+      "Package": "ripgrep",
+      "Version": "15.2.0",
+      "Filename": "pool/main/r/ripgrep/ripgrep_15.2.0_aarch64.deb",
+      "SHA256": "38e28bc297000517b24702568a483eca7dc3323eb6bdccc9033f031776bdcc6c",
+      "Depends": "pcre2"
+    },
+    {
+      "Package": "imagemagick",
+      "Version": "7.1.2.32",
+      "Filename": "pool/main/i/imagemagick/imagemagick_7.1.2.32_aarch64.deb",
+      "SHA256": "62dfd0eff25472c633cf6839d6c14aa91db59bfa47055d83dba81166a7e61d71",
+      "Depends": "djvulibre, fftw, fontconfig, freetype, gdk-pixbuf, ghostscript, glib, graphviz, harfbuzz, imath, jbig2dec, libandroid-support, libbz2, libc++, libcairo, libheif, libjpeg-turbo, libjxl, liblqr, libltdl, liblzma, libpng, libraqm, libraw, librsvg, libtiff, libwebp, libx11, libxext, libxml2, libzip, littlecms, openexr, openjpeg, pango, zlib"
+    },
+    {
+      "Package": "android-tools",
+      "Version": "37.0.0-2",
+      "Filename": "pool/main/a/android-tools/android-tools_37.0.0-2_aarch64.deb",
+      "SHA256": "6bcbded86e6e310f05045aa4cf2b1e1dc8c7e497f27e970e84f5c6eb4f80e169",
+      "Depends": "abseil-cpp, brotli, fmt, libc++, liblz4, libprotobuf, pcre2, zlib, zstd"
+    },
+    {
+      "Package": "termux-licenses",
+      "Version": "2.2",
+      "Filename": "pool/main/t/termux-licenses/termux-licenses_2.2_all.deb",
+      "SHA256": "a3265cd1cf7d04754f2fb683eaf5b21918263792fd714457127900c1d6d9bcd9"
+    },
+    {
+      "Package": "gdbm",
+      "Version": "1.26-1",
+      "Filename": "pool/main/g/gdbm/gdbm_1.26-1_aarch64.deb",
+      "SHA256": "c378de833aae3cf41f3028491ea11836479d9833ab653edc27d0c0e0e691d5c5",
+      "Depends": "readline"
+    },
+    {
+      "Package": "libandroid-posix-semaphore",
+      "Version": "0.1-4",
+      "Filename": "pool/main/liba/libandroid-posix-semaphore/libandroid-posix-semaphore_0.1-4_aarch64.deb",
+      "SHA256": "0efa8677a0166315ba4e685863712eba0ca0a1732827492f38226e2723730c7a"
+    },
+    {
+      "Package": "libandroid-support",
+      "Version": "29-1",
+      "Filename": "pool/main/liba/libandroid-support/libandroid-support_29-1_aarch64.deb",
+      "SHA256": "f2f145d6135ad4843ac9670153be3e3944dc1e6f1736d46d2306c28f2b86f517"
+    },
+    {
+      "Package": "libbz2",
+      "Version": "1.0.8-8",
+      "Filename": "pool/main/libb/libbz2/libbz2_1.0.8-8_aarch64.deb",
+      "SHA256": "4335d7f060650b0aabef545d1334c2f9f280223d5962e13c24a00ec934b794ba"
+    },
+    {
+      "Package": "libcrypt",
+      "Version": "0.2-6",
+      "Filename": "pool/main/libc/libcrypt/libcrypt_0.2-6_aarch64.deb",
+      "SHA256": "6c283eed576b98cc3568f99638156f8588f77d979579d03bef8683d6eb8601e1",
+      "Depends": "openssl"
+    },
+    {
+      "Package": "libexpat",
+      "Version": "2.9.0",
+      "Filename": "pool/main/libe/libexpat/libexpat_2.9.0_aarch64.deb",
+      "SHA256": "f8a104e8227c9c181f6818658a3ee2fa4c107fac94219b068144fc6591086cdb"
+    },
+    {
+      "Package": "libffi",
+      "Version": "3.8.0",
+      "Filename": "pool/main/libf/libffi/libffi_3.8.0_aarch64.deb",
+      "SHA256": "4f255badf74cd31f6a2801c17fa1444199c84c834b517b7c843e2fe9ebe91d77"
+    },
+    {
+      "Package": "liblzma",
+      "Version": "5.8.4",
+      "Filename": "pool/main/libl/liblzma/liblzma_5.8.4_aarch64.deb",
+      "SHA256": "44e95e6e60dddb3705e60a344a4f009a1085a210797342b721eaff41b44033c0"
+    },
+    {
+      "Package": "libsqlite",
+      "Version": "3.53.4",
+      "Filename": "pool/main/libs/libsqlite/libsqlite_3.53.4_aarch64.deb",
+      "SHA256": "0e909ce0d50fe123305446cd22e0c5edf535d40344b9b065fbdcdee52f53198d",
+      "Depends": "zlib"
+    },
+    {
+      "Package": "ncurses",
+      "Version": "6.6.20260307+really6.5.20250830",
+      "Filename": "pool/main/n/ncurses/ncurses_6.6.20260307+really6.5.20250830_aarch64.deb",
+      "SHA256": "f44bbfdc3d42ec0217bffa978309390e59cea5a48a9a83226d4a496c42ad0b99"
+    },
+    {
+      "Package": "ncurses-ui-libs",
+      "Version": "6.6.20260307+really6.5.20250830",
+      "Filename": "pool/main/n/ncurses-ui-libs/ncurses-ui-libs_6.6.20260307+really6.5.20250830_aarch64.deb",
+      "SHA256": "7393f369009be189b3d4ec1f9b16ebd57621d6a1b22949ae07685573950d1f37",
+      "Depends": "ncurses (= 6.6.20260307+really6.5.20250830)"
+    },
+    {
+      "Package": "openssl",
+      "Version": "1:3.6.5",
+      "Filename": "pool/main/o/openssl/openssl_1:3.6.5_aarch64.deb",
+      "SHA256": "a2fb7856875e63ef6b90442752e05974813372c3ca86d2513a78ea43c67a0f8b",
+      "Depends": "ca-certificates, zlib"
+    },
+    {
+      "Package": "readline",
+      "Version": "8.3.6",
+      "Filename": "pool/main/r/readline/readline_8.3.6_aarch64.deb",
+      "SHA256": "616cc73009bc0223f61caed8dd09455714455aa5ea5e180126e2f69c4c775136",
+      "Depends": "libandroid-support, ncurses"
+    },
+    {
+      "Package": "zlib",
+      "Version": "1.3.2",
+      "Filename": "pool/main/z/zlib/zlib_1.3.2_aarch64.deb",
+      "SHA256": "75e7d0af17fcc3b40004309fdc00a1ddb9ae08346dce5e269902c34ac3966ac9"
+    },
+    {
+      "Package": "zstd",
+      "Version": "1.5.7-1",
+      "Filename": "pool/main/z/zstd/zstd_1.5.7-1_aarch64.deb",
+      "SHA256": "e1b4a5113648da8de189620ba1fce74c48b2d0833d9043391b9a1c91fb606fd3",
+      "Depends": "liblzma, zlib"
+    },
+    {
+      "Package": "libcurl",
+      "Version": "8.22.0",
+      "Filename": "pool/main/libc/libcurl/libcurl_8.22.0_aarch64.deb",
+      "SHA256": "e780d925d977c32a3cfe6a2c7d340f0726618786deee98b0cb8b601efb93a8c9",
+      "Depends": "libnghttp2, libnghttp3, libngtcp2, libssh2, openssl (>= 1:3.2.1-1), zlib"
+    },
+    {
+      "Package": "libiconv",
+      "Version": "1.19",
+      "Filename": "pool/main/libi/libiconv/libiconv_1.19_aarch64.deb",
+      "SHA256": "fe9481b1dc101c6c3552943f25435109fd522aecc615ae49594f9fbee863bb37"
+    },
+    {
+      "Package": "less",
+      "Version": "710",
+      "Filename": "pool/main/l/less/less_710_aarch64.deb",
+      "SHA256": "bff261b48553bcde3a93e0d7c2a51dbb1b7e5025767a1ee9a1cb4459a3789499",
+      "Depends": "ncurses, pcre2"
+    },
+    {
+      "Package": "pcre2",
+      "Version": "10.49",
+      "Filename": "pool/main/p/pcre2/pcre2_10.49_aarch64.deb",
+      "SHA256": "c27995e5f52b8ecc9b8b3e662eb08e49f82a18bfd3f34343936acc7b23964724"
+    },
+    {
+      "Package": "nodejs",
+      "Version": "26.4.0-1",
+      "Filename": "pool/main/n/nodejs/nodejs_26.4.0-1_aarch64.deb",
+      "SHA256": "eaf3ed8a6e4b72ebaa8c2cb3bad778c577cdf9ea87ca91761213d8a3940fc090",
+      "Depends": "libc++, openssl, c-ares, libicu, libsqlite, zlib, libffi"
+    },
+    {
+      "Package": "djvulibre",
+      "Version": "3.5.30",
+      "Filename": "pool/main/d/djvulibre/djvulibre_3.5.30_aarch64.deb",
+      "SHA256": "49afd0d01acb7ff7c9085fdbf6fcb09b82e4779ad4be8ca988671e8e2d15e90b",
+      "Depends": "libc++, libjpeg-turbo, libtiff"
+    },
+    {
+      "Package": "fftw",
+      "Version": "3.3.11",
+      "Filename": "pool/main/f/fftw/fftw_3.3.11_aarch64.deb",
+      "SHA256": "0a5140986bbfc69dbfa8f939f78521fb3dc02a193b6c822b7218dae44d99ffd5"
+    },
+    {
+      "Package": "fontconfig",
+      "Version": "2.18.3",
+      "Filename": "pool/main/f/fontconfig/fontconfig_2.18.3_aarch64.deb",
+      "SHA256": "7f8b70dd7ca85b1e7cbb14a11e9e6bd4ce3189ab985aa7af51145484d85f2c61",
+      "Depends": "freetype, libexpat, ttf-dejavu"
+    },
+    {
+      "Package": "freetype",
+      "Version": "2.14.3",
+      "Filename": "pool/main/f/freetype/freetype_2.14.3_aarch64.deb",
+      "SHA256": "670d27d8f53ef2d887b67f8b82fa480f7132b65ac2264a39b3c5b4db637ee285",
+      "Depends": "brotli, libbz2, libpng, zlib"
+    },
+    {
+      "Package": "gdk-pixbuf",
+      "Version": "2.44.8",
+      "Filename": "pool/main/g/gdk-pixbuf/gdk-pixbuf_2.44.8_aarch64.deb",
+      "SHA256": "213da5186fc4ccca336ee7debf150c01c8de72ecb9575950d58f55e535267795",
+      "Depends": "glib, libpng, libtiff, libjpeg-turbo, zstd"
+    },
+    {
+      "Package": "ghostscript",
+      "Version": "10.07.1-2",
+      "Filename": "pool/main/g/ghostscript/ghostscript_10.07.1-2_aarch64.deb",
+      "SHA256": "38c98197ca1878a243053bb1208f90db69acb560909976a9503df1dc4bdf8b2a",
+      "Depends": "fontconfig, freetype, jbig2dec, leptonica, libandroid-support, libc++, libiconv, libidn, libjpeg-turbo, libpng, libtiff, littlecms, openjpeg, zlib"
+    },
+    {
+      "Package": "glib",
+      "Version": "2.90.0",
+      "Filename": "pool/main/g/glib/glib_2.90.0_aarch64.deb",
+      "SHA256": "fee438e69505cda78f29e6662afb04613947f56db3e8d1557f25a0a5c3ea7c9c",
+      "Depends": "libandroid-support, libffi, libiconv, pcre2, resolv-conf, zlib, python"
+    },
+    {
+      "Package": "graphviz",
+      "Version": "16.1.0",
+      "Filename": "pool/main/g/graphviz/graphviz_16.1.0_aarch64.deb",
+      "SHA256": "f1ff30020fdad8bbe134372c4e71ed08b58fabb02d0bc7861f858f1b078cd83a",
+      "Depends": "fontconfig, freetype, gdk-pixbuf, glib, harfbuzz, libandroid-glob, libc++, libcairo, libexpat, libgd, libgts, libltdl, librsvg, libwebp, pango, zlib"
+    },
+    {
+      "Package": "harfbuzz",
+      "Version": "14.5.1",
+      "Filename": "pool/main/h/harfbuzz/harfbuzz_14.5.1_aarch64.deb",
+      "SHA256": "7564c59d5f7f3df3bd6d3ab89e70599cf611b29d722a1a0a5d53c90668079efc",
+      "Depends": "freetype, glib, libcairo, libgraphite"
+    },
+    {
+      "Package": "imath",
+      "Version": "3.2.3",
+      "Filename": "pool/main/i/imath/imath_3.2.3_aarch64.deb",
+      "SHA256": "565bad41cf987a64ebfd316d75d647e1091a84bacd5f2a32d0f2d7ca4f8f8dc5",
+      "Depends": "libc++"
+    },
+    {
+      "Package": "jbig2dec",
+      "Version": "0.20-2",
+      "Filename": "pool/main/j/jbig2dec/jbig2dec_0.20-2_aarch64.deb",
+      "SHA256": "1f7ad0cda697b5a64816df130cdb76f2ee8c2926beb2b8d28ffdf91ea1a5d643",
+      "Depends": "libpng"
+    },
+    {
+      "Package": "libc++",
+      "Version": "30",
+      "Filename": "pool/main/libc/libc++/libc++_30_aarch64.deb",
+      "SHA256": "53d0b84a7ba7459024257cb94d5b136fe13ef858567f65a8064b35950799f2ca"
+    },
+    {
+      "Package": "libcairo",
+      "Version": "1.18.6",
+      "Filename": "pool/main/libc/libcairo/libcairo_1.18.6_aarch64.deb",
+      "SHA256": "c2caebbd7a5e2c778729868fdbae54f87a324cccb5ad254bcae050a412d9cd57",
+      "Depends": "fontconfig, freetype, glib, libandroid-shmem, libandroid-execinfo, liblzo, libpixman, libpng, libx11, libxcb, libxext, libxrender, zlib"
+    },
+    {
+      "Package": "libheif",
+      "Version": "1.23.6",
+      "Filename": "pool/main/libh/libheif/libheif_1.23.6_aarch64.deb",
+      "SHA256": "14681f626daef5eac65bbfce8eadcc3add8fb881de3fafa2ea3014c6f8b46ffe",
+      "Depends": "gdk-pixbuf, glib, libaom, libc++, libdav1d, libde265, librav1e, libx264, libx265"
+    },
+    {
+      "Package": "libjpeg-turbo",
+      "Version": "3.2.0",
+      "Filename": "pool/main/libj/libjpeg-turbo/libjpeg-turbo_3.2.0_aarch64.deb",
+      "SHA256": "e6339075bcde28b4902d5a51f4063164834abfd2fa115e881ae637a34585e54f"
+    },
+    {
+      "Package": "libjxl",
+      "Version": "0.12.0-1",
+      "Filename": "pool/main/libj/libjxl/libjxl_0.12.0-1_aarch64.deb",
+      "SHA256": "5deef55b1940aef2bc2666fdb4bfcba66cfbf73c17a419f299ddabe312b2ce11",
+      "Depends": "brotli, giflib, glib, highway, libc++, libffi, libiconv, libjpeg-turbo, libpng, zlib"
+    },
+    {
+      "Package": "liblqr",
+      "Version": "0.4.3-1",
+      "Filename": "pool/main/libl/liblqr/liblqr_0.4.3-1_aarch64.deb",
+      "SHA256": "0e60111fbbb65b10dc5346223b0c31dbf3ccaab5c701d6d416f3eb56432e1dbf",
+      "Depends": "glib"
+    },
+    {
+      "Package": "libltdl",
+      "Version": "2.6.2",
+      "Filename": "pool/main/libl/libltdl/libltdl_2.6.2_aarch64.deb",
+      "SHA256": "7b4643fe9d0ab42c0c3c8a1018640816bdb43d422f2268a5e4ea80675624f539"
+    },
+    {
+      "Package": "libpng",
+      "Version": "1.6.59",
+      "Filename": "pool/main/libp/libpng/libpng_1.6.59_aarch64.deb",
+      "SHA256": "32d61f0b1a60cf7283aa3a80e288737493df2c6b84c8c749606b77c94a10f2b2",
+      "Depends": "zlib"
+    },
+    {
+      "Package": "libraqm",
+      "Version": "0.11.0",
+      "Filename": "pool/main/libr/libraqm/libraqm_0.11.0_aarch64.deb",
+      "SHA256": "72e907ef7bc7a5d54b042df4602f49c4309b2e128e49618616795e3d5bc4a174",
+      "Depends": "freetype, harfbuzz, fribidi"
+    },
+    {
+      "Package": "libraw",
+      "Version": "0.22.2-1",
+      "Filename": "pool/main/libr/libraw/libraw_0.22.2-1_aarch64.deb",
+      "SHA256": "19b457ba738b0bba881a1f4b523b5ca7bbd0df93b017c3878009d4f90162903a",
+      "Depends": "libc++, libjasper, libjpeg-turbo, littlecms, zlib"
+    },
+    {
+      "Package": "librsvg",
+      "Version": "2.63.2",
+      "Filename": "pool/main/libr/librsvg/librsvg_2.63.2_aarch64.deb",
+      "SHA256": "1f6b2b92d45d5d66048033de7f15eb483951baaecf87eef732cea99a2a751cf3",
+      "Depends": "fontconfig, freetype, gdk-pixbuf, glib, harfbuzz, libcairo, libdav1d, libpng, libxml2, pango"
+    },
+    {
+      "Package": "libtiff",
+      "Version": "4.7.2",
+      "Filename": "pool/main/libt/libtiff/libtiff_4.7.2_aarch64.deb",
+      "SHA256": "998c583d65d7d42dcb177548a218545661f02385a51bb9f5c24f0da4fd046574",
+      "Depends": "libc++, libjpeg-turbo, liblzma, zlib, zstd"
+    },
+    {
+      "Package": "libwebp",
+      "Version": "1.6.0-rc1-0",
+      "Filename": "pool/main/libw/libwebp/libwebp_1.6.0-rc1-0_aarch64.deb",
+      "SHA256": "80fa46bec4faad0ccfd969df5acfd501d813ca9d112b5c49f3f91390e987f3a9",
+      "Depends": "giflib, libjpeg-turbo, libpng, libtiff, zlib"
+    },
+    {
+      "Package": "libx11",
+      "Version": "1.8.13-1",
+      "Filename": "pool/main/libx/libx11/libx11_1.8.13-1_aarch64.deb",
+      "SHA256": "a18c5cf3cfe2670bf1cb4243e3140a0b7639350a4175b5229c969402fdb12e9f",
+      "Depends": "libandroid-support, libxcb, xorgproto"
+    },
+    {
+      "Package": "libxext",
+      "Version": "1.3.7",
+      "Filename": "pool/main/libx/libxext/libxext_1.3.7_aarch64.deb",
+      "SHA256": "6e98a24e0d1996d25f7db8d70ecae02cfe5fc146343428a065149003454c7fc9",
+      "Depends": "libx11"
+    },
+    {
+      "Package": "libxml2",
+      "Version": "2.15.4-1",
+      "Filename": "pool/main/libx/libxml2/libxml2_2.15.4-1_aarch64.deb",
+      "SHA256": "d315861bbcf716cfb088f53cddab9fb6a96430cc66769f79774cc69c2f53bcff",
+      "Depends": "libandroid-glob, libiconv, zlib"
+    },
+    {
+      "Package": "libzip",
+      "Version": "1.11.4-1",
+      "Filename": "pool/main/libz/libzip/libzip_1.11.4-1_aarch64.deb",
+      "SHA256": "735dcb2f7f3be5d4bda7f7a8c0aaa093e3181d4d68e0bfd60393901c5c7200e8",
+      "Depends": "libbz2, liblzma, openssl, zlib, zstd"
+    },
+    {
+      "Package": "littlecms",
+      "Version": "2.19.1",
+      "Filename": "pool/main/l/littlecms/littlecms_2.19.1_aarch64.deb",
+      "SHA256": "274f732a186563beca204f5d016d30cac8e5c24f7c4395b60881f9613eddf1a1"
+    },
+    {
+      "Package": "openexr",
+      "Version": "3.4.4",
+      "Filename": "pool/main/o/openexr/openexr_3.4.4_aarch64.deb",
+      "SHA256": "40b558372af87325e5a51450c97d866d0ccf63bb95189e6eb117cf5b9e9ba8b7",
+      "Depends": "imath, libc++, zlib"
+    },
+    {
+      "Package": "openjpeg",
+      "Version": "2.5.4",
+      "Filename": "pool/main/o/openjpeg/openjpeg_2.5.4_aarch64.deb",
+      "SHA256": "93ad32c8caa0eb8943e2dd86b5c2eaf48a767709a3fa069a5b670d948656c7d8"
+    },
+    {
+      "Package": "pango",
+      "Version": "1.58.2",
+      "Filename": "pool/main/p/pango/pango_1.58.2_aarch64.deb",
+      "SHA256": "3089e2de505f3aed90b60235af7723bdc6e90bd0dd954bcd8083848a5d9c19e9",
+      "Depends": "fontconfig, freetype, fribidi, glib, harfbuzz, libcairo, libx11, libxft, libxrender"
+    },
+    {
+      "Package": "abseil-cpp",
+      "Version": "20260526.0",
+      "Filename": "pool/main/a/abseil-cpp/abseil-cpp_20260526.0_aarch64.deb",
+      "SHA256": "e489fac652cddc39d9436141e627285f1034a545a06fbb19c420514a419ad877",
+      "Depends": "libc++"
+    },
+    {
+      "Package": "brotli",
+      "Version": "1.2.0",
+      "Filename": "pool/main/b/brotli/brotli_1.2.0_aarch64.deb",
+      "SHA256": "db1502601d40fb44e6085ad8bfd9311a8b472e98db831ceec9d404c5708bb52c"
+    },
+    {
+      "Package": "fmt",
+      "Version": "1:11.2.0-1",
+      "Filename": "pool/main/f/fmt/fmt_1:11.2.0-1_aarch64.deb",
+      "SHA256": "dad595afcb3b1096d725c6772c0c5531764caa5841affba3c533c6298a32ab08",
+      "Depends": "libc++"
+    },
+    {
+      "Package": "liblz4",
+      "Version": "1.10.0-1",
+      "Filename": "pool/main/libl/liblz4/liblz4_1.10.0-1_aarch64.deb",
+      "SHA256": "09b9449418d5c2dc4f5c1c140ba8138d56be3e9ae5fd3be3318825ec9f8a0499"
+    },
+    {
+      "Package": "libprotobuf",
+      "Version": "2:35.1",
+      "Filename": "pool/main/libp/libprotobuf/libprotobuf_2:35.1_aarch64.deb",
+      "SHA256": "a1ba7c7f0e5903a2134662653d3e7b9ffceaa78bdd00e07ac985e2d313ebc738",
+      "Depends": "abseil-cpp, libc++, zlib"
+    },
+    {
+      "Package": "ca-certificates",
+      "Version": "1:2026.09.25",
+      "Filename": "pool/main/c/ca-certificates/ca-certificates_1:2026.09.25_all.deb",
+      "SHA256": "57fab24bf4561bfdd35afe71bc1929914e51c35458cfd1fca2b15e54bc8df7af"
+    },
+    {
+      "Package": "libnghttp2",
+      "Version": "1.70.0",
+      "Filename": "pool/main/libn/libnghttp2/libnghttp2_1.70.0_aarch64.deb",
+      "SHA256": "ab2e0a3408fe4934ffdf774bd5049a265db2e6db62dcb651baecbecfb81e3f0b"
+    },
+    {
+      "Package": "libnghttp3",
+      "Version": "1.18.0",
+      "Filename": "pool/main/libn/libnghttp3/libnghttp3_1.18.0_aarch64.deb",
+      "SHA256": "0be2ee96def3608afaf24eb0b4b55f3484a37c95ea21bb1d6d85c7d543467603"
+    },
+    {
+      "Package": "libngtcp2",
+      "Version": "1.25.0",
+      "Filename": "pool/main/libn/libngtcp2/libngtcp2_1.25.0_aarch64.deb",
+      "SHA256": "f471bad7f4329b6b0b4aedf124e0a23a35f6ac99bfbae73304136f8bfd570fc3",
+      "Depends": "openssl"
+    },
+    {
+      "Package": "libssh2",
+      "Version": "1.11.1-2",
+      "Filename": "pool/main/libs/libssh2/libssh2_1.11.1-2_aarch64.deb",
+      "SHA256": "1add4e0a926b848814e7e2f1817ea28b123c54cabd5bbc4e5cfd65291cbad84e",
+      "Depends": "openssl, zlib"
+    },
+    {
+      "Package": "c-ares",
+      "Version": "1.34.8",
+      "Filename": "pool/main/c/c-ares/c-ares_1.34.8_aarch64.deb",
+      "SHA256": "7681fc23e822d7988ba8b2adf3468f93ae68f724dda365cff1385096a9fa87e6",
+      "Depends": "resolv-conf"
+    },
+    {
+      "Package": "libicu",
+      "Version": "78.3",
+      "Filename": "pool/main/libi/libicu/libicu_78.3_aarch64.deb",
+      "SHA256": "f536403f65a08fe0df6e7304184e902d54def77d5c3bd5edfd9109d57601d276",
+      "Depends": "libc++"
+    },
+    {
+      "Package": "ttf-dejavu",
+      "Version": "2.37-8",
+      "Filename": "pool/main/t/ttf-dejavu/ttf-dejavu_2.37-8_all.deb",
+      "SHA256": "3fa9352d528cb19aebcdd2de5d1fb0cb67b201be3ae264207fc1a277d2cfd6da"
+    },
+    {
+      "Package": "leptonica",
+      "Version": "1.87.0",
+      "Filename": "pool/main/l/leptonica/leptonica_1.87.0_aarch64.deb",
+      "SHA256": "c7a9b770b56a7f71c022a011f9d9a16e999aea63764256d3e21cb5fdaab25a9b",
+      "Depends": "giflib, libjpeg-turbo, libpng, libtiff, libwebp, openjpeg, zlib"
+    },
+    {
+      "Package": "libidn",
+      "Version": "1.44",
+      "Filename": "pool/main/libi/libidn/libidn_1.44_aarch64.deb",
+      "SHA256": "d683287fcb512324ff08198cd74f251adaba5fd4578c32b4522fe481a8f4daa1",
+      "Depends": "libiconv"
+    },
+    {
+      "Package": "resolv-conf",
+      "Version": "1.3",
+      "Filename": "pool/main/r/resolv-conf/resolv-conf_1.3_aarch64.deb",
+      "SHA256": "ab541abac8e0c81709cd7ca4a02bcfa0d60ba1f4bfe7fd6dce4a694a4a9dfffa"
+    },
+    {
+      "Package": "libandroid-glob",
+      "Version": "0.6-3",
+      "Filename": "pool/main/liba/libandroid-glob/libandroid-glob_0.6-3_aarch64.deb",
+      "SHA256": "2276ae8adedf0db76c2f4ffc94cc4cceb2f4f5d78e021b54e2e046d1233e7826"
+    },
+    {
+      "Package": "libgd",
+      "Version": "1:2.3.3-7",
+      "Filename": "pool/main/libg/libgd/libgd_1:2.3.3-7_aarch64.deb",
+      "SHA256": "6453d3e80a96333638889e4c325aff2f33d478c53cb51062b84d4ae176d9f4d7",
+      "Depends": "fontconfig, freetype, libavif, libheif, libiconv, libjpeg-turbo, libpng, libtiff, libwebp, zlib"
+    },
+    {
+      "Package": "libgts",
+      "Version": "0.7.6-3",
+      "Filename": "pool/main/libg/libgts/libgts_0.7.6-3_aarch64.deb",
+      "SHA256": "6beffdc2efb87ee351be51da9e8b65b8612b27b39f8f7ea920f2ecca707eadfc",
+      "Depends": "glib"
+    },
+    {
+      "Package": "libgraphite",
+      "Version": "1.3.15",
+      "Filename": "pool/main/libg/libgraphite/libgraphite_1.3.15_aarch64.deb",
+      "SHA256": "15ac85737a35150cecb9e46ecb32567ae2a4fc28071cdf58fb95e1b77d7889d9",
+      "Depends": "libc++"
+    },
+    {
+      "Package": "libandroid-shmem",
+      "Version": "0.7",
+      "Filename": "pool/main/liba/libandroid-shmem/libandroid-shmem_0.7_aarch64.deb",
+      "SHA256": "0da3a24d558b93c92bcf8d611e0826a99ff96e396b148e6cdf33b47c47c57ff6"
+    },
+    {
+      "Package": "libandroid-execinfo",
+      "Version": "0.1-3",
+      "Filename": "pool/main/liba/libandroid-execinfo/libandroid-execinfo_0.1-3_aarch64.deb",
+      "SHA256": "725dd2c6da7fc96e860fcc928e18aa9fb0e85e0bdcaf4f8ce0f0654ca6860fc2"
+    },
+    {
+      "Package": "liblzo",
+      "Version": "2.10-5",
+      "Filename": "pool/main/libl/liblzo/liblzo_2.10-5_aarch64.deb",
+      "SHA256": "b8a6d232d592dcd6529589c817927cca3254f3ab40a85fce873d997ace7d1ca2"
+    },
+    {
+      "Package": "libpixman",
+      "Version": "0.46.4-1",
+      "Filename": "pool/main/libp/libpixman/libpixman_0.46.4-1_aarch64.deb",
+      "SHA256": "364b8c82ff68f8513930e5d413459fb7c52eccc7ba75a97a8c5a38760eee8d33"
+    },
+    {
+      "Package": "libxcb",
+      "Version": "1.17.0-1",
+      "Filename": "pool/main/libx/libxcb/libxcb_1.17.0-1_aarch64.deb",
+      "SHA256": "191c3642b6a8c754bc75b69b94a81858ecb5f18766dc085aff55559b8087ad34",
+      "Depends": "libxau, libxdmcp"
+    },
+    {
+      "Package": "libxrender",
+      "Version": "0.9.12-1",
+      "Filename": "pool/main/libx/libxrender/libxrender_0.9.12-1_aarch64.deb",
+      "SHA256": "90b21a4bc266468d540cab654ea7c010dcdd949b60d7136e87dad6966cef5cc0",
+      "Depends": "libx11"
+    },
+    {
+      "Package": "libaom",
+      "Version": "3.15.1",
+      "Filename": "pool/main/liba/libaom/libaom_3.15.1_aarch64.deb",
+      "SHA256": "87ece0ac014c683b519d9f40045f62e02f1b175a73002b93d44d4a3fb0f8a537"
+    },
+    {
+      "Package": "libdav1d",
+      "Version": "1.5.4",
+      "Filename": "pool/main/libd/libdav1d/libdav1d_1.5.4_aarch64.deb",
+      "SHA256": "4c2ffdcbbb805727caaa2e91b56917830dbacf4245dd439cf2e1c0d61a541613"
+    },
+    {
+      "Package": "libde265",
+      "Version": "1.1.3",
+      "Filename": "pool/main/libd/libde265/libde265_1.1.3_aarch64.deb",
+      "SHA256": "3c38af85b13a638b377fab1b7389aae2aca5067e21db29c058d5746f52ea7114",
+      "Depends": "libc++"
+    },
+    {
+      "Package": "librav1e",
+      "Version": "0.8.1",
+      "Filename": "pool/main/libr/librav1e/librav1e_0.8.1_aarch64.deb",
+      "SHA256": "ac7842a5896bdff1b4d4974d9c02e60f7d4a587b8618df691118a8591f8dbccf"
+    },
+    {
+      "Package": "libx264",
+      "Version": "1:0.164.3191-1",
+      "Filename": "pool/main/libx/libx264/libx264_1:0.164.3191-1_aarch64.deb",
+      "SHA256": "fe98852cb06ce1c963a54284179d8cda42af2fa82afcac09f7d81e6de4d9bbc1"
+    },
+    {
+      "Package": "libx265",
+      "Version": "4.3",
+      "Filename": "pool/main/libx/libx265/libx265_4.3_aarch64.deb",
+      "SHA256": "8dbfd50ad2ceea5ffa2384f0f4cc16a87cbf56ac83b4861fa4f640d1beb352cd",
+      "Depends": "libandroid-posix-semaphore, libc++"
+    },
+    {
+      "Package": "giflib",
+      "Version": "6.1.3",
+      "Filename": "pool/main/g/giflib/giflib_6.1.3_aarch64.deb",
+      "SHA256": "c46823a7a9cb07f1f833392e36d0ead162f9972a4d3881a6e4b5700ec55b2534"
+    },
+    {
+      "Package": "highway",
+      "Version": "1.4.0-1",
+      "Filename": "pool/main/h/highway/highway_1.4.0-1_aarch64.deb",
+      "SHA256": "71b8e0c231ab6b66827374543d55997a5cb02d8882f5d53e059ba78cd2511da1",
+      "Depends": "libc++"
+    },
+    {
+      "Package": "fribidi",
+      "Version": "1.0.17",
+      "Filename": "pool/main/f/fribidi/fribidi_1.0.17_aarch64.deb",
+      "SHA256": "879a180b10e105600fb6033f15eff0987eb48ae11f1b87beeca803aab84b8666",
+      "Depends": "glib"
+    },
+    {
+      "Package": "libjasper",
+      "Version": "4.2.9-1",
+      "Filename": "pool/main/libj/libjasper/libjasper_4.2.9-1_aarch64.deb",
+      "SHA256": "37e884b7e2c84fb605ae153d2e3e3e2b10d9f71064a5e68f5d6a75b0e2c3d6fd",
+      "Depends": "libjpeg-turbo"
+    },
+    {
+      "Package": "xorgproto",
+      "Version": "2026.1",
+      "Filename": "pool/main/x/xorgproto/xorgproto_2026.1_all.deb",
+      "SHA256": "2463651143a386eba0d7baebac87ca5d2db5239d36cf38f9b2086f3c1bfdcbce",
+      "Depends": "xorg-util-macros"
+    },
+    {
+      "Package": "libxft",
+      "Version": "2.3.9-1",
+      "Filename": "pool/main/libx/libxft/libxft_2.3.9-1_aarch64.deb",
+      "SHA256": "50e13e49e55dc0246a8b2ead0f84679bc674cd09ffc0e3e60e885f6886cbe2fd",
+      "Depends": "fontconfig, freetype, libx11, libxrender"
+    },
+    {
+      "Package": "libavif",
+      "Version": "1.4.2",
+      "Filename": "pool/main/liba/libavif/libavif_1.4.2_aarch64.deb",
+      "SHA256": "98d2b89c5547d07191c55c7a4efe4a0906c600953b62504056ebe96baafce52e",
+      "Depends": "libaom, libc++, libdav1d, libjpeg-turbo, libpng, libwebp, librav1e, svt-av1"
+    },
+    {
+      "Package": "libxau",
+      "Version": "1.0.12-2",
+      "Filename": "pool/main/libx/libxau/libxau_1.0.12-2_aarch64.deb",
+      "SHA256": "2d86bed61ce89dd8fdb55e565aede10155f2ce3adaccb61d5f1375aec3314083"
+    },
+    {
+      "Package": "libxdmcp",
+      "Version": "1.1.5-2",
+      "Filename": "pool/main/libx/libxdmcp/libxdmcp_1.1.5-2_aarch64.deb",
+      "SHA256": "caea0cf5c0028af0840774094b8900ef7afffd8f9bbd7b1abfbe66851f0d6077"
+    },
+    {
+      "Package": "xorg-util-macros",
+      "Version": "1.20.2",
+      "Filename": "pool/main/x/xorg-util-macros/xorg-util-macros_1.20.2_all.deb",
+      "SHA256": "11765ad1a6f181e36f807464f7b4360593d847dce245202a393eb2ca156520d0"
+    },
+    {
+      "Package": "svt-av1",
+      "Version": "4.2.0",
+      "Filename": "pool/main/s/svt-av1/svt-av1_4.2.0_aarch64.deb",
+      "SHA256": "e1fd576d086e2d870429e3ae16610b24cb1d0c8f9fcf330fa0abba9e867aabdb"
+    }
+  ]
+}

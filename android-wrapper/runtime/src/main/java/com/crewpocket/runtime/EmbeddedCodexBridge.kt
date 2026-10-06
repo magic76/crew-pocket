@@ -254,13 +254,14 @@ class EmbeddedCodexBridge(private val context: Context, private val bridgeToken:
         builder.directory(context.filesDir)
         builder.redirectErrorStream(false)
         builder.environment().apply {
+            putAll(EmbeddedToolchain.environment(context))
             put("HOME", context.filesDir.absolutePath)
             put("CODEX_HOME", codexHome.absolutePath)
             put("TMPDIR", context.cacheDir.absolutePath)
             put("PATH", EmbeddedExecutablePaths.path(context))
             put("SHELL", File(EmbeddedExecutablePaths.prepare(context), "bash").absolutePath)
             put("CODEX_SELF_EXE", binary.absolutePath)
-            put("LD_LIBRARY_PATH", context.applicationInfo.nativeLibraryDir)
+            put("LD_LIBRARY_PATH", "${context.applicationInfo.nativeLibraryDir}:${EmbeddedToolchain.libraryPath(context)}")
             put("SSL_CERT_FILE", certificates.absolutePath)
             // Propagate to Node invoked by provider command tools as well.
             put("OPENSSL_CONF", "/dev/null")

@@ -40,7 +40,13 @@ val runtimePayloadReady = listOf(
     File(runtimeJniDir, "libcodex_exec.so"),
     File(runtimeJniDir, "libcode_mode_host.so"),
     file("src/main/assets/provider-manifests/codex.json")
-).all { it.isFile } && agyPayloadReady()
+).all { it.isFile } && agyPayloadReady() && runCatching {
+    val manifest = JsonSlurper().parse(file("src/main/assets/toolchain/manifest.json")) as Map<*, *>
+    val commands = manifest["commands"] as Map<*, *>
+    val links = manifest["links"] as Map<*, *>
+    listOf("python3", "git", "npm", "rg", "magick", "adb", "jev").all { commands.containsKey(it) } &&
+        (commands.values + links.values).all { File(runtimeJniDir, it.toString()).isFile }
+}.getOrDefault(false)
 
 val companionEnabled = System.getenv("CREW_RUNTIME_ENABLE_COMPANION")
     ?.equals("true", ignoreCase = true) == true
@@ -53,6 +59,8 @@ val prepareCrewWorkspaceAssets = tasks.register<Sync>("prepareCrewWorkspaceAsset
         include("AGENTS.md")
         include("GEMINI.md")
         include("android-wrapper/runtime/dependency-audit.md")
+        include("android-wrapper/runtime/toolchain/README.md")
+        include("android-wrapper/runtime/toolchain/tools.json")
         include("lib/**")
         include("public/**")
         include("extensions/**")
@@ -67,6 +75,12 @@ android {
 
     buildFeatures {
         buildConfig = true
+    }
+
+    androidResources {
+        // AAPT's default <dir>_* filter drops Python _common/_pyrepl and npm
+        // __generated__ modules. These are runtime data, not editor metadata.
+        ignoreAssetsPattern = "!.svn:!.git:!.DS_Store:!*.scc:!CVS:!thumbs.db:!picasa.ini:!*~"
     }
 
     packaging {

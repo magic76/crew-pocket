@@ -67,6 +67,7 @@ class EmbeddedNodeHost(
             builder.redirectOutput(ProcessBuilder.Redirect.appendTo(log))
             builder.redirectError(ProcessBuilder.Redirect.appendTo(log))
             builder.environment().apply {
+                putAll(EmbeddedToolchain.environment(context))
                 put("HOME", context.filesDir.absolutePath)
                 put("CODEX_HOME", codexHome.absolutePath)
                 put("TMPDIR", context.cacheDir.absolutePath)
@@ -90,7 +91,7 @@ class EmbeddedNodeHost(
                 }
                 put("PATH", EmbeddedExecutablePaths.path(context))
                 put("SHELL", File(EmbeddedExecutablePaths.prepare(context), "bash").absolutePath)
-                put("LD_LIBRARY_PATH", context.applicationInfo.nativeLibraryDir)
+                put("LD_LIBRARY_PATH", "${context.applicationInfo.nativeLibraryDir}:${EmbeddedToolchain.libraryPath(context)}")
                 put("SSL_CERT_FILE", certificates.absolutePath)
                 // The bundled Termux OpenSSL build otherwise reads its
                 // compiled-in, inaccessible Termux openssl.cnf on node -e.

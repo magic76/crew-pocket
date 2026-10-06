@@ -19,6 +19,7 @@ object EmbeddedExecutablePaths {
                 Os.symlink(target.absolutePath, alias.absolutePath)
             }
         }
+        EmbeddedToolchain.prepare(context, directory)
         return directory
     }
 

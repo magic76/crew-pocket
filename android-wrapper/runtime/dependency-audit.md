@@ -4,6 +4,55 @@ Inspected on 2026-10-06 for `feature/companion-runtime`, Dev packages on Samsung
 SM-S938B / Android 16. Runtime ports are 8100 (server), 8867 (Codex bridge), and
 8868 (status). Dev disables Termux fallback.
 
+## Toolchain delivery update (2026-10-06)
+
+Python, Git, npm, ripgrep, ImageMagick, ADB and a Crew Jev CLI adapter are now
+bundled in Runtime Dev. The earlier missing-tool tables below are historical.
+All checks in this section ran through Dev's `/api/run-code` on port 8100, with
+Runtime-private HOME/PATH/data and APK-owned native executables. `/healthz` is 204.
+
+| Tool | Actual device result |
+| --- | --- |
+| Python 3.14.6 | PASS: ssl, sqlite3, ctypes, zlib, bz2, lzma, hashlib imports; SQLite returned 42; compression roundtrip passed. `ctypes.CDLL("libsqlite3.so")` and multiprocessing semaphore passed. Android CA bundle supplied 143 trusted certificates. |
+| Git 2.56.0 | PASS: temporary repository init/add/commit/log; HTTPS `ls-remote` returned remote HEAD; empty submodule status passed. Fixtures removed. SSH/Perl extensions are not included. |
+| npm 11.20.0 | PASS: a package script invoked bundled Node and returned 42; installed `is-number@7.0.0` from the public registry and loaded it successfully. JS packages are supported; native addons/compilation and arbitrary app-data shebang executables are not certified. |
+| ripgrep 15.2.0 | PASS: searched a private temporary file and returned its matching text. |
+| ImageMagick 7.1.2-32 | PASS: created PNG, converted to JPEG, identified both; rendered DejaVu font text. External Ghostscript/Graphviz delegates are not registered commands. |
+| ADB 37.0.0 | PASS: version and private daemon startup/devices on 5038. Private device list was empty; Runtime keys require separate Wireless Debugging pairing. Test daemon was stopped; development connection on Termux port 5037 stayed online. Stable Runtime reserves 5039. |
+| Jev adapter 1.0.0 | CLI PASS: version/help execute; compatible `ask` invocation correctly exits 3 when TypeSafe key is absent. Authenticated model request NOT VERIFIED. This is a repository-owned adapter to the official API, not a renamed community CLI. |
+
+Packaging now has one registry (`toolchain/tools.json`), a package version/hash
+lock, recursive ELF closure, native command aliases, script launchers, and
+private data/module extraction. JNI contains 238 tool ELF files plus the native
+script launcher; package provenance covers 102 Android packages including license
+data. Libraries rewrite DT_NEEDED and SONAME consistently. LD_LIBRARY_PATH uses
+only Runtime's native directory and private toolchain/lib aliases. Nothing in the
+tested command chain executes a Termux binary or reads Termux HOME.
+
+First actual failure: Python `ctypes` called `dlopen("libpython3.14.so")` after its
+APK relocation. Fix: update the packaged Python LDLIBRARY metadata and provide
+private logical library aliases. Preserving the old SONAME instead was invalid
+on Android (`cannot find ... from verneed ... in DT_NEEDED list`); dependency and
+SONAME rewrites must agree. Both conditions are handled in the packager.
+
+Further useful-command checks exposed shared packaging issues:
+
+- AAPT omitted underscore directories, dropping Python `compression._common` and
+  npm `@sigstore/protobuf-specs/dist/__generated__/envelope`. Runtime now configures
+  asset filtering explicitly and CI compares every staged asset/module and JNI
+  entry against the APK (including AAPT's verified gzip expansion).
+- Python shell subprocesses still named the Termux shell; standard-library
+  defaults now select Android/private paths, and ctypes library discovery prefers
+  bundled native aliases. Package-manager-only Python helpers are excluded.
+- Named semaphore support contained a compiled temporary path. The vendored
+  MIT implementation now uses private TMPDIR; the actual semaphore check passed.
+- Git needs sourced shell files in addition to executable helpers; both are aliased.
+- Fontconfig's compiled Termux directories are replaced with private fonts/cache.
+
+The full original Pocket/AGY/Termux-shutdown gate remains pending. This toolchain
+update does not certify an authenticated AGY task or a complete Termux shutdown.
+Expansion steps and limits: [Toolchain guide](toolchain/README.md).
+
 ## Provided by the Runtime APK
 
 | Dependency | Delivery and current evidence |
@@ -27,7 +76,7 @@ SM-S938B / Android 16. Runtime ports are 8100 (server), 8867 (Codex bridge), and
 | Shell | Android supplies `/system/bin/sh`. On this Samsung device `/bin` is a symlink to `/system/bin`, so `/bin/sh` also exists. Bash snippets use bundled Bash; POSIX snippets use system `sh`. Codex's default shell and explicitly selected Bash both executed real commands. |
 | System commands | PATH contains Runtime's private executable aliases followed by Android system directories. `df` is supplied by Android; its real Codex tool call passed. |
 
-## Remaining dependencies and gaps
+## Original review dependencies and gaps (before toolchain delivery)
 
 | Feature | Dependency / current result |
 | --- | --- |
@@ -111,8 +160,9 @@ in the dependency closure audit. Dynamic executables request
 `/system/bin/linker64`; AGY has neither `PT_INTERP` nor `DT_NEEDED`.
 
 Actual Node/Codex process environment uses Runtime-private HOME and CODEX_HOME,
-private executable aliases plus Android system PATH, and only nativeLibraryDir
-for LD_LIBRARY_PATH. CA paths point to the private generated trust bundle.
+private executable aliases plus Android system PATH, and nativeLibraryDir
+for LD_LIBRARY_PATH in the original review (the tooling update adds private
+toolchain/lib aliases). CA paths point to the private generated trust bundle.
 OpenSSL uses explicit empty configuration rather than Termux's compiled-in path.
 Build-time Termux/npm tools used to assemble payloads are not runtime dependencies.
 This audit did not close Termux, because the debugging agent itself runs there;
@@ -161,9 +211,9 @@ Final `/healthz`: HTTP 204, empty body.
 
 ### Remaining work / boundaries
 
-Python, Git, npm, rg, ImageMagick, ADB and Jev require a deliberate delivery
-decision. Thumbnail generation still depends on ImageMagick; original-image
-fallback does not certify thumbnail creation. Companion remote access needs a
+Python, Git, npm, rg, ImageMagick, ADB and Jev now have explicit APK delivery.
+The new checks above supersede their earlier missing-tool results. Full Pocket
+thumbnail/export user flows still need their own interaction gates. Companion remote access needs a
 native restart/bind design. Native default shell availability differs by Android
 device; this Samsung result cannot certify every manufacturer. Status payload
 readiness and task completion are not proof of every tool succeeding.

@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "packages": [
+    "python",
+    "git",
+    "npm",
+    "ripgrep",
+    "imagemagick",
+    "android-tools",
+    "termux-licenses"
+  ],
+  "commands": {
+    "python3": "bin/python3",
+    "python": "bin/python3",
+    "git": "bin/git",
+    "rg": "bin/rg",
+    "magick": "bin/magick",
+    "adb": "bin/adb"
+  },
+  "data": [
+    "lib/python*",
+    "lib/node_modules/npm",
+    "libexec/git-core",
+    "share/git-core",
+    "etc/ImageMagick*",
+    "lib/ImageMagick*",
+    "share/ImageMagick*",
+    "etc/fonts",
+    "share/fonts",
+    "share/LICENSES"
+  ],
+  "scripts": {
+    "npm": [
+      "node",
+      "lib/node_modules/npm/bin/npm-cli.js"
+    ],
+    "npx": [
+      "node",
+      "lib/node_modules/npm/bin/npx-cli.js"
+    ],
+    "jev": [
+      "node",
+      "crew/jev.cjs"
+    ]
+  },
+  "limitations": [
+    "Native npm/Python addons and native compilation require Android payloads in a Runtime APK update; no general compiler or pip is bundled.",
+    "App-data shebang executables cannot run directly. Invoke installed JS/Python entries with bundled node/python3; arbitrary npx CLI execution is not certified.",
+    "Git SSH/Perl extensions and ImageMagick external Ghostscript/Graphviz delegates are not bundled.",
+    "Runtime ADB requires its own Wireless Debugging pairing. Jev requires a TypeSafe API key."
+  ]
+}
