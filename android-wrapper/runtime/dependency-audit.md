@@ -409,3 +409,12 @@ Run with bundled Bash: `bash ~/install-apk.sh <apk> [wireless-target] [expected-
 The previous Runtime HOME script was backed up before replacement. The signed
 APK was also saved beside the original CI unsigned APK in Runtime HOME
 `/.crew-pocket/crew-helper-ci-71106ab/CrewHelper-Release-APK/`.
+
+Follow-up Dev-owned installation verification: the user requested installation
+through Pocket Dev. Dev Node `/api/run-code` launched bundled Bash with Runtime
+HOME's `install-apk.sh`, the signed Helper APK and expected package
+`com.crewpocket.helper`. Runtime UID10608 used its own ADB server on5038; signature
+verification, installed APK pull/certificate comparison and streamed reinstall
+completed in4,249ms, exit0, explicit `Success`. This verifies the Runtime command
+installation path, not a manual WebView button interaction. Proof files are
+Runtime HOME `/.crew-pocket/helper-dev-install-proof.json` and `.log`.
