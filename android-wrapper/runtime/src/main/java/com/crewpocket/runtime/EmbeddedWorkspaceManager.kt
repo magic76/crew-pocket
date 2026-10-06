@@ -8,6 +8,14 @@ object EmbeddedWorkspaceManager {
     private const val WORKSPACE_ASSET = "crew-workspace"
     private const val MARKER_NAME = ".crew-runtime-source"
 
+    private fun packagedRevision(context: Context): String {
+        // Debug builds retain the same versionName across installs. The APK
+        // update timestamp changes when a new bundle is installed, while an
+        // ordinary service restart keeps local workspace edits intact.
+        val updateTime = context.packageManager.getPackageInfo(context.packageName, 0).lastUpdateTime
+        return "${BuildConfig.VERSION_NAME}:$updateTime"
+    }
+
     fun workspaceDir(context: Context): File =
         File(File(context.filesDir, "workspaces"), WORKSPACE_NAME)
 
@@ -17,7 +25,7 @@ object EmbeddedWorkspaceManager {
         return File(workspace, "server.js").isFile &&
             File(workspace, "lib/providers/codex.js").isFile &&
             marker.isFile &&
-            marker.readText().trim() == BuildConfig.VERSION_NAME
+            marker.readText().trim() == packagedRevision(context)
     }
 
     fun ensureWorkspace(context: Context): Result<File> {
@@ -40,19 +48,15 @@ object EmbeddedWorkspaceManager {
             }
 
             val target = workspaceDir(context)
-            val previous = File(root, "$WORKSPACE_NAME.previous")
-            previous.deleteRecursively()
-
-            if (target.exists() && !target.renameTo(previous)) {
-                target.deleteRecursively()
+            // Refresh packaged source only. Keep histories, settings, runtime
+            // logs and user-created files that are not part of the APK assets.
+            target.mkdirs()
+            check(staging.copyRecursively(target, overwrite = true)) {
+                "Could not refresh packaged Crew workspace"
             }
-            if (!staging.renameTo(target)) {
-                staging.copyRecursively(target, overwrite = true)
-                staging.deleteRecursively()
-            }
-            previous.deleteRecursively()
+            staging.deleteRecursively()
 
-            File(target, MARKER_NAME).writeText(BuildConfig.VERSION_NAME)
+            File(target, MARKER_NAME).writeText(packagedRevision(context))
             ensureRuntimeFiles(context, target)
             target
         }

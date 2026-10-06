@@ -80,7 +80,7 @@ def dependency_names(record):
 
 selected = []
 seen = set()
-queue = [root_package]
+queue = [root_package, 'bash']
 while queue:
     name = queue.pop(0)
     if name in seen:

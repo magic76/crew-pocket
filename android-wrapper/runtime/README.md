@@ -85,7 +85,7 @@ that is not supplied by the companion APK.
 A normal Linux GitHub runner can prepare the Android ARM64 payloads without Termux:
 
 ```bash
-# Downloads current Termux ARM64 Node + dependencies and repackages them for the APK.
+# Downloads ARM64 Node, Bash and dependencies and repackages them for the APK.
 bash android-wrapper/runtime/scripts/fetch-termux-node-payload.sh
 
 # Downloads the current Android Codex npm tarball, including codex-code-mode-host.
@@ -95,6 +95,11 @@ bash android-wrapper/runtime/scripts/fetch-codex-payload.sh
 # digest, and only accepts an ARM64 ELF that is directly Android-compatible.
 bash android-wrapper/runtime/scripts/fetch-official-agy-payload.sh
 ```
+
+Node and Bash have app-private PATH aliases pointing to their installer-owned
+ELF files. The companion provider preserves the validated conversation cwd and
+instructs command tools to use the bundled Bash rather than Codex's native
+`/bin/sh` fallback, which does not exist on Android.
 
 Antigravity CLI 1.2.15 release notes added native Android/Termux support. Current releases expose the ARM64-compatible build through the musl archive rather than a separately named Android asset. The official fetcher therefore prefers an Android-named asset if one appears in a future release, then the ARM64 musl archive, and only falls back to the regular Linux ARM64 archive for inspection. It still validates the ELF loader/dependencies and refuses glibc or other non-Android binaries instead of trusting the asset name.
 

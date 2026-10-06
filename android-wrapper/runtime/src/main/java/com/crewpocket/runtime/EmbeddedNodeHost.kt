@@ -88,8 +88,8 @@ class EmbeddedNodeHost(
                 if (!historyMigrationToken.isNullOrBlank()) {
                     put("CREW_HISTORY_IMPORT_TOKEN", historyMigrationToken)
                 }
-                put("SHELL", "/system/bin/sh")
-                put("PATH", "/system/bin:/system/xbin:/product/bin")
+                put("PATH", EmbeddedExecutablePaths.path(context))
+                put("SHELL", File(EmbeddedExecutablePaths.prepare(context), "bash").absolutePath)
                 put("LD_LIBRARY_PATH", context.applicationInfo.nativeLibraryDir)
                 put("SSL_CERT_FILE", certificates.absolutePath)
                 put("CODEX_CA_CERTIFICATE", certificates.absolutePath)

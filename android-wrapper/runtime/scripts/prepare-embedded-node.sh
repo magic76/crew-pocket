@@ -16,8 +16,10 @@ if ! command -v patchelf >/dev/null 2>&1; then
 fi
 
 PREFIX_DIR="${PREFIX:-/data/data/com.termux/files/usr}"
+BASH_BIN="${NODE_EMBED_BASH_BIN:-$PREFIX_DIR/bin/bash}"
+[ -f "$BASH_BIN" ] || { echo "Bash payload not found: $BASH_BIN" >&2; exit 1; }
 mkdir -p "$DEST"
-rm -f "$DEST/libnode_exec.so" "$DEST"/libcrew_node_*.so
+rm -f "$DEST/libnode_exec.so" "$DEST/libbash_exec.so" "$DEST"/libcrew_node_*.so
 
 declare -A SOURCE_BY_NEEDED
 declare -A SAFE_BY_NEEDED
@@ -88,6 +90,7 @@ collect_binary() {
 }
 
 collect_binary "$NODE_BIN"
+collect_binary "$BASH_BIN"
 index=0
 while [ "$index" -lt "${#QUEUE[@]}" ]; do
     needed="${QUEUE[$index]}"
@@ -97,6 +100,8 @@ done
 
 cp "$NODE_BIN" "$DEST/libnode_exec.so"
 chmod 0755 "$DEST/libnode_exec.so"
+cp "$BASH_BIN" "$DEST/libbash_exec.so"
+chmod 0755 "$DEST/libbash_exec.so"
 
 for needed in "${!SOURCE_BY_NEEDED[@]}"; do
     cp "${SOURCE_BY_NEEDED[$needed]}" "$DEST/${SAFE_BY_NEEDED[$needed]}"
@@ -116,6 +121,7 @@ patch_binary() {
 }
 
 patch_binary "$DEST/libnode_exec.so"
+patch_binary "$DEST/libbash_exec.so"
 
 for needed in "${!SOURCE_BY_NEEDED[@]}"; do
     target="$DEST/${SAFE_BY_NEEDED[$needed]}"
