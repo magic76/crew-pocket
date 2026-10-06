@@ -33,7 +33,7 @@ const { getProvider, normalizeProviderId, listProviders, listProviderMetadata } 
 const { handleLiveSync, handleLiveTranscribe, handleQuickTranscribe } = require('./lib/history');
 const { generateCompactedSummary, buildCompactionSource } = require('./lib/compact');
 const { handleRunCode } = require('./lib/sandbox');
-const { handleTerminal } = require('./lib/terminal');
+const { handleTerminal, hasActiveTerminals } = require('./lib/terminal');
 const { handleBuildArtifact } = require('./lib/build-artifacts');
 const { handleUsage } = require('./lib/usage');
 const { handleListFiles, handleReadFile, handleSaveFile, handleDeleteFile, handleTransferFile } = require('./lib/files');
@@ -41,7 +41,7 @@ const { handleListPublicAssets } = require('./lib/public-assets');
 const { createExtensionBridge } = require('./lib/extension_bridge');
 const { getStorageReport, deleteMediaItems, getMediaThumbnail } = require('./lib/storage');
 const { getConversationSettings, getProviderConversationSettings, saveConversationSettings, saveConversationTitle, deleteConversationSettings } = require('./lib/conversation-settings');
-const { createTask, getTask, listTasks, updateTask } = require('./lib/tasks');
+const { createTask, getTask, listTasks, updateTask, hasRunningTasks } = require('./lib/tasks');
 const { listWorkspaces, resolveWorkspace, createWorkspace } = require('./lib/workspaces');
 const auth = require('./lib/auth');
 const {
@@ -2841,6 +2841,12 @@ const server = http.createServer(async (req, res) => {
     return handleGetModels(res);
   } else if (pathname === '/api/providers' && req.method === 'GET') {
     return handleGetProviders(res);
+  } else if (pathname === '/api/runtime/update-readiness' && req.method === 'GET') {
+    const busy = Boolean(getProvider('codex').getWarmupStatus?.().busy) ||
+      sessionManager.getStatus().activeSessions.some(session => session.isBusy) ||
+      await hasRunningTasks() || hasActiveTerminals();
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+    return res.end(JSON.stringify({ idle: !busy }));
   } else if (pathname === '/api/runtime/status' && req.method === 'GET') {
     return handleRuntimeStatus(res);
   } else if (pathname === '/api/runtime/providers' && (req.method === 'GET' || req.method === 'POST')) {

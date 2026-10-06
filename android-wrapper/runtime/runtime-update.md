@@ -1,0 +1,19 @@
+# Pocket-managed Runtime APK update
+
+The settings provider update buttons open a native Pocket panel. Choose an existing APK through Android's document picker, or paste an HTTPS download URL (or the current runtime's `/api/build-artifacts/<id>/<name>.apk`) with its SHA256.
+
+Pocket stages the APK in its own private files, checks the expected runtime package, current signing certificate set, non-decreasing versionCode, companion READY metadata and required Node/Codex payloads. Debug Pocket accepts only `com.crewpocket.runtime.dev`. Certificate rotation is not currently supported. Normal replacement preserves Runtime app data; no uninstall or data reset is performed.
+
+Installation requires finishing Live/text tasks and all running provider/background tasks and Terminal sessions. `/api/runtime/update-readiness` is an authenticated, no-store readiness snapshot. It is not a lock against a new task started by another client during Android's installation confirmation; finish other clients' work before updating.
+
+Pocket uses Android PackageInstaller, `USER_ACTION_REQUIRED` and a private explicit install-result receiver. Grant “Install unknown apps” to Pocket when Android requests it, then confirm the installation. The updater does not use Termux or ADB. Install state/session id, expected APK hash and install confirmation are stored in Pocket preferences so replacing Runtime does not replace the updater. Return to Pocket after installation. It checks the installed APK hash, starts Runtime through the normal Pocket service and polls companion status plus the actual Node health endpoint. Finally, a Codex request must execute a harmless Node command and produce the expected marker with exit code zero. Installation and runtime/provider verification have distinct outcomes; failure remains visible in the update panel for retry.
+
+Downloads are bounded to 2GB, enforce SHA256, permit HTTPS redirects only, and disallow redirects for loopback artifacts. Interrupted downloads restart from the beginning. The panel does not discover new releases or rebuild the Runtime automatically. A compatible signed APK must already be prepared. Generated Runtime debug builds must use the original Dev signing key; a fresh Gradle debug key will fail the signature check and may also break Pocket's signature permission. Never solve a mismatch by uninstalling the user's Runtime.
+
+The Codex verification adds a small verification conversation. AGY authentication/task execution is not certified by this updater. No histories, signing keys or auth/config files are edited by the updater.
+
+## Device verification
+
+On Samsung SM-S938B / Android 16, the native panel opened from Pocket Dev. The readiness endpoint returned `idle:false` with a newly created test Terminal and `idle:true` after closing only that test Terminal. Selecting a compatible Runtime APK passed package/signature checks. The Android unknown-source permission screen and explicit “Update Crew Runtime Dev” confirmation appeared. Installation completed through Pocket's PackageInstaller session, preserving Runtime data. Pocket's persisted verification later reached `completed`, after installed-APK SHA256 matching, `/status` running, `/healthz` 204 and the Codex command marker with exit code zero.
+
+The first pass exposed a callback ordering race: Pocket can resume before PackageInstaller delivers success. An explicit package-scoped result broadcast now resumes verification when Pocket is visible; otherwise the persisted state is checked on its next resume. A repeat of this final automatic callback path awaits the phone being unlocked. Network download and negative package/signature/hash paths have not yet been exercised on the device.

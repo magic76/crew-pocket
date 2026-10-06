@@ -66,6 +66,7 @@ class MainActivity : Activity() {
     private val pageLoaded = AtomicBoolean(false)
     private lateinit var runtimeHealthMonitor: RuntimeHealthMonitor
     private lateinit var wirelessDebugController: WirelessDebugController
+    private lateinit var runtimeUpdateController: RuntimeUpdateController
 
     private var pendingWebPermission: PermissionRequest? = null
     private var pendingWebResources: Array<String> = emptyArray()
@@ -74,12 +75,16 @@ class MainActivity : Activity() {
     private var filePathCallback: ValueCallback<Array<Uri>>? = null
     private val webSessionId = System.currentTimeMillis()
     private var legacyPwaCleanupPending = false
+    private var appVisible = false
     private var pendingConversationProvider: String? = null
     private var pendingConversationId: String? = null
     private var pendingTaskId: String? = null
     private var pendingConversationAttempts = 0
     private val runtimeReloadReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == "${packageName}.RUNTIME_UPDATE_RESULT" && appVisible) {
+                runtimeUpdateController.resume()
+            }
             if (intent?.action == CrewRuntimeService.ACTION_RELOAD_WEBVIEW && ::webView.isInitialized) {
                 webView.reload()
             }
@@ -91,6 +96,9 @@ class MainActivity : Activity() {
         captureConversationIntent(intent)
         buildUi()
         wirelessDebugController = WirelessDebugController(this)
+        runtimeUpdateController = RuntimeUpdateController(this) { callback ->
+            webView.evaluateJavascript("Boolean((typeof isStreaming !== 'undefined' && isStreaming) || window.isLiveSessionActive?.())") { active -> callback(active == "false") }
+        }
         runtimeHealthMonitor = RuntimeHealthMonitor(
             onHealthy = {
                 runOnUiThread {
@@ -108,7 +116,7 @@ class MainActivity : Activity() {
             }
         )
         configureWebView()
-        registerReceiver(runtimeReloadReceiver, IntentFilter(CrewRuntimeService.ACTION_RELOAD_WEBVIEW), Context.RECEIVER_NOT_EXPORTED)
+        registerReceiver(runtimeReloadReceiver, IntentFilter(CrewRuntimeService.ACTION_RELOAD_WEBVIEW).apply { addAction("${packageName}.RUNTIME_UPDATE_RESULT") }, Context.RECEIVER_NOT_EXPORTED)
         prepareLegacyPwaRetirement()
         requestNotificationPermissionIfNeeded()
         requestTermuxPermissionIfPossible()
@@ -123,11 +131,13 @@ class MainActivity : Activity() {
 
     override fun onStart() {
         super.onStart()
+        appVisible = true
         startCrewRuntime()
         runtimeHealthMonitor.start()
     }
 
     override fun onStop() {
+        appVisible = false
         runtimeHealthMonitor.stop()
         notifyRuntimeBackground()
         super.onStop()
@@ -136,12 +146,14 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         refreshSetupStatus()
+        if (::runtimeUpdateController.isInitialized) runtimeUpdateController.resume()
     }
 
     override fun onDestroy() {
         unregisterReceiver(runtimeReloadReceiver)
         runtimeHealthMonitor.close()
         wirelessDebugController.close()
+        runtimeUpdateController.close()
         webView.destroy()
         super.onDestroy()
     }
@@ -483,22 +495,7 @@ class MainActivity : Activity() {
             runOnUiThread {
                 if (!webView.url.orEmpty().startsWith(SERVER_URL)) return@runOnUiThread
 
-                val runtimePackage = CompanionAgentRuntime.PACKAGE_NAME
-                val marketIntent = Intent(
-                    Intent.ACTION_VIEW,
-                    Uri.parse("market://details?id=$runtimePackage")
-                ).setPackage("com.android.vending")
-
-                try {
-                    startActivity(marketIntent)
-                } catch (_: Exception) {
-                    startActivity(
-                        Intent(
-                            Intent.ACTION_VIEW,
-                            Uri.parse("https://play.google.com/store/apps/details?id=$runtimePackage")
-                        )
-                    )
-                }
+                runtimeUpdateController.show()
             }
         }
     }
@@ -684,6 +681,14 @@ class MainActivity : Activity() {
 
     @Deprecated("Deprecated in Java")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        if (requestCode == RuntimeUpdateController.REQUEST_APK) {
+            if (resultCode == RESULT_OK) data?.data?.let { runtimeUpdateController.selected(it) }
+            return
+        }
+        if (requestCode == RuntimeUpdateController.REQUEST_INSTALL_PERMISSION) {
+            runtimeUpdateController.show()
+            return
+        }
         if (requestCode == REQUEST_FILE) {
             val callback = filePathCallback
             filePathCallback = null
