@@ -4,6 +4,29 @@ Inspected on 2026-10-06 for `feature/companion-runtime`, Dev packages on Samsung
 SM-S938B / Android 16. Runtime ports are 8100 (server), 8867 (Codex bridge), and
 8868 (status). Dev disables Termux fallback.
 
+## GitHub CLI delivery (2026-10-06)
+
+Runtime Dev bundles Android ARM64 GitHub CLI 2.102.0 from a SHA256-pinned package.
+`gh` resolves into Runtime's installer-owned nativeLibraryDir. Its ELF interpreter
+is `/system/bin/linker64`; DT_NEEDED includes only liblog, libdl and libc. Credentials
+use Runtime's private `.config/gh`, not Termux HOME. SSH and browser launch helpers
+are not bundled; device authorization can be completed manually in the phone browser.
+
+Device checks passed: actual Runtime `gh --version`, `gh auth login --help`, PTY
+version execution, and HTTPS to GitHub API (an intentionally invalid probe token
+received HTTP 401, confirming network/TLS rather than account authorization).
+`gh auth status` correctly reports not logged in. User OAuth login and authenticated
+repo access remain for the user to authorize; no real credentials were copied.
+
+The credential integration probe found a real runtime dependency: Git's compiled
+SHELL_PATH still pointed to `/data/data/com.termux/files/usr/bin/sh`, so `!` helpers
+failed with `fatal: cannot exec ...: No such file or directory`. The packager now
+relocates that NUL-terminated C string to `/system/bin/sh` without changing ELF
+offsets. After rebuilding/installing Runtime Dev, both a harmless shell credential
+helper and `!gh auth git-credential` returned credentials with exit 0 using synthetic
+probe data only. Runtime status remained running and Node health returned 204.
+See toolchain README for a PATH-based Git helper that survives APK native directory changes.
+
 ## Agent APK build delivery (2026-10-06)
 
 On Samsung SM-S938B / Android 16, Runtime Dev now provides OpenJDK 21.0.12,

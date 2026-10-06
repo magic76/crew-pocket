@@ -45,7 +45,7 @@ val runtimePayloadReady = listOf(
     val manifest = JsonSlurper().parse(file("src/main/assets/toolchain/manifest.json")) as Map<*, *>
     val commands = manifest["commands"] as Map<*, *>
     val links = manifest["links"] as Map<*, *>
-    listOf("python3", "git", "npm", "rg", "magick", "adb", "jev").all { commands.containsKey(it) } &&
+    listOf("python3", "git", "gh", "npm", "rg", "magick", "adb", "jev").all { commands.containsKey(it) } &&
         (commands.values + links.values).all { File(runtimeJniDir, it.toString()).isFile }
 }.getOrDefault(false)
 

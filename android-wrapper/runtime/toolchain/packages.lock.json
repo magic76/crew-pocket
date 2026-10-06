@@ -3,6 +3,7 @@
   "roots": [
     "python",
     "git",
+    "gh",
     "npm",
     "ripgrep",
     "imagemagick",
@@ -858,6 +859,12 @@
       "Filename": "pool/main/libv/libvorbis/libvorbis_1.3.7-4_aarch64.deb",
       "SHA256": "6bfd70c4b570b85594bd06116b75a6f8109ec58cbc123e938b630a6eefdedf4e",
       "Depends": "libogg"
+    },
+    {
+      "Package": "gh",
+      "Version": "2.102.0",
+      "Filename": "pool/main/g/gh/gh_2.102.0_aarch64.deb",
+      "SHA256": "84c1fb3d4c9ae374d25ec1100637c8ec1669f1eee1d91eab887424254ad1d20b"
     }
   ]
 }

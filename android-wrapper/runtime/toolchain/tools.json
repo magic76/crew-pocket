@@ -3,6 +3,7 @@
   "packages": [
     "python",
     "git",
+    "gh",
     "npm",
     "ripgrep",
     "imagemagick",
@@ -31,7 +32,8 @@
     "aapt2": "bin/aapt2",
     "zipalign": "bin/zipalign",
     "aapt": "bin/aapt",
-    "aidl": "bin/aidl"
+    "aidl": "bin/aidl",
+    "gh": "bin/gh"
   },
   "data": [
     "lib/python*",
@@ -50,7 +52,8 @@
     "lib/jvm/java-21-openjdk/release",
     "lib/jvm/java-21-openjdk/jmods/java.base.jmod",
     "opt/gradle/lib",
-    "share/java/apksigner.jar"
+    "share/java/apksigner.jar",
+    "share/doc/gh"
   ],
   "scripts": {
     "npm": [

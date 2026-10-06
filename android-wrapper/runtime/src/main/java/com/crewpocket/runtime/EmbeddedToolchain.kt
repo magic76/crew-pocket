@@ -103,6 +103,8 @@ object EmbeddedToolchain {
             put("GIT_EXEC_PATH", bin.absolutePath)
             put("GIT_TEMPLATE_DIR", File(target, "share/git-core/templates").absolutePath)
             put("GIT_PAGER", "cat")
+            put("GH_PAGER", "/system/bin/cat")
+            put("GH_CONFIG_DIR", File(context.filesDir, ".config/gh").absolutePath)
             put("GIT_CONFIG_NOSYSTEM", "1")
             put("GIT_TEXTDOMAINDIR", File(target, "share/locale").absolutePath)
             put("GIT_SSL_CAINFO", EmbeddedTrustStore.certificateBundle(context).absolutePath)

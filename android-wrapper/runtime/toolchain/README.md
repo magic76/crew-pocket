@@ -64,7 +64,18 @@ and toolchains. This payload does not include a general native compiler.
   with `node`, or add a registered native launcher during the next APK build.
 - Git supports built-in commands and bundled HTTP(S) helpers. SSH, Perl-based Git
   extensions and interactive editors are not included; hooks require compatible
-  interpreters. Git TLS uses Android's exported trust roots.
+  interpreters. Git TLS uses Android's exported trust roots. Git's compiled
+  credential-helper shell is relocated to `/system/bin/sh` during ELF packaging.
+- GitHub CLI (`gh`) is an Android ARM64 executable in the Runtime APK.
+  `GH_CONFIG_DIR` is private `$HOME/.config/gh`, outside the replaceable tool payload.
+  Use HTTPS: SSH tooling and a desktop browser opener are not bundled.
+  For device login run `gh auth login --hostname github.com --git-protocol https --web`;
+  open the displayed device URL in the phone browser and enter the displayed code.
+  Then run `gh auth setup-git`. For GitHub HTTPS, replace the generated native-library
+  path helper with a PATH-based helper so a later APK replacement does not invalidate it:
+  `git config --global --replace-all credential.https://github.com.helper ""` followed by
+  `git config --global --add credential.https://github.com.helper "!gh auth git-credential"`.
+  `gh auth status` checks login. Never print `gh auth token` into chat or logs.
 - ImageMagick bundles coders and configuration. External delegates such as
   Ghostscript, Graphviz and GUI programs are not registered commands; formats
   requiring those delegates are not certified. PNG/JPEG conversion is the first gate.

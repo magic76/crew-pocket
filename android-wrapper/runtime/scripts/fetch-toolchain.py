@@ -16,6 +16,19 @@ def download(url):
     with urllib.request.urlopen(urllib.request.Request(url, headers={'User-Agent': 'Crew-Toolchain/1'}), timeout=120) as response:
         return response.read()
 
+def relocate_git_shell(binary_path):
+    # Git's !credential helpers invoke its compiled SHELL_PATH, ignoring PATH.
+    # Keep all ELF offsets intact while replacing this NUL-terminated C string.
+    original = b'/data/data/com.termux/files/usr/bin/sh\0'
+    replacement = b'/system/bin/sh\0'
+    binary = binary_path.read_bytes()
+    count = binary.count(original)
+    if not count and replacement not in binary:
+        raise RuntimeError('Git payload has no recognized shell path; inspect its build')
+    if count:
+        binary_path.write_bytes(binary.replace(original, replacement.ljust(len(original), b'\0')))
+    return count
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--work', required=True)
@@ -137,6 +150,8 @@ def main():
             links['lib/' + name] = library
     for source, library in elf.items():
         target = jni / library; shutil.copyfile(source, target); target.chmod(0o755)
+        if source.relative_to(prefix) == pathlib.Path('bin/git'):
+            print('Relocated Git credential-helper shell', relocate_git_shell(target), flush=True)
         for old, new in rewrites[source].items(): subprocess.run(['patchelf', '--replace-needed', old, new, str(target)], check=True)
         subprocess.run(['patchelf', '--set-rpath', '$ORIGIN', str(target)], check=True)
         if run('patchelf', '--print-soname', str(target)):
