@@ -150,9 +150,9 @@ class WirelessDebugController(private val activity: Activity) {
                     statusText.setTextColor(Color.rgb(248, 113, 113))
                     return@setOnClickListener
                 }
-                "adb pair $normalizedPairing $pairingCode\n~/set-adb.sh $target"
+                "adb pair $normalizedPairing $pairingCode\nadb connect $target"
             } else {
-                "~/set-adb.sh $target"
+                "adb connect $target"
             }
             val clipboard = activity.getSystemService(ClipboardManager::class.java)
             clipboard?.setPrimaryClip(ClipData.newPlainText("Crew Pocket ADB", command))
@@ -167,21 +167,8 @@ class WirelessDebugController(private val activity: Activity) {
                 return@setOnClickListener
             }
     
-            saveButton.isEnabled = false
-            statusText.setTextColor(Color.rgb(148, 163, 184))
-            statusText.text = "正在通知 Termux 儲存 $target 並連線…"
-            val result = TermuxBridge.setAdbTarget(activity, target)
-            if (result.isFailure) {
-                statusText.text = result.exceptionOrNull()?.message
-                    ?: "無法通知 Termux；請確認已允許執行 Termux 指令。"
-                statusText.setTextColor(Color.rgb(248, 113, 113))
-                saveButton.isEnabled = true
-                return@setOnClickListener
-            }
-    
-            statusText.text = "設定已送出，正在確認 ADB 連線…"
-            refreshAdbStatus(targetInput, statusText, retries = 6, delayMs = 500L)
-            saveButton.isEnabled = true
+            submitAdbRequest(target, null, null, statusText, saveButton, pairButton)
+
         }
     
         pairButton.setOnClickListener {
@@ -206,20 +193,8 @@ class WirelessDebugController(private val activity: Activity) {
                 return@setOnClickListener
             }
     
-            pairButton.isEnabled = false
-            statusText.setTextColor(Color.rgb(148, 163, 184))
-            statusText.text = "正在通知 Termux 配對 $pairingTarget，再連線 $target…"
-            val result = TermuxBridge.pairAdbTarget(activity, pairingTarget, pairingCode, target)
-            if (result.isFailure) {
-                statusText.text = result.exceptionOrNull()?.message
-                    ?: "無法通知 Termux；請確認已允許執行 Termux 指令。"
-                statusText.setTextColor(Color.rgb(248, 113, 113))
-                pairButton.isEnabled = true
-                return@setOnClickListener
-            }
-            statusText.text = "配對指令已送出，正在確認 ADB 連線…"
-            refreshAdbStatus(targetInput, statusText, retries = 8, delayMs = 800L)
-            pairButton.isEnabled = true
+            submitAdbRequest(target, pairingTarget, pairingCode, statusText, saveButton, pairButton)
+
         }
     
         dialog.setOnShowListener {
@@ -284,6 +259,71 @@ class WirelessDebugController(private val activity: Activity) {
         }, delayMs, TimeUnit.MILLISECONDS)
     }
     
+    private fun submitAdbRequest(
+        target: String,
+        pairingTarget: String?,
+        pairingCode: String?,
+        statusView: TextView,
+        saveButton: Button,
+        pairButton: Button
+    ) {
+        adbStatusTask?.cancel(false)
+        adbStatusTask = null
+        saveButton.isEnabled = false
+        pairButton.isEnabled = false
+        statusView.setTextColor(Color.rgb(148, 163, 184))
+        statusView.text = if (pairingTarget == null) "正在由 Runtime 連線 $target…"
+            else "正在由 Runtime 配對 $pairingTarget，再連線 $target…"
+        val currentDialog = adbDialog
+        scheduler.execute {
+            val result = runCatching {
+                val payload = JSONObject().put("target", target)
+                if (pairingTarget != null) {
+                    payload.put("pairing_target", pairingTarget)
+                    payload.put("pairing_code", pairingCode)
+                }
+                val connection = URL("${SERVER_URL}api/adb").openConnection() as HttpURLConnection
+                connection.requestMethod = "POST"
+                connection.connectTimeout = 3000
+                connection.readTimeout = 60000
+                connection.useCaches = false
+                connection.doOutput = true
+                connection.setRequestProperty("Content-Type", "application/json")
+                try {
+                    connection.outputStream.use { it.write(payload.toString().toByteArray(Charsets.UTF_8)) }
+                    val ok = connection.responseCode in 200..299
+                    val stream = if (ok) connection.inputStream else connection.errorStream
+                    val json = JSONObject(stream?.bufferedReader()?.use { it.readText() } ?: "{}")
+                    if (!ok || !json.optBoolean("success")) {
+                        error(json.optString("error", "Runtime ADB 設定失敗"))
+                    }
+                    json
+                } finally {
+                    connection.disconnect()
+                }
+            }
+            activity.runOnUiThread {
+                if (adbDialog !== currentDialog || currentDialog?.isShowing != true) return@runOnUiThread
+                saveButton.isEnabled = true
+                pairButton.isEnabled = true
+                result.fold(onSuccess = { json ->
+                    if (json.optBoolean("connected")) {
+                        statusView.text = "ADB 已連線：$target"
+                        statusView.setTextColor(Color.rgb(74, 222, 128))
+                    } else {
+                        statusView.text = listOf(json.optString("pair_output"), json.optString("output"))
+                            .filter { it.isNotBlank() }.joinToString("\n")
+                            .ifBlank { "尚未連線；請確認無線偵錯 Port 與配對狀態。" }
+                        statusView.setTextColor(Color.rgb(248, 113, 113))
+                    }
+                }, onFailure = { error ->
+                    statusView.text = error.message ?: "無法連線目前版本的 Runtime。"
+                    statusView.setTextColor(Color.rgb(248, 113, 113))
+                })
+            }
+        }
+    }
+
     private fun readAdbStatus(): AdbStatus? {
         return try {
             val connection = URL("${SERVER_URL}api/adb").openConnection() as HttpURLConnection
