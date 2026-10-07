@@ -40,7 +40,12 @@
       clearInterval(pollTimer);
       pollTimer = null;
     }
+    if (!visible && window.getPrimaryTab?.() === 'tasks') {
+      window.syncPrimaryTabChrome?.('chat');
+    }
   }
+
+  window.setTaskCenterVisible = setModalVisible;
 
   function renderTasks(tasks) {
     if (!list) return;

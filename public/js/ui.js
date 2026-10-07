@@ -151,6 +151,7 @@ const closeWorkspaceModalBtn = document.getElementById('close-workspace-modal-bt
 const workspaceIcon = document.getElementById('workspace-icon');
 const workspaceLabel = document.getElementById('workspace-label');
 const headerRoleProject = document.getElementById('header-role-project');
+const headerCurrentTask = document.getElementById('header-current-task');
 const drawerNewRoleBtn = document.getElementById('drawer-new-role-btn');
 const roleEditorModal = document.getElementById('role-editor-modal');
 const roleEditorForm = document.getElementById('role-editor-form');
@@ -455,7 +456,6 @@ window.showRoleHistoryView = showRoleHistoryView;
 
 function toggleDrawer(open) {
   if (!drawer || !drawerOverlay) return;
-  haptic('light');
   if (open) {
     drawer.classList.remove('-translate-x-full');
     drawerOverlay.classList.remove('opacity-0', 'pointer-events-none');
@@ -468,6 +468,7 @@ function toggleDrawer(open) {
   } else {
     drawer.classList.add('-translate-x-full');
     drawerOverlay.classList.add('opacity-0', 'pointer-events-none');
+    if (window.getPrimaryTab?.() === 'crew') window.syncPrimaryTabChrome?.('chat');
   }
 }
 
@@ -681,8 +682,12 @@ function updateWorkspaceUI() {
     if (workspaceIcon) workspaceIcon.textContent = role.projectId ? (member?.icon || '🧠') : '🧠';
     if (workspaceLabel) workspaceLabel.textContent = role.name;
     if (headerRoleProject) headerRoleProject.textContent = projectLabel;
+    const status = crewStatusForRole(role.id);
+    const latest = roleLatestConversation(role.id);
+    const taskTitle = status?.currentTask?.title || status?.conversationTitle || latest?.title || '新工作';
+    if (headerCurrentTask) headerCurrentTask.textContent = taskTitle;
     if (workspaceSelectorBtn) {
-      workspaceSelectorBtn.title = `開啟 Crew Roles · ${role.name} · ${projectLabel}`;
+      workspaceSelectorBtn.title = `目前 Role · ${role.name} · ${projectLabel}`;
     }
     return;
   }
@@ -692,7 +697,8 @@ function updateWorkspaceUI() {
     if (workspaceIcon) workspaceIcon.textContent = member.icon || '💻';
     if (workspaceLabel) workspaceLabel.textContent = member.name;
     if (headerRoleProject) headerRoleProject.textContent = projectLabel;
-    if (workspaceSelectorBtn) workspaceSelectorBtn.title = `開啟 Crew Roles · ${member.name}`;
+    if (headerCurrentTask) headerCurrentTask.textContent = '新工作';
+    if (workspaceSelectorBtn) workspaceSelectorBtn.title = `目前 Role · ${member.name}`;
     return;
   }
 
@@ -700,7 +706,8 @@ function updateWorkspaceUI() {
   if (workspaceIcon) workspaceIcon.textContent = meta.icon;
   if (workspaceLabel) workspaceLabel.textContent = 'General Developer';
   if (headerRoleProject) headerRoleProject.textContent = compactWorkspaceLabel(meta);
-  if (workspaceSelectorBtn) workspaceSelectorBtn.title = '開啟 Crew Roles';
+  if (headerCurrentTask) headerCurrentTask.textContent = '新工作';
+  if (workspaceSelectorBtn) workspaceSelectorBtn.title = '目前 Role · General Developer';
 }
 
 window.getCurrentCrewMemberId = () => currentCrewMemberId || '';
@@ -862,6 +869,7 @@ async function loadCrewStatus({ force = false } = {}) {
       if (!response.ok || !data.success) throw new Error(data.error || '無法讀取 Crew 狀態');
       crewStatusByRole = new Map((data.roles || []).map(status => [status.roleId, status]));
       crewStatusUpdatedAt = Number(data.generatedAt) || Date.now();
+      updateWorkspaceUI();
       renderRoleNavigation();
       return crewStatusByRole;
     })
@@ -909,6 +917,7 @@ async function prepareNewRoleRuntime(roleId = currentRoleId || DEFAULT_ROLE_ID) 
     lastActivityAt: Number(data.runtime.updatedAt || Date.now())
   });
   crewStatusUpdatedAt = Date.now();
+  updateWorkspaceUI();
   renderRoleNavigation();
   return data.runtime;
 }
@@ -932,7 +941,7 @@ function roleLatestConversation(roleId) {
 }
 
 function formatRoleLastActivity(conversation) {
-  if (!conversation) return '尚未開始工作';
+  if (!conversation) return '';
   const updatedAt = Number(conversation.updatedAt || 0);
   if (!updatedAt) return conversation.title || '最近工作';
   const diffMs = Math.max(0, Date.now() - updatedAt);
@@ -982,26 +991,16 @@ function renderRoleNavigation() {
           badge: 'border-slate-700 bg-slate-800/70 text-slate-500',
           avatar: 'border-slate-700/70 bg-slate-900'
         };
-    const title = status?.currentTask?.title || status?.conversationTitle || latest?.title || '尚未開始工作';
-    const activity = formatRoleLastActivity({
-      title,
-      updatedAt: status?.lastActivityAt || latest?.updatedAt || 0
-    });
-    const description = role.description ? escapeHtml(role.description) : '長期身份與記憶';
+    const title = status?.currentTask?.title || status?.conversationTitle || latest?.title || '';
+    const hasWork = Boolean(title);
+    const activity = hasWork
+      ? formatRoleLastActivity({
+          title,
+          updatedAt: status?.lastActivityAt || latest?.updatedAt || 0
+        })
+      : '';
     const queued = Number(status?.queuedRequestCount || 0);
     const unread = Number(status?.unreadReplyCount || 0);
-    const recentMessage = status?.recentMessage || null;
-    const otherRole = recentMessage
-      ? (recentMessage.direction === 'outgoing' ? recentMessage.toRoleName : recentMessage.fromRoleName)
-      : '';
-    const messagePrefix = recentMessage?.direction === 'outgoing' ? '→' : '←';
-    const messageRow = recentMessage
-      ? `<span class="mt-1.5 flex min-w-0 items-center gap-1.5 text-[9px] text-slate-500">
-          <span class="shrink-0 text-slate-600">${messagePrefix}</span>
-          <span class="shrink-0 font-medium text-slate-400">${escapeHtml(otherRole || 'Crew')}</span>
-          <span class="min-w-0 flex-1 truncate">${escapeHtml(recentMessage.content || '')}</span>
-        </span>`
-      : '';
     const counters = [
       queued ? `<span class="rounded-full border border-amber-500/25 bg-amber-500/10 px-1.5 py-0.5 text-[8px] font-bold text-amber-300">${queued} queued</span>` : '',
       unread ? `<span class="rounded-full border border-indigo-500/25 bg-indigo-500/10 px-1.5 py-0.5 text-[8px] font-bold text-indigo-300">${unread} unread</span>` : ''
@@ -1019,19 +1018,15 @@ function renderRoleNavigation() {
               <span class="flex min-w-0 items-center gap-1.5">
                 <span class="truncate text-[13px] font-bold text-slate-100">${escapeHtml(role.name)}</span>
                 <span class="shrink-0 rounded-full border px-1.5 py-0.5 text-[8px] font-bold ${meta.badge}">${meta.label}</span>
-                ${selected ? '<span class="shrink-0 rounded-full border border-teal-500/30 bg-teal-500/10 px-1.5 py-0.5 text-[8px] font-bold text-teal-300">OPEN</span>' : ''}
+                ${counters}
               </span>
-              <span class="mt-0.5 block truncate text-[10px] font-medium text-slate-400">${escapeHtml(roleProjectLabel(role))}</span>
-              <span class="mt-1 block truncate text-[9px] text-slate-500">${description}</span>
+              <span class="mt-0.5 block truncate text-[10px] font-medium text-slate-500">${escapeHtml(roleProjectLabel(role))}</span>
             </span>
           </span>
           <span class="mt-2.5 flex items-center gap-1.5 rounded-xl border border-slate-800/80 bg-slate-950/70 px-2.5 py-2">
-            <span class="text-[9px] text-slate-600">${status?.runtime ? '現在' : '最近'}</span>
-            <span class="min-w-0 flex-1 truncate text-[10px] font-medium text-slate-300">${escapeHtml(title)}</span>
-            <span class="shrink-0 text-[9px] text-slate-600">${escapeHtml(activity)}</span>
+            <span class="min-w-0 flex-1 truncate text-[10px] font-medium ${hasWork ? 'text-slate-300' : 'text-slate-600'}">${hasWork ? escapeHtml(title) : '尚無工作'}</span>
+            ${activity ? `<span class="shrink-0 text-[9px] text-slate-600">${escapeHtml(activity)}</span>` : ''}
           </span>
-          ${messageRow}
-          ${counters ? `<span class="mt-2 flex flex-wrap gap-1">${counters}</span>` : ''}
         </button>
         <button type="button" data-role-menu-btn="${escapeHtml(role.id)}" class="w-11 shrink-0 border-l border-slate-800/70 text-lg text-slate-500 transition hover:bg-slate-800/70 hover:text-white active:scale-95" aria-label="${escapeHtml(role.name)} 操作">⋯</button>
       </div>

@@ -60,6 +60,7 @@ jobs:
           node --check test/context-health.test.js
           node --check test/context-compaction.test.js
           node --check test/role-centric-navigation.test.js
+          node --check test/navigation-simplification.test.js
           node --check test/crew-role-messaging.test.js
           node --check test/role-runtime.test.js
           node --check test/role-delete-lifecycle.test.js
@@ -70,6 +71,7 @@ jobs:
           node test/context-health.test.js
           node test/context-compaction.test.js
           node test/role-centric-navigation.test.js
+          node test/navigation-simplification.test.js
           node test/crew-role-messaging.test.js
           node test/role-runtime.test.js
           node test/role-delete-lifecycle.test.js
