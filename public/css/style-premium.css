@@ -704,3 +704,14 @@ body.ai-streaming #send-btn {
     padding-bottom: 0.75rem !important;
   }
 }
+
+
+/* === Crew roster cards: 2026-10 === */
+.crew-role-task {
+  display: -webkit-box !important;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  min-height: 34px;
+  line-height: 1.35;
+}
