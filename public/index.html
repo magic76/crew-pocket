@@ -96,7 +96,7 @@
         </div>
         <!-- Header Sub-row: Workspace, Model Selector & Context Pill -->
         <div class="flex items-center gap-1.5 mt-0.5 min-w-0">
-          <button id="workspace-selector-btn" type="button" class="flex max-w-[104px] min-w-0 items-center gap-1 rounded-md border border-teal-500/30 bg-teal-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-teal-200 transition hover:bg-teal-500/20 active:scale-95 shrink-0" title="切換 Crew Member / 專案">
+          <button id="workspace-selector-btn" type="button" class="flex max-w-[104px] min-w-0 items-center gap-1 rounded-md border border-teal-500/30 bg-teal-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-teal-200 transition hover:bg-teal-500/20 active:scale-95 shrink-0" title="切換 Role / 專案">
             <span id="workspace-icon" class="shrink-0">💻</span><span id="workspace-label" class="truncate">Crew</span>
             <svg class="h-2.5 w-2.5 shrink-0 text-teal-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m6 9 6 6 6-6"/></svg>
           </button>
@@ -328,7 +328,7 @@
   <div id="workspace-modal" class="fixed inset-0 z-[70] hidden items-end justify-center bg-black/70 p-2 opacity-0 transition-opacity duration-150 sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-labelledby="workspace-modal-title">
     <section class="w-full max-w-md overflow-hidden rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl">
       <div class="flex items-start justify-between gap-3 border-b border-slate-800 p-3.5">
-        <div><h2 id="workspace-modal-title" class="text-sm font-bold text-slate-100">選擇 Crew Member</h2><p class="mt-0.5 text-[10px] text-slate-400">每位 Crew Member 長期負責一個專案；對話只是專案底下的工作紀錄。</p></div>
+        <div><h2 id="workspace-modal-title" class="text-sm font-bold text-slate-100">選擇 Role</h2><p class="mt-0.5 text-[10px] text-slate-400">Role 是長期身份；Project 與工作區獨立保存，Crew Member 暫時作為相容橋接。</p></div>
         <button id="close-workspace-modal-btn" type="button" class="min-h-9 min-w-9 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white">✕</button>
       </div>
 
@@ -346,7 +346,7 @@
       </div>
 
       <div id="workspace-options" class="max-h-[48vh] space-y-1 overflow-y-auto p-2.5"><div class="p-5 text-center text-xs text-slate-400">載入工作區中…</div></div>
-      <div class="border-t border-slate-800 px-3.5 py-2.5 text-[10px] text-slate-500">切換 Crew Member，就是切換長期負責的專案與工作脈絡。</div>
+      <div class="border-t border-slate-800 px-3.5 py-2.5 text-[10px] text-slate-500">切換 Role 會建立新對話；長期記憶跟著 Role，而不是跟著單一 transcript。</div>
     </section>
   </div>
 
