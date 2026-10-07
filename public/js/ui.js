@@ -868,6 +868,44 @@ async function loadCrewStatus({ force = false } = {}) {
 
 window.loadCrewStatus = loadCrewStatus;
 
+async function prepareNewRoleRuntime(roleId = currentRoleId || DEFAULT_ROLE_ID) {
+  const role = roleMeta(roleId);
+  if (!role) return null;
+  const response = await fetch('/api/role-runtime', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      action: 'prepare_new',
+      role_id: role.id,
+      provider: currentProvider,
+      model: currentModel,
+      effort: currentEffort,
+      workspace: currentWorkspace
+    })
+  });
+  const data = await response.json();
+  if (!response.ok || !data.success || !data.runtime) {
+    throw new Error(data.error || '無法建立 Role 新工作狀態');
+  }
+  const previous = crewStatusForRole(role.id) || { roleId: role.id, roleName: role.name };
+  crewStatusByRole.set(role.id, {
+    ...previous,
+    state: 'new',
+    busy: false,
+    runtime: data.runtime,
+    currentTask: null,
+    conversationTitle: null,
+    queuedRequestCount: Number(previous.queuedRequestCount || 0),
+    unreadReplyCount: Number(previous.unreadReplyCount || 0),
+    lastActivityAt: Number(data.runtime.updatedAt || Date.now())
+  });
+  crewStatusUpdatedAt = Date.now();
+  renderRoleNavigation();
+  return data.runtime;
+}
+
+window.prepareNewRoleRuntime = prepareNewRoleRuntime;
+
 function closeWorkspaceModal() {
   if (!workspaceModal) return;
   workspaceModal.classList.add('opacity-0');
@@ -1237,13 +1275,18 @@ async function selectRole(roleId, isCreatingNewChat = false) {
   const role = roleMeta(roleId);
   if (!role) return alert('找不到這個 Role。');
 
+  let restorePendingNew = false;
+
   if (!isCreatingNewChat) {
     try {
       await loadCrewStatus({ force: true });
       const status = crewStatusForRole(role.id);
       const runtime = status?.runtime || null;
 
-      if (
+      if (runtime?.pendingNew && !runtime.conversationId) {
+        restorePendingNew = true;
+        activateRoleIdentity(role);
+      } else if (
         runtime?.conversationId &&
         runtime?.providerId &&
         window.openCrewConversation
@@ -1264,20 +1307,22 @@ async function selectRole(roleId, isCreatingNewChat = false) {
         return;
       }
 
-      if (currentConversationId && roleId === currentRoleId) {
+      if (!restorePendingNew && currentConversationId && roleId === currentRoleId) {
         closeWorkspaceModal();
         if (typeof toggleDrawer === 'function') toggleDrawer(false);
         return;
       }
 
-      activateRoleIdentity(role);
-      if (typeof loadConversations === 'function') await loadConversations({ force: true });
-      const latest = roleLatestConversation(role.id);
-      if (latest && window.openCrewConversation) {
-        closeWorkspaceModal();
-        if (typeof toggleDrawer === 'function') toggleDrawer(false);
-        await window.openCrewConversation(latest.provider, latest.id);
-        return;
+      if (!restorePendingNew) {
+        activateRoleIdentity(role);
+        if (typeof loadConversations === 'function') await loadConversations({ force: true });
+        const latest = roleLatestConversation(role.id);
+        if (latest && window.openCrewConversation) {
+          closeWorkspaceModal();
+          if (typeof toggleDrawer === 'function') toggleDrawer(false);
+          await window.openCrewConversation(latest.provider, latest.id);
+          return;
+        }
       }
     } catch (error) {
       console.warn('[Role Navigation] Failed to restore current work:', error);
@@ -1285,6 +1330,14 @@ async function selectRole(roleId, isCreatingNewChat = false) {
   }
 
   activateRoleIdentity(role);
+
+  if (isCreatingNewChat) {
+    try {
+      await prepareNewRoleRuntime(role.id);
+    } catch (error) {
+      console.warn('[Role Runtime] Failed to prepare new work:', error.message);
+    }
+  }
 
   // A Role owns durable identity/memory. A fresh Conversation is created only
   // when this Role has no current/prior work or the user explicitly asks for New Work.
