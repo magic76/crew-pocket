@@ -745,9 +745,8 @@ function initAppAndListeners() {
   // New Work Action: keep the active Role, reset only short-term Conversation context.
   if (newChatBtn) {
     newChatBtn.addEventListener('click', async () => {
-      if (currentAbortController) {
-        try { currentAbortController.abort(); } catch(e) {}
-        currentAbortController = null;
+      if (isStreaming && typeof window.stopGeneration === 'function') {
+        await window.stopGeneration();
       }
       if (typeof clearQueuedBtwMessages === 'function') clearQueuedBtwMessages();
       if (typeof window.prepareNewRoleRuntime === 'function') {

@@ -66,6 +66,24 @@ function run() {
   assert.equal(failed.status, 'failed', 'structured tool failures should produce a failed result');
 
   const chatSource = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'chat.js'), 'utf8');
+  const uiSource = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'ui.js'), 'utf8');
+  const appSource = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'app.js'), 'utf8');
+
+  assert.ok(
+    !uiSource.includes("if (isStreaming) return alert('目前正在回覆中，請完成後再切換 Role。');"),
+    'role switching must not be blocked by another role streaming'
+  );
+  assert.match(uiSource, /syncActiveRoleStreamingState/, 'activating a role must sync its own streaming state');
+  assert.match(uiSource, /preserveActiveStream: true/, 'restoring a role on another provider must not stop its background stream');
+  assert.match(chatSource, /const activeRoleStreamRegistry = new Map\(\)/, 'chat UI should track streams by role');
+  assert.match(chatSource, /const streamRoleId = currentStreamRoleId\(\)/, 'each live turn must capture its owning role');
+  assert.match(chatSource, /registerActiveRoleStream\(\{/, 'live turns must register against their role');
+  assert.match(chatSource, /clearActiveRoleStream\(streamRoleId, streamAbortController\)/, 'finishing one role must only clear its own stream');
+  assert.match(chatSource, /activeStream\?\.provider \|\| currentProvider/, 'stop must target the active role provider');
+  assert.match(chatSource, /pendingQueuedMessage\.roleId === currentStreamRoleId\(\)/, 'queued messages must not leak across roles');
+  assert.match(chatSource, /updateHeader: isStreamVisible\(\)/, 'background role completion must not overwrite the visible role header');
+  assert.match(appSource, /window\.stopGeneration/, 'new work should stop only the current role stream');
+
   assert.match(chatSource, /execution-result-card/, 'chat UI should render collapsed execution result cards');
   assert.match(chatSource, /IntersectionObserver/, 'sticky execution capsule should use viewport observation');
   assert.match(chatSource, /scrollIntoView/, 'sticky execution capsule should navigate back to the active card');

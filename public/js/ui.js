@@ -1183,10 +1183,16 @@ async function confirmRoleDelete() {
     closeRoleDeleteModal();
     closeRoleEditor();
 
+    if (typeof window.clearActiveRoleStream === 'function') {
+      window.clearActiveRoleStream(role.id);
+    }
+
     if (wasCurrent) {
-      if (typeof setStreamingState === 'function') setStreamingState(false);
       currentRoleId = DEFAULT_ROLE_ID;
       localStorage.setItem('crew_current_role', DEFAULT_ROLE_ID);
+      if (typeof window.syncActiveRoleStreamingState === 'function') {
+        window.syncActiveRoleStreamingState();
+      }
     }
 
     await loadWorkspaces();
@@ -1345,12 +1351,14 @@ function activateRoleIdentity(role) {
 
   updateWorkspaceUI();
   renderRoleNavigation();
+  if (typeof window.syncActiveRoleStreamingState === 'function') {
+    window.syncActiveRoleStreamingState();
+  }
   return role;
 }
 
 async function selectRole(roleId, isCreatingNewChat = false) {
   if (!roleId) return closeWorkspaceModal();
-  if (isStreaming) return alert('目前正在回覆中，請完成後再切換 Role。');
   const role = roleMeta(roleId);
   if (!role) return alert('找不到這個 Role。');
 
@@ -1567,9 +1575,11 @@ function renderProviderOptions() {
   });
 }
 
-window.selectProvider = async function(providerId) {
+window.selectProvider = async function(providerId, { preserveActiveStream = false } = {}) {
   if (!availableProviders.some(provider => provider.id === providerId) || providerId === currentProvider) return;
-  if (currentAbortController) { try { currentAbortController.abort(); } catch (_) {} }
+  if (isStreaming && !preserveActiveStream && typeof window.stopGeneration === 'function') {
+    await window.stopGeneration();
+  }
   currentProvider = providerId;
   localStorage.setItem('crew_current_provider', currentProvider);
   currentConversationId = localStorage.getItem(activeConversationStorageKey());
@@ -1614,7 +1624,7 @@ window.openCrewConversation = async function(providerId, conversationId) {
   localStorage.setItem(providerStorageKey('active_conv_id', targetProvider), targetConversationId);
 
   if (targetProvider !== currentProvider) {
-    await window.selectProvider(targetProvider);
+    await window.selectProvider(targetProvider, { preserveActiveStream: true });
   } else if (currentConversationId !== targetConversationId) {
     await loadConversationHistory(targetConversationId);
   } else {
