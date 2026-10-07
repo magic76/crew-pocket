@@ -45,7 +45,12 @@ const { listWorkspaces, resolveWorkspace, createWorkspace } = require('./lib/wor
 const { listCrewMembers, getCrewMember, saveCrewMember, buildCrewMemberGuide } = require('./lib/crew-members');
 const { DEFAULT_ROLE_ID, roleIdForProject, listRoles, getRole, saveRole } = require('./lib/roles');
 const { getProject } = require('./lib/projects');
-const { defaultMemoryProvider } = require('./lib/memory');
+const {
+  MemoryState,
+  defaultMemoryProvider,
+  defaultMemoryReflectionEngine,
+  reflectTurn
+} = require('./lib/memory');
 const { buildAgentContext, formatAgentContext } = require('./lib/context-builder');
 const auth = require('./lib/auth');
 const {
@@ -67,6 +72,49 @@ const { prepareTurnExecution } = require('./lib/runtime/turn-orchestrator');
 const { normalizeExecutionIntent } = require('./lib/execution-intent');
 const { getDefaultModel } = require('./lib/model-runtime');
 const { reviewElapsedCheckpointWithJev, reviewSoftBudgetWithJev, reviewToolFailureWithJev, sanitizeText: sanitizeRuntimeDecisionText, shouldUseRuntimeSnapshots } = require('./lib/runtime-decision');
+
+let memoryReflectionQueue = Promise.resolve();
+let pendingMemoryReflections = 0;
+const MAX_PENDING_MEMORY_REFLECTIONS = 4;
+
+function queueMemoryReflection(input) {
+  if (pendingMemoryReflections >= MAX_PENDING_MEMORY_REFLECTIONS) {
+    console.warn('[Memory Reflection] Skipped because queue is full');
+    return false;
+  }
+  pendingMemoryReflections += 1;
+  memoryReflectionQueue = memoryReflectionQueue
+    .then(() => reflectTurn({
+      memoryProvider: defaultMemoryProvider,
+      reflectionEngine: defaultMemoryReflectionEngine,
+      ...input
+    }))
+    .then(result => {
+      if (!result?.skipped && result?.retained?.length) {
+        console.log('[Memory Reflection] ' + JSON.stringify({
+          role_id: input.roleId || null,
+          project_id: input.projectId || null,
+          conversation_id: input.conversationId || null,
+          retained: result.retained.map(record => ({
+            id: record.id,
+            state: record.state,
+            scope: record.scope,
+            confidence: record.confidence,
+            confirmations: record.confirmations
+          }))
+        }));
+      }
+      return result;
+    })
+    .catch(error => {
+      console.warn('[Memory Reflection] Failed:', error.message || error);
+      return null;
+    })
+    .finally(() => {
+      pendingMemoryReflections = Math.max(0, pendingMemoryReflections - 1);
+    });
+  return true;
+}
 
 
 async function handleStorageReport(res) {
@@ -1099,6 +1147,56 @@ function memoryScopesFromQuery(query = {}) {
   return scopes.length ? scopes : undefined;
 }
 
+function memoryStatesFromQuery(query = {}) {
+  const raw = query.states || query.state;
+  if (raw) {
+    const values = Array.isArray(raw) ? raw : String(raw).split(',');
+    const states = values.map(value => String(value || '').trim()).filter(Boolean);
+    if (states.length) return states;
+  }
+  if (/^(?:1|true|yes)$/i.test(String(query.include_candidates || query.includeCandidates || ''))) {
+    return [MemoryState.ACTIVE, MemoryState.CANDIDATE];
+  }
+  return undefined;
+}
+
+async function handleMemoryReflection(req, res) {
+  try {
+    const body = await parseJsonBody(req);
+    const roleId = String(body.roleId || body.role_id || DEFAULT_ROLE_ID).trim() || DEFAULT_ROLE_ID;
+    const role = await getRole(roleId);
+    if (!role) throw new Error('Role 不存在');
+
+    const projectId = String(body.projectId || body.project_id || role.projectId || '').trim() || null;
+    const project = projectId ? await getProject(projectId) : null;
+    if (projectId && !project) throw new Error('Project 不存在');
+
+    const result = await reflectTurn({
+      memoryProvider: defaultMemoryProvider,
+      reflectionEngine: defaultMemoryReflectionEngine,
+      roleId: role.id,
+      roleName: role.name,
+      projectId,
+      projectName: project?.name || '',
+      conversationId: String(body.conversationId || body.conversation_id || '').trim() || null,
+      prompt: body.prompt || body.user_request || '',
+      response: body.response || body.final_result || '',
+      executionMode: body.executionMode || body.execution_mode || '',
+      status: body.status || 'completed',
+      changedFiles: body.changedFiles || body.changed_files || [],
+      toolMetrics: body.toolMetrics || body.tool_metrics || {},
+      taskSummary: body.taskSummary || body.task_summary || '',
+      force: body.force !== false
+    });
+
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+    res.end(JSON.stringify({ success: true, ...result }));
+  } catch (err) {
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: false, error: err.message }));
+  }
+}
+
 async function handleMemories(req, res, parsedUrl) {
   try {
     if (req.method === 'GET') {
@@ -1106,6 +1204,7 @@ async function handleMemories(req, res, parsedUrl) {
       const memories = await defaultMemoryProvider.recall({
         text: query.q || query.query || '',
         scopes: memoryScopesFromQuery(query),
+        states: memoryStatesFromQuery(query),
         roleId: query.roleId || query.role_id || null,
         projectId: query.projectId || query.project_id || null,
         conversationId: query.conversationId || query.conversation_id || null,
@@ -1652,6 +1751,7 @@ async function handleChat(req, res) {
     const runtimeDecisions = [];
     const pendingRuntimeDecisions = new Set();
     let runtimeDecisionQueue = Promise.resolve();
+    let memoryReflectionQueued = false;
 
     const getToolMetrics = () => {
       let executions = 0;
@@ -2390,6 +2490,25 @@ async function handleChat(req, res) {
         } else if (event.type === 'error') {
           finish({ error: event.message, provider: providerId, conversation_id });
         } else if (event.type === 'turn_completed') {
+          const completedConversationId = event.conversationId || activeConversationId || conversation_id || null;
+          const completedResponse = String(event.response || currentAssistantTail || '').trim();
+          if (!memoryReflectionQueued) {
+            memoryReflectionQueued = queueMemoryReflection({
+              roleId: role?.id || savedSettings?.roleId || DEFAULT_ROLE_ID,
+              roleName: role?.name || '',
+              projectId,
+              projectName: project?.name || '',
+              conversationId: completedConversationId,
+              prompt: prompt || '',
+              response: completedResponse,
+              executionMode: executionPolicy?.mode || routedExecutionMode || '',
+              status: event.status || 'completed',
+              isBtw: Boolean(body.is_btw),
+              changedFiles: [...changedFiles],
+              toolMetrics: getToolMetrics(),
+              taskSummary: approvedExecutionIntent?.summary || ''
+            });
+          }
           finishAfterRuntimeDecisions({
             response: event.response,
             conversation_id: event.conversationId,
@@ -2980,6 +3099,8 @@ const server = http.createServer(async (req, res) => {
     return handleCrewMembers(req, res);
   } else if (pathname === '/api/roles' && (req.method === 'GET' || req.method === 'POST')) {
     return handleRoles(req, res);
+  } else if (pathname === '/api/memories/reflect' && req.method === 'POST') {
+    return handleMemoryReflection(req, res);
   } else if (pathname === '/api/memories' && ['GET', 'POST', 'DELETE'].includes(req.method)) {
     return handleMemories(req, res, parsedUrl);
   } else if (pathname === '/api/workspaces' && req.method === 'GET') {
