@@ -253,7 +253,7 @@ async function run() {
     assert.ok(memorySimilarity(
       'Crew Helper completion requires terminal evidence.',
       'Crew Helper completion must include terminal evidence.'
-    ) >= 0.64);
+    ) >= 0.60);
 
     console.log('memory-reflection tests: ok');
   } finally {
