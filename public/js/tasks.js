@@ -61,7 +61,7 @@
             : ''));
       return `<article class="rounded-xl border border-slate-800 bg-slate-950/75 p-3 space-y-2">
         <div class="flex items-start justify-between gap-2">
-          <div class="min-w-0"><div class="text-xs font-semibold text-slate-100 break-words">${escapeHtml(task.title)}</div><div class="mt-0.5 text-[10px] text-slate-400 truncate">對話：${escapeHtml(task.conversationTitle || task.conversationId || '未知')}</div><div class="mt-0.5 text-[10px] font-mono text-slate-500">${task.source === 'live' ? '🎙️ Live' : '💬 主對話'} · ${formatTime(task.updatedAt)}</div></div>
+          <div class="min-w-0"><div class="text-xs font-semibold text-slate-100 break-words">${escapeHtml(task.title)}</div><div class="mt-0.5 text-[10px] text-slate-400 truncate">對話：${escapeHtml(task.conversationTitle || task.conversationId || '未知')}</div><div class="mt-0.5 text-[10px] font-mono text-slate-500">${task.projectId ? '🧭 Project' : '↩ Legacy'} · ${task.source === 'live' ? '🎙️ Live' : '💬 主對話'} · ${formatTime(task.updatedAt)}</div></div>
           <span class="shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${statusClass}">${statusLabel}</span>
         </div>
         <p class="whitespace-pre-wrap break-words text-[11px] leading-relaxed text-slate-300">${escapeHtml(task.task)}</p>
@@ -74,7 +74,11 @@
   async function loadTasks() {
     if (!list) return;
     try {
-      const response = await fetch('/api/tasks?limit=80');
+      const crewMemberId = typeof window.getCurrentCrewMemberId === 'function' ? window.getCurrentCrewMemberId() : '';
+      const taskUrl = crewMemberId
+        ? `/api/tasks?limit=80&crew_member_id=${encodeURIComponent(crewMemberId)}`
+        : '/api/tasks?limit=80';
+      const response = await fetch(taskUrl);
       const data = await response.json();
       if (!response.ok || !data.success) throw new Error(data.error || '無法載入任務');
       renderTasks(data.tasks || []);

@@ -49,6 +49,21 @@ jobs:
           node --check lib/runtime/codex-transport.js
           node --check lib/runtime/provider-manager.js
           CREW_PROVIDER_DELIVERY=runtime-apk CREW_RUNTIME_VERSION=0.2.0 CREW_RUNTIME_PACKAGE=com.crewpocket.runtime CREW_CODEX_VERSION=codex-test CREW_AGY_VERSION=agy-test node -e "const p=require('./lib/runtime/provider-manager'); (async()=>{const s=await p.getProviderRuntimeStatus(); if(s.runtime!=='companion-runtime'||s.runtimeVersion!=='0.2.0'||s.providers.codex.version!=='codex-test'||s.providers.antigravity.version!=='agy-test'||s.providers.codex.updateMode!=='runtime-app') process.exit(1); try{await p.updateProvider('codex');process.exit(1)}catch(e){if(e.code!=='RUNTIME_APP_UPDATE_REQUIRED'||e.statusCode!==409||e.action?.packageName!=='com.crewpocket.runtime') process.exit(1)}})().catch(()=>process.exit(1))"
+          node --check lib/conversation-settings.js
+          node --check lib/projects.js
+          node --check lib/roles.js
+          node --check lib/context-builder.js
+          node --check lib/memory/types.js
+          node --check lib/memory/provider.js
+          node --check lib/memory/local-memory-provider.js
+          node --check lib/memory/openviking-adapter.js
+          node --check lib/memory/index.js
+          node --check test/role-memory-kernel.test.js
+          node test/role-memory-kernel.test.js
+          node --check test/role-conversation-state.test.js
+          node test/role-conversation-state.test.js
+          node --check test/role-memory-http.test.js
+          node test/role-memory-http.test.js
           node --check lib/runtime/agy-transport.js
           node -e "const fs=require('fs'),os=require('os'),path=require('path'); const a=require('./lib/runtime/agy-transport'); const exe=path.join(os.tmpdir(),'crew-agy-native-test'); fs.writeFileSync(exe,'#!/bin/sh\\nexit 0\\n'); fs.chmodSync(exe,0o755); const env={...process.env,CREW_AGY_RUNTIME_TYPE:'native-command',CREW_AGY_COMMAND_JSON:JSON.stringify([exe,'--shim'])}; const r=a.resolveAgyCommand(env); if(r.command!==exe||r.prefixArgs.length!==1||r.prefixArgs[0]!=='--shim'||r.runtimeType!=='embedded-agy-native-command'||!a.isAgyAvailable(env)) process.exit(1); fs.unlinkSync(exe)"
           node --check lib/providers/codex.js

@@ -25,7 +25,8 @@ const {
   BRAIN_DIR,
   MIME_TYPES,
   THINKING_EFFORTS,
-  parseJsonBody
+  parseJsonBody,
+  cleanUserContent
 } = require('./lib/config');
 
 const { sessionManager } = require('./lib/session');
@@ -43,6 +44,12 @@ const { getStorageReport, deleteMediaItems, getMediaThumbnail } = require('./lib
 const { getConversationSettings, getProviderConversationSettings, saveConversationSettings, saveConversationTitle, deleteConversationSettings } = require('./lib/conversation-settings');
 const { createTask, getTask, listTasks, updateTask, hasRunningTasks } = require('./lib/tasks');
 const { listWorkspaces, resolveWorkspace, createWorkspace } = require('./lib/workspaces');
+const { listCrewMembers, getCrewMember, saveCrewMember, buildCrewMemberGuide } = require('./lib/crew-members');
+const { DEFAULT_ROLE_ID, roleIdForProject, listRoles, getRole, saveRole } = require('./lib/roles');
+const { listCrewMessages } = require('./lib/crew-messages');
+const { getProject } = require('./lib/projects');
+const { defaultMemoryProvider } = require('./lib/memory');
+const { buildAgentContext, formatAgentContext } = require('./lib/context-builder');
 const auth = require('./lib/auth');
 const {
   applyCors,
@@ -573,7 +580,7 @@ function liveDelegateError(message, statusCode = 500) {
   return error;
 }
 
-async function runLiveDelegatedTurn({ providerId, conversationId, model, effort, task, onAbortReady }) {
+async function runLiveDelegatedTurn({ providerId, conversationId, model, effort, workspace, task, onAbortReady }) {
   const provider = getProvider(providerId);
   const status = provider.getStatus(conversationId);
   if (status && status.isBusy) {
@@ -601,6 +608,7 @@ async function runLiveDelegatedTurn({ providerId, conversationId, model, effort,
       conversationId,
       model,
       effort: effort || 'low',
+      workspace,
       prompt: delegationPrompt,
       onAbort(handler) {
         abortTurn = typeof handler === 'function' ? handler : abortTurn;
@@ -646,6 +654,7 @@ async function launchLiveDelegateJob(taskRecord) {
     conversationId: taskRecord.conversationId,
     model: taskRecord.model,
     effort: taskRecord.effort,
+    workspace: taskRecord.workspace,
     task: taskRecord.task,
     onAbortReady(abort) {
       job.abort = abort;
@@ -694,6 +703,17 @@ async function resolveTaskConversationTitle(providerId, conversationId, provided
   return conversationId ? `對話 ${conversationId.slice(0, 8)}` : '未知對話';
 }
 
+async function resolveTaskCrewContext(providerId, conversationId, requestedMemberId = '') {
+  const settings = conversationId ? await getConversationSettings(providerId, conversationId).catch(() => null) : null;
+  const memberId = settings?.crewMemberId || String(requestedMemberId || '').trim();
+  const member = memberId ? await getCrewMember(memberId) : null;
+  return {
+    crewMemberId: member?.id || '',
+    projectId: member?.project?.id || '',
+    workspace: member?.workspace || settings?.workspace || ''
+  };
+}
+
 async function handleLiveDelegate(req, res) {
   try {
     const body = await parseJsonBody(req);
@@ -718,15 +738,16 @@ async function handleLiveDelegate(req, res) {
       conversationId,
       body.conversation_title || taskRecord?.conversationTitle
     );
+    const taskCrew = await resolveTaskCrewContext(providerId, conversationId, body.crew_member_id || taskRecord?.crewMemberId);
     if (!taskRecord) {
       taskRecord = await createTask({
-        source: 'live', provider: providerId, conversationId, conversationTitle, model: body.model,
+        source: 'live', ...taskCrew, provider: providerId, conversationId, conversationTitle, model: body.model,
         effort: body.effort, task, status: 'pending_confirmation',
         event: 'Live 已確認交辦，等待主對話接手。'
       });
     }
     taskRecord = await updateTask(taskRecord.id, {
-      provider: providerId, conversationId, conversationTitle, model: body.model || taskRecord.model,
+      ...taskCrew, provider: providerId, conversationId, conversationTitle, model: body.model || taskRecord.model,
       effort: body.effort || taskRecord.effort, status: 'pending_confirmation'
     }) || taskRecord;
     const job = await launchLiveDelegateJob(taskRecord);
@@ -763,6 +784,9 @@ async function handleLiveDelegateStatus(parsedUrl, res) {
     provider: task?.provider || job.provider,
     conversation_id: task?.conversationId || job.conversationId,
     conversation_title: task?.conversationTitle || undefined,
+    crew_member_id: task?.crewMemberId || undefined,
+    project_id: task?.projectId || undefined,
+    workspace: task?.workspace || undefined,
     task_id: task?.id || job.id,
     task_title: task?.title || undefined,
     task: task?.task || undefined,
@@ -774,7 +798,10 @@ async function handleLiveDelegateStatus(parsedUrl, res) {
 async function handleTasks(req, res, parsedUrl) {
   try {
     if (req.method === 'GET') {
-      const tasks = await listTasks(parsedUrl.query.limit);
+      const tasks = await listTasks(parsedUrl.query.limit, {
+        crewMemberId: parsedUrl.query.crew_member_id,
+        projectId: parsedUrl.query.project_id
+      });
       res.writeHead(200, { 'Content-Type': 'application/json' });
       return res.end(JSON.stringify({ success: true, tasks }));
     }
@@ -787,8 +814,9 @@ async function handleTasks(req, res, parsedUrl) {
       if (!task || !conversationId) throw liveDelegateError('任務內容與主對話不可為空。', 400);
       const providerId = normalizeProviderId(body.provider);
       const conversationTitle = await resolveTaskConversationTitle(providerId, conversationId, body.conversation_title);
+      const taskCrew = await resolveTaskCrewContext(providerId, conversationId, body.crew_member_id);
       const record = await createTask({
-        source: body.source || 'main_chat', provider: providerId, conversationId, conversationTitle,
+        source: body.source || 'main_chat', ...taskCrew, provider: providerId, conversationId, conversationTitle,
         model: body.model, effort: body.effort, task, status: 'pending_confirmation'
       });
       res.writeHead(201, { 'Content-Type': 'application/json' });
@@ -848,6 +876,8 @@ async function handleProviderConversations(parsedUrl, res) {
     res.end(JSON.stringify({ conversations: conversations.map(conversation => ({
       ...conversation,
       workspace: settingsByConversation.get(conversation.id)?.workspace || null,
+      crewMemberId: settingsByConversation.get(conversation.id)?.crewMemberId || null,
+      roleId: settingsByConversation.get(conversation.id)?.roleId || DEFAULT_ROLE_ID,
       role: settingsByConversation.get(conversation.id)?.role || 'general',
       model: settingsByConversation.get(conversation.id)?.model || null,
       effort: settingsByConversation.get(conversation.id)?.effort || null
@@ -900,7 +930,9 @@ async function handleCodexContinuationSummary(req, res) {
     const provider = getProvider('codex');
     const history = await provider.getHistory(conversationId);
     const segments = (history.messages || []).flatMap(message => {
-      const content = String(message.content || '').trim();
+      const content = message.role === 'user'
+        ? cleanUserContent(String(message.content || '')).trim()
+        : String(message.content || '').trim();
       return content ? [`${message.role === 'user' ? 'User' : 'Assistant'}: ${content}`] : [];
     });
     if (segments.length < 2) throw new Error('尚無足夠對話可建立續接摘要');
@@ -925,7 +957,7 @@ async function handleProviderHistory(parsedUrl, res) {
     const conversationSettings = await getConversationSettings(providerId, parsedUrl.query.id);
     if (Array.isArray(history.messages)) {
       history.messages = history.messages.map(message => message.role === 'user'
-        ? { ...message, content: stripLegacyLanguageInstruction(message.content) }
+        ? { ...message, content: stripLegacyLanguageInstruction(cleanUserContent(message.content)) }
         : message);
     }
     res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -963,27 +995,206 @@ async function handleProviderDelete(parsedUrl, res) {
   }
 }
 
+function requestedRoleId(body = {}) {
+  return String(body.role_id || body.roleId || '').trim();
+}
+
+async function resolveConversationRole({ body = {}, previous = null, crewMember = null } = {}) {
+  const requested = requestedRoleId(body);
+  const persisted = String(previous?.roleId || '').trim();
+
+  if (persisted && requested && persisted !== requested) {
+    const error = new Error('這個 conversation 已屬於另一個 Role；請切換 Role 後建立新 conversation。');
+    error.statusCode = 409;
+    throw error;
+  }
+
+  let roleId = persisted || requested;
+  if (!roleId && crewMember?.project?.id) roleId = roleIdForProject(crewMember.project.id);
+  roleId = roleId || DEFAULT_ROLE_ID;
+
+  const role = await getRole(roleId);
+  if (!role) {
+    const error = new Error('Role 不存在');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const project = role.projectId ? await getProject(role.projectId) : null;
+  if (role.projectId && !project) {
+    const error = new Error('Role 綁定的 Project 已不可用');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  let member = crewMember;
+  if (project) {
+    if (member?.project?.id && member.project.id !== project.id) {
+      const error = new Error('Role 與 Crew Member 屬於不同 Project；請建立新 conversation。');
+      error.statusCode = 409;
+      throw error;
+    }
+    if (!member && project.legacyCrewMemberId) {
+      member = await getCrewMember(project.legacyCrewMemberId);
+    }
+  }
+
+  return {
+    role,
+    project,
+    crewMember: member,
+    projectId: project?.id || member?.project?.id || null
+  };
+}
+
 async function handleConversationSettings(req, res) {
   try {
     const body = await parseJsonBody(req);
     const providerId = normalizeProviderId(body.provider);
     const previous = await getConversationSettings(providerId, body.conversation_id);
-    const targetWorkspace = body.workspace || previous?.workspace;
+    const requestedMemberId = String(body.crew_member_id || body.crewMemberId || '').trim();
+    if (previous?.crewMemberId && requestedMemberId && requestedMemberId !== previous.crewMemberId) {
+      const error = new Error('這個 conversation 已屬於另一個 Crew Member；請切換 Member 後建立新 conversation。');
+      error.statusCode = 409;
+      throw error;
+    }
+
+    const memberId = previous?.crewMemberId || requestedMemberId || '';
+    let member = memberId ? await getCrewMember(memberId) : null;
+    if (requestedMemberId && !member) throw new Error('Crew Member 不存在或專案工作區已不可用');
+
+    const identity = await resolveConversationRole({ body, previous, crewMember: member });
+    member = identity.crewMember;
+    const targetWorkspace = member?.workspace || body.workspace || previous?.workspace;
     const workspace = targetWorkspace ? await resolveWorkspace(targetWorkspace) : null;
     const settings = await saveConversationSettings(providerId, body.conversation_id, {
-      model: body.model || previous?.model || 'gemini-3.7-flash',
-      effort: body.effort || previous?.effort || 'low',
+      model: body.model || previous?.model || member?.model || getDefaultModel(providerId),
+      effort: body.effort || previous?.effort || member?.effort || 'low',
+      roleId: identity.role.id,
       ...(workspace ? { workspace } : {}),
+      ...(member ? { crewMemberId: member.id } : previous?.crewMemberId ? { crewMemberId: previous.crewMemberId } : {}),
       role: body.role || previous?.role || 'general'
     });
     if (previous?.workspace && workspace && previous.workspace !== workspace && providerId === 'antigravity') {
       sessionManager.closeSession(body.conversation_id);
     }
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ success: true, conversation_settings: settings }));
+    res.end(JSON.stringify({
+      success: true,
+      conversation_settings: settings,
+      role: identity.role,
+      project: identity.project,
+      crew_member: member
+    }));
+  } catch (err) {
+    res.writeHead(err.statusCode || 400, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: err.message }));
+  }
+}
+
+async function handleCrewMembers(req, res) {
+  try {
+    if (req.method === 'GET') {
+      const members = await listCrewMembers();
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+      return res.end(JSON.stringify({ success: true, crewMembers: members }));
+    }
+    const body = await parseJsonBody(req);
+    const member = await saveCrewMember(body);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: true, crewMember: member }));
   } catch (err) {
     res.writeHead(400, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: err.message }));
+    res.end(JSON.stringify({ success: false, error: err.message }));
+  }
+}
+
+async function handleRoles(req, res) {
+  try {
+    if (req.method === 'GET') {
+      const roles = await listRoles();
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+      return res.end(JSON.stringify({ success: true, roles }));
+    }
+    const body = await parseJsonBody(req);
+    const role = await saveRole(body);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: true, role }));
+  } catch (err) {
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: false, error: err.message }));
+  }
+}
+
+async function handleCrewMessages(parsedUrl, res) {
+  try {
+    const roleId = String(parsedUrl.query.role_id || parsedUrl.query.roleId || '').trim();
+    const roles = await listRoles();
+    const role = roles.find(item => item.id === roleId);
+    if (!role) {
+      res.writeHead(400, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+      return res.end(JSON.stringify({ success: false, error: 'A valid role_id is required' }));
+    }
+    const [messages, roleNames] = await Promise.all([
+      listCrewMessages(role.id, parsedUrl.query.limit),
+      Promise.resolve(new Map(roles.map(item => [item.id, item.name])))
+    ]);
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+    res.end(JSON.stringify({
+      success: true,
+      role: { id: role.id, name: role.name },
+      messages: messages.map(message => ({
+        ...message,
+        fromRoleName: roleNames.get(message.fromRoleId) || message.fromRoleId,
+        toRoleName: roleNames.get(message.toRoleId) || message.toRoleId
+      }))
+    }));
+  } catch (err) {
+    res.writeHead(500, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+    res.end(JSON.stringify({ success: false, error: err.message }));
+  }
+}
+
+function memoryScopesFromQuery(query = {}) {
+  const raw = query.scopes || query.scope;
+  if (!raw) return undefined;
+  const values = Array.isArray(raw) ? raw : String(raw).split(',');
+  const scopes = values.map(value => String(value || '').trim()).filter(Boolean);
+  return scopes.length ? scopes : undefined;
+}
+
+async function handleMemories(req, res, parsedUrl) {
+  try {
+    if (req.method === 'GET') {
+      const query = parsedUrl.query || {};
+      const memories = await defaultMemoryProvider.recall({
+        text: query.q || query.query || '',
+        scopes: memoryScopesFromQuery(query),
+        roleId: query.roleId || query.role_id || null,
+        projectId: query.projectId || query.project_id || null,
+        conversationId: query.conversationId || query.conversation_id || null,
+        limit: query.limit,
+        maxChars: query.maxChars || query.max_chars
+      });
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+      return res.end(JSON.stringify({ success: true, memories }));
+    }
+
+    if (req.method === 'POST') {
+      const body = await parseJsonBody(req);
+      const memory = await defaultMemoryProvider.retain(body);
+      res.writeHead(201, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({ success: true, memory }));
+    }
+
+    const id = String(parsedUrl.query?.id || '').trim();
+    if (!id) throw new Error('Memory id is required');
+    const forgotten = await defaultMemoryProvider.forget(id);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: true, forgotten, id }));
+  } catch (err) {
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: false, error: err.message }));
   }
 }
 
@@ -1332,37 +1543,59 @@ async function handleChat(req, res) {
     res.writeHead(400, { 'Content-Type': 'application/json' });
     return res.end(JSON.stringify({ error: 'Prompt or image is required' }));
   }
-  // 🛡️ Resolve workspace:
-  // For an existing conversation, lock to the conversation's saved workspace from database,
-  // preventing accidental workspace hijacking from stale frontend state.
+  // Role owns long-lived identity. Project/workspace and legacy Crew Member
+  // remain compatibility bridges so provider transcripts stay untouched.
   const workspaceStartedAt = Date.now();
   let workspace;
   let savedSettings = null;
+  let crewMember = null;
+  let role = null;
+  let project = null;
+  let projectId = null;
   try {
+    const requestedCrewMemberId = String(body.crew_member_id || body.crewMemberId || '').trim();
     if (conversation_id) {
       savedSettings = await getConversationSettings(providerId, conversation_id);
-      if (savedSettings?.workspace) {
-        workspace = await resolveWorkspace(savedSettings.workspace);
-      } else {
-        workspace = await resolveWorkspace(body.workspace);
-        // Backfill workspace in settings so this conversation remains locked to it
-        saveConversationSettings(providerId, conversation_id, {
-          model: model || savedSettings?.model || getDefaultModel(providerId),
-          effort: effort || savedSettings?.effort || 'low',
-          workspace,
-          role: body.role || savedSettings?.role || 'general'
-        }).catch(() => {});
+      if (savedSettings?.crewMemberId && requestedCrewMemberId && savedSettings.crewMemberId !== requestedCrewMemberId) {
+        const error = new Error('這個 conversation 已屬於另一個 Crew Member；請切換 Member 後建立新 conversation。');
+        error.statusCode = 409;
+        throw error;
       }
-    } else {
-      workspace = await resolveWorkspace(body.workspace);
+    }
+
+    const boundMemberId = savedSettings?.crewMemberId || requestedCrewMemberId;
+    if (boundMemberId) crewMember = await getCrewMember(boundMemberId);
+    if (requestedCrewMemberId && !crewMember) throw new Error('Crew Member 不存在或專案工作區已不可用');
+
+    const identity = await resolveConversationRole({ body, previous: savedSettings, crewMember });
+    role = identity.role;
+    project = identity.project;
+    projectId = identity.projectId;
+    crewMember = identity.crewMember;
+
+    workspace = await resolveWorkspace(crewMember?.workspace || savedSettings?.workspace || body.workspace);
+
+    if (conversation_id && (
+      !savedSettings?.workspace ||
+      !savedSettings?.roleId ||
+      (crewMember && (!savedSettings?.crewMemberId || savedSettings.workspace !== workspace))
+    )) {
+      saveConversationSettings(providerId, conversation_id, {
+        model: model || savedSettings?.model || crewMember?.model || getDefaultModel(providerId),
+        effort: effort || savedSettings?.effort || crewMember?.effort || 'low',
+        workspace,
+        roleId: role.id,
+        ...(crewMember ? { crewMemberId: crewMember.id } : {}),
+        role: body.role || savedSettings?.role || 'general'
+      }).catch(() => {});
     }
   } catch (err) {
-    res.writeHead(400, { 'Content-Type': 'application/json' });
+    res.writeHead(err.statusCode || 400, { 'Content-Type': 'application/json' });
     return res.end(JSON.stringify({ error: err.message }));
   }
   turnTiming.workspace_ms = Date.now() - workspaceStartedAt;
 
-  const effectiveModel = model || savedSettings?.model || getDefaultModel(providerId);
+  const effectiveModel = model || savedSettings?.model || crewMember?.model || getDefaultModel(providerId);
   const {
     jevInputSummary,
     routedExecutionMode,
@@ -1418,11 +1651,24 @@ async function handleChat(req, res) {
 
   let finalPrompt = prompt || 'Analyze this image';
 
-  // The provider records prompt text as a user turn. Keep continuation text
-  // byte-for-byte user-authored so internal capability guidance never appears
-  // in conversation history or is mistaken for user input.
+  // Provider-native history records prompt text as a user turn. Long-term
+  // memory therefore enters only on a fresh thread, remains deterministic and
+  // bounded, and is wrapped as removable internal metadata.
   if (!conversation_id) {
-    finalPrompt = `${buildCapabilityGuide(finalPrompt)}\n\n[User Request]:\n${finalPrompt}`;
+    let roleMemoryContext = '';
+    try {
+      const agentContext = await buildAgentContext({
+        roleId: role?.id || DEFAULT_ROLE_ID,
+        projectId,
+        currentTask: approvedExecutionIntent?.summary || '',
+        currentPrompt: finalPrompt
+      });
+      roleMemoryContext = formatAgentContext(agentContext);
+    } catch (error) {
+      console.warn('[Memory Context] Build failed:', error.message);
+    }
+    const memberGuide = buildCrewMemberGuide(crewMember);
+    finalPrompt = `${roleMemoryContext ? `${roleMemoryContext}\n` : ''}${memberGuide ? `${memberGuide}\n` : ''}${buildCapabilityGuide(finalPrompt)}\n\n<USER_REQUEST>${finalPrompt}</USER_REQUEST>`;
   }
 
   if (image_path) {
@@ -1607,6 +1853,7 @@ async function handleChat(req, res) {
         model: effectiveModel || model || savedSettings?.model || getDefaultModel(providerId),
         effort: effort || savedSettings?.effort || 'low',
         workspace,
+        roleId: role?.id || savedSettings?.roleId || DEFAULT_ROLE_ID,
         role: body.role || savedSettings?.role || 'general',
         executionMode: executionPolicy.mode
       }).catch(error => console.warn('[RuntimeDecision] Save mode failed:', error.message));
@@ -2132,9 +2379,11 @@ async function handleChat(req, res) {
           // as well as on manual selector changes so new conversations are
           // immediately bound to their first model.
           saveConversationSettings(providerId, event.conversationId, {
-            model: event.model || effectiveModel || model || savedSettings?.model || getDefaultModel(providerId),
-            effort: event.effort || effort || savedSettings?.effort || 'low',
+            model: event.model || effectiveModel || model || savedSettings?.model || crewMember?.model || getDefaultModel(providerId),
+            effort: event.effort || effort || savedSettings?.effort || crewMember?.effort || 'low',
             workspace,
+            roleId: role?.id || savedSettings?.roleId || DEFAULT_ROLE_ID,
+            ...(crewMember ? { crewMemberId: crewMember.id } : savedSettings?.crewMemberId ? { crewMemberId: savedSettings.crewMemberId } : {}),
             role: body.role || savedSettings?.role || 'general',
             ...(executionPolicy?.mode ? { executionMode: executionPolicy.mode } : {})
           }).catch(err => console.warn('[Conversation Settings] Save failed:', err.message));
@@ -2145,6 +2394,10 @@ async function handleChat(req, res) {
             effort: event.effort,
             execution_mode: executionPolicy?.mode || null,
             execution_source: executionPolicy?.source || null,
+            role_id: role?.id || savedSettings?.roleId || DEFAULT_ROLE_ID,
+            role_name: role?.name || null,
+            crew_member_id: crewMember?.id || savedSettings?.crewMemberId || null,
+            project_id: projectId || crewMember?.project?.id || null,
             jev_route: jevRoute ? {
               input_summary: jevInputSummary,
               accepted: Boolean(jevRoute.accepted),
@@ -2576,7 +2829,7 @@ function remoteAccessSnapshot(req, configuredEnabled = fs.existsSync(REMOTE_ACCE
 
 async function handleCrewHome(req, res) {
   try {
-    const tasks = await listTasks(200);
+    const [tasks, crewMembers] = await Promise.all([listTasks(200), listCrewMembers()]);
     const counts = {
       running: tasks.filter(task => task.status === 'running').length,
       pending: tasks.filter(task => task.status === 'pending_confirmation').length,
@@ -2601,6 +2854,15 @@ async function handleCrewHome(req, res) {
       success: true,
       counts,
       recentTasks,
+      crewMembers: crewMembers.map(member => ({
+        id: member.id,
+        name: member.name,
+        icon: member.icon,
+        role: member.role,
+        workspace: member.workspace,
+        project: member.project,
+        activeTasks: tasks.filter(task => task.crewMemberId === member.id && ['running', 'pending_confirmation'].includes(task.status)).length
+      })),
       remote: remoteAccessSnapshot(req),
       runtime: {
         device: os.hostname(),
@@ -2788,6 +3050,14 @@ const server = http.createServer(async (req, res) => {
     return handleConversationSettings(req, res);
   } else if (pathname === '/api/codex-warmup' && (req.method === 'GET' || req.method === 'POST')) {
     return handleCodexWarmup(req, res);
+  } else if (pathname === '/api/crew-members' && (req.method === 'GET' || req.method === 'POST')) {
+    return handleCrewMembers(req, res);
+  } else if (pathname === '/api/roles' && (req.method === 'GET' || req.method === 'POST')) {
+    return handleRoles(req, res);
+  } else if (pathname === '/api/crew-messages' && req.method === 'GET') {
+    return handleCrewMessages(parsedUrl, res);
+  } else if (pathname === '/api/memories' && ['GET', 'POST', 'DELETE'].includes(req.method)) {
+    return handleMemories(req, res, parsedUrl);
   } else if (pathname === '/api/workspaces' && req.method === 'GET') {
     return handleWorkspaces(res);
   } else if (pathname === '/api/workspaces' && req.method === 'POST') {
