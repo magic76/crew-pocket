@@ -712,21 +712,41 @@ function updateContextPill(stats, health = null) {
   const pill = document.getElementById('context-pill');
   const indicator = document.getElementById('context-indicator');
   const textEl = document.getElementById('context-tokens-text');
+  const progressTrack = document.getElementById('context-progress-track');
+  const progressBar = document.getElementById('context-progress-bar');
   const total = resolved.totalUsage || { value: 0, exact: false, source: 'heuristic' };
   const meta = contextStatusMeta(resolved.status);
   const display = formatContextTokens(total.value, total.exact !== true);
+  const maxTokens = Number(resolved.budget?.maxTokens);
+  const hasBudget = Number.isFinite(maxTokens) && maxTokens > 0;
+  const percent = hasBudget
+    ? Math.max(0, Math.min(100, Math.round((Number(total.value) || 0) / maxTokens * 100)))
+    : null;
+  const progressClass = resolved.status === 'critical'
+    ? 'bg-rose-400'
+    : resolved.status === 'warning'
+      ? 'bg-amber-400'
+      : resolved.status === 'healthy'
+        ? 'bg-emerald-400'
+        : 'bg-slate-500';
 
   if (textEl) {
-    textEl.textContent = display;
-    textEl.className = `font-mono font-semibold ${meta.text}`;
+    textEl.textContent = percent === null
+      ? display
+      : `${total.exact === true ? '' : '~'}${percent}%`;
+    textEl.className = `shrink-0 font-mono text-[8px] font-bold ${meta.text}`;
   }
   if (indicator) indicator.className = `h-1.5 w-1.5 shrink-0 rounded-full ${meta.dot}`;
+  if (progressTrack) progressTrack.classList.toggle('hidden', percent === null);
+  if (progressBar) {
+    progressBar.style.width = percent === null ? '0%' : `${percent}%`;
+    progressBar.className = `block h-full rounded-full transition-[width] duration-200 ${progressClass}`;
+  }
 
-  const maxTokens = Number(resolved.budget?.maxTokens);
   if (pill) {
     pill.dataset.contextLoad = resolved.status || 'unknown';
-    pill.title = Number.isFinite(maxTokens) && maxTokens > 0
-      ? `${meta.label} Context · ${display} / ${formatContextTokens(maxTokens)}`
+    pill.title = hasBudget
+      ? `${meta.label} Context · ${display} / ${formatContextTokens(maxTokens)} · ${percent}%`
       : `${total.exact ? 'Context' : 'Estimated Context'} · ${display} · Context limit unknown`;
   }
 

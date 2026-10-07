@@ -273,9 +273,7 @@ function initAppAndListeners() {
     }, 220);
   }
 
-  // Drawer listeners
-  if (menuBtn) menuBtn.addEventListener('click', () => toggleDrawer(true));
-  if (workspaceSelectorBtn) workspaceSelectorBtn.addEventListener('click', () => toggleDrawer(true));
+  // Role view is now reached from the persistent bottom navigation.
   if (closeDrawerBtn) closeDrawerBtn.addEventListener('click', () => toggleDrawer(false));
   if (drawerOverlay) drawerOverlay.addEventListener('click', () => toggleDrawer(false));
   const drawerNewWorkBtn = document.getElementById('drawer-new-work-btn');
@@ -288,57 +286,23 @@ function initAppAndListeners() {
   if (workspaceModal) workspaceModal.addEventListener('click', event => {
     if (event.target === workspaceModal) window.closeWorkspacePicker?.();
   });
-  bindEdgeDrawerGesture();
-  bindDrawerCloseGesture();
+  // Edge drawer gestures are intentionally disabled: Crew is a first-class tab now.
 
   // Lightbox listeners
   if (closeLightboxBtn) closeLightboxBtn.addEventListener('click', () => lightbox.classList.add('opacity-0', 'pointer-events-none'));
   if (lightbox) lightbox.addEventListener('click', (e) => { if (e.target === lightbox) lightbox.classList.add('opacity-0', 'pointer-events-none'); });
 
-  // 🧰 Tools Menu: desktop popover, mobile bottom sheet.
-  if (toolsMenuBtn && toolsMenuDropdown) {
-    const toolsSheetOverlay = document.getElementById('tools-sheet-overlay');
-    const toolsSheetCloseBtn = document.getElementById('tools-sheet-close-btn');
-    const sheetQuickNewChatBtn = document.getElementById('sheet-quick-new-chat-btn');
-    const sheetQuickFilesBtn = document.getElementById('sheet-quick-files-btn');
-    const sheetQuickTasksBtn = document.getElementById('sheet-quick-tasks-btn');
-    const sheetQuickRuntimeBtn = document.getElementById('sheet-quick-runtime-btn');
+  // Settings is a first-class primary view; the old tools popover/sheet is reused as its content.
+  let setSettingsViewOpen = () => {};
+  if (toolsMenuDropdown) {
     const adbSettingsBtn = document.getElementById('adb-settings-btn');
 
-    const setToolsMenuOpen = (open) => {
+    setSettingsViewOpen = (open) => {
       toolsMenuDropdown.classList.toggle('hidden', !open);
-      if (toolsSheetOverlay) toolsSheetOverlay.classList.toggle('hidden', !open);
-      document.body.classList.toggle('tools-sheet-open', open);
     };
-
-    toolsMenuBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      if (typeof window.haptic === 'function') window.haptic('light');
-      setToolsMenuOpen(toolsMenuDropdown.classList.contains('hidden'));
-    });
-
-    if (toolsSheetCloseBtn) toolsSheetCloseBtn.addEventListener('click', () => setToolsMenuOpen(false));
-    if (toolsSheetOverlay) toolsSheetOverlay.addEventListener('click', () => setToolsMenuOpen(false));
-
-    if (sheetQuickNewChatBtn) sheetQuickNewChatBtn.addEventListener('click', () => {
-      setToolsMenuOpen(false);
-      newChatBtn?.click();
-    });
-    if (sheetQuickFilesBtn) sheetQuickFilesBtn.addEventListener('click', () => {
-      setToolsMenuOpen(false);
-      filesBtn?.click();
-    });
-    if (sheetQuickTasksBtn) sheetQuickTasksBtn.addEventListener('click', () => {
-      setToolsMenuOpen(false);
-      document.querySelector('[data-open-task-center]')?.click();
-    });
-    if (sheetQuickRuntimeBtn) sheetQuickRuntimeBtn.addEventListener('click', () => {
-      setToolsMenuOpen(false);
-      document.getElementById('auth-menu-btn')?.click();
-    });
+    window.setSettingsViewOpen = setSettingsViewOpen;
 
     if (adbSettingsBtn) adbSettingsBtn.addEventListener('click', () => {
-      setToolsMenuOpen(false);
       if (typeof window.CrewPocket?.openWirelessDebugSettings === 'function') {
         window.CrewPocket.openWirelessDebugSettings();
       } else {
@@ -346,30 +310,10 @@ function initAppAndListeners() {
       }
     });
 
-    if (window.matchMedia('(max-width: 640px)').matches) {
-      const moreTools = toolsMenuDropdown.querySelector('details.group');
-      const moreSummary = moreTools?.querySelector('summary');
-      const secondaryTools = [
-        document.getElementById('live-settings-btn'),
-        toolsMenuDropdown.querySelector('a[href="/assets.html"]'),
-        document.getElementById('storage-btn')
-      ].filter(Boolean);
-      if (moreTools && moreSummary) {
-        secondaryTools.forEach(node => moreTools.appendChild(node));
-      }
-    }
-
-    document.addEventListener('click', (e) => {
-      if (!toolsMenuDropdown.contains(e.target) && !toolsMenuBtn.contains(e.target)) {
-        setToolsMenuOpen(false);
-      }
-    });
-
     const authMenuBtn = document.getElementById('auth-menu-btn');
     [newChatBtn, filesBtn, storageBtn, authMenuBtn, usageBtn, cheatSheetBtn, notifyBtn, exportExtBtn, adbSettingsBtn].forEach(btn => {
       if (btn) btn.addEventListener('click', () => {
         if (typeof window.haptic === 'function') window.haptic('light');
-        setToolsMenuOpen(false);
       });
     });
 
@@ -377,14 +321,71 @@ function initAppAndListeners() {
     const conversationContextMenuBtn = document.getElementById('conversation-context-menu-btn');
 
     if (conversationWorkspaceMenuBtn) conversationWorkspaceMenuBtn.addEventListener('click', () => {
-      setToolsMenuOpen(false);
-      toggleDrawer(true);
+      window.setPrimaryTab?.('crew');
     });
     if (conversationContextMenuBtn) conversationContextMenuBtn.addEventListener('click', () => {
-      setToolsMenuOpen(false);
       document.getElementById('context-pill')?.click();
     });
   }
+
+  const primaryTabButtons = [...document.querySelectorAll('[data-primary-tab]')];
+  const chatComposerFooter = document.getElementById('chat-composer-footer');
+  let primaryTab = 'chat';
+
+  const updatePrimaryChromeMetrics = () => {
+    const header = document.querySelector('header');
+    if (header) {
+      document.documentElement.style.setProperty('--crew-header-height', `${Math.max(1, Math.round(header.getBoundingClientRect().height))}px`);
+    }
+    const nav = document.getElementById('primary-bottom-nav');
+    if (nav) {
+      document.documentElement.style.setProperty('--crew-primary-nav-height', `${Math.max(1, Math.round(nav.getBoundingClientRect().height))}px`);
+    }
+  };
+
+  function syncPrimaryTabChrome(tab) {
+    primaryTab = ['chat', 'crew', 'tasks', 'settings'].includes(tab) ? tab : 'chat';
+    document.body.dataset.primaryTab = primaryTab;
+    primaryTabButtons.forEach(button => {
+      const active = button.dataset.primaryTab === primaryTab;
+      button.classList.toggle('is-active', active);
+      if (active) button.setAttribute('aria-current', 'page');
+      else button.removeAttribute('aria-current');
+    });
+    chatComposerFooter?.classList.toggle('hidden', primaryTab !== 'chat');
+    updatePrimaryChromeMetrics();
+  }
+
+  function setPrimaryTab(tab, { hapticFeedback = true } = {}) {
+    const target = ['chat', 'crew', 'tasks', 'settings'].includes(tab) ? tab : 'chat';
+    syncPrimaryTabChrome(target);
+    if (hapticFeedback && typeof window.haptic === 'function') window.haptic('light');
+
+    if (target === 'crew') toggleDrawer(true);
+    else if (drawer && !drawer.classList.contains('-translate-x-full')) toggleDrawer(false);
+
+    if (typeof window.setTaskCenterVisible === 'function') {
+      window.setTaskCenterVisible(target === 'tasks');
+    }
+    setSettingsViewOpen(target === 'settings');
+
+  }
+
+  window.setPrimaryTab = setPrimaryTab;
+  window.getPrimaryTab = () => primaryTab;
+  window.syncPrimaryTabChrome = syncPrimaryTabChrome;
+
+  primaryTabButtons.forEach(button => {
+    button.addEventListener('click', () => setPrimaryTab(button.dataset.primaryTab));
+  });
+  document.querySelectorAll('[data-open-task-center]').forEach(button => {
+    button.addEventListener('click', () => {
+      if (primaryTab !== 'tasks') setPrimaryTab('tasks', { hapticFeedback: false });
+    });
+  });
+  window.addEventListener('resize', updatePrimaryChromeMetrics);
+  syncPrimaryTabChrome('chat');
+  window.setTimeout(updatePrimaryChromeMetrics, 0);
 
   // 📦 Browser Extension Export listeners
   if (exportExtBtn) exportExtBtn.addEventListener('click', () => toggleExportExtModal(true));

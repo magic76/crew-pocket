@@ -17,13 +17,15 @@ assert.ok(html.includes('id="crew-room-summary"'));
 assert.equal(html.includes('id="conversation-workspaces"'), false);
 
 // Header shows who is active; Project/work title are kept out of the visible header.
-assert.ok(html.includes('<button id="workspace-selector-btn"'));
+assert.ok(html.includes('<div id="workspace-selector-btn"'));
 assert.ok(html.includes('id="workspace-label"'));
 assert.ok(html.includes('General Developer'));
+assert.ok(html.includes('id="header-current-task"'));
 assert.ok(html.includes('id="header-role-project" class="hidden"'));
 assert.ok(html.includes('id="header-title" type="button" class="hidden"'));
 assert.ok(html.includes('id="role-editor-workspace"'));
-assert.ok(app.includes("workspaceSelectorBtn.addEventListener('click', () => toggleDrawer(true))"));
+assert.ok(app.includes("data-primary-tab"));
+assert.equal(app.includes("workspaceSelectorBtn.addEventListener('click', () => toggleDrawer(true))"), false);
 
 // Each Role owns its own secondary actions.
 for (const action of ['new-work', 'history', 'memory', 'settings']) {
