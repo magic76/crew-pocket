@@ -2406,6 +2406,13 @@ function syncActiveRoleStreamingState() {
       provider: activeStream?.provider || currentProvider
     }
   }));
+  if (!isStreaming && getPendingQueuedMessage(roleId)) {
+    window.setTimeout(() => {
+      if (currentStreamRoleId() === roleId && !getActiveRoleStream(roleId)) {
+        flushQueuedBtwMessage();
+      }
+    }, 0);
+  }
   return activeStream;
 }
 
