@@ -1289,7 +1289,9 @@ async function loadConversationHistory(convId, { preserveComposer = false } = {}
   if (Array.isArray(cachedConversations)) {
     const cached = cachedConversations.find(c => c.id === convId);
     if (cached) {
-      if (cached.workspace && typeof window.setConversationWorkspaceDirect === 'function') {
+      if (cached.crewMemberId && typeof window.setConversationCrewMemberDirect === 'function') {
+        window.setConversationCrewMemberDirect(cached.crewMemberId, cached.workspace);
+      } else if (cached.workspace && typeof window.setConversationWorkspaceDirect === 'function') {
         window.setConversationWorkspaceDirect(cached.workspace);
       }
     }
@@ -1946,7 +1948,8 @@ async function sendBtwConcurrentSidecard(customText = null, customImgPath = null
         effort: 'low', // Fast low reasoning for instant 1s answers across Gemini & Codex
         image_path: imgPath,
         workspace: (typeof currentWorkspace !== 'undefined') ? currentWorkspace : '/data/data/com.termux/files/home',
-        role: 'general'
+        role: 'general',
+        crew_member_id: (typeof currentCrewMemberId !== 'undefined' && currentCrewMemberId) ? currentCrewMemberId : undefined
       }),
       signal: sideAbort.signal
     });
@@ -2577,7 +2580,8 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
         model: currentModel,
         effort: (typeof currentEffort !== 'undefined') ? currentEffort : 'low',
         workspace: (typeof currentWorkspace !== 'undefined') ? currentWorkspace : '/data/data/com.termux/files/home',
-        role: 'general'
+        role: 'general',
+        crew_member_id: (typeof currentCrewMemberId !== 'undefined' && currentCrewMemberId) ? currentCrewMemberId : undefined
       }),
       signal: streamAbortController.signal
     });

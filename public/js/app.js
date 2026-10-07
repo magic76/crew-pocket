@@ -1065,6 +1065,7 @@ function initAppAndListeners() {
                 model: target.model,
                 effort: target.effort,
                 workspace: target.workspace,
+                crewMemberId: target.crewMemberId,
                 role: target.role
               });
             }

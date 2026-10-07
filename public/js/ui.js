@@ -46,8 +46,10 @@ let modelsCatalogLoaded = false;
 const HOME_WORKSPACE = '/data/data/com.termux/files/home';
 let currentWorkspace = localStorage.getItem('crew_current_workspace') || HOME_WORKSPACE;
 let availableWorkspaces = [];
-// Conversation roles were removed from the product UI. Clear any old client preference;
- // the transport keeps "general" only for backward compatibility.
+let currentCrewMemberId = localStorage.getItem('crew_current_member') || '';
+let availableCrewMembers = [];
+// Conversation roles were removed from the product UI. Crew Member now owns
+// the durable project boundary; transport roles remain internal.
 localStorage.removeItem('crew_current_role');
 
 // Coalesce boot/model/effort/new-chat prewarm requests into one provider call.
@@ -549,6 +551,14 @@ function workspaceMeta(workspace = currentWorkspace) {
   };
 }
 
+function crewMemberMeta(memberId = currentCrewMemberId) {
+  return availableCrewMembers.find(item => item.id === memberId) || null;
+}
+
+function inferCrewMemberForWorkspace(workspace = currentWorkspace) {
+  return availableCrewMembers.find(item => item.workspace === workspace) || null;
+}
+
 function compactWorkspaceLabel(meta) {
   const raw = String(meta?.label || '').trim();
   if (!raw || raw === 'Home') return 'Home';
@@ -556,24 +566,79 @@ function compactWorkspaceLabel(meta) {
 }
 
 function updateWorkspaceUI() {
+  let member = crewMemberMeta();
+  if (!member) {
+    member = inferCrewMemberForWorkspace();
+    if (member) {
+      currentCrewMemberId = member.id;
+      localStorage.setItem('crew_current_member', currentCrewMemberId);
+    }
+  }
+
+  if (member) {
+    if (workspaceIcon) workspaceIcon.textContent = member.icon || '💻';
+    if (workspaceLabel) workspaceLabel.textContent = member.name;
+    if (workspaceSelectorBtn) {
+      workspaceSelectorBtn.title = `${member.name} · ${member.project?.label || compactWorkspaceLabel(workspaceMeta(member.workspace))}\n${member.workspace}`;
+    }
+    return;
+  }
+
   const meta = workspaceMeta();
   if (workspaceIcon) workspaceIcon.textContent = meta.icon;
   if (workspaceLabel) workspaceLabel.textContent = compactWorkspaceLabel(meta);
   if (workspaceSelectorBtn) workspaceSelectorBtn.title = `工作區：${meta.path}`;
 }
 
+window.getCurrentCrewMemberId = () => currentCrewMemberId || '';
+
+window.setConversationCrewMemberDirect = function(memberId, workspace) {
+  if (memberId) {
+    currentCrewMemberId = memberId;
+    localStorage.setItem('crew_current_member', currentCrewMemberId);
+  }
+  const member = crewMemberMeta(memberId);
+  const nextWorkspace = member?.workspace || workspace;
+  if (nextWorkspace) {
+    currentWorkspace = nextWorkspace;
+    localStorage.setItem('crew_current_workspace', currentWorkspace);
+  }
+  updateWorkspaceUI();
+};
+
 window.setConversationWorkspaceDirect = function(workspace) {
   if (!workspace) return;
   currentWorkspace = workspace;
   localStorage.setItem('crew_current_workspace', currentWorkspace);
+  const member = inferCrewMemberForWorkspace(workspace);
+  if (member) {
+    currentCrewMemberId = member.id;
+    localStorage.setItem('crew_current_member', currentCrewMemberId);
+  }
   updateWorkspaceUI();
 };
 
 async function loadWorkspaces() {
-  const response = await fetch('/api/workspaces');
-  if (!response.ok) throw new Error('無法讀取工作區');
-  const data = await response.json();
-  availableWorkspaces = Array.isArray(data.workspaces) ? data.workspaces : [];
+  const [workspaceResponse, memberResponse] = await Promise.all([
+    fetch('/api/workspaces'),
+    fetch('/api/crew-members')
+  ]);
+  if (!workspaceResponse.ok) throw new Error('無法讀取工作區');
+  if (!memberResponse.ok) throw new Error('無法讀取 Crew Members');
+
+  const [workspaceData, memberData] = await Promise.all([workspaceResponse.json(), memberResponse.json()]);
+  availableWorkspaces = Array.isArray(workspaceData.workspaces) ? workspaceData.workspaces : [];
+  availableCrewMembers = Array.isArray(memberData.crewMembers) ? memberData.crewMembers : [];
+
+  let member = crewMemberMeta();
+  if (!member) member = inferCrewMemberForWorkspace(currentWorkspace);
+  if (!member && availableCrewMembers.length) member = availableCrewMembers[0];
+  if (member) {
+    currentCrewMemberId = member.id;
+    currentWorkspace = member.workspace;
+    localStorage.setItem('crew_current_member', currentCrewMemberId);
+    localStorage.setItem('crew_current_workspace', currentWorkspace);
+  }
   updateWorkspaceUI();
   return availableWorkspaces;
 }
@@ -584,59 +649,94 @@ function closeWorkspaceModal() {
   window.setTimeout(() => workspaceModal.classList.add('hidden'), 160);
 }
 
+function memberRoleLabel(member) {
+  if (member?.role === 'software_engineer') return 'Project Developer';
+  if (member?.role === 'general') return 'General Assistant';
+  return member?.role || 'Crew Member';
+}
+
 function renderWorkspaceOptions() {
   if (!workspaceOptions) return;
-  workspaceOptions.innerHTML = availableWorkspaces.map(item => {
-    const active = item.path === currentWorkspace;
-    return `<button type="button" data-workspace-path="${escapeHtml(item.path)}" class="workspace-option w-full flex items-center gap-3 rounded-xl border p-3 text-left transition active:scale-[0.99] ${active ? 'border-teal-400/70 bg-teal-500/15' : 'border-slate-800 bg-slate-950/70 hover:border-slate-700 hover:bg-slate-800'}">
-      <span class="text-lg shrink-0">${escapeHtml(item.icon || '📁')}</span>
-      <span class="min-w-0 flex-1"><span class="block truncate text-xs font-semibold text-slate-100">${escapeHtml(item.label)}</span><span class="block truncate pt-0.5 text-[10px] font-mono text-slate-400">${escapeHtml(item.detail || item.path)}</span></span>
+  workspaceOptions.innerHTML = availableCrewMembers.map(member => {
+    const active = member.id === currentCrewMemberId;
+    const projectLabel = member.project?.label || compactWorkspaceLabel(workspaceMeta(member.workspace));
+    return `<button type="button" data-crew-member-id="${escapeHtml(member.id)}" class="crew-member-option w-full flex items-center gap-3 rounded-xl border p-3 text-left transition active:scale-[0.99] ${active ? 'border-teal-400/70 bg-teal-500/15' : 'border-slate-800 bg-slate-950/70 hover:border-slate-700 hover:bg-slate-800'}">
+      <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-700/70 bg-slate-900 text-xl">${escapeHtml(member.icon || '💻')}</span>
+      <span class="min-w-0 flex-1">
+        <span class="flex items-center gap-2"><span class="truncate text-xs font-bold text-slate-100">${escapeHtml(member.name)}</span><span class="shrink-0 rounded-full border border-indigo-500/30 bg-indigo-500/10 px-1.5 py-0.5 text-[9px] text-indigo-300">${escapeHtml(memberRoleLabel(member))}</span></span>
+        <span class="block truncate pt-1 text-[10px] text-slate-400">專案：${escapeHtml(projectLabel)}</span>
+        <span class="block truncate pt-0.5 text-[9px] font-mono text-slate-500">${escapeHtml(member.workspace)}</span>
+      </span>
       ${active ? '<span class="text-xs font-bold text-teal-300">✓</span>' : ''}
     </button>`;
-  }).join('') || '<div class="p-5 text-center text-xs text-slate-400">尚未找到專案工作區</div>';
-  workspaceOptions.querySelectorAll('.workspace-option').forEach(button => {
-    button.addEventListener('click', () => selectWorkspace(button.dataset.workspacePath));
+  }).join('') || '<div class="p-5 text-center text-xs text-slate-400">尚未找到 Crew Member；先建立一個專案。</div>';
+
+  workspaceOptions.querySelectorAll('.crew-member-option').forEach(button => {
+    button.addEventListener('click', () => selectCrewMember(button.dataset.crewMemberId));
   });
 }
 
-async function selectWorkspace(workspace, isCreatingNewChat = false) {
-  if (!workspace) return closeWorkspaceModal();
-  if (isStreaming) return alert('目前正在回覆中，請完成後再切換工作區。');
-  const next = workspaceMeta(workspace);
-  if (!isCreatingNewChat && currentConversationId && workspace !== currentWorkspace && !window.confirm(`切換至「${next.label}」後，下一回合會從 ${next.path} 啟動 AI 工作 session。\n\n對話歷史會保留。是否切換？`)) return;
-  const previous = currentWorkspace;
-  currentWorkspace = workspace;
+async function selectCrewMember(memberId, isCreatingNewChat = false) {
+  if (!memberId) return closeWorkspaceModal();
+  if (isStreaming) return alert('目前正在回覆中，請完成後再切換 Crew Member。');
+  const member = availableCrewMembers.find(item => item.id === memberId);
+  if (!member) return alert('找不到這位 Crew Member。');
+
+  if (!isCreatingNewChat && currentConversationId && memberId !== currentCrewMemberId &&
+      !window.confirm(`切換給「${member.name}」後，這個對話會改由專案 ${member.project?.label || ''} 接手。\n\n對話歷史會保留。是否切換？`)) return;
+
+  const previousMemberId = currentCrewMemberId;
+  const previousWorkspace = currentWorkspace;
+  currentCrewMemberId = member.id;
+  currentWorkspace = member.workspace;
+  localStorage.setItem('crew_current_member', currentCrewMemberId);
   localStorage.setItem('crew_current_workspace', currentWorkspace);
   updateWorkspaceUI();
+
   try {
     if (currentConversationId) {
-      const saved = await window.saveCurrentConversationSettings({ workspace: currentWorkspace });
-      if (!saved) throw new Error('儲存工作區失敗');
+      const saved = await window.saveCurrentConversationSettings({
+        workspace: currentWorkspace,
+        crewMemberId: currentCrewMemberId
+      });
+      if (!saved) throw new Error('儲存 Crew Member 失敗');
       if (typeof loadConversations === 'function') loadConversations();
-    } else {
-      // New chat mode: update greeting message with selected workspace info
-      if (typeof messagesContainer !== 'undefined' && messagesContainer && messagesContainer.children.length <= 1) {
-        messagesContainer.innerHTML = '';
-        if (typeof appendMessage === 'function') {
-          appendMessage('assistant', `✨ 已為你開啟新對話（工作區：${next.label}）。\n\n原本的歷史對話已安全保存在左側選單中。有什麼可以幫你的？`);
-        }
+    } else if (typeof messagesContainer !== 'undefined' && messagesContainer) {
+      messagesContainer.innerHTML = '';
+      if (typeof appendMessage === 'function') {
+        appendMessage('assistant', `${member.icon || '💻'} ${member.name} 已就位。\n\n專案：${member.project?.label || compactWorkspaceLabel(workspaceMeta(member.workspace))}\n工作區：${member.workspace}\n\n直接交代這個專案要做的事即可。`);
       }
     }
     closeWorkspaceModal();
     window.requestProviderPrewarm?.(0);
   } catch (error) {
-    currentWorkspace = previous;
+    currentCrewMemberId = previousMemberId;
+    currentWorkspace = previousWorkspace;
+    if (currentCrewMemberId) localStorage.setItem('crew_current_member', currentCrewMemberId);
+    else localStorage.removeItem('crew_current_member');
     localStorage.setItem('crew_current_workspace', currentWorkspace);
     updateWorkspaceUI();
-    alert(error.message || '切換工作區失敗');
+    alert(error.message || '切換 Crew Member 失敗');
   }
+}
+
+async function selectWorkspace(workspace, isCreatingNewChat = false) {
+  const member = availableCrewMembers.find(item => item.workspace === workspace);
+  if (member) return selectCrewMember(member.id, isCreatingNewChat);
+  if (!workspace) return closeWorkspaceModal();
+  currentCrewMemberId = '';
+  localStorage.removeItem('crew_current_member');
+  currentWorkspace = workspace;
+  localStorage.setItem('crew_current_workspace', currentWorkspace);
+  updateWorkspaceUI();
+  closeWorkspaceModal();
 }
 
 async function handleCreateWorkspaceSubmit(e) {
   if (e) e.preventDefault();
   const input = document.getElementById('create-workspace-input');
   const name = input ? input.value.trim() : '';
-  if (!name) return alert('請輸入欲建立的目錄名稱');
+  if (!name) return alert('請輸入欲建立的專案目錄名稱');
 
   try {
     const res = await fetch('/api/workspaces', {
@@ -645,23 +745,25 @@ async function handleCreateWorkspaceSubmit(e) {
       body: JSON.stringify({ name })
     });
     const data = await res.json();
-    if (!data.success) throw new Error(data.error || '建立目錄失敗');
-    
+    if (!data.success) throw new Error(data.error || '建立專案失敗');
+
     if (input) input.value = '';
     await loadWorkspaces();
     renderWorkspaceOptions();
-    await selectWorkspace(data.workspace.path);
+    const member = availableCrewMembers.find(item => item.workspace === data.workspace.path);
+    if (member) await selectCrewMember(member.id, true);
+    else await selectWorkspace(data.workspace.path, true);
   } catch (err) {
-    alert(err.message || '建立目錄出錯');
+    alert(err.message || '建立專案出錯');
   }
 }
 
-window.openWorkspacePicker = async function(isNewChat = false) {
+window.openWorkspacePicker = async function() {
   if (!workspaceModal) return;
   workspaceModal.classList.remove('hidden');
   requestAnimationFrame(() => workspaceModal.classList.remove('opacity-0'));
-  if (workspaceOptions) workspaceOptions.innerHTML = '<div class="p-5 text-center text-xs text-slate-400">載入工作區中…</div>';
-  
+  if (workspaceOptions) workspaceOptions.innerHTML = '<div class="p-5 text-center text-xs text-slate-400">載入 Crew Members 中…</div>';
+
   const form = document.getElementById('create-workspace-form');
   if (form && !form.dataset.bound) {
     form.dataset.bound = 'true';
@@ -822,11 +924,23 @@ window.applyConversationSettings = function(settings) {
     localStorage.setItem('crew_current_provider', currentProvider);
     renderProviderOptions();
   }
+  const memberId = settings.crewMemberId || settings.crew_member_id || '';
+  if (memberId) {
+    currentCrewMemberId = memberId;
+    localStorage.setItem('crew_current_member', currentCrewMemberId);
+  }
   if (settings.workspace) {
     currentWorkspace = settings.workspace;
     localStorage.setItem('crew_current_workspace', currentWorkspace);
-    updateWorkspaceUI();
   }
+  if (!memberId && settings.workspace) {
+    const inferred = inferCrewMemberForWorkspace(settings.workspace);
+    if (inferred) {
+      currentCrewMemberId = inferred.id;
+      localStorage.setItem('crew_current_member', currentCrewMemberId);
+    }
+  }
+  updateWorkspaceUI();
   const providerModels = availableModels.filter(model => (model.provider || 'antigravity') === currentProvider);
   if (!settings.model && settings.loadingModel) {
     currentModel = null;
@@ -868,6 +982,7 @@ window.saveCurrentConversationSettings = function(overrides = {}) {
     model: overrides.model !== undefined ? overrides.model : currentModel,
     effort: overrides.effort !== undefined ? overrides.effort : currentEffort,
     workspace: overrides.workspace !== undefined ? overrides.workspace : currentWorkspace,
+    crew_member_id: overrides.crewMemberId !== undefined ? overrides.crewMemberId : (currentCrewMemberId || undefined),
     role: 'general'
   };
   return fetch('/api/conversation-settings', {

@@ -41,6 +41,7 @@ const { getStorageReport, deleteMediaItems, getMediaThumbnail } = require('./lib
 const { getConversationSettings, getProviderConversationSettings, saveConversationSettings, saveConversationTitle, deleteConversationSettings } = require('./lib/conversation-settings');
 const { createTask, getTask, listTasks, updateTask } = require('./lib/tasks');
 const { listWorkspaces, resolveWorkspace, createWorkspace } = require('./lib/workspaces');
+const { listCrewMembers, getCrewMember, saveCrewMember, buildCrewMemberGuide } = require('./lib/crew-members');
 const auth = require('./lib/auth');
 const {
   applyCors,
@@ -539,7 +540,7 @@ function liveDelegateError(message, statusCode = 500) {
   return error;
 }
 
-async function runLiveDelegatedTurn({ providerId, conversationId, model, effort, task, onAbortReady }) {
+async function runLiveDelegatedTurn({ providerId, conversationId, model, effort, workspace, task, onAbortReady }) {
   const provider = getProvider(providerId);
   const status = provider.getStatus(conversationId);
   if (status && status.isBusy) {
@@ -567,6 +568,7 @@ async function runLiveDelegatedTurn({ providerId, conversationId, model, effort,
       conversationId,
       model,
       effort: effort || 'low',
+      workspace,
       prompt: delegationPrompt,
       onAbort(handler) {
         abortTurn = typeof handler === 'function' ? handler : abortTurn;
@@ -612,6 +614,7 @@ async function launchLiveDelegateJob(taskRecord) {
     conversationId: taskRecord.conversationId,
     model: taskRecord.model,
     effort: taskRecord.effort,
+    workspace: taskRecord.workspace,
     task: taskRecord.task,
     onAbortReady(abort) {
       job.abort = abort;
@@ -660,6 +663,17 @@ async function resolveTaskConversationTitle(providerId, conversationId, provided
   return conversationId ? `對話 ${conversationId.slice(0, 8)}` : '未知對話';
 }
 
+async function resolveTaskCrewContext(providerId, conversationId, requestedMemberId = '') {
+  const settings = conversationId ? await getConversationSettings(providerId, conversationId).catch(() => null) : null;
+  const memberId = settings?.crewMemberId || String(requestedMemberId || '').trim();
+  const member = memberId ? await getCrewMember(memberId) : null;
+  return {
+    crewMemberId: member?.id || '',
+    projectId: member?.project?.id || '',
+    workspace: member?.workspace || settings?.workspace || ''
+  };
+}
+
 async function handleLiveDelegate(req, res) {
   try {
     const body = await parseJsonBody(req);
@@ -684,15 +698,16 @@ async function handleLiveDelegate(req, res) {
       conversationId,
       body.conversation_title || taskRecord?.conversationTitle
     );
+    const taskCrew = await resolveTaskCrewContext(providerId, conversationId, body.crew_member_id || taskRecord?.crewMemberId);
     if (!taskRecord) {
       taskRecord = await createTask({
-        source: 'live', provider: providerId, conversationId, conversationTitle, model: body.model,
+        source: 'live', ...taskCrew, provider: providerId, conversationId, conversationTitle, model: body.model,
         effort: body.effort, task, status: 'pending_confirmation',
         event: 'Live 已確認交辦，等待主對話接手。'
       });
     }
     taskRecord = await updateTask(taskRecord.id, {
-      provider: providerId, conversationId, conversationTitle, model: body.model || taskRecord.model,
+      ...taskCrew, provider: providerId, conversationId, conversationTitle, model: body.model || taskRecord.model,
       effort: body.effort || taskRecord.effort, status: 'pending_confirmation'
     }) || taskRecord;
     const job = await launchLiveDelegateJob(taskRecord);
@@ -729,6 +744,9 @@ async function handleLiveDelegateStatus(parsedUrl, res) {
     provider: task?.provider || job.provider,
     conversation_id: task?.conversationId || job.conversationId,
     conversation_title: task?.conversationTitle || undefined,
+    crew_member_id: task?.crewMemberId || undefined,
+    project_id: task?.projectId || undefined,
+    workspace: task?.workspace || undefined,
     task_id: task?.id || job.id,
     task_title: task?.title || undefined,
     task: task?.task || undefined,
@@ -740,7 +758,10 @@ async function handleLiveDelegateStatus(parsedUrl, res) {
 async function handleTasks(req, res, parsedUrl) {
   try {
     if (req.method === 'GET') {
-      const tasks = await listTasks(parsedUrl.query.limit);
+      const tasks = await listTasks(parsedUrl.query.limit, {
+        crewMemberId: parsedUrl.query.crew_member_id,
+        projectId: parsedUrl.query.project_id
+      });
       res.writeHead(200, { 'Content-Type': 'application/json' });
       return res.end(JSON.stringify({ success: true, tasks }));
     }
@@ -753,8 +774,9 @@ async function handleTasks(req, res, parsedUrl) {
       if (!task || !conversationId) throw liveDelegateError('任務內容與主對話不可為空。', 400);
       const providerId = normalizeProviderId(body.provider);
       const conversationTitle = await resolveTaskConversationTitle(providerId, conversationId, body.conversation_title);
+      const taskCrew = await resolveTaskCrewContext(providerId, conversationId, body.crew_member_id);
       const record = await createTask({
-        source: body.source || 'main_chat', provider: providerId, conversationId, conversationTitle,
+        source: body.source || 'main_chat', ...taskCrew, provider: providerId, conversationId, conversationTitle,
         model: body.model, effort: body.effort, task, status: 'pending_confirmation'
       });
       res.writeHead(201, { 'Content-Type': 'application/json' });
@@ -814,6 +836,7 @@ async function handleProviderConversations(parsedUrl, res) {
     res.end(JSON.stringify({ conversations: conversations.map(conversation => ({
       ...conversation,
       workspace: settingsByConversation.get(conversation.id)?.workspace || null,
+      crewMemberId: settingsByConversation.get(conversation.id)?.crewMemberId || null,
       role: settingsByConversation.get(conversation.id)?.role || 'general',
       model: settingsByConversation.get(conversation.id)?.model || null,
       effort: settingsByConversation.get(conversation.id)?.effort || null
@@ -934,22 +957,45 @@ async function handleConversationSettings(req, res) {
     const body = await parseJsonBody(req);
     const providerId = normalizeProviderId(body.provider);
     const previous = await getConversationSettings(providerId, body.conversation_id);
-    const targetWorkspace = body.workspace || previous?.workspace;
+    const requestedMemberId = String(body.crew_member_id || body.crewMemberId || '').trim();
+    const memberId = requestedMemberId || previous?.crewMemberId || '';
+    const member = memberId ? await getCrewMember(memberId) : null;
+    if (requestedMemberId && !member) throw new Error('Crew Member 不存在或專案工作區已不可用');
+
+    const targetWorkspace = member?.workspace || body.workspace || previous?.workspace;
     const workspace = targetWorkspace ? await resolveWorkspace(targetWorkspace) : null;
     const settings = await saveConversationSettings(providerId, body.conversation_id, {
-      model: body.model || previous?.model || 'gemini-3.7-flash',
-      effort: body.effort || previous?.effort || 'low',
+      model: body.model || previous?.model || member?.model || getDefaultModel(providerId),
+      effort: body.effort || previous?.effort || member?.effort || 'low',
       ...(workspace ? { workspace } : {}),
+      ...(member ? { crewMemberId: member.id } : previous?.crewMemberId ? { crewMemberId: previous.crewMemberId } : {}),
       role: body.role || previous?.role || 'general'
     });
     if (previous?.workspace && workspace && previous.workspace !== workspace && providerId === 'antigravity') {
       sessionManager.closeSession(body.conversation_id);
     }
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ success: true, conversation_settings: settings }));
+    res.end(JSON.stringify({ success: true, conversation_settings: settings, crew_member: member }));
   } catch (err) {
     res.writeHead(400, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: err.message }));
+  }
+}
+
+async function handleCrewMembers(req, res) {
+  try {
+    if (req.method === 'GET') {
+      const members = await listCrewMembers();
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+      return res.end(JSON.stringify({ success: true, crewMembers: members }));
+    }
+    const body = await parseJsonBody(req);
+    const member = await saveCrewMember(body);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: true, crewMember: member }));
+  } catch (err) {
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: false, error: err.message }));
   }
 }
 
@@ -1298,29 +1344,39 @@ async function handleChat(req, res) {
     res.writeHead(400, { 'Content-Type': 'application/json' });
     return res.end(JSON.stringify({ error: 'Prompt or image is required' }));
   }
-  // 🛡️ Resolve workspace:
-  // For an existing conversation, lock to the conversation's saved workspace from database,
-  // preventing accidental workspace hijacking from stale frontend state.
+  // Crew Member owns the project workspace. Conversations inherit that
+  // project boundary; legacy workspace-only conversations keep working.
   const workspaceStartedAt = Date.now();
   let workspace;
   let savedSettings = null;
+  let crewMember = null;
   try {
+    const requestedCrewMemberId = String(body.crew_member_id || body.crewMemberId || '').trim();
     if (conversation_id) {
       savedSettings = await getConversationSettings(providerId, conversation_id);
-      if (savedSettings?.workspace) {
-        workspace = await resolveWorkspace(savedSettings.workspace);
-      } else {
-        workspace = await resolveWorkspace(body.workspace);
-        // Backfill workspace in settings so this conversation remains locked to it
+      const boundMemberId = savedSettings?.crewMemberId || requestedCrewMemberId;
+      if (boundMemberId) crewMember = await getCrewMember(boundMemberId);
+      if (requestedCrewMemberId && !crewMember) throw new Error('Crew Member 不存在或專案工作區已不可用');
+
+      if (crewMember) workspace = await resolveWorkspace(crewMember.workspace);
+      else if (savedSettings?.workspace) workspace = await resolveWorkspace(savedSettings.workspace);
+      else workspace = await resolveWorkspace(body.workspace);
+
+      if (!savedSettings?.workspace || (crewMember && (!savedSettings?.crewMemberId || savedSettings.workspace !== workspace))) {
         saveConversationSettings(providerId, conversation_id, {
-          model: model || savedSettings?.model || getDefaultModel(providerId),
-          effort: effort || savedSettings?.effort || 'low',
+          model: model || savedSettings?.model || crewMember?.model || getDefaultModel(providerId),
+          effort: effort || savedSettings?.effort || crewMember?.effort || 'low',
           workspace,
+          ...(crewMember ? { crewMemberId: crewMember.id } : {}),
           role: body.role || savedSettings?.role || 'general'
         }).catch(() => {});
       }
     } else {
-      workspace = await resolveWorkspace(body.workspace);
+      if (requestedCrewMemberId) {
+        crewMember = await getCrewMember(requestedCrewMemberId);
+        if (!crewMember) throw new Error('Crew Member 不存在或專案工作區已不可用');
+      }
+      workspace = await resolveWorkspace(crewMember?.workspace || body.workspace);
     }
   } catch (err) {
     res.writeHead(400, { 'Content-Type': 'application/json' });
@@ -1328,7 +1384,7 @@ async function handleChat(req, res) {
   }
   turnTiming.workspace_ms = Date.now() - workspaceStartedAt;
 
-  const effectiveModel = model || savedSettings?.model || getDefaultModel(providerId);
+  const effectiveModel = model || savedSettings?.model || crewMember?.model || getDefaultModel(providerId);
   const {
     jevInputSummary,
     routedExecutionMode,
@@ -1388,7 +1444,8 @@ async function handleChat(req, res) {
   // byte-for-byte user-authored so internal capability guidance never appears
   // in conversation history or is mistaken for user input.
   if (!conversation_id) {
-    finalPrompt = `${buildCapabilityGuide(finalPrompt)}\n\n[User Request]:\n${finalPrompt}`;
+    const memberGuide = buildCrewMemberGuide(crewMember);
+    finalPrompt = `${memberGuide ? `${memberGuide}\n` : ''}${buildCapabilityGuide(finalPrompt)}\n\n[User Request]:\n${finalPrompt}`;
   }
 
   if (image_path) {
@@ -2098,9 +2155,10 @@ async function handleChat(req, res) {
           // as well as on manual selector changes so new conversations are
           // immediately bound to their first model.
           saveConversationSettings(providerId, event.conversationId, {
-            model: event.model || effectiveModel || model || savedSettings?.model || getDefaultModel(providerId),
-            effort: event.effort || effort || savedSettings?.effort || 'low',
+            model: event.model || effectiveModel || model || savedSettings?.model || crewMember?.model || getDefaultModel(providerId),
+            effort: event.effort || effort || savedSettings?.effort || crewMember?.effort || 'low',
             workspace,
+            ...(crewMember ? { crewMemberId: crewMember.id } : savedSettings?.crewMemberId ? { crewMemberId: savedSettings.crewMemberId } : {}),
             role: body.role || savedSettings?.role || 'general',
             ...(executionPolicy?.mode ? { executionMode: executionPolicy.mode } : {})
           }).catch(err => console.warn('[Conversation Settings] Save failed:', err.message));
@@ -2111,6 +2169,8 @@ async function handleChat(req, res) {
             effort: event.effort,
             execution_mode: executionPolicy?.mode || null,
             execution_source: executionPolicy?.source || null,
+            crew_member_id: crewMember?.id || savedSettings?.crewMemberId || null,
+            project_id: crewMember?.project?.id || null,
             jev_route: jevRoute ? {
               input_summary: jevInputSummary,
               accepted: Boolean(jevRoute.accepted),
@@ -2542,7 +2602,7 @@ function remoteAccessSnapshot(req, configuredEnabled = fs.existsSync(REMOTE_ACCE
 
 async function handleCrewHome(req, res) {
   try {
-    const tasks = await listTasks(200);
+    const [tasks, crewMembers] = await Promise.all([listTasks(200), listCrewMembers()]);
     const counts = {
       running: tasks.filter(task => task.status === 'running').length,
       pending: tasks.filter(task => task.status === 'pending_confirmation').length,
@@ -2567,6 +2627,15 @@ async function handleCrewHome(req, res) {
       success: true,
       counts,
       recentTasks,
+      crewMembers: crewMembers.map(member => ({
+        id: member.id,
+        name: member.name,
+        icon: member.icon,
+        role: member.role,
+        workspace: member.workspace,
+        project: member.project,
+        activeTasks: tasks.filter(task => task.crewMemberId === member.id && ['running', 'pending_confirmation'].includes(task.status)).length
+      })),
       remote: remoteAccessSnapshot(req),
       runtime: {
         device: os.hostname(),
@@ -2744,6 +2813,8 @@ const server = http.createServer(async (req, res) => {
     return handleConversationSettings(req, res);
   } else if (pathname === '/api/codex-warmup' && (req.method === 'GET' || req.method === 'POST')) {
     return handleCodexWarmup(req, res);
+  } else if (pathname === '/api/crew-members' && (req.method === 'GET' || req.method === 'POST')) {
+    return handleCrewMembers(req, res);
   } else if (pathname === '/api/workspaces' && req.method === 'GET') {
     return handleWorkspaces(res);
   } else if (pathname === '/api/workspaces' && req.method === 'POST') {

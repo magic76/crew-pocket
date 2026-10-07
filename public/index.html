@@ -83,7 +83,7 @@
   <header class="bg-slate-950/80 backdrop-blur-xl border-b border-slate-800/80 px-2.5 py-2 flex items-center justify-between z-20 shrink-0 w-full max-w-full min-w-0">
     <div class="flex items-center gap-1.5 sm:gap-2.5 min-w-0 flex-1">
       <!-- Drawer Menu Button -->
-      <button id="menu-btn" class="p-1.5 sm:p-2 rounded-lg hover:bg-slate-800 text-slate-300 hover:text-white transition active:scale-95 shrink-0" aria-label="歷史對話選單">
+      <button id="menu-btn" class="p-1.5 sm:p-2 rounded-lg hover:bg-slate-800 text-slate-300 hover:text-white transition active:scale-95 shrink-0" aria-label="Crew 與歷史對話選單">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
         </svg>
@@ -96,8 +96,8 @@
         </div>
         <!-- Header Sub-row: Workspace, Model Selector & Context Pill -->
         <div class="flex items-center gap-1.5 mt-0.5 min-w-0">
-          <button id="workspace-selector-btn" type="button" class="flex max-w-[104px] min-w-0 items-center gap-1 rounded-md border border-teal-500/30 bg-teal-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-teal-200 transition hover:bg-teal-500/20 active:scale-95 shrink-0" title="切換目前對話的工作區">
-            <span id="workspace-icon" class="shrink-0">🏠</span><span id="workspace-label" class="truncate">Home</span>
+          <button id="workspace-selector-btn" type="button" class="flex max-w-[104px] min-w-0 items-center gap-1 rounded-md border border-teal-500/30 bg-teal-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-teal-200 transition hover:bg-teal-500/20 active:scale-95 shrink-0" title="切換 Crew Member / 專案">
+            <span id="workspace-icon" class="shrink-0">💻</span><span id="workspace-label" class="truncate">Crew</span>
             <svg class="h-2.5 w-2.5 shrink-0 text-teal-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m6 9 6 6 6-6"/></svg>
           </button>
           <!-- Model selector and Context token share one compact header control. -->
@@ -328,7 +328,7 @@
   <div id="workspace-modal" class="fixed inset-0 z-[70] hidden items-end justify-center bg-black/70 p-2 opacity-0 transition-opacity duration-150 sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-labelledby="workspace-modal-title">
     <section class="w-full max-w-md overflow-hidden rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl">
       <div class="flex items-start justify-between gap-3 border-b border-slate-800 p-3.5">
-        <div><h2 id="workspace-modal-title" class="text-sm font-bold text-slate-100">選擇新對話工作區</h2><p class="mt-0.5 text-[10px] text-slate-400">AI 執行指令、讀寫檔案與相對路徑會在此目錄中進行。</p></div>
+        <div><h2 id="workspace-modal-title" class="text-sm font-bold text-slate-100">選擇 Crew Member</h2><p class="mt-0.5 text-[10px] text-slate-400">每位 Crew Member 長期負責一個專案；對話只是專案底下的工作紀錄。</p></div>
         <button id="close-workspace-modal-btn" type="button" class="min-h-9 min-w-9 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white">✕</button>
       </div>
 
@@ -337,16 +337,16 @@
         <form id="create-workspace-form" class="flex items-center gap-2" onsubmit="return false;">
           <div class="relative flex-1">
             <span class="absolute inset-y-0 left-2.5 flex items-center text-xs text-slate-500 font-mono">~/</span>
-            <input id="create-workspace-input" type="text" placeholder="建立新專案目錄 (如: my-project)" class="w-full rounded-xl border border-slate-800 bg-slate-900/90 pl-7 pr-3 py-2 text-xs font-mono text-slate-100 placeholder:text-slate-500 focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500" />
+            <input id="create-workspace-input" type="text" placeholder="建立新專案 (如: crew-teacher)" class="w-full rounded-xl border border-slate-800 bg-slate-900/90 pl-7 pr-3 py-2 text-xs font-mono text-slate-100 placeholder:text-slate-500 focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500" />
           </div>
           <button id="create-workspace-btn" type="submit" class="shrink-0 min-h-8 px-3 rounded-xl bg-teal-600 hover:bg-teal-500 active:scale-95 text-white text-xs font-bold transition flex items-center gap-1 shadow-md shadow-teal-900/30">
-            <span>+</span><span>建立</span>
+            <span>+</span><span>建立專案</span>
           </button>
         </form>
       </div>
 
       <div id="workspace-options" class="max-h-[48vh] space-y-1 overflow-y-auto p-2.5"><div class="p-5 text-center text-xs text-slate-400">載入工作區中…</div></div>
-      <div class="border-t border-slate-800 px-3.5 py-2.5 text-[10px] text-slate-500">點選即可切換或開啟新對話工作目錄。</div>
+      <div class="border-t border-slate-800 px-3.5 py-2.5 text-[10px] text-slate-500">切換 Crew Member，就是切換長期負責的專案與工作脈絡。</div>
     </section>
   </div>
 
@@ -372,7 +372,7 @@
       </div>
 
       <section id="conversation-workspaces" class="border-b border-slate-800/80 bg-slate-950/35 px-2.5 py-2">
-        <div class="mb-1.5 px-1 text-[10px] font-semibold text-slate-500">資料夾</div>
+        <div class="mb-1.5 px-1 text-[10px] font-semibold text-slate-500">Crew / 專案</div>
         <div id="conversation-workspace-list" class="flex gap-1.5 overflow-x-auto pb-0.5" aria-label="歷史對話資料夾"></div>
       </section>
 
@@ -385,7 +385,7 @@
     <div id="task-center-modal" class="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-end sm:items-center justify-center p-2 sm:p-4 opacity-0 pointer-events-none transition-opacity duration-200">
       <section class="w-full max-w-lg max-h-[82vh] overflow-hidden rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl flex flex-col">
         <div class="flex items-center justify-between gap-2 border-b border-slate-800 p-3">
-          <div><h2 class="text-sm font-bold text-slate-100">✓ 任務中心</h2><p class="text-[10px] text-slate-500">Live 與主對話交辦的可追蹤工作</p></div>
+          <div><h2 class="text-sm font-bold text-slate-100">✓ 任務中心</h2><p class="text-[10px] text-slate-500">Crew Member 底下可追蹤的工作</p></div>
           <div class="flex gap-1"><button id="refresh-task-center-btn" type="button" class="min-h-[36px] min-w-[36px] rounded-lg text-slate-300 active:scale-95" title="重新整理">↻</button><button id="close-task-center-btn" type="button" class="min-h-[36px] min-w-[36px] rounded-lg text-slate-300 active:scale-95" title="關閉">✕</button></div>
         </div>
         <div id="task-center-list" class="overflow-y-auto p-3 space-y-2"><div class="py-8 text-center text-xs text-slate-500">載入任務中…</div></div>
