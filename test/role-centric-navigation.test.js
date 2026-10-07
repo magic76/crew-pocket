@@ -14,6 +14,7 @@ assert.ok(html.includes('CREW ROOM'));
 assert.ok(html.includes('id="drawer-new-role-btn"'));
 assert.ok(html.includes('id="drawer-new-work-btn"'));
 assert.ok(html.includes('id="crew-room-summary"'));
+assert.ok(html.includes('id="crew-room-activity"'));
 assert.equal(html.includes('id="conversation-workspaces"'), false);
 
 // Header shows who is active; Project/work title are kept out of the visible header.
@@ -37,6 +38,11 @@ assert.ok(ui.includes("label: 'WORKING'"));
 assert.ok(ui.includes("label: 'WAITING'"));
 assert.ok(ui.includes('queuedRequestCount'));
 assert.ok(ui.includes('unreadReplyCount'));
+assert.ok(ui.includes('crewRecentActivities'));
+assert.ok(ui.includes('renderCrewRoomActivity'));
+assert.ok(ui.includes('animateCrewActivity'));
+assert.ok(ui.includes("card.animate(["));
+assert.ok(ui.includes("drawer.classList.contains('-translate-x-full')"));
 
 // Role navigation opens the Role runtime's exact current conversation first;
 // latest history is only a migration/fallback path.

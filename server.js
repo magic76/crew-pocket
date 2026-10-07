@@ -43,7 +43,7 @@ const { createTask, getTask, listTasks, updateTask } = require('./lib/tasks');
 const { listWorkspaces, resolveWorkspace, createWorkspace } = require('./lib/workspaces');
 const { listCrewMembers, getCrewMember, saveCrewMember, buildCrewMemberGuide } = require('./lib/crew-members');
 const { DEFAULT_ROLE_ID, roleIdForProject, listRoles, getRole, saveRole } = require('./lib/roles');
-const { listCrewRoles, sendCrewMessage, getCrewInbox, getCrewMessageActivity, markCrewMessagesDelivered } = require('./lib/crew-messages');
+const { listCrewRoles, sendCrewMessage, getCrewInbox, getCrewRecentActivity, getCrewMessageActivity, markCrewMessagesDelivered } = require('./lib/crew-messages');
 const { createCrewAutoResponder } = require('./lib/crew-auto-response');
 const { getRoleRuntime, listRoleRuntimes, activateRoleConversation, prepareNewRoleConversation, clearRoleConversation, clearRoleConversationByConversation } = require('./lib/role-runtime');
 const { buildCrewStatus } = require('./lib/crew-status');
@@ -1276,6 +1276,7 @@ async function handleCrewStatus(res) {
       listRoleRuntimes,
       getConversationSettings,
       getCrewInbox,
+      getCrewRecentActivity,
       getCrewMessageActivity,
       getProvider,
       listTasks
