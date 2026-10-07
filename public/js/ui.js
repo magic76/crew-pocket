@@ -1074,8 +1074,11 @@ window.selectProvider = async function(providerId) {
   if (currentConversationId) await loadConversationHistory(currentConversationId);
   else {
     messagesContainer.innerHTML = '';
-    appendMessage('assistant', providerConfig().greeting || '你好！已為你開啟新對話。有什麼可以幫你的？');
-    if (headerTitle) headerTitle.textContent = '新對話';
+    const activeRoleName = roleMeta()?.name || '';
+    appendMessage('assistant', activeRoleName
+      ? `🧠 ${activeRoleName} 已切換 Provider；目前是新的工作 Context。`
+      : (providerConfig().greeting || '已開啟新的工作 Context。'));
+    if (headerTitle) headerTitle.textContent = '新工作';
   }
   loadConversations();
   window.requestProviderPrewarm();
