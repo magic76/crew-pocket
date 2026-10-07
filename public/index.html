@@ -234,7 +234,7 @@
 
         <div class="px-2 pt-1 pb-0.5 text-[10px] font-bold tracking-wider text-slate-500">系統與工作區</div>
 
-        <button id="crew-home-btn" type="button" class="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-xs text-slate-200 hover:bg-slate-800/90 hover:text-indigo-300 transition text-left group" title="任務總覽與 Remote Console">
+        <button id="crew-home-btn" type="button" class="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-xs text-slate-200 hover:bg-slate-800/90 hover:text-indigo-300 transition text-left group" title="小隊狀態與 Remote Console">
           <div class="w-6 h-6 rounded-lg bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center text-indigo-300 group-hover:scale-105 transition shrink-0">
             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 4h6v6H4V4Zm10 0h6v6h-6V4ZM4 14h6v6H4v-6Zm10 0h6v6h-6v-6Z"/>
@@ -242,7 +242,7 @@
           </div>
           <div class="flex flex-col min-w-0">
             <span class="font-semibold text-slate-100 group-hover:text-indigo-300">Crew Home</span>
-            <span class="text-[10px] text-slate-400">任務總覽 · Remote Console</span>
+            <span class="text-[10px] text-slate-400">小隊狀態 · Remote Console</span>
           </div>
         </button>
 
@@ -438,17 +438,7 @@
       </section>
     </aside>
 
-    <div id="task-center-modal" class="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-end sm:items-center justify-center p-2 sm:p-4 opacity-0 pointer-events-none transition-opacity duration-200">
-      <section class="w-full max-w-lg max-h-[82vh] overflow-hidden rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl flex flex-col">
-        <div class="flex items-center justify-between gap-2 border-b border-slate-800 p-3">
-          <div><h2 class="text-sm font-bold text-slate-100">✓ 任務中心</h2><p class="text-[10px] text-slate-500">追蹤背景與委派任務</p></div>
-          <div class="flex gap-1"><button id="refresh-task-center-btn" type="button" class="min-h-[36px] min-w-[36px] rounded-lg text-slate-300 active:scale-95" title="重新整理">↻</button><button id="close-task-center-btn" type="button" class="hidden" aria-hidden="true">✕</button></div>
-        </div>
-        <div id="task-center-list" class="overflow-y-auto p-3 space-y-2"><div class="py-8 text-center text-xs text-slate-500">載入任務中…</div></div>
-      </section>
-    </div>
-
-    <!-- MESSAGES SCROLL AREA -->
+    <!-- MESSAGES SCROLL AREA -->    <!-- MESSAGES SCROLL AREA -->
     <main id="messages-container" class="flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-4 space-y-3.5 select-text min-h-0 w-full max-w-full">
       <!-- Welcome Message -->
       <div class="flex gap-2.5 w-full max-w-2xl mx-auto justify-start min-w-0">
@@ -740,10 +730,9 @@
   </footer>
 
   <nav id="primary-bottom-nav" class="shrink-0 border-t border-slate-800/90 bg-slate-950/95 backdrop-blur-xl" aria-label="主要導覽">
-    <div class="mx-auto grid max-w-xl grid-cols-4">
+    <div class="mx-auto grid max-w-xl grid-cols-3">
       <button type="button" data-primary-tab="chat" class="primary-tab is-active" aria-current="page"><span class="primary-tab-icon">💬</span><span>對話</span></button>
       <button type="button" data-primary-tab="crew" class="primary-tab"><span class="primary-tab-icon">👥</span><span>小隊</span></button>
-      <button type="button" data-primary-tab="tasks" class="primary-tab"><span class="primary-tab-icon">✓</span><span>任務</span></button>
       <button type="button" data-primary-tab="settings" class="primary-tab"><span class="primary-tab-icon">⚙</span><span>設定</span></button>
     </div>
   </nav>
@@ -771,7 +760,7 @@
         </div>
         <div class="p-2.5 rounded-xl bg-slate-950/80 border border-emerald-900/50 space-y-1">
           <div class="font-bold text-emerald-400 flex items-center gap-1.5"><span>✓</span><span>2. Live 委派主對話</span></div>
-          <p class="text-[11px] text-slate-400">在通話中說明要做的事，確認後由主對話處理；任務中心會保留進度、結果、失敗原因，並可重試。</p>
+          <p class="text-[11px] text-slate-400">Live 中明確交辦工作時，會直接把整理後的訊息送給目前 Role；Role 忙碌時會排入該 Conversation 的 queue。</p>
         </div>
         <div class="p-2.5 rounded-xl bg-slate-950/80 border border-amber-900/50 space-y-1">
           <div class="font-bold text-amber-400 flex items-center gap-1.5"><span>📷</span><span>3. 相機與手機感知</span></div>
@@ -1586,7 +1575,7 @@
             <span class="text-base">⌂</span>
             <h2 class="text-sm font-bold text-slate-100">Crew Home</h2>
           </div>
-          <p id="crew-home-subtitle" class="mt-0.5 text-[10px] text-slate-500 truncate">手機是主機 · 這裡看所有 AI 工作</p>
+          <p id="crew-home-subtitle" class="mt-0.5 text-[10px] text-slate-500 truncate">手機是主機 · Role 狀態與 Remote Console</p>
         </div>
         <div class="flex items-center gap-1.5">
           <button id="crew-home-refresh-btn" class="min-h-9 min-w-9 rounded-xl border border-slate-700 bg-slate-800/70 text-slate-300 text-xs active:scale-95" title="重新整理">↻</button>
@@ -1597,24 +1586,24 @@
       <div class="flex-1 overflow-y-auto p-3 sm:p-4 space-y-3">
         <div class="grid grid-cols-3 gap-2">
           <div class="rounded-2xl border border-indigo-500/25 bg-indigo-500/10 p-3">
-            <div class="text-[10px] text-indigo-300">處理中</div>
-            <div id="crew-home-running" class="mt-1 text-2xl font-bold text-white">—</div>
+            <div class="text-[10px] text-indigo-300">工作中</div>
+            <div id="crew-home-working" class="mt-1 text-2xl font-bold text-white">—</div>
           </div>
           <div class="rounded-2xl border border-amber-500/25 bg-amber-500/10 p-3">
-            <div class="text-[10px] text-amber-300">等確認</div>
-            <div id="crew-home-pending" class="mt-1 text-2xl font-bold text-white">—</div>
+            <div class="text-[10px] text-amber-300">等待處理</div>
+            <div id="crew-home-waiting" class="mt-1 text-2xl font-bold text-white">—</div>
           </div>
           <div class="rounded-2xl border border-teal-500/25 bg-teal-500/10 p-3">
-            <div class="text-[10px] text-teal-300">已完成</div>
-            <div id="crew-home-completed" class="mt-1 text-2xl font-bold text-white">—</div>
+            <div class="text-[10px] text-teal-300">未讀</div>
+            <div id="crew-home-unread" class="mt-1 text-2xl font-bold text-white">—</div>
           </div>
         </div>
 
         <section class="rounded-2xl border border-slate-800 bg-slate-950/65 overflow-hidden">
           <div class="px-3 py-2.5 border-b border-slate-800 flex items-center justify-between">
             <div>
-              <div class="text-xs font-semibold text-slate-100">最近工作</div>
-              <div class="text-[10px] text-slate-500">同一份 Task Center，不另外同步</div>
+              <div class="text-xs font-semibold text-slate-100">最近 Role</div>
+              <div class="text-[10px] text-slate-500">直接來自 Role / Conversation runtime</div>
             </div>
           </div>
           <div id="crew-home-recent" class="divide-y divide-slate-800/80">
@@ -1657,7 +1646,6 @@
 
           <p class="text-[9px] leading-relaxed text-slate-500">只有手機開啟 Remote Console 時才會接受區網連線；可在這裡查看連線數量並隨時中斷。</p>
         </section>
-        <button data-open-task-center id="crew-home-all-tasks-btn" class="w-full min-h-10 rounded-xl border border-slate-800 bg-slate-950/65 text-[10px] text-indigo-300 hover:text-indigo-200">查看全部任務</button>
       </div>
     </div>
   </div>
@@ -1679,7 +1667,6 @@
   <script src="/js/tools.js"></script>
   <script src="/js/storage.js"></script>
   <script src="/js/chat.js"></script>
-  <script src="/js/tasks.js"></script>
   <script src="/vendor/qrcode.min.js"></script>
   <script src="/js/home.js"></script>
   <script src="/js/live.js"></script>

@@ -16,7 +16,7 @@ async function run() {
       effort: 'high',
       workspace: '/a',
       activatedAt: 100,
-      updatedAt: 300
+      updatedAt: 330
     },
     {
       roleId: 'role-b',
@@ -52,15 +52,6 @@ async function run() {
     'role-b': [],
     'role-c': []
   };
-  const tasks = [{
-    id: 'task-a',
-    provider: 'codex',
-    conversationId: 'thread-a',
-    conversationTitle: 'Runtime routing',
-    title: 'Implement role visualization',
-    status: 'running',
-    updatedAt: 330
-  }];
 
   const status = await buildCrewStatus({
     listRoles: async () => roles,
@@ -74,8 +65,7 @@ async function run() {
       getStatus(conversationId) {
         return { isBusy: conversationId === 'thread-a' };
       }
-    }),
-    listTasks: async () => tasks
+    })
   });
 
   const byId = new Map(status.roles.map(item => [item.roleId, item]));
@@ -83,7 +73,8 @@ async function run() {
   assert.equal(a.state, 'working');
   assert.equal(a.busy, true);
   assert.equal(a.runtime.conversationId, 'thread-a');
-  assert.equal(a.currentTask.title, 'Implement role visualization');
+  assert.equal(a.currentTask, null, 'Role status is derived from the active conversation, not a parallel Task model');
+  assert.equal(a.conversationTitle, 'Active A');
   assert.equal(a.queuedRequestCount, 1);
   assert.equal(a.unreadReplyCount, 1);
   assert.equal(a.lastActivityAt, 330);
@@ -112,14 +103,12 @@ async function run() {
     getConversationSettings: async () => null,
     getCrewInbox: async () => [],
     getCrewMessageActivity: async () => [],
-    getProvider: () => ({ getStatus: () => ({ isBusy: false }) }),
-    listTasks: async () => []
+    getProvider: () => ({ getStatus: () => ({ isBusy: false }) })
   });
   assert.equal(pendingNew.roles[0].state, 'new');
   assert.equal(pendingNew.roles[0].runtime.pendingNew, true);
   assert.equal(pendingNew.roles[0].runtime.conversationId, null);
 
-  // A queued request without an active busy turn is visualized as waiting.
   const waiting = await buildCrewStatus({
     listRoles: async () => [{ id: 'role-w', name: 'Role W' }],
     listRoleRuntimes: async () => [{
@@ -128,11 +117,10 @@ async function run() {
       conversationId: 'thread-w',
       updatedAt: 10
     }],
-    getConversationSettings: async () => ({}),
+    getConversationSettings: async () => ({ title: 'Waiting work' }),
     getCrewInbox: async () => [{ id: 'q', fromRoleId: 'role-a', toRoleId: 'role-w', content: 'q', replyToId: null, createdAt: 20 }],
     getCrewMessageActivity: async () => [],
-    getProvider: () => ({ getStatus: () => ({ isBusy: false }) }),
-    listTasks: async () => []
+    getProvider: () => ({ getStatus: () => ({ isBusy: false }) })
   });
   assert.equal(waiting.roles[0].state, 'waiting');
   assert.equal(waiting.roles[0].queuedRequestCount, 1);
