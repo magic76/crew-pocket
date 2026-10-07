@@ -83,7 +83,7 @@ async function main() {
       const response = data.auto_response;
       process.stdout.write('auto_response\t' + response.status + (response.reason ? '\t' + response.reason : '') + '\n');
       if (response.reply) {
-        process.stdout.write('reply\t' + response.toRoleId + '\t' + response.reply.replace(/\s+/g, ' ').trim() + '\n');
+        process.stdout.write('reply\t' + response.reply.replace(/\s+/g, ' ').trim() + '\n');
       }
       if (response.conversationId) {
         process.stdout.write('recipient_conversation\t' + response.conversationId + '\n');
