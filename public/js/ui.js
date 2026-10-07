@@ -1237,16 +1237,40 @@ async function selectRole(roleId, isCreatingNewChat = false) {
   const role = roleMeta(roleId);
   if (!role) return alert('找不到這個 Role。');
 
-  if (!isCreatingNewChat && currentConversationId && roleId === currentRoleId) {
-    closeWorkspaceModal();
-    if (typeof toggleDrawer === 'function') toggleDrawer(false);
-    return;
-  }
-
-  activateRoleIdentity(role);
-
   if (!isCreatingNewChat) {
     try {
+      await loadCrewStatus({ force: true });
+      const status = crewStatusForRole(role.id);
+      const runtime = status?.runtime || null;
+
+      if (
+        runtime?.conversationId &&
+        runtime?.providerId &&
+        window.openCrewConversation
+      ) {
+        activateRoleIdentity(role);
+        closeWorkspaceModal();
+        if (typeof toggleDrawer === 'function') toggleDrawer(false);
+
+        if (
+          roleId === currentRoleId &&
+          currentConversationId === runtime.conversationId &&
+          currentProvider === runtime.providerId
+        ) {
+          return;
+        }
+
+        await window.openCrewConversation(runtime.providerId, runtime.conversationId);
+        return;
+      }
+
+      if (currentConversationId && roleId === currentRoleId) {
+        closeWorkspaceModal();
+        if (typeof toggleDrawer === 'function') toggleDrawer(false);
+        return;
+      }
+
+      activateRoleIdentity(role);
       if (typeof loadConversations === 'function') await loadConversations({ force: true });
       const latest = roleLatestConversation(role.id);
       if (latest && window.openCrewConversation) {
@@ -1256,12 +1280,14 @@ async function selectRole(roleId, isCreatingNewChat = false) {
         return;
       }
     } catch (error) {
-      console.warn('[Role Navigation] Failed to restore recent work:', error);
+      console.warn('[Role Navigation] Failed to restore current work:', error);
     }
   }
 
+  activateRoleIdentity(role);
+
   // A Role owns durable identity/memory. A fresh Conversation is created only
-  // when this Role has no prior work or the user explicitly asks for New Work.
+  // when this Role has no current/prior work or the user explicitly asks for New Work.
   currentConversationId = null;
   localStorage.setItem(activeConversationStorageKey(), '__new__');
 
