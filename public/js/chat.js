@@ -2377,11 +2377,104 @@ function isBtwPrompt(text = getPromptText()) {
   return /^\s*\/btw\b/i.test(text);
 }
 
+const activeRoleStreamRegistry = new Map();
+
+function currentStreamRoleId() {
+  const roleId = typeof window.getCurrentRoleId === 'function'
+    ? window.getCurrentRoleId()
+    : 'role-general';
+  return String(roleId || 'role-general').trim() || 'role-general';
+}
+
+function getActiveRoleStream(roleId = currentStreamRoleId()) {
+  return activeRoleStreamRegistry.get(String(roleId || 'role-general')) || null;
+}
+
+function syncActiveRoleStreamingState() {
+  const roleId = currentStreamRoleId();
+  const activeStream = getActiveRoleStream(roleId);
+  isStreaming = Boolean(activeStream);
+  currentAbortController = activeStream?.controller || null;
+  document.body.classList.toggle('ai-streaming', isStreaming);
+  if (typeof updateSendButtonMode === 'function') updateSendButtonMode();
+  if (typeof renderQueuedMessageCapsule === 'function') renderQueuedMessageCapsule();
+  window.dispatchEvent(new CustomEvent('crew:streaming-state', {
+    detail: {
+      streaming: isStreaming,
+      roleId,
+      conversationId: activeStream?.conversationId || currentConversationId || null,
+      provider: activeStream?.provider || currentProvider
+    }
+  }));
+  return activeStream;
+}
+
+function registerActiveRoleStream(stream = {}) {
+  const roleId = String(stream.roleId || currentStreamRoleId());
+  const previous = getActiveRoleStream(roleId) || {};
+  const next = {
+    ...previous,
+    ...stream,
+    roleId,
+    controller: stream.controller === undefined ? (previous.controller || null) : stream.controller,
+    source: stream.source || previous.source || 'local'
+  };
+  activeRoleStreamRegistry.set(roleId, next);
+  if (roleId === currentStreamRoleId()) syncActiveRoleStreamingState();
+  return next;
+}
+
+function updateActiveRoleStream(roleId, patch = {}) {
+  const key = String(roleId || currentStreamRoleId());
+  const current = getActiveRoleStream(key);
+  if (!current) return null;
+  const next = { ...current, ...patch, roleId: key };
+  activeRoleStreamRegistry.set(key, next);
+  if (key === currentStreamRoleId()) syncActiveRoleStreamingState();
+  return next;
+}
+
+function clearActiveRoleStream(roleId = currentStreamRoleId(), expectedController) {
+  const key = String(roleId || currentStreamRoleId());
+  const current = getActiveRoleStream(key);
+  if (!current) {
+    if (key === currentStreamRoleId()) syncActiveRoleStreamingState();
+    return false;
+  }
+  if (arguments.length >= 2 && current.controller !== expectedController) return false;
+  activeRoleStreamRegistry.delete(key);
+  if (key === currentStreamRoleId()) syncActiveRoleStreamingState();
+  return true;
+}
+
+function ensureExternalActiveRoleStream({ roleId = currentStreamRoleId(), provider = currentProvider, conversationId = currentConversationId } = {}) {
+  const existing = getActiveRoleStream(roleId);
+  if (existing) {
+    return updateActiveRoleStream(roleId, {
+      provider: provider || existing.provider,
+      conversationId: conversationId || existing.conversationId
+    });
+  }
+  return registerActiveRoleStream({
+    roleId,
+    controller: null,
+    provider,
+    conversationId,
+    source: 'external',
+    startedAt: Date.now()
+  });
+}
+
+window.getActiveRoleStream = getActiveRoleStream;
+window.syncActiveRoleStreamingState = syncActiveRoleStreamingState;
+window.clearActiveRoleStream = clearActiveRoleStream;
+
 let pendingQueuedMessage = null;
 
 function setPendingQueuedMessage(msg) {
   pendingQueuedMessage = {
     ...msg,
+    roleId: currentStreamRoleId(),
     conversationId: currentConversationId,
     provider: currentProvider
   };
@@ -2403,6 +2496,7 @@ function renderQueuedMessageCapsule() {
   // 🛡️ Only show queue capsule if user is currently inside the exact conversation where it was queued
   const isMatch = pendingQueuedMessage &&
     pendingQueuedMessage.text &&
+    pendingQueuedMessage.roleId === currentStreamRoleId() &&
     pendingQueuedMessage.conversationId === currentConversationId &&
     pendingQueuedMessage.provider === currentProvider;
 
@@ -2428,7 +2522,13 @@ function updateSendButtonMode() {
   const queueCountBadge = document.getElementById('send-queue-count');
   const srLabel = document.getElementById('send-btn-sr-label');
   const hasInputText = promptInput ? promptInput.value.trim().length > 0 : false;
-  if (queueCountBadge) queueCountBadge.classList.toggle('hidden', !pendingQueuedMessage);
+  const queuedForCurrentRole = Boolean(
+    pendingQueuedMessage &&
+    pendingQueuedMessage.roleId === currentStreamRoleId() &&
+    pendingQueuedMessage.conversationId === currentConversationId &&
+    pendingQueuedMessage.provider === currentProvider
+  );
+  if (queueCountBadge) queueCountBadge.classList.toggle('hidden', !queuedForCurrentRole);
 
   sendBtn.classList.remove(
     'bg-indigo-600', 'hover:bg-indigo-500', 'active:bg-indigo-700', 'shadow-indigo-600/30',
@@ -2607,13 +2707,15 @@ async function sendBtwConcurrentSidecard(customText = null, customImgPath = null
 
 function flushQueuedBtwMessage() {
   const msgToSend = pendingQueuedMessage;
-  if (msgToSend) {
-    clearPendingQueuedMessage();
-    setTimeout(() => {
-      setStreamingState(false);
-      sendMessage(msgToSend);
-    }, 120);
-  }
+  const matchesCurrentRole = Boolean(
+    msgToSend &&
+    msgToSend.roleId === currentStreamRoleId() &&
+    msgToSend.conversationId === currentConversationId &&
+    msgToSend.provider === currentProvider
+  );
+  if (!matchesCurrentRole || isStreaming) return;
+  clearPendingQueuedMessage();
+  setTimeout(() => sendMessage(msgToSend), 120);
 }
 function clearQueuedBtwMessages() {
   clearPendingQueuedMessage();
@@ -2621,12 +2723,21 @@ function clearQueuedBtwMessages() {
 
 // Toggle Send / Stop button appearance & state
 function setStreamingState(streaming) {
-  isStreaming = streaming;
-  document.body.classList.toggle('ai-streaming', Boolean(streaming));
-  updateSendButtonMode();
-  window.dispatchEvent(new CustomEvent('crew:streaming-state', {
-    detail: { streaming: isStreaming }
-  }));
+  const roleId = currentStreamRoleId();
+  const activeStream = getActiveRoleStream(roleId);
+  if (streaming && !activeStream) {
+    ensureExternalActiveRoleStream({
+      roleId,
+      provider: currentProvider,
+      conversationId: currentConversationId
+    });
+    return;
+  }
+  if (!streaming && activeStream?.source === 'external') {
+    clearActiveRoleStream(roleId);
+    return;
+  }
+  syncActiveRoleStreamingState();
 }
 
 // Stop active generation
@@ -2634,20 +2745,42 @@ async function stopGeneration() {
   if (typeof streamingTTS !== 'undefined') {
     streamingTTS.stop();
   }
-  if (currentAbortController) {
+
+  const roleId = currentStreamRoleId();
+  const activeStream = getActiveRoleStream(roleId);
+  const targetController = activeStream?.controller || currentAbortController || null;
+  const targetProvider = activeStream?.provider || currentProvider;
+  const targetConversationId = activeStream?.conversationId || currentConversationId || null;
+
+  if (targetController) {
     try {
-      currentAbortController.abort();
+      targetController.abort();
     } catch (e) {}
-    currentAbortController = null;
   }
+
+  if (activeStream) {
+    if (activeStream.controller) clearActiveRoleStream(roleId, activeStream.controller);
+    else clearActiveRoleStream(roleId);
+  } else {
+    syncActiveRoleStreamingState();
+  }
+
   try {
-    await fetch('/api/stop', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ provider: currentProvider, conversation_id: currentConversationId || null }) });
+    await fetch('/api/stop', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        provider: targetProvider,
+        conversation_id: targetConversationId
+      })
+    });
   } catch (e) {}
+
   if (typeof window.haptic === 'function') {
     window.haptic('heavy');
   }
-  setStreamingState(false);
 }
+window.stopGeneration = stopGeneration;
 
 // Send Message with Live Streaming, Tools Logging, and Abort Support
 async function sendMessage(queuedMessage = null) {
@@ -2674,9 +2807,8 @@ async function sendMessage(queuedMessage = null) {
   }
 // 🧹 Clear All / Reset Conversation Initialization
 async function clearAndResetCurrentConversation(skipConfirm = false) {
-  if (currentAbortController) {
-    try { currentAbortController.abort(); } catch(e) {}
-    currentAbortController = null;
+  if (isStreaming) {
+    await stopGeneration();
   }
 
   if (!skipConfirm && currentConversationId) {
@@ -2841,13 +2973,20 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
   }
 
   streamingStartedAt = Date.now();
-  const streamAbortController = new AbortController();
-  currentAbortController = streamAbortController;
-  setStreamingState(true);
-
+  const streamRoleId = currentStreamRoleId();
   const activeStreamConvId = currentConversationId;
-  let streamConversationId = activeStreamConvId;
   const streamProvider = currentProvider;
+  const streamAbortController = new AbortController();
+  registerActiveRoleStream({
+    roleId: streamRoleId,
+    controller: streamAbortController,
+    provider: streamProvider,
+    conversationId: activeStreamConvId,
+    source: 'local',
+    startedAt: Date.now()
+  });
+
+  let streamConversationId = activeStreamConvId;
   const isNewConversation = !activeStreamConvId;
   const isBtwQuery = /^\s*\/btw\b/i.test(text);
 
@@ -2907,7 +3046,9 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
   const liveTimerElem = assistantMsgDiv.querySelector('.live-timer');
   const responseTimeElem = assistantMsgDiv.querySelector('.response-time');
   const liveProgressListElem = assistantMsgDiv.querySelector('.live-progress-list');
-  const isStreamVisible = () => assistantMsgDiv.isConnected && currentProvider === streamProvider
+  const isStreamVisible = () => assistantMsgDiv.isConnected
+    && currentStreamRoleId() === streamRoleId
+    && currentProvider === streamProvider
     && (!streamConversationId ? currentConversationId === null : currentConversationId === streamConversationId);
   const stickyExecution = isBtwQuery ? null : createExecutionStickyController(assistantMsgDiv, isStreamVisible);
 
@@ -3049,7 +3190,7 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
 
     // 🏷️ Set a local title for new conversations without another AI request.
     if (isNewConversation && targetDoneConvId && text) {
-      applyInitialConversationTitle(targetDoneConvId, text);
+      applyInitialConversationTitle(targetDoneConvId, text, { updateHeader: isStreamVisible() });
     }
   }
 
@@ -3156,6 +3297,7 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
             const data = JSON.parse(rawData);
             if (currentEvent === 'init' && data.conversation_id) {
               streamConversationId = data.conversation_id;
+              updateActiveRoleStream(streamRoleId, { conversationId: data.conversation_id });
               // 🛡️ Only update global currentConversationId if user hasn't switched to another conversation
               if (assistantMsgDiv.isConnected && currentProvider === streamProvider
                 && currentConversationId === activeStreamConvId) {
@@ -3336,12 +3478,11 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
     }
   } finally {
     clearInterval(liveTimerInterval);
-    if (currentAbortController === streamAbortController) {
-      currentAbortController = null;
-    }
-    setStreamingState(false);
+    clearActiveRoleStream(streamRoleId, streamAbortController);
     if (isStreamVisible()) scrollToBottom();
-    setTimeout(flushQueuedBtwMessage, 0);
+    if (currentStreamRoleId() === streamRoleId) {
+      setTimeout(flushQueuedBtwMessage, 0);
+    }
   }
 }
 
@@ -3392,9 +3533,9 @@ function handleSendClick(e) {
 }
 
 // 🏷️ Persist a deterministic initial title; never spend another AI turn on it.
-function applyInitialConversationTitle(convId, userMessage) {
+function applyInitialConversationTitle(convId, userMessage, { updateHeader = true } = {}) {
   const title = shortenConversationTitle(userMessage, 22) || '新對話';
-  if (headerTitle) headerTitle.textContent = title;
+  if (updateHeader && headerTitle) headerTitle.textContent = title;
   renameConversationSilently(convId, title).catch((error) => {
     console.warn('[Conversation Title] Failed to persist:', error.message);
   });
