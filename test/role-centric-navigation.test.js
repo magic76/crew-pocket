@@ -41,6 +41,8 @@ assert.ok(ui.includes('unreadReplyCount'));
 // Role navigation opens the Role runtime's exact current conversation first;
 // latest history is only a migration/fallback path.
 assert.ok(ui.includes("fetch('/api/crew-status'"));
+assert.ok(ui.includes("fetch('/api/role-runtime'"));
+assert.ok(ui.includes("action: 'prepare_new'"));
 assert.ok(ui.includes('crewStatusForRole(role.id)'));
 assert.ok(ui.includes('await window.openCrewConversation(runtime.providerId, runtime.conversationId)'));
 assert.ok(ui.includes('getLatestConversationForRole'));
@@ -53,6 +55,7 @@ const renameStart = app.indexOf('// ✏️ Inline work title rename.');
 assert.ok(newWorkStart >= 0 && renameStart > newWorkStart);
 const newWorkBlock = app.slice(newWorkStart, renameStart);
 assert.ok(newWorkBlock.includes("headerTitle.textContent = '新工作'"));
+assert.ok(newWorkBlock.includes('window.prepareNewRoleRuntime'));
 assert.equal(newWorkBlock.includes('openWorkspacePicker'), false);
 
 // Work history is scoped to the current Role and recent work sorts first.
