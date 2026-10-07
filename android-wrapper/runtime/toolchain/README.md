@@ -149,3 +149,25 @@ Kotlin, Flutter and arbitrary Gradle/AGP combinations need separate checks.
 SDK dexdump/split-select legacy inspection commands fail explicitly as unsupported.
 APK download links in Pocket use Android's download notification; installation
 remains a separate user action.
+
+## Shared Downloads
+
+Pocket's Tools → Downloads 存取 opens a signature-protected activity in the
+matching Runtime package. Android11+ asks the user to enable the Runtime's
+`MANAGE_EXTERNAL_STORAGE` special access in Android settings. This grants access
+to shared storage beyond Downloads; it does not grant access to other apps'
+private HOME directories. Earlier Android versions use runtime read/write
+storage permissions. Grant/revocation is always a user action in system settings.
+
+Runtime exports `CREW_DOWNLOADS_DIR` and creates `~/storage/downloads` pointing to
+Android's shared Download directory, preserving any preexisting user path. Agent
+commands can list/read/write/copy files using that path while retaining the
+conversation's existing workspace. No Termux process or ADB grant is required.
+Runtime `/status.sharedDownloads` reports the path and current Android permission;
+provider tool snapshots also report filesystem readability/writability.
+
+The existing file explorer follows the downloads directory alias. Absolute text
+links inside Downloads are readable through `/api/file/read?absolute=1`; the
+realpath must remain inside the configured Downloads root. Workspace validation
+remains scoped to Runtime HOME. APK download links through Android DownloadManager
+continue to work independently of this special access grant.

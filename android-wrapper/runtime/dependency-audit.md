@@ -418,3 +418,20 @@ verification, installed APK pull/certificate comparison and streamed reinstall
 completed in4,249ms, exit0, explicit `Success`. This verifies the Runtime command
 installation path, not a manual WebView button interaction. Proof files are
 Runtime HOME `/.crew-pocket/helper-dev-install-proof.json` and `.log`.
+
+### Shared Downloads mechanism (2026-10-07)
+
+Added matching Pocket/Runtime native permission entry, Runtime-managed Downloads
+alias/environment and permission status, directory-link handling in the file
+explorer, and absolute Downloads file preview containment. Android11+ special
+access is broader shared-storage access, explained in the permission activity;
+only the user can enable/revoke it in Android settings. The activity requires
+the existing signature-level Runtime control permission. No ADB/appops grant,
+Termux storage delegation or automatic permission enable is used.
+
+JS syntax and whitespace checks passed. Dev Pocket and Runtime APKs built
+successfully in1m36s; both retained the installed Dev signing certificate
+`21adcee5760d5614aa136cb32bdb3b1ebe013cf958526e8843310e5949caa2d8`.
+Installation/real-device permission grant/read/write verification remain separate
+gates: installation and Runtime restart require the user's approval before the
+grant can be exercised. Build success is not proof of granted storage access.

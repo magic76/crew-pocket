@@ -331,6 +331,15 @@ function initAppAndListeners() {
       document.getElementById('auth-menu-btn')?.click();
     });
 
+    document.getElementById('downloads-access-btn')?.addEventListener('click', () => {
+      setToolsMenuOpen(false);
+      if (typeof window.CrewPocket?.openDownloadsAccess === 'function') {
+        window.CrewPocket.openDownloadsAccess();
+      } else {
+        alert('請使用支援 Downloads 存取的 Pocket 與 Runtime APK。');
+      }
+    });
+
     if (adbSettingsBtn) adbSettingsBtn.addEventListener('click', () => {
       setToolsMenuOpen(false);
       if (typeof window.CrewPocket?.openWirelessDebugSettings === 'function') {

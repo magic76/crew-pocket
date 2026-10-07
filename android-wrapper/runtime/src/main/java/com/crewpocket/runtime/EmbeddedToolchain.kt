@@ -90,6 +90,7 @@ object EmbeddedToolchain {
         val config = File(target, "etc").listFiles()?.firstOrNull { it.name.startsWith("ImageMagick") }
         val adbPort = if (BuildConfig.DEBUG) "5038" else "5039"
         return buildMap {
+            put("CREW_DOWNLOADS_DIR", SharedDownloads.prepare(context).absolutePath)
             put("CREW_TOOL_ROOT", target.absolutePath)
             put("CREW_NATIVE_DIR", context.applicationInfo.nativeLibraryDir)
             put("CREW_TOOLCHAIN_MANIFEST", File(target, "manifest.json").absolutePath)

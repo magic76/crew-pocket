@@ -491,6 +491,19 @@ class MainActivity : Activity() {
         }
 
         @JavascriptInterface
+        fun openDownloadsAccess() {
+            runOnUiThread {
+                if (!webView.url.orEmpty().startsWith(SERVER_URL)) return@runOnUiThread
+                runCatching {
+                    startActivity(Intent().setClassName(BuildConfig.RUNTIME_PACKAGE,
+                        "com.crewpocket.runtime.DownloadsAccessActivity"))
+                }.onFailure {
+                    Toast.makeText(this@MainActivity, "請先安裝支援 Downloads 存取的 Crew Runtime", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+
+        @JavascriptInterface
         fun openRuntimeUpdate() {
             runOnUiThread {
                 if (!webView.url.orEmpty().startsWith(SERVER_URL)) return@runOnUiThread
