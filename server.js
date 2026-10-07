@@ -46,7 +46,12 @@ const { listCrewMembers, getCrewMember, saveCrewMember, buildCrewMemberGuide } =
 const { DEFAULT_ROLE_ID, roleIdForProject, listRoles, getRole, saveRole } = require('./lib/roles');
 const { getProject } = require('./lib/projects');
 const { defaultMemoryProvider } = require('./lib/memory');
-const { buildAgentContext, formatAgentContext } = require('./lib/context-builder');
+const {
+  buildAgentContext,
+  buildStaticContextContributions,
+  formatAgentContext
+} = require('./lib/context-builder');
+const { analyzeConversationContext } = require('./lib/context/health');
 const auth = require('./lib/auth');
 const {
   applyCors,
@@ -925,8 +930,27 @@ async function handleProviderHistory(parsedUrl, res) {
         ? { ...message, content: stripLegacyLanguageInstruction(cleanUserContent(message.content)) }
         : message);
     }
+
+    let role = null;
+    let project = null;
+    try {
+      role = await getRole(conversationSettings?.roleId || DEFAULT_ROLE_ID);
+      const effectiveProjectId = role?.projectId || null;
+      project = effectiveProjectId ? await getProject(effectiveProjectId) : null;
+    } catch (error) {
+      console.warn('[Context Health] Identity context unavailable:', error.message);
+    }
+
+    const contextHealth = analyzeConversationContext(history, {
+      additionalContributions: buildStaticContextContributions({ role, project })
+    });
+
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ ...history, conversation_settings: conversationSettings }));
+    res.end(JSON.stringify({
+      ...history,
+      conversation_settings: conversationSettings,
+      context_health: contextHealth
+    }));
   } catch (err) {
     res.writeHead(err.statusCode || 404, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: err.message }));
@@ -1099,6 +1123,14 @@ function memoryScopesFromQuery(query = {}) {
   return scopes.length ? scopes : undefined;
 }
 
+function memoryStatusesFromQuery(query = {}) {
+  const raw = query.statuses || query.status;
+  if (!raw) return undefined;
+  const values = Array.isArray(raw) ? raw : String(raw).split(',');
+  const statuses = values.map(value => String(value || '').trim()).filter(Boolean);
+  return statuses.length ? statuses : undefined;
+}
+
 async function handleMemories(req, res, parsedUrl) {
   try {
     if (req.method === 'GET') {
@@ -1106,6 +1138,7 @@ async function handleMemories(req, res, parsedUrl) {
       const memories = await defaultMemoryProvider.recall({
         text: query.q || query.query || '',
         scopes: memoryScopesFromQuery(query),
+        statuses: memoryStatusesFromQuery(query),
         roleId: query.roleId || query.role_id || null,
         projectId: query.projectId || query.project_id || null,
         conversationId: query.conversationId || query.conversation_id || null,

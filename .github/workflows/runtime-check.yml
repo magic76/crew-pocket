@@ -39,13 +39,21 @@ jobs:
           node --check lib/projects.js
           node --check lib/roles.js
           node --check lib/context-builder.js
+          node --check lib/context/types.js
+          node --check lib/context/estimator.js
+          node --check lib/context/health.js
+          node --check lib/context/index.js
           node --check lib/memory/types.js
           node --check lib/memory/provider.js
           node --check lib/memory/local-memory-provider.js
           node --check lib/memory/openviking-adapter.js
           node --check lib/memory/index.js
           node --check test/role-memory-kernel.test.js
+          node --check test/memory-provenance.test.js
+          node --check test/context-health.test.js
           node test/role-memory-kernel.test.js
+          node test/memory-provenance.test.js
+          node test/context-health.test.js
           node --check lib/runtime/agy-transport.js
           node --check lib/providers/codex.js
           node --check lib/jev-router.js
