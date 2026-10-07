@@ -45,7 +45,7 @@ const { listWorkspaces, resolveWorkspace, createWorkspace } = require('./lib/wor
 const { listCrewMembers, getCrewMember, saveCrewMember, buildCrewMemberGuide } = require('./lib/crew-members');
 const { DEFAULT_ROLE_ID, roleIdForProject, listRoles, getRole, saveRole } = require('./lib/roles');
 const { getProject } = require('./lib/projects');
-const { MemoryScope, defaultMemoryProvider } = require('./lib/memory');
+const { defaultMemoryProvider } = require('./lib/memory');
 const { buildAgentContext, formatAgentContext } = require('./lib/context-builder');
 const auth = require('./lib/auth');
 const {
@@ -1604,7 +1604,7 @@ async function handleChat(req, res) {
       console.warn('[Memory Context] Build failed:', error.message);
     }
     const memberGuide = buildCrewMemberGuide(crewMember);
-    finalPrompt = `${roleMemoryContext ? `${roleMemoryContext}\n` : ''}${memberGuide ? `${memberGuide}\n` : ''}${buildCapabilityGuide(finalPrompt)}\n\n[User Request]:\n${finalPrompt}`;
+    finalPrompt = `${roleMemoryContext ? `${roleMemoryContext}\n` : ''}${memberGuide ? `${memberGuide}\n` : ''}${buildCapabilityGuide(finalPrompt)}\n\n<USER_REQUEST>${finalPrompt}</USER_REQUEST>`;
   }
 
   if (image_path) {
