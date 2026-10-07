@@ -10,7 +10,7 @@ const app = fs.readFileSync(path.join(root, 'public', 'js', 'app.js'), 'utf8');
 
 // Role is the primary visible identity, not a secondary conversation setting.
 assert.ok(html.includes('id="role-nav-list"'));
-assert.ok(html.includes('MY CREW'));
+assert.ok(html.includes('CREW ROOM'));
 assert.ok(html.includes('id="drawer-new-role-btn"'));
 assert.ok(html.includes('id="drawer-new-work-btn"'));
 assert.ok(html.includes('id="crew-room-summary"'));
