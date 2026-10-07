@@ -134,6 +134,7 @@ const drawerOverlay = document.getElementById('drawer-overlay');
 const closeDrawerBtn = document.getElementById('close-drawer-btn');
 const convList = document.getElementById('conv-list');
 const roleNavList = document.getElementById('role-nav-list');
+const crewRoomSummary = document.getElementById('crew-room-summary');
 const roleNavView = document.getElementById('role-nav-view');
 const roleHistoryView = document.getElementById('role-history-view');
 const roleHistoryTitle = document.getElementById('role-history-title');
@@ -903,35 +904,87 @@ function renderRoleNavigation() {
   const roles = availableRoles.length ? availableRoles : [];
   if (!roles.length) {
     roleNavList.innerHTML = '<div class="p-4 text-center text-xs text-slate-500">尚未找到 Role。</div>';
+    if (crewRoomSummary) crewRoomSummary.innerHTML = '<span>尚未建立 Crew</span>';
     return;
   }
 
+  const statuses = roles.map(role => crewStatusForRole(role.id)).filter(Boolean);
+  const workingCount = statuses.filter(status => status.state === 'working').length;
+  const waitingCount = statuses.filter(status => status.state === 'waiting').length;
+  const queuedCount = statuses.reduce((sum, status) => sum + Number(status.queuedRequestCount || 0), 0);
+  const unreadCount = statuses.reduce((sum, status) => sum + Number(status.unreadReplyCount || 0), 0);
+  if (crewRoomSummary) {
+    crewRoomSummary.innerHTML = [
+      `<span class="inline-flex items-center gap-1 text-emerald-300"><span class="h-1.5 w-1.5 rounded-full bg-emerald-400"></span>${workingCount} 工作中</span>`,
+      `<span class="inline-flex items-center gap-1 text-amber-300"><span class="h-1.5 w-1.5 rounded-full bg-amber-400"></span>${waitingCount} 等待</span>`,
+      queuedCount ? `<span class="rounded-full bg-amber-500/10 px-1.5 py-0.5 text-amber-300">${queuedCount} queued</span>` : '',
+      unreadCount ? `<span class="rounded-full bg-indigo-500/10 px-1.5 py-0.5 text-indigo-300">${unreadCount} unread</span>` : ''
+    ].filter(Boolean).join('');
+  }
+
   roleNavList.innerHTML = roles.map(role => {
-    const active = role.id === (currentRoleId || DEFAULT_ROLE_ID);
+    const selected = role.id === (currentRoleId || DEFAULT_ROLE_ID);
     const member = role.projectId ? crewMemberForProject(role.projectId) : null;
     const latest = roleLatestConversation(role.id);
-    const recentTitle = latest?.title ? escapeHtml(latest.title) : '尚未開始工作';
-    const activity = formatRoleLastActivity(latest);
+    const status = crewStatusForRole(role.id);
+    const meta = status
+      ? crewStatusMeta(status)
+      : {
+          label: 'SYNC',
+          dot: 'bg-slate-600',
+          badge: 'border-slate-700 bg-slate-800/70 text-slate-500',
+          avatar: 'border-slate-700/70 bg-slate-900'
+        };
+    const title = status?.currentTask?.title || status?.conversationTitle || latest?.title || '尚未開始工作';
+    const activity = formatRoleLastActivity({
+      title,
+      updatedAt: status?.lastActivityAt || latest?.updatedAt || 0
+    });
     const description = role.description ? escapeHtml(role.description) : '長期身份與記憶';
-    return `<div class="role-nav-card overflow-hidden rounded-2xl border transition ${active ? 'border-teal-400/70 bg-teal-500/10 shadow-lg shadow-teal-950/20' : 'border-slate-800 bg-slate-950/55'}" data-role-card-id="${escapeHtml(role.id)}">
+    const queued = Number(status?.queuedRequestCount || 0);
+    const unread = Number(status?.unreadReplyCount || 0);
+    const recentMessage = status?.recentMessage || null;
+    const otherRole = recentMessage
+      ? (recentMessage.direction === 'outgoing' ? recentMessage.toRoleName : recentMessage.fromRoleName)
+      : '';
+    const messagePrefix = recentMessage?.direction === 'outgoing' ? '→' : '←';
+    const messageRow = recentMessage
+      ? `<span class="mt-1.5 flex min-w-0 items-center gap-1.5 text-[9px] text-slate-500">
+          <span class="shrink-0 text-slate-600">${messagePrefix}</span>
+          <span class="shrink-0 font-medium text-slate-400">${escapeHtml(otherRole || 'Crew')}</span>
+          <span class="min-w-0 flex-1 truncate">${escapeHtml(recentMessage.content || '')}</span>
+        </span>`
+      : '';
+    const counters = [
+      queued ? `<span class="rounded-full border border-amber-500/25 bg-amber-500/10 px-1.5 py-0.5 text-[8px] font-bold text-amber-300">${queued} queued</span>` : '',
+      unread ? `<span class="rounded-full border border-indigo-500/25 bg-indigo-500/10 px-1.5 py-0.5 text-[8px] font-bold text-indigo-300">${unread} unread</span>` : ''
+    ].filter(Boolean).join('');
+
+    return `<div class="role-nav-card overflow-hidden rounded-2xl border transition ${selected ? 'border-teal-400/70 bg-teal-500/10 shadow-lg shadow-teal-950/20' : 'border-slate-800 bg-slate-950/55'}" data-role-card-id="${escapeHtml(role.id)}">
       <div class="flex items-stretch">
         <button type="button" data-role-nav-id="${escapeHtml(role.id)}" class="min-w-0 flex-1 p-3 text-left active:scale-[0.995]">
           <span class="flex items-start gap-3">
-            <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border ${active ? 'border-teal-500/40 bg-teal-500/15' : 'border-slate-700/70 bg-slate-900'} text-xl">${escapeHtml(member?.icon || '🧠')}</span>
+            <span class="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border ${meta.avatar} text-xl">
+              ${escapeHtml(member?.icon || '🧠')}
+              <span class="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-slate-950 ${meta.dot}" aria-hidden="true"></span>
+            </span>
             <span class="min-w-0 flex-1">
-              <span class="flex min-w-0 items-center gap-2">
+              <span class="flex min-w-0 items-center gap-1.5">
                 <span class="truncate text-[13px] font-bold text-slate-100">${escapeHtml(role.name)}</span>
-                ${active ? '<span class="shrink-0 rounded-full border border-teal-500/30 bg-teal-500/10 px-1.5 py-0.5 text-[8px] font-bold text-teal-300">ACTIVE</span>' : ''}
+                <span class="shrink-0 rounded-full border px-1.5 py-0.5 text-[8px] font-bold ${meta.badge}">${meta.label}</span>
+                ${selected ? '<span class="shrink-0 rounded-full border border-teal-500/30 bg-teal-500/10 px-1.5 py-0.5 text-[8px] font-bold text-teal-300">OPEN</span>' : ''}
               </span>
               <span class="mt-0.5 block truncate text-[10px] font-medium text-slate-400">${escapeHtml(roleProjectLabel(role))}</span>
               <span class="mt-1 block truncate text-[9px] text-slate-500">${description}</span>
             </span>
           </span>
           <span class="mt-2.5 flex items-center gap-1.5 rounded-xl border border-slate-800/80 bg-slate-950/70 px-2.5 py-2">
-            <span class="text-[9px] text-slate-600">最近</span>
-            <span class="min-w-0 flex-1 truncate text-[10px] font-medium text-slate-300">${recentTitle}</span>
+            <span class="text-[9px] text-slate-600">${status?.runtime ? '現在' : '最近'}</span>
+            <span class="min-w-0 flex-1 truncate text-[10px] font-medium text-slate-300">${escapeHtml(title)}</span>
             <span class="shrink-0 text-[9px] text-slate-600">${escapeHtml(activity)}</span>
           </span>
+          ${messageRow}
+          ${counters ? `<span class="mt-2 flex flex-wrap gap-1">${counters}</span>` : ''}
         </button>
         <button type="button" data-role-menu-btn="${escapeHtml(role.id)}" class="w-11 shrink-0 border-l border-slate-800/70 text-lg text-slate-500 transition hover:bg-slate-800/70 hover:text-white active:scale-95" aria-label="${escapeHtml(role.name)} 操作">⋯</button>
       </div>
@@ -981,6 +1034,11 @@ function renderRoleNavigation() {
 }
 
 window.renderRoleNavigation = renderRoleNavigation;
+
+window.setInterval(() => {
+  if (!drawer || drawer.classList.contains('-translate-x-full')) return;
+  loadCrewStatus().catch(() => {});
+}, 2500);
 
 function toggleRoleModal(modal, open) {
   if (!modal) return;
