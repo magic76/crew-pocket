@@ -662,8 +662,8 @@ function updateWorkspaceUI() {
   }
 
   if (role) {
-    const projectLabel = member?.project?.label || (role.projectId ? role.projectId : 'General');
-    if (workspaceIcon) workspaceIcon.textContent = member?.icon || '🧠';
+    const projectLabel = role.projectId ? (member?.project?.label || role.projectId) : 'General';
+    if (workspaceIcon) workspaceIcon.textContent = role.projectId ? (member?.icon || '🧠') : '🧠';
     if (workspaceLabel) workspaceLabel.textContent = role.name;
     if (headerRoleProject) headerRoleProject.textContent = projectLabel;
     if (workspaceSelectorBtn) {
