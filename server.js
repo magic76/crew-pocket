@@ -98,113 +98,92 @@ async function handleStorageThumbnail(parsedUrl, res) {
   }
 }
 
-// 🔌 Central ADB Wireless Debugging Handlers (~/.adb_port)
+// ADB is optional. Status probes never reconnect and all child commands expire.
+const { DEADLINES: ADB_DEADLINES, adbExecutable, runAdb, connectedDevice,
+  normalizeEndpoint, readDevices } = require('./lib/adb');
 const ADB_PORT_FILE = path.join(os.homedir(), '.adb_port');
 const ADB_RESULT_FILE = path.join(os.homedir(), '.crew-pocket', 'adb-last-result');
+let adbUpdateRunning = false;
 
 async function handleAdbStatus(res) {
   try {
-    let target = '';
-    let lastOutput = '';
-    try {
-      target = (await fsPromises.readFile(ADB_PORT_FILE, 'utf-8')).trim();
-    } catch (_) {}
-    try {
-      lastOutput = (await fsPromises.readFile(ADB_RESULT_FILE, 'utf-8')).trim().slice(-2000);
-    } catch (_) {}
-
-    let connected = false;
-    let devicesOutput = '';
-    try {
-      const { stdout } = await execFileAsync('adb', ['devices', '-l']);
-      devicesOutput = stdout;
-      if (target) {
-        connected = stdout.includes(target) && stdout.includes('device');
-      } else {
-        connected = stdout.split('\n').slice(1).some(line => line.includes('device '));
-      }
-    } catch (_) {}
-
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ target, connected, devices: devicesOutput.trim(), last_output: lastOutput }));
-  } catch (err) {
+    const target = await fsPromises.readFile(ADB_PORT_FILE, 'utf8').then(v => v.trim()).catch(() => '');
+    const lastOutput = await fsPromises.readFile(ADB_RESULT_FILE, 'utf8').then(v => v.trim().slice(-2000)).catch(() => '');
+    const available = Boolean(adbExecutable());
+    const devices = available ? await readDevices() : { stdout: '', timedOut: false };
+    const connected = connectedDevice(devices.stdout, target);
+    const state = !available ? 'unavailable' : devices.timedOut ? 'timeout'
+      : connected ? 'connected' : target ? 'offline' : 'unconfigured';
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+    res.end(JSON.stringify({ available, target, connected, state, busy: adbUpdateRunning,
+      devices: devices.stdout.trim(), previous_output: lastOutput,
+      last_output: connected ? lastOutput : devices.timedOut ? devices.output
+        : '目前 ADB 尚未連線。需要裝置操作時，再開啟 Wi-Fi／無線偵錯並確認目前 Port。',
+      message: connected ? 'ADB 已連線。' : !available ? '目前環境未安裝 ADB。'
+        : devices.timedOut ? devices.output : 'ADB 尚未連線；不影響一般聊天。需要安裝或裝置操作時，再開啟 Wi-Fi 與無線偵錯，確認目前 Port。' }));
+  } catch (error) {
     res.writeHead(500, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: err.message }));
+    res.end(JSON.stringify({ error: error.message }));
   }
 }
 
 async function handleAdbUpdate(req, res) {
+  if (adbUpdateRunning) {
+    res.writeHead(409, { 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify({ success: false, error: '另一個 ADB 操作尚未結束，請稍候再試。' }));
+  }
+  adbUpdateRunning = true;
   try {
+    if (!adbExecutable()) {
+      res.writeHead(409, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({ success: false, error: '目前環境未安裝 ADB。' }));
+    }
     const body = await parseJsonBody(req);
-    let target = (body.target || body.port || '').toString().trim();
-    let pairingTarget = (body.pairing_target || body.pair_target || '').toString().trim();
-    const pairingCode = (body.pairing_code || body.pair_code || '').toString().trim();
-    if (!target) {
-      res.writeHead(400, { 'Content-Type': 'application/json' });
-      return res.end(JSON.stringify({ success: false, error: 'Port or target is required' }));
+    const target = normalizeEndpoint(body.target || body.port);
+    const pairInput = body.pairing_target || body.pair_target || '';
+    const code = String(body.pairing_code || body.pair_code || '').trim();
+    const pairingTarget = pairInput || code ? normalizeEndpoint(pairInput) : '';
+    if (pairingTarget && !/^\d{6}$/.test(code)) {
+      const error = new Error('配對需要有效的配對 IP:Port 與 6 位配對碼。');
+      error.statusCode = 400;
+      throw error;
     }
-    if (/^\d+$/.test(target)) {
-      target = `127.0.0.1:${target}`;
-    }
-    if (pairingTarget && /^\d+$/.test(pairingTarget)) {
-      pairingTarget = `127.0.0.1:${pairingTarget}`;
-    }
-    const endpointPattern = /^(?:[A-Za-z0-9._-]+|\[[0-9A-Fa-f:]+\]):[1-9][0-9]{0,4}$/;
-    if (!endpointPattern.test(target)) {
-      res.writeHead(400, { 'Content-Type': 'application/json' });
-      return res.end(JSON.stringify({ success: false, error: 'Invalid ADB target' }));
-    }
-    const targetPort = Number(target.slice(target.lastIndexOf(':') + 1));
-    if (targetPort > 65535) {
-      res.writeHead(400, { 'Content-Type': 'application/json' });
-      return res.end(JSON.stringify({ success: false, error: 'Invalid ADB port' }));
-    }
-    if (pairingTarget || pairingCode) {
-      if (!endpointPattern.test(pairingTarget) || !/^\d{6}$/.test(pairingCode)) {
-        res.writeHead(400, { 'Content-Type': 'application/json' });
-        return res.end(JSON.stringify({ success: false, error: 'Pairing target and six-digit pairing code are required' }));
-      }
-    }
-    await fsPromises.writeFile(ADB_PORT_FILE, target + '\n', 'utf-8');
-
-    let connectOutput = '';
+    await fsPromises.writeFile(ADB_PORT_FILE, target + '\n', 'utf8');
     let pairOutput = '';
-    let connected = false;
+    let timedOut = false;
+    let pairFailed = false;
     if (pairingTarget) {
-      try {
-        const { stdout, stderr } = await execFileAsync('adb', ['pair', pairingTarget, pairingCode]);
-        pairOutput = (stdout + '\n' + stderr).trim();
-      } catch (e) {
-        pairOutput = (e.stdout || '') + '\n' + (e.stderr || e.message || 'pair failed');
-        pairOutput = pairOutput.trim();
+      const pair = await runAdb(['pair', pairingTarget, code], ADB_DEADLINES.pair);
+      pairOutput = pair.output;
+      timedOut = pair.timedOut;
+      pairFailed = !pair.ok || !/successfully paired/i.test(pair.output);
+    }
+    let connected = false;
+    let output = pairFailed ? '配對未完成，已停止後續連線。請重新取得配對 Port 與配對碼。' : '';
+    if (!pairFailed) {
+      const connection = await runAdb(['connect', target], ADB_DEADLINES.connect);
+      output = connection.output;
+      timedOut = timedOut || connection.timedOut;
+      if (connection.ok && !/failed|cannot|unable|refused/i.test(connection.output)) {
+        const devices = await readDevices();
+        connected = connectedDevice(devices.stdout, target);
+        timedOut = timedOut || devices.timedOut;
+        if (devices.timedOut) output = devices.output;
       }
+      if (!connected && !timedOut) output = '尚未連線。請確認 Wi-Fi、無線偵錯與目前 Port；尚未配對時請先配對。\n' + output;
     }
-    try {
-      const { stdout, stderr } = await execFileAsync('adb', ['connect', target]);
-      connectOutput = (stdout + '\n' + stderr).trim();
-      const devices = await execFileAsync('adb', ['devices', '-l']);
-      connected = devices.stdout.includes(target) && devices.stdout.includes('device');
-    } catch (e) {
-      connectOutput = e.message;
-    }
-
     await fsPromises.mkdir(path.dirname(ADB_RESULT_FILE), { recursive: true });
-    const resultLines = [];
-    if (pairOutput) resultLines.push(`pair: ${pairOutput}`);
-    if (connectOutput) resultLines.push(`connect: ${connectOutput}`);
-    await fsPromises.writeFile(ADB_RESULT_FILE, resultLines.join('\n') + '\n', 'utf-8');
-
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({
-      success: true,
-      target,
-      connected,
-      output: connectOutput,
-      pair_output: pairOutput
-    }));
-  } catch (err) {
-    res.writeHead(500, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ success: false, error: err.message }));
+    await fsPromises.writeFile(ADB_RESULT_FILE,
+      [pairOutput && `pair: ${pairOutput}`, `connect: ${output}`].filter(Boolean).join('\n') + '\n', 'utf8');
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+    res.end(JSON.stringify({ success: true, target, connected, timed_out: timedOut,
+      state: connected ? 'connected' : timedOut ? 'timeout' : pairFailed ? 'pairing-failed' : 'offline',
+      output, pair_output: pairOutput }));
+  } catch (error) {
+    res.writeHead(error.statusCode || 500, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: false, error: error.message }));
+  } finally {
+    adbUpdateRunning = false;
   }
 }
 
@@ -1214,7 +1193,7 @@ const CAPABILITY_RULES = {
   maps: `[Crew Pocket Capability Rules]
 提及地點、路線或地圖時，使用 Markdown Google Maps 連結：https://www.google.com/maps/search/?api=1&query=...。`,
   apk: `[Crew Pocket Capability Rules]
-建置、安裝或測試 Android APK 時，執行 ~/install-apk.sh <path-to-apk>；若失敗，說明 Wireless Debugging 需重新開啟或設定目前 Port。`
+建置、安裝或測試 Android APK 時，執行 ~/install-apk.sh <path-to-apk>；其他 ADB 命令使用 bash ~/crew-adb.sh <adb-arguments>，有明確逾時。離線或逾時後停止這次裝置操作，不要持續重試舊 Port，不要終止一般聊天；說明需要時再開啟 Wi-Fi／Wireless Debugging 並提供目前 Port。`
 };
 
 function buildCapabilityGuide(userPrompt) {

@@ -24,6 +24,8 @@ Crew Pocket is an Android APK shell backed by a local Node.js runtime in Termux.
 
 ## Verification and Operations
 
+- Run ADB commands through `bash ~/crew-adb.sh <adb-arguments>` so status/connection calls have deadlines. After offline/timeout, stop that device operation and ask for the current Port when needed; do not retry the old target in a loop or interrupt normal chat.
+
 - For JavaScript changes, run `node --check` on each touched executable file and `git diff --check`.
 - For server routes or provider/session changes, verify the relevant local helper or focused endpoint when the running service state permits.
 - Never restart `start-web.sh`, terminate a running server, install or replace an APK, or close active sessions without the user's explicit approval.
