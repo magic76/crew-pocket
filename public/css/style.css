@@ -664,6 +664,193 @@ footer {
   background: #34d399 !important;
 }
 
+/* Completed execution turns collapse into a compact result instead of leaving
+   the full tool timeline and answer expanded in the conversation. */
+.execution-result-card {
+  margin: 0.15rem 0 0.2rem;
+  overflow: hidden;
+  border: 1px solid rgba(51, 65, 85, 0.78);
+  border-radius: 0.85rem;
+  background: rgba(15, 23, 42, 0.62);
+}
+
+.execution-result-card > summary {
+  list-style: none;
+}
+.execution-result-card > summary::-webkit-details-marker {
+  display: none;
+}
+
+.execution-result-summary {
+  min-height: 46px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem;
+  padding: 0.6rem 0.72rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+.execution-result-summary-main,
+.execution-result-summary-side {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.48rem;
+}
+
+.execution-result-summary-main {
+  flex: 1;
+}
+
+.execution-result-summary-side {
+  flex: none;
+  color: #64748b;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 10px;
+}
+
+.execution-result-status {
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.execution-result-status.is-complete {
+  color: #6ee7b7;
+  background: rgba(16, 185, 129, 0.13);
+  border: 1px solid rgba(16, 185, 129, 0.28);
+}
+
+.execution-result-status.is-failed {
+  color: #fda4af;
+  background: rgba(244, 63, 94, 0.12);
+  border: 1px solid rgba(244, 63, 94, 0.3);
+}
+
+.execution-result-title {
+  color: #e2e8f0;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.execution-result-meta {
+  max-width: 104px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.execution-result-chevron {
+  display: inline-block;
+  font-size: 16px;
+  line-height: 1;
+  transition: transform 150ms ease;
+}
+
+.execution-result-card[open] .execution-result-chevron {
+  transform: rotate(90deg);
+}
+
+.execution-result-body {
+  border-top: 1px solid rgba(51, 65, 85, 0.68);
+  padding: 0.72rem;
+}
+
+.execution-result-overview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  color: #94a3b8;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 10px;
+}
+
+.execution-result-section {
+  margin-top: 0.72rem;
+}
+
+.execution-result-section-title {
+  margin-bottom: 0.34rem;
+  color: #64748b;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.execution-result-file-list,
+.execution-result-check-list {
+  display: grid;
+  gap: 0.22rem;
+}
+
+.execution-result-file,
+.execution-result-check {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.42rem;
+  color: #cbd5e1;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 10px;
+}
+
+.execution-result-steps {
+  padding: 0.15rem 0 0;
+}
+
+.execution-result-response {
+  padding-top: 0.68rem;
+  border-top: 1px solid rgba(51, 65, 85, 0.5);
+}
+
+.execution-result-response .msg-content {
+  font-size: 13.5px;
+  line-height: 1.62;
+}
+
+/* Only appears when an active execution turn has scrolled outside the
+   messages viewport. It is removed for normal chat turns. */
+.sticky-execution-capsule {
+  position: absolute;
+  left: 50%;
+  bottom: 10px;
+  z-index: 24;
+  max-width: min(88%, 560px);
+  transform: translateX(-50%);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border: 1px solid rgba(99, 102, 241, 0.48);
+  border-radius: 9999px;
+  padding: 0.46rem 0.72rem;
+  background: rgba(15, 23, 42, 0.94);
+  color: #cbd5e1;
+  box-shadow: 0 10px 28px rgba(2, 6, 23, 0.48);
+  backdrop-filter: blur(12px);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 10.5px;
+  text-align: left;
+}
+
+.sticky-execution-capsule.is-complete {
+  border-color: rgba(16, 185, 129, 0.42);
+  color: #a7f3d0;
+}
+
+.sticky-execution-capsule.is-failed {
+  border-color: rgba(244, 63, 94, 0.48);
+  color: #fecdd3;
+}
+
 .assistant-article .msg-content {
   font-size: 14px;
   line-height: 1.65;
