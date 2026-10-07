@@ -65,6 +65,12 @@ async function run() {
     assert.equal(reply.replyToId, sent.id);
     assert.equal((await store.inbox('role-helper'))[0].fromRoleId, 'role-general');
 
+    const helperActivity = await store.recentActivity('role-helper');
+    assert.equal(helperActivity[0].direction, 'incoming');
+    assert.equal(helperActivity[0].fromRoleName, 'General Developer');
+    assert.equal(helperActivity[1].direction, 'outgoing');
+    assert.equal(helperActivity[1].toRoleName, 'General Developer');
+
     await assert.rejects(
       () => store.send({ fromRoleId: 'role-helper', toRoleId: 'role-helper', content: 'self' }),
       /another Role/

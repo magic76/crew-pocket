@@ -743,12 +743,16 @@ function initAppAndListeners() {
 
   // New Work Action: keep the active Role, reset only short-term Conversation context.
   if (newChatBtn) {
-    newChatBtn.addEventListener('click', () => {
+    newChatBtn.addEventListener('click', async () => {
       if (currentAbortController) {
         try { currentAbortController.abort(); } catch(e) {}
         currentAbortController = null;
       }
       if (typeof clearQueuedBtwMessages === 'function') clearQueuedBtwMessages();
+      if (typeof window.prepareNewRoleRuntime === 'function') {
+        try { await window.prepareNewRoleRuntime(); }
+        catch (error) { console.warn('[Role Runtime] Failed to prepare new work:', error.message); }
+      }
       currentConversationId = null;
       localStorage.setItem(activeConversationStorageKey(), '__new__');
       revokeAllBlobUrls();

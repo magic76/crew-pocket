@@ -64,6 +64,30 @@ async function run() {
   assert.equal(resolved.conversationId, 'agy-newer');
   assert.equal(activated.length, 1);
 
+  const pendingNew = await resolveRoleRuntime('role-b', {
+    listProviders: () => providers,
+    getProviderConversationSettings,
+    getDefaultModel: providerId => providerId + '-default',
+    getRoleRuntime: async () => ({
+      roleId: 'role-b',
+      providerId: 'codex',
+      conversationId: null,
+      pendingNew: true,
+      model: 'gpt-next',
+      effort: 'high',
+      workspace: '/next'
+    }),
+    activateRoleConversation: async () => {
+      throw new Error('pending new runtime must not migrate to old conversation');
+    },
+    clearRoleConversation: async () => {
+      throw new Error('pending new runtime must not be cleared');
+    }
+  });
+  assert.equal(pendingNew.pendingNew, true);
+  assert.equal(pendingNew.conversationId, null);
+  assert.equal(pendingNew.model, 'gpt-next');
+
   assert.equal(await hasBusyRoleConversation('role-b', {
     getRoleRuntime: async () => ({ providerId: 'codex', conversationId: 'codex-old' }),
     getProvider: id => providers.find(provider => provider.id === id)

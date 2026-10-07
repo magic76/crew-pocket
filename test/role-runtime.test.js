@@ -59,6 +59,27 @@ async function run() {
     assert.equal(await store.get('role-b'), null);
     assert.equal(await store.get('role-c'), null);
 
+    const pending = await store.prepareNew({
+      roleId: 'role-a',
+      providerId: 'codex',
+      model: 'gpt-next',
+      effort: 'high',
+      workspace: '/next'
+    });
+    assert.equal(pending.pendingNew, true);
+    assert.equal(pending.conversationId, null);
+    assert.equal((await store.get('role-a')).pendingNew, true);
+
+    const resumed = await store.activate({
+      roleId: 'role-a',
+      providerId: 'codex',
+      conversationId: 'thread-next',
+      pendingNew: false,
+      model: 'gpt-next'
+    });
+    assert.equal(resumed.pendingNew, false);
+    assert.equal(resumed.conversationId, 'thread-next');
+
     assert.equal(await store.clearRole('role-a'), true);
     assert.equal(await store.get('role-a'), null);
 

@@ -10,9 +10,10 @@ const app = fs.readFileSync(path.join(root, 'public', 'js', 'app.js'), 'utf8');
 
 // Role is the primary visible identity, not a secondary conversation setting.
 assert.ok(html.includes('id="role-nav-list"'));
-assert.ok(html.includes('MY CREW'));
+assert.ok(html.includes('CREW ROOM'));
 assert.ok(html.includes('id="drawer-new-role-btn"'));
 assert.ok(html.includes('id="drawer-new-work-btn"'));
+assert.ok(html.includes('id="crew-room-summary"'));
 assert.equal(html.includes('id="conversation-workspaces"'), false);
 
 // Header shows who is active; Project/work title are kept out of the visible header.
@@ -32,8 +33,18 @@ assert.ok(html.includes('id="role-editor-modal"'));
 assert.ok(html.includes('id="role-memory-modal"'));
 assert.ok(ui.includes("fetch('/api/roles'"));
 assert.ok(ui.includes('/api/memories?roleId='));
+assert.ok(ui.includes("label: 'WORKING'"));
+assert.ok(ui.includes("label: 'WAITING'"));
+assert.ok(ui.includes('queuedRequestCount'));
+assert.ok(ui.includes('unreadReplyCount'));
 
-// Role navigation restores recent work unless the user explicitly creates new work.
+// Role navigation opens the Role runtime's exact current conversation first;
+// latest history is only a migration/fallback path.
+assert.ok(ui.includes("fetch('/api/crew-status'"));
+assert.ok(ui.includes("fetch('/api/role-runtime'"));
+assert.ok(ui.includes("action: 'prepare_new'"));
+assert.ok(ui.includes('crewStatusForRole(role.id)'));
+assert.ok(ui.includes('await window.openCrewConversation(runtime.providerId, runtime.conversationId)'));
 assert.ok(ui.includes('getLatestConversationForRole'));
 assert.ok(ui.includes('await window.openCrewConversation(latest.provider, latest.id)'));
 assert.ok(ui.includes('A fresh Conversation is created only'));
@@ -44,6 +55,7 @@ const renameStart = app.indexOf('// ✏️ Inline work title rename.');
 assert.ok(newWorkStart >= 0 && renameStart > newWorkStart);
 const newWorkBlock = app.slice(newWorkStart, renameStart);
 assert.ok(newWorkBlock.includes("headerTitle.textContent = '新工作'"));
+assert.ok(newWorkBlock.includes('window.prepareNewRoleRuntime'));
 assert.equal(newWorkBlock.includes('openWorkspacePicker'), false);
 
 // Work history is scoped to the current Role and recent work sorts first.

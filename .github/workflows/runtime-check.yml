@@ -40,6 +40,7 @@ jobs:
           node --check lib/roles.js
           node --check lib/crew-messages.js
           node --check lib/role-runtime.js
+          node --check lib/crew-status.js
           node --check lib/crew-auto-response.js
           node --check lib/context-builder.js
           node --check lib/context/types.js
@@ -60,6 +61,7 @@ jobs:
           node --check test/role-centric-navigation.test.js
           node --check test/crew-role-messaging.test.js
           node --check test/role-runtime.test.js
+          node --check test/crew-status.test.js
           node --check test/crew-auto-response.test.js
           node test/role-memory-kernel.test.js
           node test/memory-provenance.test.js
@@ -68,6 +70,7 @@ jobs:
           node test/role-centric-navigation.test.js
           node test/crew-role-messaging.test.js
           node test/role-runtime.test.js
+          node test/crew-status.test.js
           node test/crew-auto-response.test.js
           node --check scripts/crew-tool.js
           node --check lib/runtime/agy-transport.js
