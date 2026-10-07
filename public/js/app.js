@@ -275,6 +275,7 @@ function initAppAndListeners() {
 
   // Drawer listeners
   if (menuBtn) menuBtn.addEventListener('click', () => toggleDrawer(true));
+  if (workspaceSelectorBtn) workspaceSelectorBtn.addEventListener('click', () => toggleDrawer(true));
   if (closeDrawerBtn) closeDrawerBtn.addEventListener('click', () => toggleDrawer(false));
   if (drawerOverlay) drawerOverlay.addEventListener('click', () => toggleDrawer(false));
   const drawerNewWorkBtn = document.getElementById('drawer-new-work-btn');
@@ -797,10 +798,10 @@ function initAppAndListeners() {
     });
   }
 
-  // ✏️ Inline conversation title rename.
+  // ✏️ Inline work title rename.
   const triggerHeaderRename = () => {
     if (!currentConversationId || !headerTitle) {
-      alert('請先發送訊息建立對話後，即可自定義對話標題！');
+      alert('請先開始工作後，即可自定義工作標題！');
       return;
     }
     if (headerTitle.dataset.editing === 'true') return;
@@ -811,7 +812,7 @@ function initAppAndListeners() {
     input.value = (original === '新對話' || original === '新工作') ? '' : original;
     input.maxLength = 60;
     input.className = 'header-title-editor h-6 max-w-[150px] sm:max-w-[220px] rounded-md border border-indigo-500/70 bg-slate-950 px-1.5 text-xs font-semibold text-white outline-none ring-1 ring-indigo-500/30';
-    input.setAttribute('aria-label', '修改對話標題');
+    input.setAttribute('aria-label', '修改工作標題');
 
     headerTitle.dataset.editing = 'true';
     headerTitle.classList.add('hidden');

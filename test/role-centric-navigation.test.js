@@ -8,35 +8,49 @@ const ui = fs.readFileSync(path.join(root, 'public', 'js', 'ui.js'), 'utf8');
 const chat = fs.readFileSync(path.join(root, 'public', 'js', 'chat.js'), 'utf8');
 const app = fs.readFileSync(path.join(root, 'public', 'js', 'app.js'), 'utf8');
 
-// Role is now the primary drawer entity.
-assert.match(html, /id="role-nav-list"/);
-assert.match(html, /id="open-work-history-btn"/);
-assert.match(html, /id="drawer-new-work-btn"/);
-assert.doesNotMatch(html, /id="conversation-workspaces"/);
+// Role is the primary visible identity, not a secondary conversation setting.
+assert.ok(html.includes('id="role-nav-list"'));
+assert.ok(html.includes('MY CREW'));
+assert.ok(html.includes('id="drawer-new-role-btn"'));
+assert.ok(html.includes('id="drawer-new-work-btn"'));
+assert.equal(html.includes('id="conversation-workspaces"'), false);
 
-// Header Role identity is informational rather than another picker button.
-assert.match(html, /<div id="workspace-selector-btn"/);
-assert.doesNotMatch(html, /<button id="workspace-selector-btn"/);
+// Header puts Role first and demotes the current work title.
+assert.ok(html.includes('<button id="workspace-selector-btn"'));
+assert.ok(html.includes('id="workspace-label"'));
+assert.ok(html.includes('General Developer'));
+assert.ok(html.includes('id="header-role-project"'));
+assert.ok(html.includes('title="點擊修改工作標題"'));
+assert.ok(app.includes("workspaceSelectorBtn.addEventListener('click', () => toggleDrawer(true))"));
+
+// Each Role owns its own secondary actions.
+for (const action of ['new-work', 'history', 'memory', 'settings']) {
+  assert.ok(ui.includes(`data-role-action="${action}"`), action);
+}
+assert.ok(html.includes('id="role-editor-modal"'));
+assert.ok(html.includes('id="role-memory-modal"'));
+assert.ok(ui.includes("fetch('/api/roles'"));
+assert.ok(ui.includes('/api/memories?roleId='));
 
 // Role navigation restores recent work unless the user explicitly creates new work.
-assert.match(ui, /getLatestConversationForRole/);
-assert.match(ui, /await window\.openCrewConversation\(latest\.provider, latest\.id\)/);
-assert.match(ui, /A fresh Conversation is created only/);
+assert.ok(ui.includes('getLatestConversationForRole'));
+assert.ok(ui.includes('await window.openCrewConversation(latest.provider, latest.id)'));
+assert.ok(ui.includes('A fresh Conversation is created only'));
 
-// Main New Work action preserves the active Role and no longer opens the Role picker.
+// Main New Work action preserves the active Role and no longer opens the old picker.
 const newWorkStart = app.indexOf('// New Work Action');
-const renameStart = app.indexOf('// ✏️ Inline conversation title rename.');
+const renameStart = app.indexOf('// ✏️ Inline work title rename.');
 assert.ok(newWorkStart >= 0 && renameStart > newWorkStart);
 const newWorkBlock = app.slice(newWorkStart, renameStart);
-assert.match(newWorkBlock, /headerTitle\.textContent = '新工作'/);
-assert.doesNotMatch(newWorkBlock, /openWorkspacePicker/);
+assert.ok(newWorkBlock.includes("headerTitle.textContent = '新工作'"));
+assert.equal(newWorkBlock.includes('openWorkspacePicker'), false);
 
 // Work history is scoped to the current Role and recent work sorts first.
-assert.match(chat, /getRoleConversations\(activeRoleId, conversations\)/);
-assert.match(chat, /Number\(b\.updatedAt \|\| 0\) - Number\(a\.updatedAt \|\| 0\)/);
+assert.ok(chat.includes('getRoleConversations(activeRoleId, conversations)'));
+assert.ok(chat.includes('Number(b.updatedAt || 0) - Number(a.updatedAt || 0)'));
 
 // Deleting a current work record resets short-term context, not Role identity.
-assert.match(chat, /localStorage\.setItem\(activeConversationStorageKey\(\), '__new__'\)/);
-assert.match(chat, /headerTitle\.textContent = '新工作'/);
+assert.ok(chat.includes("localStorage.setItem(activeConversationStorageKey(), '__new__')"));
+assert.ok(chat.includes("headerTitle.textContent = '新工作'"));
 
 console.log('role-centric-navigation tests: ok');

@@ -88,32 +88,32 @@
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
         </svg>
       </button>
-      <div class="flex flex-col min-w-0">
-        <div class="flex items-center gap-1.5 min-w-0">
-          <span id="network-dot" class="hidden" title="網路連線正常"></span>
-          <h1 id="header-title" class="font-semibold text-xs text-white truncate max-w-[110px] sm:max-w-[160px] cursor-pointer hover:text-indigo-300 transition" title="點擊修改對話標題">Crew Pocket</h1>
-          <span id="network-offline-badge" class="hidden text-[9px] px-1.5 py-0.2 rounded bg-rose-500/20 text-rose-300 border border-rose-500/40 font-mono shrink-0">離線</span>
-        </div>
-        <!-- Header Sub-row: Workspace, Model Selector & Context Pill -->
-        <div class="flex items-center gap-1.5 mt-0.5 min-w-0">
-          <div id="workspace-selector-btn" class="flex max-w-[132px] min-w-0 items-center gap-1 rounded-md border border-teal-500/25 bg-teal-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-teal-200 shrink-0" title="目前 Role">
-            <span id="workspace-icon" class="shrink-0">💻</span><span id="workspace-label" class="truncate">Crew</span>
+      <div class="flex min-w-0 flex-1 items-center gap-2">
+        <button id="workspace-selector-btn" type="button" class="group flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-teal-500/35 bg-teal-500/10 text-lg text-teal-200 transition active:scale-95 hover:bg-teal-500/20" title="開啟 Crew Roles">
+          <span id="workspace-icon">🧠</span>
+        </button>
+        <div class="flex min-w-0 flex-1 flex-col">
+          <div class="flex min-w-0 items-center gap-1.5">
+            <span id="network-dot" class="hidden" title="網路連線正常"></span>
+            <h1 id="workspace-label" class="truncate text-sm font-bold text-white sm:text-base">General Developer</h1>
+            <span id="network-offline-badge" class="hidden shrink-0 rounded border border-rose-500/40 bg-rose-500/20 px-1.5 py-0.2 text-[9px] font-mono text-rose-300">離線</span>
           </div>
-          <!-- Model selector and Context token share one compact header control. -->
-          <div id="model-context-control" class="flex min-w-0 items-center rounded-md border border-slate-700/80 bg-slate-900/90 overflow-hidden">
-            <button id="model-selector-btn" class="flex min-w-0 items-center gap-1 text-[10px] text-slate-300 hover:bg-slate-800 hover:text-white px-1.5 py-0.5 transition active:scale-95 text-left" title="點擊切換 AI 模型與思考強度 (Gemini / Claude / GPT)">
-              <span id="model-badge-icon" class="shrink-0">✨</span>
-              <span id="model-display-name" class="font-semibold text-slate-200 truncate">Gemini 3.7</span>
-              <svg class="w-2.5 h-2.5 text-slate-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
-            </button>
-            <button id="context-pill" class="flex shrink-0 items-center gap-1 border-l border-slate-700/80 px-1.5 py-0.5 text-[10px] text-slate-300 transition hover:bg-slate-800 hover:text-white active:scale-95 text-left cursor-pointer" title="點擊查看當前對話 Context 用量與記憶提煉">
-              <span id="context-indicator" class="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0"></span>
-              <span id="context-tokens-text" class="font-mono font-semibold text-slate-200">0</span>
-            </button>
+          <div class="mt-0.5 flex min-w-0 items-center gap-1.5">
+            <span id="header-role-project" class="max-w-[92px] truncate rounded-md bg-slate-800/80 px-1.5 py-0.5 text-[9px] font-semibold text-slate-400">General</span>
+            <button id="header-title" type="button" class="min-w-0 max-w-[125px] truncate text-left text-[10px] font-medium text-slate-400 transition hover:text-indigo-300 sm:max-w-[220px]" title="點擊修改工作標題">新工作</button>
+            <span class="text-[9px] text-slate-700">•</span>
+            <div id="model-context-control" class="flex min-w-0 items-center overflow-hidden rounded-md border border-slate-700/80 bg-slate-900/90">
+              <button id="model-selector-btn" class="flex min-w-0 items-center gap-1 px-1.5 py-0.5 text-left text-[9px] text-slate-300 transition hover:bg-slate-800 hover:text-white active:scale-95" title="點擊切換 AI 模型與思考強度">
+                <span id="model-badge-icon" class="shrink-0">✨</span>
+                <span id="model-display-name" class="max-w-[74px] truncate font-semibold text-slate-300">Gemini 3.7</span>
+              </button>
+              <button id="context-pill" class="flex shrink-0 items-center gap-1 border-l border-slate-700/80 px-1.5 py-0.5 text-[9px] text-slate-300 transition hover:bg-slate-800 hover:text-white active:scale-95" title="查看目前工作 Context">
+                <span id="context-indicator" class="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400"></span>
+                <span id="context-tokens-text" class="font-mono font-semibold text-slate-300">0</span>
+              </button>
+            </div>
+            <button id="header-compact-btn" type="button" class="hidden shrink-0 rounded-md border px-1.5 py-0.5 text-[9px] font-bold font-mono transition active:scale-95" title="Context 接近上限時快速精簡">Compact</button>
           </div>
-          <button id="header-compact-btn" type="button" class="hidden shrink-0 rounded-md border px-1.5 py-0.5 text-[9px] font-bold font-mono transition active:scale-95" title="Context 接近上限時快速精簡">
-            Compact
-          </button>
         </div>
       </div>
     </div>
@@ -349,6 +349,34 @@
     </section>
   </div>
 
+  <div id="role-editor-modal" class="fixed inset-0 z-[80] hidden items-end justify-center bg-black/75 p-2 opacity-0 transition-opacity duration-150 sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-labelledby="role-editor-title">
+    <section class="w-full max-w-lg overflow-hidden rounded-3xl border border-slate-700 bg-slate-900 shadow-2xl">
+      <div class="flex items-start justify-between gap-3 border-b border-slate-800 p-4">
+        <div><div class="text-[9px] font-bold tracking-[0.18em] text-teal-400/80">ROLE PROFILE</div><h2 id="role-editor-title" class="mt-1 text-base font-bold text-white">新增 Role</h2><p class="mt-1 text-[11px] text-slate-400">設定這位 Crew 的長期身份、專案背景與行為方式。</p></div>
+        <button id="close-role-editor-btn" type="button" class="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-700 bg-slate-800 text-slate-400">✕</button>
+      </div>
+      <form id="role-editor-form" class="max-h-[72vh] space-y-3 overflow-y-auto p-4">
+        <input id="role-editor-id" type="hidden">
+        <label class="block"><span class="mb-1 block text-[10px] font-bold text-slate-400">名稱</span><input id="role-editor-name" maxlength="120" required placeholder="例如：Crew Helper Developer" class="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-white outline-none focus:border-teal-500"></label>
+        <label class="block"><span class="mb-1 block text-[10px] font-bold text-slate-400">專案</span><select id="role-editor-project" class="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-xs text-slate-200 outline-none focus:border-teal-500"><option value="">General / 不綁定專案</option></select></label>
+        <label class="block"><span class="mb-1 block text-[10px] font-bold text-slate-400">一句話定位</span><textarea id="role-editor-description" maxlength="1200" rows="2" placeholder="這位 Role 長期負責什麼？" class="w-full resize-none rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-xs text-slate-200 outline-none focus:border-teal-500"></textarea></label>
+        <label class="block"><span class="mb-1 block text-[10px] font-bold text-slate-400">Skills</span><input id="role-editor-skills" placeholder="React, Android, Debugging" class="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-xs text-slate-200 outline-none focus:border-teal-500"></label>
+        <label class="block"><span class="mb-1 block text-[10px] font-bold text-slate-400">Role 指引</span><textarea id="role-editor-system-context" maxlength="6000" rows="5" placeholder="長期背景、偏好、責任邊界…" class="w-full resize-none rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-xs leading-relaxed text-slate-200 outline-none focus:border-teal-500"></textarea></label>
+        <button id="save-role-btn" type="submit" class="min-h-11 w-full rounded-xl bg-teal-600 px-4 text-sm font-bold text-white active:scale-[0.99]">儲存 Role</button>
+      </form>
+    </section>
+  </div>
+
+  <div id="role-memory-modal" class="fixed inset-0 z-[80] hidden items-end justify-center bg-black/75 p-2 opacity-0 transition-opacity duration-150 sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-labelledby="role-memory-title">
+    <section class="flex max-h-[82vh] w-full max-w-lg flex-col overflow-hidden rounded-3xl border border-slate-700 bg-slate-900 shadow-2xl">
+      <div class="flex items-start justify-between gap-3 border-b border-slate-800 p-4">
+        <div><div class="text-[9px] font-bold tracking-[0.18em] text-indigo-400/80">LONG-TERM MEMORY</div><h2 id="role-memory-title" class="mt-1 text-base font-bold text-white">Role Memory</h2><p id="role-memory-subtitle" class="mt-1 text-[11px] text-slate-400">這些記憶跨工作保留。</p></div>
+        <button id="close-role-memory-btn" type="button" class="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-700 bg-slate-800 text-slate-400">✕</button>
+      </div>
+      <div id="role-memory-list" class="flex-1 space-y-2 overflow-y-auto p-3"><div class="p-6 text-center text-xs text-slate-500">載入 Memory 中...</div></div>
+    </section>
+  </div>
+
   <!-- MAIN CHAT CONTAINER -->
   <div class="relative flex-1 flex min-h-0 w-full max-w-full overflow-hidden">
     
@@ -356,28 +384,28 @@
     <div id="drawer-overlay" class="fixed inset-0 bg-black/60 z-30 opacity-0 pointer-events-none transition-opacity duration-300"></div>
     <aside id="drawer" class="fixed inset-y-0 left-0 w-72 sm:w-80 bg-slate-900 border-r border-slate-800 z-40 transform -translate-x-full transition-transform duration-300 flex flex-col">
       <section id="role-nav-view" class="flex min-h-0 flex-1 flex-col">
-        <div class="p-3.5 border-b border-slate-800 flex items-center justify-between">
-          <div>
-            <h2 class="font-bold text-slate-100 text-sm sm:text-base">Crew</h2>
-            <div class="text-[10px] text-slate-400">選一位 Role，直接回到最近工作</div>
+        <div class="border-b border-slate-800 bg-slate-950/70 px-3.5 pb-3 pt-4">
+          <div class="flex items-center justify-between gap-2">
+            <div>
+              <div class="text-[9px] font-bold tracking-[0.18em] text-teal-400/80">MY CREW</div>
+              <h2 class="mt-0.5 text-base font-bold text-slate-100">AI 小隊</h2>
+              <div class="mt-0.5 text-[10px] text-slate-500">Role 是長期身份；工作只是暫時 Context</div>
+            </div>
+            <button id="close-drawer-btn" class="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-800 bg-slate-900 text-slate-400 hover:text-white" aria-label="關閉 Crew 選單">✕</button>
           </div>
-          <div class="flex items-center gap-1">
-            <button type="button" data-open-task-center class="min-h-[36px] px-2 rounded-lg border border-teal-500/35 bg-teal-500/10 text-[10px] font-semibold text-teal-300 active:scale-95">✓ 任務</button>
-            <button id="close-drawer-btn" class="p-1 text-slate-400 hover:text-white rounded-md" aria-label="關閉 Crew 選單">
-              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-              </svg>
-            </button>
+          <div class="mt-3 grid grid-cols-2 gap-2">
+            <button id="drawer-new-role-btn" type="button" class="min-h-10 rounded-xl border border-teal-500/40 bg-teal-500/10 px-3 text-[11px] font-bold text-teal-200 active:scale-[0.98]">＋ 新增 Role</button>
+            <button type="button" data-open-task-center class="min-h-10 rounded-xl border border-slate-700 bg-slate-900 px-3 text-[11px] font-semibold text-slate-300 active:scale-[0.98]">✓ 任務中心</button>
           </div>
         </div>
 
-        <div id="role-nav-list" class="flex-1 overflow-y-auto p-2 space-y-1.5">
-          <div class="p-4 text-center text-xs text-slate-500">載入 Roles 中...</div>
+        <div id="role-nav-list" class="flex-1 space-y-2 overflow-y-auto p-2.5">
+          <div class="p-4 text-center text-xs text-slate-500">載入 Crew 中...</div>
         </div>
 
-        <div class="border-t border-slate-800 bg-slate-950/50 p-2.5 grid grid-cols-2 gap-2">
-          <button id="drawer-new-work-btn" type="button" class="min-h-11 rounded-xl border border-indigo-500/40 bg-indigo-500/10 px-3 text-xs font-semibold text-indigo-200 active:scale-[0.98]">＋ 新工作</button>
-          <button id="open-work-history-btn" type="button" class="min-h-11 rounded-xl border border-slate-700 bg-slate-900 px-3 text-xs font-semibold text-slate-300 active:scale-[0.98]">工作紀錄</button>
+        <div class="border-t border-slate-800 bg-slate-950/70 p-2.5">
+          <button id="drawer-new-work-btn" type="button" class="min-h-11 w-full rounded-xl border border-indigo-500/40 bg-indigo-500/10 px-3 text-xs font-bold text-indigo-200 active:scale-[0.98]">＋ 為目前 Role 開新工作</button>
+          <button id="open-work-history-btn" type="button" class="hidden">工作紀錄</button>
         </div>
       </section>
 

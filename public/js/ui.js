@@ -146,6 +146,23 @@ const workspaceOptions = document.getElementById('workspace-options');
 const closeWorkspaceModalBtn = document.getElementById('close-workspace-modal-btn');
 const workspaceIcon = document.getElementById('workspace-icon');
 const workspaceLabel = document.getElementById('workspace-label');
+const headerRoleProject = document.getElementById('header-role-project');
+const drawerNewRoleBtn = document.getElementById('drawer-new-role-btn');
+const roleEditorModal = document.getElementById('role-editor-modal');
+const roleEditorForm = document.getElementById('role-editor-form');
+const roleEditorTitle = document.getElementById('role-editor-title');
+const roleEditorId = document.getElementById('role-editor-id');
+const roleEditorName = document.getElementById('role-editor-name');
+const roleEditorProject = document.getElementById('role-editor-project');
+const roleEditorDescription = document.getElementById('role-editor-description');
+const roleEditorSkills = document.getElementById('role-editor-skills');
+const roleEditorSystemContext = document.getElementById('role-editor-system-context');
+const closeRoleEditorBtn = document.getElementById('close-role-editor-btn');
+const roleMemoryModal = document.getElementById('role-memory-modal');
+const roleMemoryTitle = document.getElementById('role-memory-title');
+const roleMemorySubtitle = document.getElementById('role-memory-subtitle');
+const roleMemoryList = document.getElementById('role-memory-list');
+const closeRoleMemoryBtn = document.getElementById('close-role-memory-btn');
 const slashMenu = document.getElementById('slash-menu');
 const lightbox = document.getElementById('lightbox');
 const lightboxImg = document.getElementById('lightbox-img');
@@ -645,28 +662,30 @@ function updateWorkspaceUI() {
   }
 
   if (role) {
-    if (workspaceIcon) workspaceIcon.textContent = member?.icon || '🧠';
+    const projectLabel = role.projectId ? (member?.project?.label || role.projectId) : 'General';
+    if (workspaceIcon) workspaceIcon.textContent = role.projectId ? (member?.icon || '🧠') : '🧠';
     if (workspaceLabel) workspaceLabel.textContent = role.name;
+    if (headerRoleProject) headerRoleProject.textContent = projectLabel;
     if (workspaceSelectorBtn) {
-      const projectLabel = member?.project?.label || (role.projectId ? role.projectId : 'General');
-      workspaceSelectorBtn.title = `${role.name} · ${projectLabel}${member?.workspace ? `\n${member.workspace}` : ''}`;
+      workspaceSelectorBtn.title = `開啟 Crew Roles · ${role.name} · ${projectLabel}`;
     }
     return;
   }
 
   if (member) {
+    const projectLabel = member.project?.label || compactWorkspaceLabel(workspaceMeta(member.workspace));
     if (workspaceIcon) workspaceIcon.textContent = member.icon || '💻';
     if (workspaceLabel) workspaceLabel.textContent = member.name;
-    if (workspaceSelectorBtn) {
-      workspaceSelectorBtn.title = `${member.name} · ${member.project?.label || compactWorkspaceLabel(workspaceMeta(member.workspace))}\n${member.workspace}`;
-    }
+    if (headerRoleProject) headerRoleProject.textContent = projectLabel;
+    if (workspaceSelectorBtn) workspaceSelectorBtn.title = `開啟 Crew Roles · ${member.name}`;
     return;
   }
 
   const meta = workspaceMeta();
   if (workspaceIcon) workspaceIcon.textContent = meta.icon;
-  if (workspaceLabel) workspaceLabel.textContent = compactWorkspaceLabel(meta);
-  if (workspaceSelectorBtn) workspaceSelectorBtn.title = `工作區：${meta.path}`;
+  if (workspaceLabel) workspaceLabel.textContent = 'General Developer';
+  if (headerRoleProject) headerRoleProject.textContent = compactWorkspaceLabel(meta);
+  if (workspaceSelectorBtn) workspaceSelectorBtn.title = '開啟 Crew Roles';
 }
 
 window.getCurrentCrewMemberId = () => currentCrewMemberId || '';
@@ -821,25 +840,218 @@ function renderRoleNavigation() {
     const active = role.id === (currentRoleId || DEFAULT_ROLE_ID);
     const member = role.projectId ? crewMemberForProject(role.projectId) : null;
     const latest = roleLatestConversation(role.id);
-    const recentTitle = latest?.title ? escapeHtml(latest.title) : '';
+    const recentTitle = latest?.title ? escapeHtml(latest.title) : '尚未開始工作';
     const activity = formatRoleLastActivity(latest);
-    return `<button type="button" data-role-nav-id="${escapeHtml(role.id)}" class="w-full flex items-center gap-3 rounded-xl border p-3 text-left transition active:scale-[0.99] ${active ? 'border-teal-400/70 bg-teal-500/15 shadow-sm' : 'border-slate-800 bg-slate-950/55 hover:border-slate-700 hover:bg-slate-800'}">
-      <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border ${active ? 'border-teal-500/40 bg-teal-500/10' : 'border-slate-700/70 bg-slate-900'} text-xl">${escapeHtml(member?.icon || '🧠')}</span>
-      <span class="min-w-0 flex-1">
-        <span class="flex items-center gap-2"><span class="truncate text-xs font-bold text-slate-100">${escapeHtml(role.name)}</span>${active ? '<span class="shrink-0 text-[9px] font-bold text-teal-300">目前</span>' : ''}</span>
-        <span class="block truncate pt-1 text-[10px] text-slate-400">${escapeHtml(roleProjectLabel(role))}</span>
-        <span class="block truncate pt-0.5 text-[9px] text-slate-500">${recentTitle ? `${recentTitle} · ${activity}` : activity}</span>
-      </span>
-      <span class="shrink-0 text-slate-600">›</span>
-    </button>`;
+    const description = role.description ? escapeHtml(role.description) : '長期身份與記憶';
+    return `<div class="role-nav-card overflow-hidden rounded-2xl border transition ${active ? 'border-teal-400/70 bg-teal-500/10 shadow-lg shadow-teal-950/20' : 'border-slate-800 bg-slate-950/55'}" data-role-card-id="${escapeHtml(role.id)}">
+      <div class="flex items-stretch">
+        <button type="button" data-role-nav-id="${escapeHtml(role.id)}" class="min-w-0 flex-1 p-3 text-left active:scale-[0.995]">
+          <span class="flex items-start gap-3">
+            <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border ${active ? 'border-teal-500/40 bg-teal-500/15' : 'border-slate-700/70 bg-slate-900'} text-xl">${escapeHtml(member?.icon || '🧠')}</span>
+            <span class="min-w-0 flex-1">
+              <span class="flex min-w-0 items-center gap-2">
+                <span class="truncate text-[13px] font-bold text-slate-100">${escapeHtml(role.name)}</span>
+                ${active ? '<span class="shrink-0 rounded-full border border-teal-500/30 bg-teal-500/10 px-1.5 py-0.5 text-[8px] font-bold text-teal-300">ACTIVE</span>' : ''}
+              </span>
+              <span class="mt-0.5 block truncate text-[10px] font-medium text-slate-400">${escapeHtml(roleProjectLabel(role))}</span>
+              <span class="mt-1 block truncate text-[9px] text-slate-500">${description}</span>
+            </span>
+          </span>
+          <span class="mt-2.5 flex items-center gap-1.5 rounded-xl border border-slate-800/80 bg-slate-950/70 px-2.5 py-2">
+            <span class="text-[9px] text-slate-600">最近</span>
+            <span class="min-w-0 flex-1 truncate text-[10px] font-medium text-slate-300">${recentTitle}</span>
+            <span class="shrink-0 text-[9px] text-slate-600">${escapeHtml(activity)}</span>
+          </span>
+        </button>
+        <button type="button" data-role-menu-btn="${escapeHtml(role.id)}" class="w-11 shrink-0 border-l border-slate-800/70 text-lg text-slate-500 transition hover:bg-slate-800/70 hover:text-white active:scale-95" aria-label="${escapeHtml(role.name)} 操作">⋯</button>
+      </div>
+      <div data-role-menu-panel="${escapeHtml(role.id)}" class="hidden grid-cols-2 gap-1.5 border-t border-slate-800/80 bg-slate-950/80 p-2">
+        <button type="button" data-role-action="new-work" data-role-id="${escapeHtml(role.id)}" class="rounded-xl bg-indigo-500/10 px-2.5 py-2 text-left text-[10px] font-semibold text-indigo-200">＋ 新工作</button>
+        <button type="button" data-role-action="history" data-role-id="${escapeHtml(role.id)}" class="rounded-xl bg-slate-800/80 px-2.5 py-2 text-left text-[10px] font-semibold text-slate-300">🕘 工作紀錄</button>
+        <button type="button" data-role-action="memory" data-role-id="${escapeHtml(role.id)}" class="rounded-xl bg-violet-500/10 px-2.5 py-2 text-left text-[10px] font-semibold text-violet-200">🧠 Memory</button>
+        <button type="button" data-role-action="settings" data-role-id="${escapeHtml(role.id)}" class="rounded-xl bg-slate-800/80 px-2.5 py-2 text-left text-[10px] font-semibold text-slate-300">⚙ Role 設定</button>
+      </div>
+    </div>`;
   }).join('');
 
   roleNavList.querySelectorAll('[data-role-nav-id]').forEach(button => {
     button.addEventListener('click', () => selectRole(button.dataset.roleNavId));
   });
+
+  roleNavList.querySelectorAll('[data-role-menu-btn]').forEach(button => {
+    button.addEventListener('click', event => {
+      event.stopPropagation();
+      const roleId = button.dataset.roleMenuBtn;
+      roleNavList.querySelectorAll('[data-role-menu-panel]').forEach(panel => {
+        const shouldOpen = panel.dataset.roleMenuPanel === roleId && panel.classList.contains('hidden');
+        panel.classList.toggle('hidden', !shouldOpen);
+        panel.classList.toggle('grid', shouldOpen);
+      });
+    });
+  });
+
+  roleNavList.querySelectorAll('[data-role-action]').forEach(button => {
+    button.addEventListener('click', async event => {
+      event.stopPropagation();
+      const roleId = button.dataset.roleId;
+      const action = button.dataset.roleAction;
+      const role = roleMeta(roleId);
+      if (!role) return;
+      if (action === 'new-work') return selectRole(roleId, true);
+      if (action === 'history') {
+        activateRoleIdentity(role);
+        showRoleHistoryView();
+        if (typeof loadConversations === 'function') await loadConversations({ force: true });
+        return;
+      }
+      if (action === 'memory') return openRoleMemory(roleId);
+      if (action === 'settings') return openRoleEditor(roleId);
+    });
+  });
 }
 
 window.renderRoleNavigation = renderRoleNavigation;
+
+function toggleRoleModal(modal, open) {
+  if (!modal) return;
+  if (open) {
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    requestAnimationFrame(() => modal.classList.remove('opacity-0'));
+  } else {
+    modal.classList.add('opacity-0');
+    window.setTimeout(() => {
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }, 150);
+  }
+}
+
+function renderRoleProjectOptions(selectedProjectId = '') {
+  if (!roleEditorProject) return;
+  const projects = [];
+  const seen = new Set();
+  availableCrewMembers.forEach(member => {
+    const project = member?.project;
+    if (!project?.id || seen.has(project.id)) return;
+    seen.add(project.id);
+    projects.push(project);
+  });
+  roleEditorProject.innerHTML = [
+    '<option value="">General / 不綁定專案</option>',
+    ...projects.map(project => `<option value="${escapeHtml(project.id)}">${escapeHtml(project.label || project.name || project.id)}</option>`)
+  ].join('');
+  roleEditorProject.value = selectedProjectId || '';
+}
+
+function openRoleEditor(roleId = '') {
+  const role = roleId ? roleMeta(roleId) : null;
+  if (roleEditorTitle) roleEditorTitle.textContent = role ? 'Role 設定' : '新增 Role';
+  if (roleEditorId) roleEditorId.value = role?.id || '';
+  if (roleEditorName) roleEditorName.value = role?.name || '';
+  if (roleEditorDescription) roleEditorDescription.value = role?.description || '';
+  if (roleEditorSkills) roleEditorSkills.value = Array.isArray(role?.skills) ? role.skills.join(', ') : '';
+  if (roleEditorSystemContext) roleEditorSystemContext.value = role?.systemContext || '';
+  renderRoleProjectOptions(role?.projectId || '');
+  toggleRoleModal(roleEditorModal, true);
+  window.setTimeout(() => roleEditorName?.focus(), 80);
+}
+
+function closeRoleEditor() {
+  toggleRoleModal(roleEditorModal, false);
+}
+
+async function saveRoleEditor(event) {
+  event?.preventDefault();
+  const id = roleEditorId?.value?.trim() || '';
+  const payload = {
+    ...(id ? { id } : {}),
+    name: roleEditorName?.value?.trim() || '',
+    projectId: roleEditorProject?.value || null,
+    description: roleEditorDescription?.value?.trim() || '',
+    skills: String(roleEditorSkills?.value || '').split(',').map(item => item.trim()).filter(Boolean),
+    systemContext: roleEditorSystemContext?.value?.trim() || ''
+  };
+  if (!payload.name) return alert('請輸入 Role 名稱');
+
+  const submit = document.getElementById('save-role-btn');
+  if (submit) {
+    submit.disabled = true;
+    submit.textContent = '儲存中…';
+  }
+  try {
+    const response = await fetch('/api/roles', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await response.json();
+    if (!response.ok || !data.success || !data.role) throw new Error(data.error || '儲存 Role 失敗');
+    const created = !id;
+    await loadWorkspaces();
+    closeRoleEditor();
+    if (created) {
+      await selectRole(data.role.id, true);
+    } else {
+      if (data.role.id === currentRoleId) activateRoleIdentity(data.role);
+      renderRoleNavigation();
+    }
+  } catch (error) {
+    alert(error.message || '儲存 Role 失敗');
+  } finally {
+    if (submit) {
+      submit.disabled = false;
+      submit.textContent = '儲存 Role';
+    }
+  }
+}
+
+async function openRoleMemory(roleId) {
+  const role = roleMeta(roleId);
+  if (!role) return;
+  if (roleMemoryTitle) roleMemoryTitle.textContent = `${role.name} · Memory`;
+  if (roleMemorySubtitle) roleMemorySubtitle.textContent = '跨工作保留的 Role Memory；Conversation 本身不等於記憶。';
+  if (roleMemoryList) roleMemoryList.innerHTML = '<div class="p-6 text-center text-xs text-slate-500">載入 Memory 中...</div>';
+  toggleRoleModal(roleMemoryModal, true);
+  try {
+    const response = await fetch(`/api/memories?roleId=${encodeURIComponent(role.id)}&scopes=ROLE&limit=50&maxChars=24000`);
+    const data = await response.json();
+    if (!response.ok || !data.success) throw new Error(data.error || 'Memory 載入失敗');
+    const memories = Array.isArray(data.memories) ? data.memories : [];
+    if (!roleMemoryList) return;
+    if (!memories.length) {
+      roleMemoryList.innerHTML = '<div class="rounded-2xl border border-dashed border-slate-700 p-8 text-center text-xs text-slate-500">這個 Role 目前沒有長期 Memory。</div>';
+      return;
+    }
+    roleMemoryList.innerHTML = memories.map(memory => {
+      const provenance = memory.provenance?.derivation || memory.source || 'memory';
+      const confidence = Number.isFinite(Number(memory.confidence)) ? ` · ${Math.round(Number(memory.confidence) * 100)}%` : '';
+      return `<article class="rounded-2xl border border-slate-800 bg-slate-950/70 p-3">
+        <div class="mb-2 flex items-center justify-between gap-2 text-[9px]">
+          <span class="rounded-full border border-violet-500/25 bg-violet-500/10 px-2 py-0.5 font-bold text-violet-300">${escapeHtml(memory.kind || 'experience')}</span>
+          <span class="truncate text-slate-600">${escapeHtml(provenance)}${confidence}</span>
+        </div>
+        <div class="whitespace-pre-wrap text-[11px] leading-relaxed text-slate-300">${escapeHtml(memory.text || '')}</div>
+      </article>`;
+    }).join('');
+  } catch (error) {
+    if (roleMemoryList) roleMemoryList.innerHTML = `<div class="p-6 text-center text-xs text-rose-300">${escapeHtml(error.message)}</div>`;
+  }
+}
+
+window.openRoleEditor = openRoleEditor;
+window.openRoleMemory = openRoleMemory;
+
+if (drawerNewRoleBtn) drawerNewRoleBtn.addEventListener('click', () => openRoleEditor());
+if (closeRoleEditorBtn) closeRoleEditorBtn.addEventListener('click', closeRoleEditor);
+if (roleEditorForm) roleEditorForm.addEventListener('submit', saveRoleEditor);
+if (roleEditorModal) roleEditorModal.addEventListener('click', event => {
+  if (event.target === roleEditorModal) closeRoleEditor();
+});
+if (closeRoleMemoryBtn) closeRoleMemoryBtn.addEventListener('click', () => toggleRoleModal(roleMemoryModal, false));
+if (roleMemoryModal) roleMemoryModal.addEventListener('click', event => {
+  if (event.target === roleMemoryModal) toggleRoleModal(roleMemoryModal, false);
+});
 
 function renderWorkspaceOptions() {
   if (!workspaceOptions) return;
@@ -863,6 +1075,24 @@ function renderWorkspaceOptions() {
   });
 }
 
+function activateRoleIdentity(role) {
+  if (!role) return null;
+  currentRoleId = role.id;
+  localStorage.setItem('crew_current_role', currentRoleId);
+
+  const member = role.projectId ? crewMemberForProject(role.projectId) : crewMemberMeta();
+  if (member) {
+    currentCrewMemberId = member.id;
+    currentWorkspace = member.workspace;
+    localStorage.setItem('crew_current_member', currentCrewMemberId);
+    localStorage.setItem('crew_current_workspace', currentWorkspace);
+  }
+
+  updateWorkspaceUI();
+  renderRoleNavigation();
+  return role;
+}
+
 async function selectRole(roleId, isCreatingNewChat = false) {
   if (!roleId) return closeWorkspaceModal();
   if (isStreaming) return alert('目前正在回覆中，請完成後再切換 Role。');
@@ -875,19 +1105,7 @@ async function selectRole(roleId, isCreatingNewChat = false) {
     return;
   }
 
-  currentRoleId = role.id;
-  localStorage.setItem('crew_current_role', currentRoleId);
-
-  let member = role.projectId ? crewMemberForProject(role.projectId) : crewMemberMeta();
-  if (member) {
-    currentCrewMemberId = member.id;
-    currentWorkspace = member.workspace;
-    localStorage.setItem('crew_current_member', currentCrewMemberId);
-    localStorage.setItem('crew_current_workspace', currentWorkspace);
-  }
-
-  updateWorkspaceUI();
-  renderRoleNavigation();
+  activateRoleIdentity(role);
 
   if (!isCreatingNewChat) {
     try {
