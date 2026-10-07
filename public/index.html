@@ -89,7 +89,7 @@
         <div class="flex min-w-0 flex-1 flex-col">
           <div class="flex min-w-0 items-center gap-1.5">
             <span id="network-dot" class="hidden" title="網路連線正常"></span>
-            <h1 id="workspace-label" class="truncate text-sm font-bold text-white sm:text-base">General Developer</h1>
+            <h1 id="workspace-label" class="truncate text-sm font-bold text-white sm:text-base">General</h1>
             <span id="network-offline-badge" class="hidden shrink-0 rounded border border-rose-500/40 bg-rose-500/20 px-1.5 py-0.2 text-[9px] font-mono text-rose-300">離線</span>
           </div>
           <div class="mt-0.5 flex min-w-0 items-center gap-1.5">
@@ -399,24 +399,22 @@
     <aside id="drawer" class="fixed inset-y-0 left-0 w-72 sm:w-80 bg-slate-900 border-r border-slate-800 z-40 transform -translate-x-full transition-transform duration-300 flex flex-col">
       <section id="role-nav-view" class="flex min-h-0 flex-1 flex-col">
         <div class="border-b border-slate-800 bg-slate-950/70 px-3.5 pb-3 pt-4">
-          <div class="flex items-center justify-between gap-2">
+          <div class="flex items-center justify-between gap-3">
             <div>
               <div class="text-[9px] font-bold tracking-[0.18em] text-teal-400/80">CREW ROOM</div>
               <h2 class="mt-0.5 text-base font-bold text-slate-100">AI 小隊</h2>
-              <div class="mt-0.5 text-[10px] text-slate-500">Role 是長期身份；工作只是暫時 Context</div>
             </div>
-            <button id="close-drawer-btn" class="hidden" aria-hidden="true">✕</button>
+            <div class="flex items-center gap-1.5">
+              <button id="drawer-new-role-btn" type="button" class="flex h-9 w-9 items-center justify-center rounded-xl border border-teal-500/40 bg-teal-500/10 text-lg font-bold text-teal-200 active:scale-95" aria-label="新增 Role" title="新增 Role">＋</button>
+              <button id="close-drawer-btn" class="hidden" aria-hidden="true">✕</button>
+            </div>
           </div>
-          <div id="crew-room-summary" class="mt-3 flex min-h-7 flex-wrap items-center gap-1.5 rounded-xl border border-slate-800/80 bg-slate-950/80 px-2.5 py-1.5 text-[9px] text-slate-500">
+          <div id="crew-room-summary" class="mt-2 flex min-h-6 flex-wrap items-center gap-2 text-[9px] text-slate-500">
             <span>載入小隊狀態…</span>
-          </div>
-          <div class="mt-2 grid grid-cols-2 gap-2">
-            <button id="drawer-new-role-btn" type="button" class="min-h-10 rounded-xl border border-teal-500/40 bg-teal-500/10 px-3 text-[11px] font-bold text-teal-200 active:scale-[0.98]">＋ 新增 Role</button>
-            <button type="button" data-open-task-center class="min-h-10 rounded-xl border border-slate-700 bg-slate-900 px-3 text-[11px] font-semibold text-slate-300 active:scale-[0.98]">✓ 任務中心</button>
           </div>
         </div>
 
-        <div id="role-nav-list" class="flex-1 space-y-2 overflow-y-auto p-2.5">
+        <div id="role-nav-list" class="grid flex-1 auto-rows-max grid-cols-2 content-start gap-2 overflow-y-auto p-2.5">
           <div class="p-4 text-center text-xs text-slate-500">載入 Crew 中...</div>
         </div>
 

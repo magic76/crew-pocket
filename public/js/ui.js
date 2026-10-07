@@ -704,10 +704,10 @@ function updateWorkspaceUI() {
 
   const meta = workspaceMeta();
   if (workspaceIcon) workspaceIcon.textContent = meta.icon;
-  if (workspaceLabel) workspaceLabel.textContent = 'General Developer';
+  if (workspaceLabel) workspaceLabel.textContent = 'General';
   if (headerRoleProject) headerRoleProject.textContent = compactWorkspaceLabel(meta);
   if (headerCurrentTask) headerCurrentTask.textContent = '新工作';
-  if (workspaceSelectorBtn) workspaceSelectorBtn.title = '目前 Role · General Developer';
+  if (workspaceSelectorBtn) workspaceSelectorBtn.title = '目前 Role · General';
 }
 
 window.getCurrentCrewMemberId = () => currentCrewMemberId || '';
@@ -1002,34 +1002,25 @@ function renderRoleNavigation() {
     const queued = Number(status?.queuedRequestCount || 0);
     const unread = Number(status?.unreadReplyCount || 0);
     const counters = [
-      queued ? `<span class="rounded-full border border-amber-500/25 bg-amber-500/10 px-1.5 py-0.5 text-[8px] font-bold text-amber-300">${queued} queued</span>` : '',
-      unread ? `<span class="rounded-full border border-indigo-500/25 bg-indigo-500/10 px-1.5 py-0.5 text-[8px] font-bold text-indigo-300">${unread} unread</span>` : ''
+      queued ? `<span class="rounded-full border border-amber-500/25 bg-amber-500/10 px-1.5 py-0.5 text-[8px] font-bold text-amber-300">${queued}</span>` : '',
+      unread ? `<span class="rounded-full border border-indigo-500/25 bg-indigo-500/10 px-1.5 py-0.5 text-[8px] font-bold text-indigo-300">${unread}</span>` : ''
     ].filter(Boolean).join('');
 
-    return `<div class="role-nav-card overflow-hidden rounded-2xl border transition ${selected ? 'border-teal-400/70 bg-teal-500/10 shadow-lg shadow-teal-950/20' : 'border-slate-800 bg-slate-950/55'}" data-role-card-id="${escapeHtml(role.id)}">
-      <div class="flex items-stretch">
-        <button type="button" data-role-nav-id="${escapeHtml(role.id)}" class="min-w-0 flex-1 p-3 text-left active:scale-[0.995]">
-          <span class="flex items-start gap-3">
-            <span class="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border ${meta.avatar} text-xl">
-              ${escapeHtml(member?.icon || '🧠')}
-              <span class="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-slate-950 ${meta.dot}" aria-hidden="true"></span>
-            </span>
-            <span class="min-w-0 flex-1">
-              <span class="flex min-w-0 items-center gap-1.5">
-                <span class="truncate text-[13px] font-bold text-slate-100">${escapeHtml(role.name)}</span>
-                <span class="shrink-0 rounded-full border px-1.5 py-0.5 text-[8px] font-bold ${meta.badge}">${meta.label}</span>
-                ${counters}
-              </span>
-              <span class="mt-0.5 block truncate text-[10px] font-medium text-slate-500">${escapeHtml(roleProjectLabel(role))}</span>
-            </span>
-          </span>
-          <span class="mt-2.5 flex items-center gap-1.5 rounded-xl border border-slate-800/80 bg-slate-950/70 px-2.5 py-2">
-            <span class="min-w-0 flex-1 truncate text-[10px] font-medium ${hasWork ? 'text-slate-300' : 'text-slate-600'}">${hasWork ? escapeHtml(title) : '尚無工作'}</span>
-            ${activity ? `<span class="shrink-0 text-[9px] text-slate-600">${escapeHtml(activity)}</span>` : ''}
-          </span>
-        </button>
-        <button type="button" data-role-menu-btn="${escapeHtml(role.id)}" class="w-11 shrink-0 border-l border-slate-800/70 text-lg text-slate-500 transition hover:bg-slate-800/70 hover:text-white active:scale-95" aria-label="${escapeHtml(role.name)} 操作">⋯</button>
-      </div>
+    return `<div class="role-nav-card relative overflow-hidden rounded-2xl border transition ${selected ? 'border-teal-400/70 bg-teal-500/10 shadow-lg shadow-teal-950/20' : 'border-slate-800 bg-slate-950/55'}" data-role-card-id="${escapeHtml(role.id)}">
+      <button type="button" data-role-nav-id="${escapeHtml(role.id)}" class="block min-h-[158px] w-full min-w-0 px-3 pb-3 pt-4 text-center active:scale-[0.99]">
+        <span class="relative mx-auto flex h-12 w-12 items-center justify-center rounded-2xl border ${meta.avatar} text-[22px]">
+          ${escapeHtml(member?.icon || '🧠')}
+          <span class="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-slate-950 ${meta.dot}" title="${escapeHtml(meta.label)}" aria-label="${escapeHtml(meta.label)}"></span>
+        </span>
+        <span class="mt-2 flex min-w-0 items-center justify-center gap-1">
+          <span class="truncate text-[12px] font-bold text-slate-100">${escapeHtml(role.name)}</span>
+          ${counters}
+        </span>
+        <span class="mt-0.5 block truncate text-[9px] font-medium text-slate-500">${escapeHtml(roleProjectLabel(role))}</span>
+        <span class="crew-role-task mt-2 block min-w-0 rounded-xl border border-slate-800/80 bg-slate-950/70 px-2 py-2 text-left text-[9px] font-medium ${hasWork ? 'text-slate-300' : 'text-slate-600'}">${hasWork ? escapeHtml(title) : '尚無工作'}</span>
+        ${activity ? `<span class="mt-1.5 block truncate text-[8px] text-slate-600">${escapeHtml(activity)}</span>` : ''}
+      </button>
+      <button type="button" data-role-menu-btn="${escapeHtml(role.id)}" class="absolute right-1.5 top-1.5 flex h-8 w-8 items-center justify-center rounded-xl text-base text-slate-500 transition hover:bg-slate-800/80 hover:text-white active:scale-95" aria-label="${escapeHtml(role.name)} 操作">⋯</button>
       <div data-role-menu-panel="${escapeHtml(role.id)}" class="hidden grid-cols-2 gap-1.5 border-t border-slate-800/80 bg-slate-950/80 p-2">
         <button type="button" data-role-action="new-work" data-role-id="${escapeHtml(role.id)}" class="rounded-xl bg-indigo-500/10 px-2.5 py-2 text-left text-[10px] font-semibold text-indigo-200">＋ 新工作</button>
         <button type="button" data-role-action="history" data-role-id="${escapeHtml(role.id)}" class="rounded-xl bg-slate-800/80 px-2.5 py-2 text-left text-[10px] font-semibold text-slate-300">🕘 工作紀錄</button>
@@ -1140,7 +1131,7 @@ function openRoleEditor(roleId = '') {
   if (roleDangerZone) roleDangerZone.classList.toggle('hidden', !role);
   if (role && roleDangerCopy) {
     roleDangerCopy.textContent = role.id === DEFAULT_ROLE_ID
-      ? 'General Developer 是預設 Role，負責 fallback 與舊資料相容，因此無法刪除。'
+      ? 'General 是預設 Role，負責 fallback 與舊資料相容，因此無法刪除。'
       : '永久刪除這個 Role 與它的 Role Memory。Project、專案檔案與已完成工作歷史會保留。';
   }
   if (deleteRoleBtn) {
