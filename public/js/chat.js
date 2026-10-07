@@ -2034,10 +2034,13 @@ async function loadConversationHistory(convId, { preserveComposer = false } = {}
     } catch (e) {}
 
   } catch (err) {
-    hideHistoryLoadOverlay(loadOverlay);
     console.error(err);
     if (!isCurrentHistory()) return;
     messagesContainer.innerHTML = `<div class="p-4 text-center text-xs text-rose-400">載入歷史對話失敗：${err.message}</div>`;
+  } finally {
+    // Startup/provider changes can make this load stale and return early.
+    // Always release its overlay so the WebView cannot stay covered forever.
+    hideHistoryLoadOverlay(loadOverlay);
   }
 }
 
@@ -2406,7 +2409,7 @@ function syncActiveRoleStreamingState() {
       provider: activeStream?.provider || currentProvider
     }
   }));
-  if (!isStreaming && getPendingQueuedMessage(roleId)) {
+  if (!isStreaming && getPendingQueuedMessageForRole(roleId)) {
     window.setTimeout(() => {
       if (currentStreamRoleId() === roleId && !getActiveRoleStream(roleId)) {
         flushQueuedBtwMessage();
@@ -2478,7 +2481,7 @@ window.clearActiveRoleStream = clearActiveRoleStream;
 
 const pendingQueuedMessagesByRole = new Map();
 
-function getPendingQueuedMessage(roleId = currentStreamRoleId()) {
+function getPendingQueuedMessageForRole(roleId = currentStreamRoleId()) {
   return pendingQueuedMessagesByRole.get(String(roleId || 'role-general')) || null;
 }
 
@@ -2505,7 +2508,7 @@ function renderQueuedMessageCapsule() {
   const preview = document.getElementById('queued-msg-preview');
   if (!capsule) return;
 
-  const pendingQueuedMessage = getPendingQueuedMessage();
+  const pendingQueuedMessage = getPendingQueuedMessageForRole();
   // 🛡️ Only show queue capsule if user is currently inside the exact conversation where it was queued
   const isMatch = pendingQueuedMessage &&
     pendingQueuedMessage.text &&
@@ -2534,7 +2537,7 @@ function updateSendButtonMode() {
   const queueCountBadge = document.getElementById('send-queue-count');
   const srLabel = document.getElementById('send-btn-sr-label');
   const hasInputText = promptInput ? promptInput.value.trim().length > 0 : false;
-  const pendingQueuedMessage = getPendingQueuedMessage();
+  const pendingQueuedMessage = getPendingQueuedMessageForRole();
   const queuedForCurrentRole = Boolean(
     pendingQueuedMessage &&
     pendingQueuedMessage.conversationId === currentConversationId &&
@@ -2718,7 +2721,7 @@ async function sendBtwConcurrentSidecard(customText = null, customImgPath = null
 }
 
 function flushQueuedBtwMessage() {
-  const msgToSend = getPendingQueuedMessage();
+  const msgToSend = getPendingQueuedMessageForRole();
   const matchesCurrentRole = Boolean(
     msgToSend &&
     msgToSend.roleId === currentStreamRoleId() &&
@@ -2743,7 +2746,7 @@ function sendRoleMessage(payload = {}) {
   const roleId = currentStreamRoleId();
   const activeStream = getActiveRoleStream(roleId);
   if (activeStream) {
-    if (getPendingQueuedMessage(roleId)) {
+    if (getPendingQueuedMessageForRole(roleId)) {
       return { success: false, error: '目前 Role 已有一則排隊訊息，請等待它送出後再新增。' };
     }
     setPendingQueuedMessage({ text, imagePath, source: payload.source || 'external' });
@@ -3607,7 +3610,7 @@ window.startLowContextContinuation = startLowContextContinuation;
 window.getCachedConversations = () => cachedConversations;
 window.setPendingQueuedMessage = setPendingQueuedMessage;
 window.clearPendingQueuedMessage = clearPendingQueuedMessage;
-window.getPendingQueuedMessage = () => getPendingQueuedMessage();
+window.getPendingQueuedMessage = getPendingQueuedMessageForRole;
 
 // ⏳ Queued Message Capsule Event Listeners
 document.addEventListener('DOMContentLoaded', () => {
@@ -3618,7 +3621,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Click Body -> Call message back to textarea for editing
   if (queuedBody) {
     queuedBody.addEventListener('click', () => {
-      const pendingQueuedMessage = getPendingQueuedMessage();
+      const pendingQueuedMessage = getPendingQueuedMessageForRole();
       if (!pendingQueuedMessage) return;
       const text = pendingQueuedMessage.text || '';
       clearPendingQueuedMessage();
@@ -3646,7 +3649,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (queuedInterruptBtn) {
     queuedInterruptBtn.addEventListener('click', async (e) => {
       e.stopPropagation();
-      const pendingQueuedMessage = getPendingQueuedMessage();
+      const pendingQueuedMessage = getPendingQueuedMessageForRole();
       if (!pendingQueuedMessage) return;
       const msgToSend = pendingQueuedMessage;
       clearPendingQueuedMessage();
