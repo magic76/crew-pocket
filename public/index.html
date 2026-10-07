@@ -361,8 +361,48 @@
         <label class="block"><span class="mb-1 block text-[10px] font-bold text-slate-400">一句話定位</span><textarea id="role-editor-description" maxlength="1200" rows="2" placeholder="這位 Role 長期負責什麼？" class="w-full resize-none rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-xs text-slate-200 outline-none focus:border-teal-500"></textarea></label>
         <label class="block"><span class="mb-1 block text-[10px] font-bold text-slate-400">Skills</span><input id="role-editor-skills" placeholder="React, Android, Debugging" class="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-xs text-slate-200 outline-none focus:border-teal-500"></label>
         <label class="block"><span class="mb-1 block text-[10px] font-bold text-slate-400">Role 指引</span><textarea id="role-editor-system-context" maxlength="6000" rows="5" placeholder="長期背景、偏好、責任邊界…" class="w-full resize-none rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-xs leading-relaxed text-slate-200 outline-none focus:border-teal-500"></textarea></label>
-        <button id="save-role-btn" type="submit" class="min-h-11 w-full rounded-xl bg-teal-600 px-4 text-sm font-bold text-white active:scale-[0.99]">儲存 Role</button>
+        <div class="grid grid-cols-2 gap-2">
+          <button id="cancel-role-editor-btn" type="button" class="min-h-11 rounded-xl border border-slate-700 bg-slate-950 px-4 text-sm font-semibold text-slate-300 active:scale-[0.99]">取消</button>
+          <button id="save-role-btn" type="submit" class="min-h-11 rounded-xl bg-teal-600 px-4 text-sm font-bold text-white active:scale-[0.99]">儲存變更</button>
+        </div>
+
+        <section id="role-danger-zone" class="hidden rounded-2xl border border-rose-500/20 bg-rose-500/5 p-3">
+          <div class="text-[10px] font-bold tracking-[0.12em] text-rose-300">DANGER ZONE</div>
+          <p id="role-danger-copy" class="mt-1.5 text-[10px] leading-relaxed text-slate-400">永久刪除這個 Role 與它的 Role Memory。Project、專案檔案與已完成工作歷史會保留。</p>
+          <button id="delete-role-btn" type="button" class="mt-3 min-h-10 w-full rounded-xl border border-rose-500/35 bg-rose-500/10 px-3 text-xs font-bold text-rose-200 active:scale-[0.99]">刪除 Role</button>
+        </section>
       </form>
+    </section>
+  </div>
+
+  <div id="role-delete-modal" class="fixed inset-0 z-[90] hidden items-end justify-center bg-black/80 p-2 opacity-0 transition-opacity duration-150 sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-labelledby="role-delete-title">
+    <section class="w-full max-w-md overflow-hidden rounded-3xl border border-rose-500/25 bg-slate-900 shadow-2xl">
+      <div class="flex items-start justify-between gap-3 border-b border-slate-800 p-4">
+        <div>
+          <div class="text-[9px] font-bold tracking-[0.18em] text-rose-400/80">DELETE ROLE</div>
+          <h2 id="role-delete-title" class="mt-1 text-base font-bold text-white">刪除 Role？</h2>
+          <p class="mt-1 text-[11px] leading-relaxed text-slate-400">這個動作無法復原。</p>
+        </div>
+        <button id="close-role-delete-btn" type="button" class="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-700 bg-slate-800 text-slate-400">✕</button>
+      </div>
+      <div class="space-y-3 p-4">
+        <p class="text-sm font-bold text-slate-100">刪除 <span id="role-delete-name" class="text-rose-300">這個 Role</span>？</p>
+        <div class="rounded-2xl border border-slate-800 bg-slate-950/70 p-3 text-[10px] leading-relaxed text-slate-400">
+          <div class="font-bold text-slate-300">將永久刪除</div>
+          <div class="mt-1">• Role 設定與 Role Memory</div>
+          <div>• Role runtime state</div>
+          <div>• 尚未處理的 Crew 訊息</div>
+          <div>• 若正在工作，會停止目前 generation</div>
+          <div class="mt-3 font-bold text-slate-300">不會刪除</div>
+          <div class="mt-1">• Project 與專案檔案</div>
+          <div>• 已完成的 Conversation 歷史</div>
+          <div>• 已送達的 Crew 訊息歷史</div>
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <button id="cancel-role-delete-btn" type="button" class="min-h-11 rounded-xl border border-slate-700 bg-slate-950 text-xs font-semibold text-slate-300">取消</button>
+          <button id="confirm-role-delete-btn" type="button" class="min-h-11 rounded-xl bg-rose-600 text-xs font-bold text-white active:scale-[0.99]">刪除 Role</button>
+        </div>
+      </div>
     </section>
   </div>
 

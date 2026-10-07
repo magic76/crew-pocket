@@ -43,6 +43,7 @@ const { createTask, getTask, listTasks, updateTask } = require('./lib/tasks');
 const { listWorkspaces, resolveWorkspace, createWorkspace } = require('./lib/workspaces');
 const { listCrewMembers, getCrewMember, saveCrewMember, buildCrewMemberGuide } = require('./lib/crew-members');
 const { DEFAULT_ROLE_ID, roleIdForProject, listRoles, getRole, saveRole } = require('./lib/roles');
+const { deleteRoleLifecycle } = require('./lib/role-delete');
 const { listCrewRoles, sendCrewMessage, getCrewInbox, getCrewMessageActivity, markCrewMessagesDelivered } = require('./lib/crew-messages');
 const { createCrewAutoResponder } = require('./lib/crew-auto-response');
 const { getRoleRuntime, listRoleRuntimes, activateRoleConversation, prepareNewRoleConversation, clearRoleConversation, clearRoleConversationByConversation } = require('./lib/role-runtime');
@@ -861,7 +862,9 @@ async function handleProviderConversations(parsedUrl, res) {
       roleId: settingsByConversation.get(conversation.id)?.roleId || DEFAULT_ROLE_ID,
       role: settingsByConversation.get(conversation.id)?.role || 'general',
       model: settingsByConversation.get(conversation.id)?.model || null,
-      effort: settingsByConversation.get(conversation.id)?.effort || null
+      effort: settingsByConversation.get(conversation.id)?.effort || null,
+      roleNameSnapshot: settingsByConversation.get(conversation.id)?.roleNameSnapshot || null,
+      roleDeletedAt: settingsByConversation.get(conversation.id)?.roleDeletedAt || null
     })) }));
   } catch (err) {
     res.writeHead(503, { 'Content-Type': 'application/json' });
@@ -1145,7 +1148,10 @@ async function resolveConversationRole({ body = {}, previous = null, crewMember 
   }
 
   let roleId = persisted || requested;
-  if (!roleId && crewMember?.project?.id) roleId = roleIdForProject(crewMember.project.id);
+  if (!roleId && crewMember?.project?.id) {
+    const legacyProjectRoleId = roleIdForProject(crewMember.project.id);
+    if (await getRole(legacyProjectRoleId)) roleId = legacyProjectRoleId;
+  }
   roleId = roleId || DEFAULT_ROLE_ID;
 
   const role = await getRole(roleId);
@@ -1252,13 +1258,36 @@ async function handleCrewMembers(req, res) {
   }
 }
 
-async function handleRoles(req, res) {
+async function stopActiveRoleWork(role) {
+  const runtime = await getRoleRuntime(role.id).catch(() => null);
+  if (!runtime?.conversationId || !runtime.providerId) return false;
+  const provider = getProvider(runtime.providerId);
+  let busy = false;
+  try {
+    busy = Boolean(provider.getStatus(runtime.conversationId)?.isBusy);
+  } catch (_) {}
+  if (!busy) return false;
+  await provider.stop(runtime.conversationId);
+  return true;
+}
+
+async function handleRoles(req, res, parsedUrl) {
   try {
     if (req.method === 'GET') {
       const roles = await listRoles();
       res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
       return res.end(JSON.stringify({ success: true, roles }));
     }
+
+    if (req.method === 'DELETE') {
+      const roleId = String(parsedUrl?.query?.id || parsedUrl?.query?.roleId || '').trim();
+      const result = await deleteRoleLifecycle(roleId, {
+        stopActiveRoleFn: stopActiveRoleWork
+      });
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+      return res.end(JSON.stringify({ success: true, deleted: result }));
+    }
+
     const body = await parseJsonBody(req);
     const role = await saveRole(body);
     res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -2858,8 +2887,8 @@ const server = http.createServer(async (req, res) => {
     return handleCodexWarmup(req, res);
   } else if (pathname === '/api/crew-members' && (req.method === 'GET' || req.method === 'POST')) {
     return handleCrewMembers(req, res);
-  } else if (pathname === '/api/roles' && (req.method === 'GET' || req.method === 'POST')) {
-    return handleRoles(req, res);
+  } else if (pathname === '/api/roles' && ['GET', 'POST', 'DELETE'].includes(req.method)) {
+    return handleRoles(req, res, parsedUrl);
   } else if (pathname === '/api/crew-status' && req.method === 'GET') {
     return handleCrewStatus(res);
   } else if (pathname === '/api/role-runtime' && req.method === 'POST') {

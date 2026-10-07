@@ -163,6 +163,15 @@ const roleEditorDescription = document.getElementById('role-editor-description')
 const roleEditorSkills = document.getElementById('role-editor-skills');
 const roleEditorSystemContext = document.getElementById('role-editor-system-context');
 const closeRoleEditorBtn = document.getElementById('close-role-editor-btn');
+const cancelRoleEditorBtn = document.getElementById('cancel-role-editor-btn');
+const roleDangerZone = document.getElementById('role-danger-zone');
+const roleDangerCopy = document.getElementById('role-danger-copy');
+const deleteRoleBtn = document.getElementById('delete-role-btn');
+const roleDeleteModal = document.getElementById('role-delete-modal');
+const roleDeleteName = document.getElementById('role-delete-name');
+const closeRoleDeleteBtn = document.getElementById('close-role-delete-btn');
+const cancelRoleDeleteBtn = document.getElementById('cancel-role-delete-btn');
+const confirmRoleDeleteBtn = document.getElementById('confirm-role-delete-btn');
 const roleMemoryModal = document.getElementById('role-memory-modal');
 const roleMemoryTitle = document.getElementById('role-memory-title');
 const roleMemorySubtitle = document.getElementById('role-memory-subtitle');
@@ -1119,21 +1128,97 @@ function renderRoleProjectOptions(selectedProjectId = '') {
   updateRoleEditorWorkspace(roleEditorProject.value);
 }
 
+let roleDeleteTarget = null;
+
 function openRoleEditor(roleId = '') {
   const role = roleId ? roleMeta(roleId) : null;
   if (roleEditorTitle) roleEditorTitle.textContent = role ? 'Role 設定' : '新增 Role';
+  const roleSubmit = document.getElementById('save-role-btn');
+  if (roleSubmit) roleSubmit.textContent = role ? '儲存變更' : '建立 Role';
   if (roleEditorId) roleEditorId.value = role?.id || '';
   if (roleEditorName) roleEditorName.value = role?.name || '';
   if (roleEditorDescription) roleEditorDescription.value = role?.description || '';
   if (roleEditorSkills) roleEditorSkills.value = Array.isArray(role?.skills) ? role.skills.join(', ') : '';
   if (roleEditorSystemContext) roleEditorSystemContext.value = role?.systemContext || '';
   renderRoleProjectOptions(role?.projectId || '');
+
+  if (roleDangerZone) roleDangerZone.classList.toggle('hidden', !role);
+  if (role && roleDangerCopy) {
+    roleDangerCopy.textContent = role.id === DEFAULT_ROLE_ID
+      ? 'General Developer 是預設 Role，負責 fallback 與舊資料相容，因此無法刪除。'
+      : '永久刪除這個 Role 與它的 Role Memory。Project、專案檔案與已完成工作歷史會保留。';
+  }
+  if (deleteRoleBtn) {
+    const protectedRole = role?.id === DEFAULT_ROLE_ID;
+    deleteRoleBtn.classList.toggle('hidden', !role || protectedRole);
+    deleteRoleBtn.disabled = !role || protectedRole;
+  }
+
   toggleRoleModal(roleEditorModal, true);
   window.setTimeout(() => roleEditorName?.focus(), 80);
 }
 
 function closeRoleEditor() {
   toggleRoleModal(roleEditorModal, false);
+}
+
+function closeRoleDeleteModal() {
+  roleDeleteTarget = null;
+  toggleRoleModal(roleDeleteModal, false);
+}
+
+function openRoleDeleteModal(roleId) {
+  const role = roleMeta(roleId);
+  if (!role || role.id === DEFAULT_ROLE_ID) return;
+  roleDeleteTarget = role;
+  if (roleDeleteName) roleDeleteName.textContent = role.name;
+  toggleRoleModal(roleDeleteModal, true);
+}
+
+async function confirmRoleDelete() {
+  const role = roleDeleteTarget;
+  if (!role) return;
+  const wasCurrent = role.id === currentRoleId;
+  const originalText = confirmRoleDeleteBtn?.textContent || '刪除 Role';
+
+  if (confirmRoleDeleteBtn) {
+    confirmRoleDeleteBtn.disabled = true;
+    confirmRoleDeleteBtn.textContent = '刪除中…';
+    confirmRoleDeleteBtn.classList.add('opacity-60');
+  }
+
+  try {
+    const response = await fetch(`/api/roles?id=${encodeURIComponent(role.id)}`, {
+      method: 'DELETE'
+    });
+    const data = await response.json();
+    if (!response.ok || !data.success) throw new Error(data.error || '刪除 Role 失敗');
+
+    closeRoleDeleteModal();
+    closeRoleEditor();
+
+    if (wasCurrent) {
+      if (typeof setStreamingState === 'function') setStreamingState(false);
+      currentRoleId = DEFAULT_ROLE_ID;
+      localStorage.setItem('crew_current_role', DEFAULT_ROLE_ID);
+    }
+
+    await loadWorkspaces();
+
+    if (wasCurrent) {
+      await selectRole(DEFAULT_ROLE_ID, true);
+    } else {
+      renderRoleNavigation();
+    }
+  } catch (error) {
+    alert(error.message || '刪除 Role 失敗');
+  } finally {
+    if (confirmRoleDeleteBtn) {
+      confirmRoleDeleteBtn.disabled = false;
+      confirmRoleDeleteBtn.textContent = originalText;
+      confirmRoleDeleteBtn.classList.remove('opacity-60');
+    }
+  }
 }
 
 async function saveRoleEditor(event) {
@@ -1176,7 +1261,7 @@ async function saveRoleEditor(event) {
   } finally {
     if (submit) {
       submit.disabled = false;
-      submit.textContent = '儲存 Role';
+      submit.textContent = '儲存變更';
     }
   }
 }
@@ -1220,6 +1305,14 @@ window.openRoleMemory = openRoleMemory;
 if (roleEditorProject) roleEditorProject.addEventListener('change', () => updateRoleEditorWorkspace(roleEditorProject.value));
 if (drawerNewRoleBtn) drawerNewRoleBtn.addEventListener('click', () => openRoleEditor());
 if (closeRoleEditorBtn) closeRoleEditorBtn.addEventListener('click', closeRoleEditor);
+if (cancelRoleEditorBtn) cancelRoleEditorBtn.addEventListener('click', closeRoleEditor);
+if (deleteRoleBtn) deleteRoleBtn.addEventListener('click', () => openRoleDeleteModal(roleEditorId?.value || ''));
+if (closeRoleDeleteBtn) closeRoleDeleteBtn.addEventListener('click', closeRoleDeleteModal);
+if (cancelRoleDeleteBtn) cancelRoleDeleteBtn.addEventListener('click', closeRoleDeleteModal);
+if (confirmRoleDeleteBtn) confirmRoleDeleteBtn.addEventListener('click', confirmRoleDelete);
+if (roleDeleteModal) roleDeleteModal.addEventListener('click', event => {
+  if (event.target === roleDeleteModal) closeRoleDeleteModal();
+});
 if (roleEditorForm) roleEditorForm.addEventListener('submit', saveRoleEditor);
 if (roleEditorModal) roleEditorModal.addEventListener('click', event => {
   if (event.target === roleEditorModal) closeRoleEditor();
