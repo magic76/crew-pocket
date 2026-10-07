@@ -45,6 +45,7 @@ const { listCrewMembers, getCrewMember, saveCrewMember, buildCrewMemberGuide } =
 const { DEFAULT_ROLE_ID, roleIdForProject, listRoles, getRole, saveRole } = require('./lib/roles');
 const { listCrewRoles, sendCrewMessage, getCrewInbox, markCrewMessagesDelivered } = require('./lib/crew-messages');
 const { createCrewAutoResponder } = require('./lib/crew-auto-response');
+const { getRoleRuntime, activateRoleConversation, clearRoleConversation, clearRoleConversationByConversation } = require('./lib/role-runtime');
 const { getProject } = require('./lib/projects');
 const { defaultMemoryProvider } = require('./lib/memory');
 const {
@@ -1073,6 +1074,17 @@ async function handleProviderHistory(parsedUrl, res) {
   try {
     const conversationId = parsedUrl.query.id;
     const bundle = await getConversationContextHealth(providerId, conversationId);
+    const settings = bundle.conversationSettings;
+    if (settings?.roleId) {
+      await activateRoleConversation({
+        roleId: settings.roleId,
+        providerId,
+        conversationId,
+        model: settings.model || getDefaultModel(providerId),
+        effort: settings.effort || 'low',
+        workspace: settings.workspace || null
+      }).catch(error => console.warn('[Role Runtime] History activation failed:', error.message));
+    }
     const publicHistory = { ...bundle.history };
     delete publicHistory.active_messages;
 
@@ -1102,6 +1114,7 @@ async function handleProviderDelete(parsedUrl, res) {
     const result = await provider.deleteConversation(conversationId);
     await deleteConversationSettings(providerId, conversationId).catch(() => {});
     await deleteContextSnapshot(providerId, conversationId).catch(() => {});
+    await clearRoleConversationByConversation(providerId, conversationId).catch(() => {});
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
       success: true,
@@ -1195,6 +1208,14 @@ async function handleConversationSettings(req, res) {
       ...(workspace ? { workspace } : {}),
       ...(member ? { crewMemberId: member.id } : previous?.crewMemberId ? { crewMemberId: previous.crewMemberId } : {}),
       role: body.role || previous?.role || 'general'
+    });
+    await activateRoleConversation({
+      roleId: identity.role.id,
+      providerId,
+      conversationId: body.conversation_id,
+      model: settings.model,
+      effort: settings.effort,
+      workspace: settings.workspace || workspace || null
     });
     if (previous?.workspace && workspace && previous.workspace !== workspace && providerId === 'antigravity') {
       sessionManager.closeSession(body.conversation_id);
@@ -1514,7 +1535,7 @@ async function handleCrewTool(req, res) {
         content: body.message || body.content,
         replyToId: body.reply_to_id || body.replyToId || null
       });
-      const autoResponse = await crewAutoResponder.schedule(message);
+      const autoResponse = await crewAutoResponder.dispatch(message, { waitForReply: true });
       res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
       return res.end(JSON.stringify({ success: true, message, auto_response: autoResponse }));
     }
@@ -1535,7 +1556,7 @@ function buildCrewToolGuide(role) {
     'List Roles: node ' + JSON.stringify(scriptPath) + ' roles',
     'Send plain-text message: node ' + JSON.stringify(scriptPath) + ' send ' + role.id + ' <target-role-id> "<message>"',
     'Fallback API: POST http://127.0.0.1:' + PORT + '/api/crew-tool with action=list_roles or action=send_message.',
-    'Only the explicit message text is sent. Do not attach or infer Conversation, Context, Memory, Project or workspace data.'
+    'Only the explicit message text is copied from the sender. The recipient handles it inside their own current conversation; do not attach or infer the sender\'s Context, Memory, Conversation, Project or workspace data.'
   ].join('\n');
 }
 
@@ -1543,7 +1564,7 @@ function formatCrewInbox(messages = []) {
   if (!messages.length) return '';
   return [
     '[Crew Messages]',
-    'These are plain-text messages sent directly to this Role. No sender Context, Memory, Conversation or Project data was shared.',
+    'These are replies returned by other Roles. They were produced inside each sender Role\'s own current conversation; no sender Context, Memory, Conversation or Project data was copied here.',
     ...messages.map(message => '- [' + message.id + '] From ' + message.fromRoleName + ' (' + message.fromRoleId + '): ' + message.content)
   ].join('\n');
 }
@@ -1554,10 +1575,15 @@ const crewAutoResponder = createCrewAutoResponder({
   getProviderConversationSettings,
   getDefaultModel,
   getRole,
+  getRoleRuntime,
+  activateRoleConversation,
+  clearRoleConversation,
   buildAgentContext,
   formatAgentContext,
   sendCrewMessage,
+  getCrewInbox,
   markCrewMessagesDelivered,
+  saveConversationSettings,
   runtimeHome: RUNTIME_HOME
 });
 
@@ -1762,7 +1788,8 @@ async function handleChat(req, res) {
   let pendingCrewMessages = [];
   try {
     pendingCrewMessages = role?.id
-      ? await getCrewInbox(role.id, { undeliveredOnly: true, limit: 20 })
+      ? (await getCrewInbox(role.id, { undeliveredOnly: true, limit: 20 }))
+        .filter(message => Boolean(message.replyToId))
       : [];
   } catch (error) {
     console.warn('[Crew Messages] Inbox unavailable:', error.message);
@@ -2128,7 +2155,14 @@ async function handleChat(req, res) {
             ...(crewMember ? { crewMemberId: crewMember.id } : savedSettings?.crewMemberId ? { crewMemberId: savedSettings.crewMemberId } : {}),
             role: body.role || savedSettings?.role || 'general',
             ...(executionPolicy?.mode ? { executionMode: executionPolicy.mode } : {})
-          }).catch(err => console.warn('[Conversation Settings] Save failed:', err.message));
+          }).then(settings => activateRoleConversation({
+            roleId: settings.roleId || role?.id || DEFAULT_ROLE_ID,
+            providerId,
+            conversationId: event.conversationId,
+            model: settings.model,
+            effort: settings.effort,
+            workspace: settings.workspace || workspace || null
+          })).catch(err => console.warn('[Conversation Settings] Save/activate failed:', err.message));
           saveContextSnapshot(providerId, event.conversationId, {
             contributions: assembledContextContributions,
             reretrieveMemoryOnNextTurn: memoryRefreshConsumed
@@ -2191,6 +2225,10 @@ async function handleChat(req, res) {
           sendEvent('context', event.stats);
         } else if (event.type === 'error') {
           finish({ error: event.message, provider: providerId, conversation_id });
+          if (role?.id) {
+            setImmediate(() => crewAutoResponder.drain(role.id)
+              .catch(error => console.warn('[Crew Messages] Queue drain failed:', error.message)));
+          }
         } else if (event.type === 'turn_completed') {
           if (pendingCrewMessageIds.length && role?.id) {
             markCrewMessagesDelivered(role.id, pendingCrewMessageIds)
@@ -2202,6 +2240,10 @@ async function handleChat(req, res) {
             provider: providerId,
             status: event.status
           });
+          if (role?.id) {
+            setImmediate(() => crewAutoResponder.drain(role.id)
+              .catch(error => console.warn('[Crew Messages] Queue drain failed:', error.message)));
+          }
         }
       }
     });
