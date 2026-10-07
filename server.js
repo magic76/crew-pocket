@@ -1099,6 +1099,14 @@ function memoryScopesFromQuery(query = {}) {
   return scopes.length ? scopes : undefined;
 }
 
+function memoryStatusesFromQuery(query = {}) {
+  const raw = query.statuses || query.status;
+  if (!raw) return undefined;
+  const values = Array.isArray(raw) ? raw : String(raw).split(',');
+  const statuses = values.map(value => String(value || '').trim()).filter(Boolean);
+  return statuses.length ? statuses : undefined;
+}
+
 async function handleMemories(req, res, parsedUrl) {
   try {
     if (req.method === 'GET') {
@@ -1106,6 +1114,7 @@ async function handleMemories(req, res, parsedUrl) {
       const memories = await defaultMemoryProvider.recall({
         text: query.q || query.query || '',
         scopes: memoryScopesFromQuery(query),
+        statuses: memoryStatusesFromQuery(query),
         roleId: query.roleId || query.role_id || null,
         projectId: query.projectId || query.project_id || null,
         conversationId: query.conversationId || query.conversation_id || null,
