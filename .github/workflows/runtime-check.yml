@@ -35,6 +35,17 @@ jobs:
         run: |
           node --check lib/runtime/codex-transport.js
           node --check lib/runtime/provider-manager.js
+          node --check lib/conversation-settings.js
+          node --check lib/projects.js
+          node --check lib/roles.js
+          node --check lib/context-builder.js
+          node --check lib/memory/types.js
+          node --check lib/memory/provider.js
+          node --check lib/memory/local-memory-provider.js
+          node --check lib/memory/openviking-adapter.js
+          node --check lib/memory/index.js
+          node --check test/role-memory-kernel.test.js
+          node test/role-memory-kernel.test.js
           node --check lib/runtime/agy-transport.js
           node --check lib/providers/codex.js
           node --check lib/jev-router.js
