@@ -1461,10 +1461,11 @@ async function loadConversations({ force = false } = {}) {
       }));
       cachedConversations = results.flat().sort(compareConversationsStable);
       renderConversationItems(cachedConversations);
+      window.renderRoleNavigation?.();
       return cachedConversations;
     } catch (err) {
       console.error('Failed to load conversations:', err);
-      if (convList) convList.innerHTML = '<div class="p-4 text-center text-xs text-rose-400">無法載入歷史紀錄</div>';
+      if (convList) convList.innerHTML = '<div class="p-4 text-center text-xs text-rose-400">無法載入工作紀錄</div>';
       return cachedConversations;
     } finally {
       conversationListRequest = null;
@@ -1480,9 +1481,27 @@ const conversationWorkspaceList = document.getElementById('conversation-workspac
 let selectedConversationWorkspace = ALL_WORKSPACES;
 
 function compareConversationsStable(a, b) {
-  return (a.title || '').localeCompare(b.title || '', 'zh-TW')
+  const updatedDiff = Number(b.updatedAt || 0) - Number(a.updatedAt || 0);
+  return updatedDiff
+    || (a.title || '').localeCompare(b.title || '', 'zh-TW')
     || String(a.id || '').localeCompare(String(b.id || ''));
 }
+
+function getRoleConversations(roleId, conversations = cachedConversations) {
+  const targetRoleId = String(roleId || DEFAULT_ROLE_ID);
+  return (conversations || [])
+    .filter(conversation => String(conversation.roleId || DEFAULT_ROLE_ID) === targetRoleId)
+    .slice()
+    .sort(compareConversationsStable);
+}
+
+window.getLatestConversationForRole = function(roleId) {
+  return getRoleConversations(roleId)[0] || null;
+};
+
+window.getCachedConversations = function() {
+  return cachedConversations.slice();
+};
 
 function conversationWorkspaceLabel(workspace) {
   if (!workspace || workspace === UNASSIGNED_WORKSPACE) return '未指定';
@@ -1519,11 +1538,13 @@ function renderConversationItems(conversations) {
   if (!convList) return;
   convList.innerHTML = '';
 
-  const filtered = (conversations || []).slice().sort(compareConversationsStable);
+  const activeRoleId = typeof window.getCurrentRoleId === 'function'
+    ? window.getCurrentRoleId()
+    : DEFAULT_ROLE_ID;
+  const filtered = getRoleConversations(activeRoleId, conversations);
 
   if (filtered.length === 0) {
-    renderConversationWorkspaceTabs([]);
-    convList.innerHTML = '<div class="p-4 text-center text-xs text-slate-500">尚無歷史對話</div>';
+    convList.innerHTML = '<div class="p-6 text-center text-xs text-slate-500">這個 Role 還沒有工作紀錄</div>';
     return;
   }
 
@@ -1549,13 +1570,10 @@ function renderConversationItems(conversations) {
         || String(a.workspace || '').localeCompare(String(b.workspace || ''));
     });
 
-  renderConversationWorkspaceTabs(workspaceGroups);
-  const visibleWorkspaceGroups = selectedConversationWorkspace === ALL_WORKSPACES
-    ? workspaceGroups
-    : workspaceGroups.filter(group => group.workspace === selectedConversationWorkspace);
+  const visibleWorkspaceGroups = workspaceGroups;
 
   if (visibleWorkspaceGroups.length === 0) {
-    convList.innerHTML = '<div class="p-4 text-center text-xs text-slate-500">此資料夾沒有歷史對話</div>';
+    convList.innerHTML = '<div class="p-4 text-center text-xs text-slate-500">這個 Role 還沒有工作紀錄</div>';
     return;
   }
 
