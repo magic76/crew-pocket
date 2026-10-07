@@ -1044,17 +1044,17 @@ async function deleteConversationDirect(convId, wrapperElement, conversationProv
     if (data.success) {
       if (currentConversationId === convId && currentProvider === conversationProvider) {
         currentConversationId = null;
-        if (headerTitle) headerTitle.textContent = '新對話';
+        localStorage.setItem(activeConversationStorageKey(), '__new__');
+        if (headerTitle) headerTitle.textContent = '新工作';
         messagesContainer.innerHTML = '';
-        appendMessage('assistant', '你好！已為你開啟新對話。有什麼可以幫你的？');
+        const activeRoleName = typeof roleMeta === 'function' ? roleMeta()?.name : '';
+        appendMessage('assistant', activeRoleName
+          ? `🧠 ${activeRoleName} 的這段工作紀錄已刪除。可以直接開始新的工作 Context。`
+          : '這段工作紀錄已刪除。可以直接開始新的工作 Context。');
       }
       setTimeout(() => {
-        if (wrapperElement && wrapperElement.parentNode) {
-          wrapperElement.remove();
-        }
-        if (convList && convList.children.length === 0) {
-          convList.innerHTML = '<div class="p-4 text-center text-xs text-slate-500">尚無歷史對話</div>';
-        }
+        if (wrapperElement && wrapperElement.parentNode) wrapperElement.remove();
+        loadConversations({ force: true }).catch(() => {});
       }, 380);
     }
   } catch (err) {
