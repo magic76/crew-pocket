@@ -46,7 +46,7 @@ async function run() {
     const stored = JSON.parse(await fs.readFile(path.join(tempDir, 'crew-messages.json'), 'utf8'));
     assert.deepEqual(
       Object.keys(stored.messages[0]).sort(),
-      ['content', 'createdAt', 'deliveredAt', 'fromRoleId', 'id', 'replyToId', 'toRoleId'].sort()
+      ['content', 'createdAt', 'deliveredAt', 'fromRoleId', 'fromRoleNameSnapshot', 'id', 'replyToId', 'toRoleId', 'toRoleNameSnapshot'].sort()
     );
     for (const forbidden of ['context', 'memory', 'conversation', 'project', 'workspace']) {
       assert.equal(Object.prototype.hasOwnProperty.call(stored.messages[0], forbidden), false);

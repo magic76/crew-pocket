@@ -30,8 +30,15 @@ for (const action of ['new-work', 'history', 'memory', 'settings']) {
   assert.ok(ui.includes(`data-role-action="${action}"`), action);
 }
 assert.ok(html.includes('id="role-editor-modal"'));
+assert.ok(html.includes('id="role-danger-zone"'));
+assert.ok(html.includes('id="delete-role-btn"'));
+assert.ok(html.includes('id="role-delete-modal"'));
+assert.ok(html.includes('id="confirm-role-delete-btn"'));
 assert.ok(html.includes('id="role-memory-modal"'));
 assert.ok(ui.includes("fetch('/api/roles'"));
+assert.ok(ui.includes("method: 'DELETE'"));
+assert.ok(ui.includes("currentRoleId = DEFAULT_ROLE_ID"));
+assert.ok(ui.includes("await selectRole(DEFAULT_ROLE_ID, true)"));
 assert.ok(ui.includes('/api/memories?roleId='));
 assert.ok(ui.includes("label: 'WORKING'"));
 assert.ok(ui.includes("label: 'WAITING'"));
