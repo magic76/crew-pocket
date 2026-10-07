@@ -1044,17 +1044,17 @@ async function deleteConversationDirect(convId, wrapperElement, conversationProv
     if (data.success) {
       if (currentConversationId === convId && currentProvider === conversationProvider) {
         currentConversationId = null;
-        if (headerTitle) headerTitle.textContent = '新對話';
+        localStorage.setItem(activeConversationStorageKey(), '__new__');
+        if (headerTitle) headerTitle.textContent = '新工作';
         messagesContainer.innerHTML = '';
-        appendMessage('assistant', '你好！已為你開啟新對話。有什麼可以幫你的？');
+        const activeRoleName = typeof roleMeta === 'function' ? roleMeta()?.name : '';
+        appendMessage('assistant', activeRoleName
+          ? `🧠 ${activeRoleName} 的這段工作紀錄已刪除。可以直接開始新的工作 Context。`
+          : '這段工作紀錄已刪除。可以直接開始新的工作 Context。');
       }
       setTimeout(() => {
-        if (wrapperElement && wrapperElement.parentNode) {
-          wrapperElement.remove();
-        }
-        if (convList && convList.children.length === 0) {
-          convList.innerHTML = '<div class="p-4 text-center text-xs text-slate-500">尚無歷史對話</div>';
-        }
+        if (wrapperElement && wrapperElement.parentNode) wrapperElement.remove();
+        loadConversations({ force: true }).catch(() => {});
       }, 380);
     }
   } catch (err) {
@@ -1461,10 +1461,11 @@ async function loadConversations({ force = false } = {}) {
       }));
       cachedConversations = results.flat().sort(compareConversationsStable);
       renderConversationItems(cachedConversations);
+      window.renderRoleNavigation?.();
       return cachedConversations;
     } catch (err) {
       console.error('Failed to load conversations:', err);
-      if (convList) convList.innerHTML = '<div class="p-4 text-center text-xs text-rose-400">無法載入歷史紀錄</div>';
+      if (convList) convList.innerHTML = '<div class="p-4 text-center text-xs text-rose-400">無法載入工作紀錄</div>';
       return cachedConversations;
     } finally {
       conversationListRequest = null;
@@ -1475,14 +1476,29 @@ async function loadConversations({ force = false } = {}) {
 
 let cachedConversations = [];
 const UNASSIGNED_WORKSPACE = '__crew-pocket-unassigned-workspace__';
-const ALL_WORKSPACES = '__crew-pocket-all-workspaces__';
-const conversationWorkspaceList = document.getElementById('conversation-workspace-list');
-let selectedConversationWorkspace = ALL_WORKSPACES;
 
 function compareConversationsStable(a, b) {
-  return (a.title || '').localeCompare(b.title || '', 'zh-TW')
+  const updatedDiff = Number(b.updatedAt || 0) - Number(a.updatedAt || 0);
+  return updatedDiff
+    || (a.title || '').localeCompare(b.title || '', 'zh-TW')
     || String(a.id || '').localeCompare(String(b.id || ''));
 }
+
+function getRoleConversations(roleId, conversations = cachedConversations) {
+  const targetRoleId = String(roleId || DEFAULT_ROLE_ID);
+  return (conversations || [])
+    .filter(conversation => String(conversation.roleId || DEFAULT_ROLE_ID) === targetRoleId)
+    .slice()
+    .sort(compareConversationsStable);
+}
+
+window.getLatestConversationForRole = function(roleId) {
+  return getRoleConversations(roleId)[0] || null;
+};
+
+window.getCachedConversations = function() {
+  return cachedConversations.slice();
+};
 
 function conversationWorkspaceLabel(workspace) {
   if (!workspace || workspace === UNASSIGNED_WORKSPACE) return '未指定';
@@ -1490,40 +1506,17 @@ function conversationWorkspaceLabel(workspace) {
   return String(workspace).split('/').filter(Boolean).pop() || '未指定';
 }
 
-function renderConversationWorkspaceTabs(workspaceGroups) {
-  if (!conversationWorkspaceList) return;
-  const available = new Set(workspaceGroups.map(group => group.workspace));
-  if (selectedConversationWorkspace !== ALL_WORKSPACES && !available.has(selectedConversationWorkspace)) {
-    selectedConversationWorkspace = ALL_WORKSPACES;
-  }
-
-  const options = [{ workspace: ALL_WORKSPACES, label: '全部' }, ...workspaceGroups.map(group => ({
-    workspace: group.workspace,
-    label: conversationWorkspaceLabel(group.workspace)
-  }))];
-  conversationWorkspaceList.innerHTML = options.map(option => {
-    const selected = option.workspace === selectedConversationWorkspace;
-    const icon = option.workspace === ALL_WORKSPACES ? '▦' : (option.workspace === UNASSIGNED_WORKSPACE ? '⚪' : '📁');
-    return `<button type="button" data-conversation-workspace="${escapeHtml(option.workspace)}" class="min-h-10 shrink-0 rounded-lg border px-2.5 text-[10px] font-semibold active:scale-95 ${selected ? 'border-indigo-500/70 bg-indigo-950 text-indigo-200' : 'border-slate-700 bg-slate-900 text-slate-400'}"><span class="mr-1">${icon}</span>${escapeHtml(option.label)}</button>`;
-  }).join('');
-
-  conversationWorkspaceList.querySelectorAll('[data-conversation-workspace]').forEach(button => {
-    button.addEventListener('click', () => {
-      selectedConversationWorkspace = button.dataset.conversationWorkspace || ALL_WORKSPACES;
-      renderConversationItems(cachedConversations);
-    });
-  });
-}
-
 function renderConversationItems(conversations) {
   if (!convList) return;
   convList.innerHTML = '';
 
-  const filtered = (conversations || []).slice().sort(compareConversationsStable);
+  const activeRoleId = typeof window.getCurrentRoleId === 'function'
+    ? window.getCurrentRoleId()
+    : DEFAULT_ROLE_ID;
+  const filtered = getRoleConversations(activeRoleId, conversations);
 
   if (filtered.length === 0) {
-    renderConversationWorkspaceTabs([]);
-    convList.innerHTML = '<div class="p-4 text-center text-xs text-slate-500">尚無歷史對話</div>';
+    convList.innerHTML = '<div class="p-6 text-center text-xs text-slate-500">這個 Role 還沒有工作紀錄</div>';
     return;
   }
 
@@ -1549,13 +1542,10 @@ function renderConversationItems(conversations) {
         || String(a.workspace || '').localeCompare(String(b.workspace || ''));
     });
 
-  renderConversationWorkspaceTabs(workspaceGroups);
-  const visibleWorkspaceGroups = selectedConversationWorkspace === ALL_WORKSPACES
-    ? workspaceGroups
-    : workspaceGroups.filter(group => group.workspace === selectedConversationWorkspace);
+  const visibleWorkspaceGroups = workspaceGroups;
 
   if (visibleWorkspaceGroups.length === 0) {
-    convList.innerHTML = '<div class="p-4 text-center text-xs text-slate-500">此資料夾沒有歷史對話</div>';
+    convList.innerHTML = '<div class="p-4 text-center text-xs text-slate-500">這個 Role 還沒有工作紀錄</div>';
     return;
   }
 
