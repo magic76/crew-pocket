@@ -84,6 +84,7 @@ const { getProviderRuntimeStatus, updateProvider } = require('./lib/runtime/prov
 const { prepareTurnExecution } = require('./lib/runtime/turn-orchestrator');
 const { normalizeExecutionIntent } = require('./lib/execution-intent');
 const { getDefaultModel } = require('./lib/model-runtime');
+const { buildTurnResult } = require('./lib/turn-result');
 
 
 async function handleStorageReport(res) {
@@ -2126,10 +2127,20 @@ async function handleChat(req, res) {
       if (ended) return;
       ended = true;
       markOnce('to_done_ms');
+      const toolMetrics = getToolMetrics();
+      const turnResult = buildTurnResult({
+        requestId,
+        executionPolicy,
+        toolMetrics,
+        elapsedMs: elapsed(),
+        error: payload?.error,
+        status: payload?.status
+      });
       const finalPayload = {
         ...(payload || {}),
         request_id: requestId,
-        tool_metrics: getToolMetrics(),
+        tool_metrics: toolMetrics,
+        turn_result: turnResult || undefined,
         execution_policy: executionPolicy || undefined,
         execution_intent: approvedExecutionIntent || undefined,
         intent_review: intentReview || undefined,
