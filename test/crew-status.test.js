@@ -98,6 +98,27 @@ async function run() {
   assert.equal(c.state, 'new');
   assert.equal(c.runtime, null);
 
+  const pendingNew = await buildCrewStatus({
+    listRoles: async () => [{ id: 'role-n', name: 'Role N' }],
+    listRoleRuntimes: async () => [{
+      roleId: 'role-n',
+      providerId: 'codex',
+      conversationId: null,
+      pendingNew: true,
+      model: 'gpt-next',
+      effort: 'medium',
+      updatedAt: 25
+    }],
+    getConversationSettings: async () => null,
+    getCrewInbox: async () => [],
+    getCrewMessageActivity: async () => [],
+    getProvider: () => ({ getStatus: () => ({ isBusy: false }) }),
+    listTasks: async () => []
+  });
+  assert.equal(pendingNew.roles[0].state, 'new');
+  assert.equal(pendingNew.roles[0].runtime.pendingNew, true);
+  assert.equal(pendingNew.roles[0].runtime.conversationId, null);
+
   // A queued request without an active busy turn is visualized as waiting.
   const waiting = await buildCrewStatus({
     listRoles: async () => [{ id: 'role-w', name: 'Role W' }],
