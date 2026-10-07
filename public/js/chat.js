@@ -488,7 +488,7 @@ function isExecutionHistoryTools(tools = []) {
   if (grouped.length >= 2) return true;
   return grouped.some(tool => {
     const name = String(tool?.name || tool?.tool_name || '').toLowerCase();
-    return /run_command|commandexecution|exec_command|shell_command|shellcommand|replace_file_content|filechange|apply_patch|applypatch|edit_file|editfile|write_to_file|writefile|create_file|createfile|read_file|readfile|view_file|code_search|codesearch|grep_search/.test(name);
+    return /run_command|commandexecution|exec_command|shell_command|shellcommand|replace_file_content|filechange|apply_patch|applypatch|edit_file|editfile|write_to_file|writefile|create_file|createfile/.test(name);
   });
 }
 
