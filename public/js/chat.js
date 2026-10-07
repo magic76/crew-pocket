@@ -464,6 +464,244 @@ function buildExecutionDetailsHtml(tools, thinking = '', { lazy = false } = {}) 
   `;
 }
 
+function formatExecutionDuration(durationMs) {
+  const ms = Number(durationMs);
+  if (!Number.isFinite(ms) || ms < 0) return '';
+  const totalSeconds = Math.max(0, Math.round(ms / 1000));
+  if (totalSeconds < 60) return `${totalSeconds}s`;
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return seconds ? `${minutes}m ${seconds}s` : `${minutes}m`;
+}
+
+function executionFileName(filePath) {
+  const value = String(filePath || '').replace(/\\/g, '/');
+  return value.split('/').filter(Boolean).pop() || value;
+}
+
+function isStructuredExecutionResult(turnResult) {
+  return Boolean(turnResult && turnResult.kind === 'execution');
+}
+
+function isExecutionHistoryTools(tools = []) {
+  const grouped = coalesceToolEvents(tools);
+  if (grouped.length >= 2) return true;
+  return grouped.some(tool => {
+    const name = String(tool?.name || tool?.tool_name || '').toLowerCase();
+    return /run_command|commandexecution|exec_command|shell_command|shellcommand|replace_file_content|filechange|apply_patch|applypatch|edit_file|editfile|write_to_file|writefile|create_file|createfile|read_file|readfile|view_file|code_search|codesearch|grep_search/.test(name);
+  });
+}
+
+function executionModeLabel(mode) {
+  const labels = {
+    INSPECT: '檢查',
+    SURGICAL_EDIT: '修改',
+    DEBUG: '除錯',
+    BUILD: '建置'
+  };
+  return labels[String(mode || '').toUpperCase()] || '執行';
+}
+
+function buildExecutionResultHeadline(turnResult = null, tools = []) {
+  const failed = turnResult?.status === 'failed';
+  if (failed) return '執行未完成';
+
+  const changedFiles = Array.isArray(turnResult?.changed_files) ? turnResult.changed_files.filter(Boolean) : [];
+  if (changedFiles.length === 1) return `完成修改 · ${executionFileName(changedFiles[0])}`;
+  if (changedFiles.length > 1) return `完成修改 · ${changedFiles.length} files`;
+
+  const mode = turnResult?.execution_mode;
+  if (mode) return `完成${executionModeLabel(mode)}`;
+
+  const grouped = coalesceToolEvents(tools);
+  return grouped.length > 0 ? '完成執行' : '完成';
+}
+
+function buildExecutionResultBodyHtml(content, tools = [], thinking = '', turnResult = null) {
+  const changedFiles = Array.isArray(turnResult?.changed_files) ? turnResult.changed_files.filter(Boolean) : [];
+  const checks = Array.isArray(turnResult?.checks) ? turnResult.checks.filter(Boolean) : [];
+  const structuredCommit = turnResult?.commit && typeof turnResult.commit === 'object'
+    ? (turnResult.commit.short_hash || turnResult.commit.hash || '')
+    : '';
+  const groupedTools = coalesceToolEvents(tools);
+  const summaryBits = [];
+  if (turnResult?.execution_mode) summaryBits.push(executionModeLabel(turnResult.execution_mode));
+  if (Number(turnResult?.executions) > 0) summaryBits.push(`${Number(turnResult.executions)} 次操作`);
+  if (Number(turnResult?.polls) > 0) summaryBits.push(`${Number(turnResult.polls)} 次等待`);
+
+  const changedFilesHtml = changedFiles.length ? `
+    <section class="execution-result-section">
+      <div class="execution-result-section-title">修改檔案</div>
+      <div class="execution-result-file-list">
+        ${changedFiles.map(file => `<div class="execution-result-file"><span>↳</span><span class="truncate">${escapeHtml(file)}</span></div>`).join('')}
+      </div>
+    </section>
+  ` : '';
+
+  const checksHtml = checks.length ? `
+    <section class="execution-result-section">
+      <div class="execution-result-section-title">Tests / Build</div>
+      <div class="execution-result-check-list">
+        ${checks.map(check => {
+          const state = String(check.status || check.state || '').toLowerCase();
+          const icon = ['passed', 'success', 'succeeded', 'completed'].includes(state) ? '✓' : ['failed', 'error'].includes(state) ? '!' : '•';
+          const label = check.label || check.name || check.type || 'Check';
+          return `<div class="execution-result-check"><span>${escapeHtml(icon)}</span><span class="truncate">${escapeHtml(label)}</span></div>`;
+        }).join('')}
+      </div>
+    </section>
+  ` : '';
+
+  const executionHtml = groupedTools.length ? `
+    <section class="execution-result-section">
+      <div class="execution-result-section-title">Execution</div>
+      <div class="execution-detail-body execution-result-steps">${buildExecutionStepRowsHtml(groupedTools, Boolean(String(thinking || '').trim()))}</div>
+    </section>
+  ` : '';
+
+  const responseHtml = !content || !String(content).trim()
+    ? buildEmptyTurnFallbackHtml()
+    : formatMessageContent(content);
+
+  return `
+    <div class="execution-result-overview">
+      <span>${turnResult?.status === 'failed' ? '未完成' : '已完成'}</span>
+      ${summaryBits.length ? `<span>· ${escapeHtml(summaryBits.join(' · '))}</span>` : ''}
+      ${structuredCommit ? `<span class="font-mono">· ${escapeHtml(String(structuredCommit).slice(0, 12))}</span>` : ''}
+    </div>
+    ${changedFilesHtml}
+    ${checksHtml}
+    ${executionHtml}
+    <section class="execution-result-section execution-result-response">
+      <div class="execution-result-section-title">完整回覆</div>
+      <div class="msg-content min-w-0">${responseHtml}</div>
+    </section>
+  `;
+}
+
+function buildExecutionResultCardHtml(content, tools = [], thinking = '', turnResult = null, { lazy = false } = {}) {
+  const failed = turnResult?.status === 'failed';
+  const duration = formatExecutionDuration(turnResult?.duration_ms);
+  const structuredCommit = turnResult?.commit && typeof turnResult.commit === 'object'
+    ? (turnResult.commit.short_hash || turnResult.commit.hash || '')
+    : '';
+  const meta = [];
+  if (structuredCommit) meta.push(String(structuredCommit).slice(0, 8));
+  if (duration) meta.push(duration);
+  const bodyHtml = lazy ? '' : buildExecutionResultBodyHtml(content, tools, thinking, turnResult);
+
+  return `
+    <details class="execution-result-card ${lazy ? 'lazy-result-card' : ''}" data-result-kind="execution">
+      <summary class="execution-result-summary">
+        <span class="execution-result-summary-main">
+          <span class="execution-result-status ${failed ? 'is-failed' : 'is-complete'}">${failed ? '!' : '✓'}</span>
+          <span class="execution-result-title truncate">${escapeHtml(buildExecutionResultHeadline(turnResult, tools))}</span>
+        </span>
+        <span class="execution-result-summary-side">
+          ${meta.length ? `<span class="execution-result-meta">${escapeHtml(meta.join(' · '))}</span>` : ''}
+          <span class="execution-result-chevron">›</span>
+        </span>
+      </summary>
+      <div class="execution-result-body">${bodyHtml}</div>
+    </details>
+  `;
+}
+
+let activeExecutionStickyController = null;
+
+function createExecutionStickyController(anchor, isActive = () => true) {
+  if (!anchor || !messagesContainer?.parentElement) return null;
+  if (activeExecutionStickyController?.dispose) activeExecutionStickyController.dispose();
+
+  const host = messagesContainer.parentElement;
+  const capsule = document.createElement('button');
+  capsule.type = 'button';
+  capsule.className = 'sticky-execution-capsule hidden';
+  capsule.setAttribute('aria-label', '回到目前執行進度');
+  host.appendChild(capsule);
+
+  let enabled = false;
+  let anchorVisible = true;
+  let disposed = false;
+  let lastLabel = '執行中';
+  let lastElapsedMs = 0;
+  let completionTimer = null;
+
+  const roleName = () => compactProgressText(document.getElementById('workspace-label')?.textContent || 'Crew', 24);
+
+  const render = (prefix = '●') => {
+    if (disposed) return;
+    const duration = formatExecutionDuration(lastElapsedMs);
+    capsule.textContent = `${prefix} ${roleName()} · ${compactProgressText(lastLabel, 44)}${duration ? ` · ${duration}` : ''}`;
+  };
+
+  const syncVisibility = () => {
+    if (disposed) return;
+    const visible = enabled && anchor.isConnected && isActive() && !anchorVisible;
+    capsule.classList.toggle('hidden', !visible);
+    if (visible) render();
+  };
+
+  const observer = typeof IntersectionObserver === 'function'
+    ? new IntersectionObserver(entries => {
+        const entry = entries.find(item => item.target === anchor);
+        if (!entry) return;
+        anchorVisible = Boolean(entry.isIntersecting && entry.intersectionRatio > 0);
+        syncVisibility();
+      }, { root: messagesContainer, threshold: [0, 0.12] })
+    : null;
+
+  if (observer) observer.observe(anchor);
+
+  capsule.addEventListener('click', () => {
+    if (!anchor.isConnected) return;
+    anchor.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  });
+
+  const controller = {
+    enable(label = '執行中') {
+      if (disposed) return;
+      enabled = true;
+      lastLabel = label || lastLabel;
+      render();
+      syncVisibility();
+    },
+    update(label, elapsedMs) {
+      if (disposed) return;
+      if (label) lastLabel = label;
+      if (Number.isFinite(Number(elapsedMs))) lastElapsedMs = Number(elapsedMs);
+      if (!capsule.classList.contains('hidden')) render();
+    },
+    complete(durationMs, failed = false) {
+      if (disposed) return;
+      enabled = false;
+      if (Number.isFinite(Number(durationMs))) lastElapsedMs = Number(durationMs);
+      observer?.disconnect();
+      if (!anchorVisible && anchor.isConnected && isActive()) {
+        lastLabel = failed ? '未完成' : '完成';
+        capsule.classList.toggle('is-failed', failed);
+        capsule.classList.add('is-complete');
+        capsule.classList.remove('hidden');
+        render(failed ? '!' : '✓');
+        completionTimer = window.setTimeout(() => controller.dispose(), 1900);
+      } else {
+        controller.dispose();
+      }
+    },
+    dispose() {
+      if (disposed) return;
+      disposed = true;
+      observer?.disconnect();
+      if (completionTimer) window.clearTimeout(completionTimer);
+      capsule.remove();
+      if (activeExecutionStickyController === controller) activeExecutionStickyController = null;
+    }
+  };
+
+  activeExecutionStickyController = controller;
+  return controller;
+}
+
 // Render tools accordion HTML with rich cards
 function buildToolsAccordionHtml(tools) {
   const groupedTools = coalesceToolEvents(tools);
@@ -1206,7 +1444,12 @@ function appendMessage(role, content, timestamp, tools = [], thinking = '', isBt
 
   const isUserBtw = isUser && (isBtw || /^\s*\/btw\b/i.test(content || ''));
 
-  const executionHtml = !isUser
+  const turnResult = renderOptions.turnResult || null;
+  const shouldCollapseExecution = !isUser && !isBtw && (
+    isStructuredExecutionResult(turnResult) ||
+    (renderOptions.historyExecutionFallback && isExecutionHistoryTools(tools))
+  );
+  const executionHtml = !isUser && !shouldCollapseExecution
     ? buildExecutionDetailsHtml(tools, thinking, { lazy: Boolean(renderOptions.lazyTools) })
     : '';
 
@@ -1265,6 +1508,10 @@ function appendMessage(role, content, timestamp, tools = [], thinking = '', isBt
       <div class="whitespace-pre-wrap leading-relaxed break-words">${escapeHtml(userText)}</div>
       ${userMeta}
     `;
+  } else if (shouldCollapseExecution) {
+    bodyHtml = buildExecutionResultCardHtml(content, tools, thinking, turnResult, {
+      lazy: Boolean(renderOptions.lazyTools)
+    });
   } else {
     const isBlankContent = !content || !String(content).trim();
     const formattedHtml = isBlankContent
@@ -1279,6 +1526,20 @@ function appendMessage(role, content, timestamp, tools = [], thinking = '', isBt
 
   msgDiv.innerHTML = `<div class="${bubbleClass}">${bodyHtml}</div>`;
   targetContainer.appendChild(msgDiv);
+
+  if (shouldCollapseExecution && renderOptions.lazyTools) {
+    const lazyResult = msgDiv.querySelector('.lazy-result-card');
+    if (lazyResult) {
+      lazyResult.addEventListener('toggle', () => {
+        if (!lazyResult.open || lazyResult.dataset.rendered) return;
+        const body = lazyResult.querySelector('.execution-result-body');
+        if (body) body.innerHTML = buildExecutionResultBodyHtml(content, tools, thinking, turnResult);
+        lazyResult.dataset.rendered = 'true';
+        prepareDeferredImages(lazyResult);
+        if (typeof enhanceCodeBlocks === 'function') enhanceCodeBlocks(lazyResult);
+      });
+    }
+  }
 
   if (renderOptions.lazyTools && !isUser && (tools?.length || String(thinking || '').trim())) {
     const lazyExecution = msgDiv.querySelector('.lazy-execution');
@@ -1590,6 +1851,8 @@ function renderHistoryMessages(messages, convId, renderVersion, options = {}) {
         const isBtw = message.role === 'assistant' && absoluteIndex > 0 && /^\s*\/btw\b/i.test(messages[absoluteIndex - 1].content || '');
         appendMessage(message.role, message.content, message.timestamp, message.tools || [], message.thinking || '', isBtw, {
           lazyTools: message.role === 'assistant',
+          historyExecutionFallback: message.role === 'assistant',
+          turnResult: message.turn_result || null,
           deferScroll: true,
           userTurnIndex,
           container: targetContainer
