@@ -44,6 +44,7 @@ const { listWorkspaces, resolveWorkspace, createWorkspace } = require('./lib/wor
 const { listCrewMembers, getCrewMember, saveCrewMember, buildCrewMemberGuide } = require('./lib/crew-members');
 const { DEFAULT_ROLE_ID, roleIdForProject, listRoles, getRole, saveRole } = require('./lib/roles');
 const { listCrewRoles, sendCrewMessage, getCrewInbox, markCrewMessagesDelivered } = require('./lib/crew-messages');
+const { createCrewAutoResponder } = require('./lib/crew-auto-response');
 const { getProject } = require('./lib/projects');
 const { defaultMemoryProvider } = require('./lib/memory');
 const {
@@ -1513,8 +1514,9 @@ async function handleCrewTool(req, res) {
         content: body.message || body.content,
         replyToId: body.reply_to_id || body.replyToId || null
       });
+      const autoResponse = await crewAutoResponder.schedule(message);
       res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-      return res.end(JSON.stringify({ success: true, message }));
+      return res.end(JSON.stringify({ success: true, message, auto_response: autoResponse }));
     }
 
     throw new Error('Crew tool action must be list_roles or send_message');
@@ -1522,11 +1524,6 @@ async function handleCrewTool(req, res) {
     res.writeHead(400, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ success: false, error: error.message }));
   }
-}
-
-function shouldExposeCrewTool(prompt) {
-  const text = String(prompt || '');
-  return /(crew|role|角色|傳話|传话|傳訊息|传讯息|send\s+message|message\s+to|通知.{0,20}(角色|crew)|問.{0,24}(角色|crew)|问.{0,24}(角色|crew)|(角色|crew).{0,24}(問|问|傳|传|通知|message))/i.test(text);
 }
 
 function buildCrewToolGuide(role) {
@@ -1550,6 +1547,19 @@ function formatCrewInbox(messages = []) {
     ...messages.map(message => '- [' + message.id + '] From ' + message.fromRoleName + ' (' + message.fromRoleId + '): ' + message.content)
   ].join('\n');
 }
+
+const crewAutoResponder = createCrewAutoResponder({
+  listProviders,
+  getProvider,
+  getProviderConversationSettings,
+  getDefaultModel,
+  getRole,
+  buildAgentContext,
+  formatAgentContext,
+  sendCrewMessage,
+  markCrewMessagesDelivered,
+  runtimeHome: RUNTIME_HOME
+});
 
 // 🏷️ Crew Pocket capability guidance
 // Keep the base prompt small. Detailed delivery constraints are only attached
@@ -1881,8 +1891,9 @@ async function handleChat(req, res) {
     }
   }
 
-  const exposeCrewTool = shouldExposeCrewTool(finalPrompt) || pendingCrewMessages.length > 0;
-  const crewToolGuide = exposeCrewTool ? buildCrewToolGuide(role) : '';
+  // Every Role can discover the Crew tool. The guide is intentionally tiny:
+  // discovery + plain-text messaging only, never implicit context transfer.
+  const crewToolGuide = buildCrewToolGuide(role);
   const crewInboxText = formatCrewInbox(pendingCrewMessages);
   const crewMetadata = [crewToolGuide, crewInboxText].filter(Boolean).join('\n\n');
   if (crewMetadata) {

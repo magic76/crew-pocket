@@ -79,6 +79,9 @@ async function main() {
     });
     const sent = data.message;
     process.stdout.write('sent\t' + sent.id + '\t' + sent.toRoleId + '\t' + (sent.toRoleName || sent.toRoleId) + '\n');
+    if (data.auto_response) {
+      process.stdout.write('auto_response\t' + data.auto_response.status + (data.auto_response.reason ? '\t' + data.auto_response.reason : '') + '\n');
+    }
     return;
   }
 

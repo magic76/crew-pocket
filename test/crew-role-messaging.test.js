@@ -84,11 +84,15 @@ async function run() {
     assert.ok(server.includes("pathname === '/api/crew-tool'"));
     assert.ok(server.includes("action === 'list_roles'"));
     assert.ok(server.includes("action === 'send_message'"));
+    assert.ok(server.includes('crewAutoResponder.schedule(message)'));
+    assert.ok(server.includes('const crewToolGuide = buildCrewToolGuide(role)'));
+    assert.equal(server.includes('shouldExposeCrewTool'), false);
     assert.ok(server.includes('getCrewInbox(role.id'));
     assert.ok(server.includes('markCrewMessagesDelivered(role.id'));
     assert.ok(server.includes('No sender Context, Memory, Conversation or Project data was shared.'));
     assert.ok(tool.includes('crew-tool roles'));
     assert.ok(tool.includes('crew-tool send <from-role-id> <to-role-id> <message...>'));
+    assert.ok(tool.includes("auto_response\\t"));
 
     console.log('crew-role-messaging tests: ok');
   } finally {
