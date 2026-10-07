@@ -71,6 +71,12 @@ async function run() {
     assert.equal(helperActivity[1].direction, 'outgoing');
     assert.equal(helperActivity[1].toRoleName, 'General Developer');
 
+    const crewActivity = await store.recentAll({ limit: 2 });
+    assert.equal(crewActivity.length, 2);
+    assert.equal(crewActivity[0].id, reply.id);
+    assert.equal(crewActivity[0].fromRoleName, 'General Developer');
+    assert.equal(crewActivity[0].toRoleName, 'Crew Helper Developer');
+
     await assert.rejects(
       () => store.send({ fromRoleId: 'role-helper', toRoleId: 'role-helper', content: 'self' }),
       /another Role/
