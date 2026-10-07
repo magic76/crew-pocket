@@ -39,7 +39,6 @@ const { handleListPublicAssets } = require('./lib/public-assets');
 const { createExtensionBridge } = require('./lib/extension_bridge');
 const { getStorageReport, deleteMediaItems, getMediaThumbnail } = require('./lib/storage');
 const { getConversationSettings, getProviderConversationSettings, saveConversationSettings, saveConversationTitle, deleteConversationSettings } = require('./lib/conversation-settings');
-const { createTask, getTask, listTasks, updateTask } = require('./lib/tasks');
 const { listWorkspaces, resolveWorkspace, createWorkspace } = require('./lib/workspaces');
 const { listCrewMembers, getCrewMember, saveCrewMember, buildCrewMemberGuide } = require('./lib/crew-members');
 const { DEFAULT_ROLE_ID, roleIdForProject, listRoles, getRole, saveRole } = require('./lib/roles');
@@ -553,299 +552,6 @@ function handleSessionStatus(parsedUrl, res) {
   res.end(JSON.stringify({ ...status, provider: providerId }));
 }
 
-const LIVE_DELEGATE_TIMEOUT_MS = 60000;
-const LIVE_DELEGATE_JOB_TTL_MS = 5 * 60 * 1000;
-const liveDelegateJobs = new Map();
-
-function liveDelegateError(message, statusCode = 500) {
-  const error = new Error(message);
-  error.statusCode = statusCode;
-  return error;
-}
-
-async function runLiveDelegatedTurn({ providerId, conversationId, model, effort, workspace, task, onAbortReady }) {
-  const provider = getProvider(providerId);
-  const status = provider.getStatus(conversationId);
-  if (status && status.isBusy) {
-    throw liveDelegateError('主對話正在處理另一個任務，請稍候再交辦。', 409);
-  }
-
-  const delegationPrompt = `[🎙️ Live 已確認委派]\n${task}\n\n【回覆規則】這是使用者透過 Live 語音確認後交辦給你的任務。請自行使用你原有且必要的工具完成它；不要把任務委派回 Live，不要要求 Live 執行工具。完成後只回傳可直接口語報告的精簡結論，以及必要的關鍵證據或下一步。`;
-
-  return new Promise((resolve, reject) => {
-    let settled = false;
-    let abortTurn = () => {};
-    let streamedResponse = '';
-    const finish = (callback, value) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timeout);
-      callback(value);
-    };
-    const timeout = setTimeout(() => {
-      try { abortTurn(); } catch (_) {}
-      finish(reject, liveDelegateError('主對話逾時未完成，任務已停止。', 504));
-    }, LIVE_DELEGATE_TIMEOUT_MS);
-
-    Promise.resolve(provider.startTurn({
-      conversationId,
-      model,
-      effort: effort || 'low',
-      workspace,
-      prompt: delegationPrompt,
-      onAbort(handler) {
-        abortTurn = typeof handler === 'function' ? handler : abortTurn;
-        if (typeof onAbortReady === 'function') onAbortReady(abortTurn);
-      },
-      onEvent(event) {
-        if (settled || !event) return;
-        if (event.type === 'text_delta') {
-          streamedResponse = event.accumulated || `${streamedResponse}${event.delta || ''}`;
-        } else if (event.type === 'error') {
-          finish(reject, liveDelegateError(event.message || '主對話執行失敗。', 502));
-        } else if (event.type === 'turn_completed') {
-          finish(resolve, {
-            conversationId: event.conversationId || conversationId,
-            response: String(event.response || streamedResponse || '').trim(),
-            status: event.status || 'completed'
-          });
-        }
-      }
-    })).catch(error => finish(reject, error));
-  });
-}
-
-async function launchLiveDelegateJob(taskRecord) {
-  const existingJob = liveDelegateJobs.get(taskRecord.id);
-  if (existingJob && existingJob.status === 'running') return existingJob;
-  const providerId = normalizeProviderId(taskRecord.provider);
-  const status = getProvider(providerId).getStatus(taskRecord.conversationId);
-  if (status && status.isBusy) throw liveDelegateError('主對話正在處理另一個任務，請稍候再交辦。', 409);
-
-  const job = {
-    id: taskRecord.id,
-    status: 'running',
-    provider: providerId,
-    conversationId: taskRecord.conversationId,
-    createdAt: Date.now(),
-    abort: null
-  };
-  liveDelegateJobs.set(job.id, job);
-  await updateTask(job.id, { status: 'running', error: '', result: '' }, { type: 'running', message: '主對話正在背景處理。' });
-  runLiveDelegatedTurn({
-    providerId,
-    conversationId: taskRecord.conversationId,
-    model: taskRecord.model,
-    effort: taskRecord.effort,
-    workspace: taskRecord.workspace,
-    task: taskRecord.task,
-    onAbortReady(abort) {
-      job.abort = abort;
-      if (job.cancelled) abort();
-    }
-  }).then(async result => {
-    const latest = await getTask(job.id);
-    if (latest?.status === 'cancelled') return;
-    job.status = 'completed';
-    job.conversationId = result.conversationId;
-    job.reply = result.response.slice(0, 7000);
-    await updateTask(job.id, {
-      status: 'completed',
-      conversationId: result.conversationId,
-      result: job.reply,
-      error: ''
-    }, { type: 'completed', message: '主對話已完成任務。' });
-  }).catch(async error => {
-    const latest = await getTask(job.id);
-    if (latest?.status === 'cancelled') return;
-    job.status = 'failed';
-    job.error = error.message || '主對話委派失敗';
-    await updateTask(job.id, { status: 'failed', error: job.error }, { type: 'failed', message: job.error });
-  }).finally(() => setTimeout(() => liveDelegateJobs.delete(job.id), LIVE_DELEGATE_JOB_TTL_MS));
-  return job;
-}
-
-async function resolveTaskConversationTitle(providerId, conversationId, providedTitle = '') {
-  const explicit = String(providedTitle || '').trim().slice(0, 160);
-  if (explicit) return explicit;
-
-  try {
-    const settings = await getConversationSettings(providerId, conversationId);
-    if (settings?.title) return String(settings.title).trim().slice(0, 160);
-  } catch (_) {}
-
-  try {
-    const provider = getProvider(providerId);
-    if (provider.metadata.capabilities.history && typeof provider.listConversations === 'function') {
-      const conversations = await provider.listConversations();
-      const match = conversations.find(item => item.id === conversationId);
-      if (match?.title) return String(match.title).trim().slice(0, 160);
-    }
-  } catch (_) {}
-
-  return conversationId ? `對話 ${conversationId.slice(0, 8)}` : '未知對話';
-}
-
-async function resolveTaskCrewContext(providerId, conversationId, requestedMemberId = '') {
-  const settings = conversationId ? await getConversationSettings(providerId, conversationId).catch(() => null) : null;
-  const memberId = settings?.crewMemberId || String(requestedMemberId || '').trim();
-  const member = memberId ? await getCrewMember(memberId) : null;
-  return {
-    crewMemberId: member?.id || '',
-    projectId: member?.project?.id || '',
-    workspace: member?.workspace || settings?.workspace || ''
-  };
-}
-
-async function handleLiveDelegate(req, res) {
-  try {
-    const body = await parseJsonBody(req);
-    const providerId = normalizeProviderId(body.provider);
-    const conversationId = String(body.conversation_id || '').trim();
-    const task = String(body.task || '').trim();
-    if (!conversationId || !/^[a-zA-Z0-9_-]+$/.test(conversationId)) {
-      throw liveDelegateError('找不到目前主對話，請先在主聊天開啟或建立一個對話。', 400);
-    }
-    if (!task || task.length > 5000) {
-      throw liveDelegateError('交辦內容不可為空，且最多 5000 字。', 400);
-    }
-
-    const requestedTaskId = String(body.task_id || '').trim();
-    let taskRecord = requestedTaskId ? await getTask(requestedTaskId) : null;
-    if (requestedTaskId && !taskRecord) throw liveDelegateError('找不到待交辦任務，請重新建立。', 404);
-    if (taskRecord && taskRecord.status === 'running') throw liveDelegateError('這個任務已在背景處理。', 409);
-    if (taskRecord && taskRecord.status === 'completed') throw liveDelegateError('這個任務已完成。', 409);
-    if (taskRecord && taskRecord.status === 'cancelled') throw liveDelegateError('這個任務已取消，請重新建立。', 409);
-    const conversationTitle = await resolveTaskConversationTitle(
-      providerId,
-      conversationId,
-      body.conversation_title || taskRecord?.conversationTitle
-    );
-    const taskCrew = await resolveTaskCrewContext(providerId, conversationId, body.crew_member_id || taskRecord?.crewMemberId);
-    if (!taskRecord) {
-      taskRecord = await createTask({
-        source: 'live', ...taskCrew, provider: providerId, conversationId, conversationTitle, model: body.model,
-        effort: body.effort, task, status: 'pending_confirmation',
-        event: 'Live 已確認交辦，等待主對話接手。'
-      });
-    }
-    taskRecord = await updateTask(taskRecord.id, {
-      ...taskCrew, provider: providerId, conversationId, conversationTitle, model: body.model || taskRecord.model,
-      effort: body.effort || taskRecord.effort, status: 'pending_confirmation'
-    }) || taskRecord;
-    const job = await launchLiveDelegateJob(taskRecord);
-
-    res.writeHead(202, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({
-      success: true,
-      accepted: true,
-      job_id: job.id,
-      task_id: taskRecord.id,
-      provider: providerId,
-      conversation_id: conversationId,
-      status: 'running'
-    }));
-  } catch (err) {
-    res.writeHead(err.statusCode || 500, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ success: false, error: err.message || '主對話委派失敗' }));
-  }
-}
-
-async function handleLiveDelegateStatus(parsedUrl, res) {
-  const jobId = String(parsedUrl.query.job_id || '').trim();
-  const job = liveDelegateJobs.get(jobId);
-  const task = await getTask(jobId);
-  if (!job && !task) {
-    res.writeHead(404, { 'Content-Type': 'application/json' });
-    return res.end(JSON.stringify({ success: false, error: '委派工作不存在或已過期。' }));
-  }
-  res.writeHead(200, { 'Content-Type': 'application/json' });
-  res.end(JSON.stringify({
-    success: true,
-    job_id: job?.id || task.id,
-    status: task?.status || job.status,
-    provider: task?.provider || job.provider,
-    conversation_id: task?.conversationId || job.conversationId,
-    conversation_title: task?.conversationTitle || undefined,
-    crew_member_id: task?.crewMemberId || undefined,
-    project_id: task?.projectId || undefined,
-    workspace: task?.workspace || undefined,
-    task_id: task?.id || job.id,
-    task_title: task?.title || undefined,
-    task: task?.task || undefined,
-    reply: (task?.status || job.status) === 'completed' ? (task?.result || job.reply) : undefined,
-    error: (task?.status || job.status) === 'failed' ? (task?.error || job.error) : undefined
-  }));
-}
-
-async function handleTasks(req, res, parsedUrl) {
-  try {
-    if (req.method === 'GET') {
-      const tasks = await listTasks(parsedUrl.query.limit, {
-        crewMemberId: parsedUrl.query.crew_member_id,
-        projectId: parsedUrl.query.project_id
-      });
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      return res.end(JSON.stringify({ success: true, tasks }));
-    }
-    const body = await parseJsonBody(req);
-    const action = String(body.action || '').trim();
-    const taskId = String(body.task_id || '').trim();
-    if (action === 'create') {
-      const task = String(body.task || '').trim();
-      const conversationId = String(body.conversation_id || '').trim();
-      if (!task || !conversationId) throw liveDelegateError('任務內容與主對話不可為空。', 400);
-      const providerId = normalizeProviderId(body.provider);
-      const conversationTitle = await resolveTaskConversationTitle(providerId, conversationId, body.conversation_title);
-      const taskCrew = await resolveTaskCrewContext(providerId, conversationId, body.crew_member_id);
-      const record = await createTask({
-        source: body.source || 'main_chat', ...taskCrew, provider: providerId, conversationId, conversationTitle,
-        model: body.model, effort: body.effort, task, status: 'pending_confirmation'
-      });
-      res.writeHead(201, { 'Content-Type': 'application/json' });
-      return res.end(JSON.stringify({ success: true, task: record }));
-    }
-    const record = await getTask(taskId);
-    if (!record) throw liveDelegateError('找不到任務。', 404);
-    if (action === 'update') {
-      if (record.status !== 'pending_confirmation') {
-        throw liveDelegateError('只有等待確認中的任務可以修改。', 409);
-      }
-      const nextTask = String(body.task || '').trim();
-      if (!nextTask) throw liveDelegateError('任務內容不可為空。', 400);
-      const updated = await updateTask(
-        taskId,
-        { task: nextTask, title: String(body.title || '').trim() || nextTask.split(/\r?\n/)[0].slice(0, 160) },
-        { type: 'updated', message: 'Live 已更新待交辦內容。' }
-      );
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      return res.end(JSON.stringify({ success: true, task: updated }));
-    }
-    if (action === 'cancel') {
-      const job = liveDelegateJobs.get(taskId);
-      if (job) {
-        job.cancelled = true;
-        job.status = 'cancelled';
-      }
-      if (job?.abort) job.abort();
-      const task = await updateTask(taskId, { status: 'cancelled' }, { type: 'cancelled', message: '使用者已取消任務。' });
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      return res.end(JSON.stringify({ success: true, task }));
-    }
-    if (action === 'retry') {
-      if (!['failed', 'cancelled'].includes(record.status)) throw liveDelegateError('只有失敗或已取消的任務可以重試。', 409);
-      const prepared = await updateTask(taskId, { status: 'pending_confirmation', error: '', result: '' }, { type: 'retry', message: '正在重新交辦主對話。' });
-      const job = await launchLiveDelegateJob(prepared);
-      res.writeHead(202, { 'Content-Type': 'application/json' });
-      return res.end(JSON.stringify({ success: true, accepted: true, task_id: prepared.id, job_id: job.id }));
-    }
-    throw liveDelegateError('不支援的任務操作。', 400);
-  } catch (err) {
-    res.writeHead(err.statusCode || 500, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ success: false, error: err.message || '任務操作失敗。' }));
-  }
-}
-
 async function handleProviderConversations(parsedUrl, res) {
   const providerId = normalizeProviderId(parsedUrl.query.provider);
   try {
@@ -1307,8 +1013,7 @@ async function handleCrewStatus(res) {
       getConversationSettings,
       getCrewInbox,
       getCrewMessageActivity,
-      getProvider,
-      listTasks
+      getProvider
     });
     res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
     res.end(JSON.stringify({ success: true, ...status }));
@@ -2681,40 +2386,43 @@ function remoteAccessSnapshot(req, configuredEnabled = fs.existsSync(REMOTE_ACCE
 
 async function handleCrewHome(req, res) {
   try {
-    const [tasks, crewMembers] = await Promise.all([listTasks(200), listCrewMembers()]);
+    const status = await buildCrewStatus({
+      listRoles,
+      listRoleRuntimes,
+      getConversationSettings,
+      getCrewInbox,
+      getCrewMessageActivity,
+      getProvider
+    });
+    const roles = Array.isArray(status.roles) ? status.roles : [];
     const counts = {
-      running: tasks.filter(task => task.status === 'running').length,
-      pending: tasks.filter(task => task.status === 'pending_confirmation').length,
-      completed: tasks.filter(task => task.status === 'completed').length,
-      failed: tasks.filter(task => task.status === 'failed').length
+      working: roles.filter(role => role.state === 'working').length,
+      waiting: roles.filter(role => role.state === 'waiting').length,
+      unread: roles.reduce((sum, role) => sum + Number(role.unreadReplyCount || 0), 0)
     };
-    const recentTasks = tasks
-      .filter(task => task.status !== 'cancelled')
+    const recentRoles = roles
+      .filter(role => role.runtime || role.recentMessage || role.queuedRequestCount || role.unreadReplyCount)
+      .sort((left, right) => Number(right.lastActivityAt || 0) - Number(left.lastActivityAt || 0))
       .slice(0, 8)
-      .map(task => ({
-        id: task.id,
-        status: task.status,
-        provider: task.provider,
-        conversationId: task.conversationId,
-        conversationTitle: task.conversationTitle,
-        title: task.title,
-        updatedAt: task.updatedAt
+      .map(role => ({
+        roleId: role.roleId,
+        roleName: role.roleName,
+        state: role.state,
+        busy: role.busy,
+        providerId: role.runtime?.providerId || null,
+        conversationId: role.runtime?.conversationId || null,
+        conversationTitle: role.conversationTitle || null,
+        queuedRequestCount: Number(role.queuedRequestCount || 0),
+        unreadReplyCount: Number(role.unreadReplyCount || 0),
+        lastActivityAt: Number(role.lastActivityAt || 0),
+        recentMessage: role.recentMessage || null
       }));
 
     res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
     res.end(JSON.stringify({
       success: true,
       counts,
-      recentTasks,
-      crewMembers: crewMembers.map(member => ({
-        id: member.id,
-        name: member.name,
-        icon: member.icon,
-        role: member.role,
-        workspace: member.workspace,
-        project: member.project,
-        activeTasks: tasks.filter(task => task.crewMemberId === member.id && ['running', 'pending_confirmation'].includes(task.status)).length
-      })),
+      recentRoles,
       remote: remoteAccessSnapshot(req),
       runtime: {
         device: os.hostname(),
@@ -2727,7 +2435,6 @@ async function handleCrewHome(req, res) {
     res.end(JSON.stringify({ success: false, error: error.message || 'Crew Home unavailable' }));
   }
 }
-
 function scheduleCrewRuntimeRestart() {
   const startScript = path.join(__dirname, 'scripts', 'android-runtime-start.sh');
   try {
@@ -2920,12 +2627,6 @@ const server = http.createServer(async (req, res) => {
     return handleStorageThumbnail(parsedUrl, res);
   } else if (pathname === '/api/chat' && req.method === 'POST') {
     return handleChat(req, res);
-  } else if (pathname === '/api/live-delegate' && req.method === 'POST') {
-    return handleLiveDelegate(req, res);
-  } else if (pathname === '/api/live-delegate' && req.method === 'GET') {
-    return handleLiveDelegateStatus(parsedUrl, res);
-  } else if (pathname === '/api/tasks' && (req.method === 'GET' || req.method === 'POST')) {
-    return handleTasks(req, res, parsedUrl);
   } else if (pathname === '/api/stop' && req.method === 'POST') {
     return handleStop(req, res);
   } else if (pathname === '/api/upload' && req.method === 'POST') {

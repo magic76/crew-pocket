@@ -344,7 +344,7 @@ function initAppAndListeners() {
   };
 
   function syncPrimaryTabChrome(tab) {
-    primaryTab = ['chat', 'crew', 'tasks', 'settings'].includes(tab) ? tab : 'chat';
+    primaryTab = ['chat', 'crew', 'settings'].includes(tab) ? tab : 'chat';
     document.body.dataset.primaryTab = primaryTab;
     primaryTabButtons.forEach(button => {
       const active = button.dataset.primaryTab === primaryTab;
@@ -357,16 +357,13 @@ function initAppAndListeners() {
   }
 
   function setPrimaryTab(tab, { hapticFeedback = true } = {}) {
-    const target = ['chat', 'crew', 'tasks', 'settings'].includes(tab) ? tab : 'chat';
+    const target = ['chat', 'crew', 'settings'].includes(tab) ? tab : 'chat';
     syncPrimaryTabChrome(target);
     if (hapticFeedback && typeof window.haptic === 'function') window.haptic('light');
 
     if (target === 'crew') toggleDrawer(true);
     else if (drawer && !drawer.classList.contains('-translate-x-full')) toggleDrawer(false);
 
-    if (typeof window.setTaskCenterVisible === 'function') {
-      window.setTaskCenterVisible(target === 'tasks');
-    }
     setSettingsViewOpen(target === 'settings');
 
   }
@@ -377,11 +374,6 @@ function initAppAndListeners() {
 
   primaryTabButtons.forEach(button => {
     button.addEventListener('click', () => setPrimaryTab(button.dataset.primaryTab));
-  });
-  document.querySelectorAll('[data-open-task-center]').forEach(button => {
-    button.addEventListener('click', () => {
-      if (primaryTab !== 'tasks') setPrimaryTab('tasks', { hapticFeedback: false });
-    });
   });
   window.addEventListener('resize', updatePrimaryChromeMetrics);
   syncPrimaryTabChrome('chat');

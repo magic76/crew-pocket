@@ -6,11 +6,10 @@
   const openButton = document.getElementById('crew-home-btn');
   const closeButton = document.getElementById('crew-home-close-btn');
   const refreshButton = document.getElementById('crew-home-refresh-btn');
-  const allTasksButton = document.getElementById('crew-home-all-tasks-btn');
   const recent = document.getElementById('crew-home-recent');
-  const running = document.getElementById('crew-home-running');
-  const pending = document.getElementById('crew-home-pending');
-  const completed = document.getElementById('crew-home-completed');
+  const working = document.getElementById('crew-home-working');
+  const waiting = document.getElementById('crew-home-waiting');
+  const unread = document.getElementById('crew-home-unread');
   const remoteStatus = document.getElementById('crew-home-remote-status');
   const remoteBadge = document.getElementById('crew-home-remote-badge');
   const remoteToggle = document.getElementById('crew-home-remote-toggle');
@@ -75,48 +74,49 @@
     return date.toLocaleDateString('zh-TW', { month: 'numeric', day: 'numeric' });
   }
 
-  function taskStatus(task) {
+  function roleStatus(role) {
     const meta = {
-      running: ['處理中', 'text-indigo-300 bg-indigo-500/10 border-indigo-500/30'],
-      pending_confirmation: ['等確認', 'text-amber-300 bg-amber-500/10 border-amber-500/30'],
-      completed: ['已完成', 'text-teal-300 bg-teal-500/10 border-teal-500/30'],
-      failed: ['失敗', 'text-rose-300 bg-rose-500/10 border-rose-500/30']
+      working: ['工作中', 'text-indigo-300 bg-indigo-500/10 border-indigo-500/30'],
+      waiting: ['等待處理', 'text-amber-300 bg-amber-500/10 border-amber-500/30'],
+      idle: ['待命', 'text-slate-300 bg-slate-800 border-slate-700'],
+      new: ['新角色', 'text-teal-300 bg-teal-500/10 border-teal-500/30']
     };
-    return meta[task.status] || [task.status || '未知', 'text-slate-400 bg-slate-800 border-slate-700'];
+    return meta[role.state] || [role.state || '未知', 'text-slate-400 bg-slate-800 border-slate-700'];
   }
 
-  function renderRecent(tasks) {
+  function renderRecentRoles(roles) {
     if (!recent) return;
-    if (!tasks.length) {
-      recent.innerHTML = '<div class="py-8 text-center text-xs text-slate-500">目前沒有背景任務。</div>';
+    if (!roles.length) {
+      recent.innerHTML = '<div class="py-8 text-center text-xs text-slate-500">目前還沒有 Role 工作紀錄。</div>';
       return;
     }
 
-    recent.innerHTML = tasks.slice(0, 3).map(task => {
-      const [label, badgeClass] = taskStatus(task);
-      const canOpen = Boolean(task.conversationId);
-      const actionLabel = task.status === 'completed' ? '查看結果' : '開啟對話';
+    recent.innerHTML = roles.slice(0, 4).map(role => {
+      const [label, badgeClass] = roleStatus(role);
+      const canOpen = Boolean(role.providerId && role.conversationId);
+      const summary = role.conversationTitle || role.recentMessage?.content || '尚無工作';
+      const badges = [];
+      if (Number(role.queuedRequestCount || 0) > 0) badges.push(`${Number(role.queuedRequestCount)} queued`);
+      if (Number(role.unreadReplyCount || 0) > 0) badges.push(`${Number(role.unreadReplyCount)} 未讀`);
       return `<div class="px-3 py-2.5 flex items-start gap-2.5">
         <div class="min-w-0 flex-1">
           <div class="flex items-center gap-1.5 min-w-0">
             <span class="rounded-full border px-1.5 py-0.5 text-[9px] font-semibold shrink-0 ${badgeClass}">${label}</span>
-            <span class="text-[10px] text-slate-500 truncate">${escapeHtml(task.conversationTitle || '未命名對話')}</span>
+            <span class="text-[10px] text-slate-400 truncate">${escapeHtml(role.roleName || 'Role')}</span>
           </div>
-          <div class="mt-1 text-[11px] font-semibold text-slate-200 break-words">${escapeHtml(task.title || 'AI 任務')}</div>
-          <div class="mt-0.5 text-[9px] text-slate-600">${formatTime(task.updatedAt)}</div>
+          <div class="mt-1 text-[11px] font-semibold text-slate-200 break-words">${escapeHtml(summary)}</div>
+          <div class="mt-0.5 text-[9px] text-slate-600">${badges.length ? `${escapeHtml(badges.join(' · '))} · ` : ''}${formatTime(role.lastActivityAt)}</div>
         </div>
         <button
-          data-home-task-id="${escapeHtml(task.id)}"
-          data-home-task-provider="${escapeHtml(task.provider || 'antigravity')}"
-          data-home-task-conversation="${escapeHtml(task.conversationId || '')}"
-          data-home-task-status="${escapeHtml(task.status || '')}"
+          data-home-role-id="${escapeHtml(role.roleId || '')}"
+          data-home-role-provider="${escapeHtml(role.providerId || '')}"
+          data-home-role-conversation="${escapeHtml(role.conversationId || '')}"
           class="shrink-0 min-h-8 px-2.5 rounded-lg border border-slate-700 bg-slate-900 text-[10px] text-slate-300 active:scale-95 disabled:opacity-40"
           ${canOpen ? '' : 'disabled'}
-        >${actionLabel}</button>
+        >開啟對話</button>
       </div>`;
     }).join('');
   }
-
   function isRemoteBrowser() {
     const host = String(location.hostname || '').toLowerCase();
     return !['127.0.0.1', 'localhost', '::1', '[::1]'].includes(host);
@@ -329,21 +329,21 @@
       const data = await response.json();
       if (!response.ok || !data.success) throw new Error(data.error || 'Crew Home 載入失敗');
 
-      if (running) running.textContent = String(data.counts?.running ?? 0);
-      if (pending) pending.textContent = String(data.counts?.pending ?? 0);
-      if (completed) completed.textContent = String(data.counts?.completed ?? 0);
+      if (working) working.textContent = String(data.counts?.working ?? 0);
+      if (waiting) waiting.textContent = String(data.counts?.waiting ?? 0);
+      if (unread) unread.textContent = String(data.counts?.unread ?? 0);
       if (subtitle) {
         const device = data.runtime?.device ? ` · ${data.runtime.device}` : '';
-        subtitle.textContent = `手機是主機 · 這裡看所有 AI 工作${device}`;
+        subtitle.textContent = `手機是主機 · Role 狀態與 Remote Console${device}`;
       }
-      renderRecent(data.recentTasks || []);
+      renderRecentRoles(data.recentRoles || []);
       renderRemote(data.remote);
     } catch (error) {
       const message = String(error?.message || error || 'Crew Home 載入失敗');
       const staleRuntime = /Unknown API endpoint/i.test(message);
       if (recent) {
         recent.innerHTML = staleRuntime
-          ? '<div class="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-left"><div class="text-xs font-semibold text-amber-200">Runtime 還在跑舊版</div><div class="mt-1 text-[10px] leading-relaxed text-slate-400">Web UI 已更新，但 Node Runtime 尚未重啟，所以還不認得 Crew Home / Task API。請重啟 Crew Runtime 後再開一次。</div></div>'
+          ? '<div class="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-left"><div class="text-xs font-semibold text-amber-200">Runtime 還在跑舊版</div><div class="mt-1 text-[10px] leading-relaxed text-slate-400">Web UI 已更新，但 Node Runtime 尚未重啟，所以還不認得新版 Crew Home API。請重啟 Crew Runtime 後再開一次。</div></div>'
           : `<div class="py-8 text-center text-xs text-rose-300">${escapeHtml(message)}</div>`;
       }
       if (staleRuntime && remoteStatus) {
@@ -462,18 +462,14 @@
     }
   }
 
-  async function openTask(button) {
-    const conversationId = button.dataset.homeTaskConversation;
-    const provider = button.dataset.homeTaskProvider || 'antigravity';
-    const taskId = button.dataset.homeTaskId;
-    const status = button.dataset.homeTaskStatus;
-    if (!conversationId) return;
+  async function openRole(button) {
+    const provider = button.dataset.homeRoleProvider;
+    const conversationId = button.dataset.homeRoleConversation;
+    if (!provider || !conversationId) return;
     button.disabled = true;
     setVisible(false);
     try {
-      if (status === 'completed' && typeof window.openCrewTaskResult === 'function') {
-        await window.openCrewTaskResult(provider, conversationId, taskId);
-      } else if (typeof window.openCrewConversation === 'function') {
+      if (typeof window.openCrewConversation === 'function') {
         await window.openCrewConversation(provider, conversationId);
       }
     } finally {
@@ -486,7 +482,6 @@
   openButton?.addEventListener('click', () => setVisible(true));
   closeButton?.addEventListener('click', () => setVisible(false));
   refreshButton?.addEventListener('click', loadHome);
-  allTasksButton?.addEventListener('click', () => setVisible(false));
   remoteToggle?.addEventListener('click', toggleRemote);
   remotePairButton?.addEventListener('click', createPairing);
   copyUrlButton?.addEventListener('click', copyRemoteUrl);
@@ -499,8 +494,8 @@
     if (button) revokeRemoteConnection(button.dataset.remoteRevoke);
   });
   recent?.addEventListener('click', event => {
-    const button = event.target.closest('[data-home-task-id]');
-    if (button) openTask(button);
+    const button = event.target.closest('[data-home-role-id]');
+    if (button) openRole(button);
   });
 
   window.openCrewHome = () => setVisible(true);

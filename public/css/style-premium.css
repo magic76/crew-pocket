@@ -282,8 +282,7 @@ body.live-active::after {
 #storage-modal > div,
 #voiceprint-modal > div,
 #live-key-modal > div,
-#guidelines-modal > div,
-#task-center-modal > section {
+#guidelines-modal > div {
   background: linear-gradient(180deg, rgba(15,23,42,0.98), rgba(2,6,23,0.97)) !important;
   border: 1px solid rgba(99,102,241,0.15) !important;
   box-shadow:
@@ -612,7 +611,6 @@ body.ai-streaming #send-btn {
 }
 
 #drawer,
-#task-center-modal,
 #tools-menu-dropdown {
   top: var(--crew-header-height) !important;
   bottom: var(--crew-primary-nav-height) !important;
@@ -630,27 +628,6 @@ body.ai-streaming #send-btn {
 
 #drawer-overlay {
   display: none !important;
-}
-
-#task-center-modal {
-  left: 0 !important;
-  right: 0 !important;
-  padding: 0 !important;
-  background: rgb(2, 6, 23) !important;
-  backdrop-filter: none !important;
-  align-items: stretch !important;
-  justify-content: stretch !important;
-  z-index: 40 !important;
-}
-
-#task-center-modal > section {
-  width: 100% !important;
-  max-width: none !important;
-  height: 100% !important;
-  max-height: none !important;
-  border: 0 !important;
-  border-radius: 0 !important;
-  box-shadow: none !important;
 }
 
 #tools-menu-dropdown {
