@@ -277,7 +277,12 @@ function initAppAndListeners() {
   if (menuBtn) menuBtn.addEventListener('click', () => toggleDrawer(true));
   if (closeDrawerBtn) closeDrawerBtn.addEventListener('click', () => toggleDrawer(false));
   if (drawerOverlay) drawerOverlay.addEventListener('click', () => toggleDrawer(false));
-  if (workspaceSelectorBtn) workspaceSelectorBtn.addEventListener('click', () => window.openWorkspacePicker?.());
+  const drawerNewWorkBtn = document.getElementById('drawer-new-work-btn');
+  const openWorkHistoryBtn = document.getElementById('open-work-history-btn');
+  const backToRoleNavBtn = document.getElementById('back-to-role-nav-btn');
+  if (drawerNewWorkBtn) drawerNewWorkBtn.addEventListener('click', () => newChatBtn?.click());
+  if (openWorkHistoryBtn) openWorkHistoryBtn.addEventListener('click', () => window.showRoleHistoryView?.());
+  if (backToRoleNavBtn) backToRoleNavBtn.addEventListener('click', () => window.showRoleNavigationView?.());
   if (closeWorkspaceModalBtn) closeWorkspaceModalBtn.addEventListener('click', () => window.closeWorkspacePicker?.());
   if (workspaceModal) workspaceModal.addEventListener('click', event => {
     if (event.target === workspaceModal) window.closeWorkspacePicker?.();
@@ -372,7 +377,7 @@ function initAppAndListeners() {
 
     if (conversationWorkspaceMenuBtn) conversationWorkspaceMenuBtn.addEventListener('click', () => {
       setToolsMenuOpen(false);
-      document.getElementById('workspace-selector-btn')?.click();
+      toggleDrawer(true);
     });
     if (conversationContextMenuBtn) conversationContextMenuBtn.addEventListener('click', () => {
       setToolsMenuOpen(false);
@@ -759,10 +764,9 @@ function initAppAndListeners() {
     initClipboardSmartSensors();
   }
 
-  // New Chat Action
+  // New Work Action: keep the active Role, reset only short-term Conversation context.
   if (newChatBtn) {
     newChatBtn.addEventListener('click', () => {
-      // 🛡️ Abort any running stream when creating new chat
       if (currentAbortController) {
         try { currentAbortController.abort(); } catch(e) {}
         currentAbortController = null;
@@ -780,17 +784,15 @@ function initAppAndListeners() {
       if (cameraInput) cameraInput.value = '';
       if (attachInput) attachInput.value = '';
       if (imagePreviewContainer) imagePreviewContainer.classList.add('hidden');
-      if (headerTitle) headerTitle.textContent = '新對話';
+      if (headerTitle) headerTitle.textContent = '新工作';
       if (messagesContainer) messagesContainer.innerHTML = '';
-      appendMessage('assistant', '你好！已為你開啟新對話。有什麼可以幫你的？');
+      const activeRoleName = typeof roleMeta === 'function' ? roleMeta()?.name : '';
+      appendMessage('assistant', activeRoleName
+        ? `🧠 ${activeRoleName} 已開啟新的工作 Context。長期 Role Memory 會繼續保留。`
+        : '已開啟新的工作 Context。直接交代要做的事即可。');
+      window.renderRoleNavigation?.();
       toggleDrawer(false);
 
-      // 📂 Prompt user to select/create directory for the new conversation
-      if (typeof window.openWorkspacePicker === 'function') {
-        window.openWorkspacePicker(true);
-      }
-
-      // 🔥 Pre-warm standby resident process in background
       if (typeof window.requestProviderPrewarm === 'function') window.requestProviderPrewarm();
     });
   }
@@ -806,7 +808,7 @@ function initAppAndListeners() {
     const original = headerTitle.textContent.trim();
     const input = document.createElement('input');
     input.type = 'text';
-    input.value = original === '新對話' ? '' : original;
+    input.value = (original === '新對話' || original === '新工作') ? '' : original;
     input.maxLength = 60;
     input.className = 'header-title-editor h-6 max-w-[150px] sm:max-w-[220px] rounded-md border border-indigo-500/70 bg-slate-950 px-1.5 text-xs font-semibold text-white outline-none ring-1 ring-indigo-500/30';
     input.setAttribute('aria-label', '修改對話標題');
@@ -1049,7 +1051,7 @@ function initAppAndListeners() {
       let restorePromise = Promise.resolve();
       if (savedConvId === '__new__') {
         currentConversationId = null;
-        if (headerTitle) headerTitle.textContent = '新對話';
+        if (headerTitle) headerTitle.textContent = '新工作';
         restorePromise = loadConversations().catch(() => {});
       } else {
         restorePromise = (async () => {
