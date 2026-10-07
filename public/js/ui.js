@@ -154,6 +154,7 @@ const roleEditorTitle = document.getElementById('role-editor-title');
 const roleEditorId = document.getElementById('role-editor-id');
 const roleEditorName = document.getElementById('role-editor-name');
 const roleEditorProject = document.getElementById('role-editor-project');
+const roleEditorWorkspace = document.getElementById('role-editor-workspace');
 const roleEditorDescription = document.getElementById('role-editor-description');
 const roleEditorSkills = document.getElementById('role-editor-skills');
 const roleEditorSystemContext = document.getElementById('role-editor-system-context');
@@ -927,6 +928,14 @@ function toggleRoleModal(modal, open) {
   }
 }
 
+function updateRoleEditorWorkspace(projectId = '') {
+  if (!roleEditorWorkspace) return;
+  const member = availableCrewMembers.find(item => item?.project?.id === projectId);
+  const workspace = member?.workspace || member?.project?.workspace || '';
+  roleEditorWorkspace.textContent = workspace ? `工作目錄：${workspace}` : '工作目錄：—';
+  roleEditorWorkspace.title = workspace || '';
+}
+
 function renderRoleProjectOptions(selectedProjectId = '') {
   if (!roleEditorProject) return;
   const projects = [];
@@ -942,6 +951,7 @@ function renderRoleProjectOptions(selectedProjectId = '') {
     ...projects.map(project => `<option value="${escapeHtml(project.id)}">${escapeHtml(project.label || project.name || project.id)}</option>`)
   ].join('');
   roleEditorProject.value = selectedProjectId || '';
+  updateRoleEditorWorkspace(roleEditorProject.value);
 }
 
 function openRoleEditor(roleId = '') {
@@ -1042,6 +1052,7 @@ async function openRoleMemory(roleId) {
 window.openRoleEditor = openRoleEditor;
 window.openRoleMemory = openRoleMemory;
 
+if (roleEditorProject) roleEditorProject.addEventListener('change', () => updateRoleEditorWorkspace(roleEditorProject.value));
 if (drawerNewRoleBtn) drawerNewRoleBtn.addEventListener('click', () => openRoleEditor());
 if (closeRoleEditorBtn) closeRoleEditorBtn.addEventListener('click', closeRoleEditor);
 if (roleEditorForm) roleEditorForm.addEventListener('submit', saveRoleEditor);
