@@ -130,6 +130,10 @@ const drawer = document.getElementById('drawer');
 const drawerOverlay = document.getElementById('drawer-overlay');
 const closeDrawerBtn = document.getElementById('close-drawer-btn');
 const convList = document.getElementById('conv-list');
+const roleNavList = document.getElementById('role-nav-list');
+const roleNavView = document.getElementById('role-nav-view');
+const roleHistoryView = document.getElementById('role-history-view');
+const roleHistoryTitle = document.getElementById('role-history-title');
 const newChatBtn = document.getElementById('new-chat-btn');
 const notifyBtn = document.getElementById('notify-btn');
 const notifyStatusSubtext = document.getElementById('notify-status-subtext');
@@ -397,13 +401,38 @@ function showLightbox(src) {
 }
 
 // Drawer Toggle (with Haptic Feedback)
+function showRoleNavigationView() {
+  roleNavView?.classList.remove('hidden');
+  roleNavView?.classList.add('flex');
+  roleHistoryView?.classList.add('hidden');
+  roleHistoryView?.classList.remove('flex');
+  renderRoleNavigation();
+}
+
+function showRoleHistoryView() {
+  const role = roleMeta() || roleMeta(DEFAULT_ROLE_ID);
+  if (roleHistoryTitle) roleHistoryTitle.textContent = role ? `${role.name} · 工作紀錄` : '工作紀錄';
+  roleNavView?.classList.add('hidden');
+  roleNavView?.classList.remove('flex');
+  roleHistoryView?.classList.remove('hidden');
+  roleHistoryView?.classList.add('flex');
+  if (typeof loadConversations === 'function') loadConversations({ force: true });
+}
+
+window.showRoleNavigationView = showRoleNavigationView;
+window.showRoleHistoryView = showRoleHistoryView;
+
 function toggleDrawer(open) {
   if (!drawer || !drawerOverlay) return;
   haptic('light');
   if (open) {
     drawer.classList.remove('-translate-x-full');
     drawerOverlay.classList.remove('opacity-0', 'pointer-events-none');
-    if (typeof loadConversations === 'function') loadConversations();
+    showRoleNavigationView();
+    Promise.all([
+      loadWorkspaces().catch(() => null),
+      typeof loadConversations === 'function' ? loadConversations({ force: true }).catch(() => []) : Promise.resolve([])
+    ]).then(() => renderRoleNavigation());
   } else {
     drawer.classList.add('-translate-x-full');
     drawerOverlay.classList.add('opacity-0', 'pointer-events-none');
@@ -745,6 +774,7 @@ async function loadWorkspaces() {
     localStorage.setItem('crew_current_workspace', currentWorkspace);
   }
   updateWorkspaceUI();
+  renderRoleNavigation();
   return availableWorkspaces;
 }
 
@@ -759,6 +789,57 @@ function roleProjectLabel(role) {
   const member = crewMemberForProject(role.projectId);
   return member?.project?.label || role.projectId;
 }
+
+function roleLatestConversation(roleId) {
+  return window.getLatestConversationForRole?.(roleId) || null;
+}
+
+function formatRoleLastActivity(conversation) {
+  if (!conversation) return '尚未開始工作';
+  const updatedAt = Number(conversation.updatedAt || 0);
+  if (!updatedAt) return conversation.title || '最近工作';
+  const diffMs = Math.max(0, Date.now() - updatedAt);
+  const minutes = Math.floor(diffMs / 60000);
+  if (minutes < 1) return '剛剛';
+  if (minutes < 60) return `${minutes} 分鐘前`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} 小時前`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days} 天前`;
+  return new Date(updatedAt).toLocaleDateString('zh-TW', { month: 'numeric', day: 'numeric' });
+}
+
+function renderRoleNavigation() {
+  if (!roleNavList) return;
+  const roles = availableRoles.length ? availableRoles : [];
+  if (!roles.length) {
+    roleNavList.innerHTML = '<div class="p-4 text-center text-xs text-slate-500">尚未找到 Role。</div>';
+    return;
+  }
+
+  roleNavList.innerHTML = roles.map(role => {
+    const active = role.id === (currentRoleId || DEFAULT_ROLE_ID);
+    const member = role.projectId ? crewMemberForProject(role.projectId) : null;
+    const latest = roleLatestConversation(role.id);
+    const recentTitle = latest?.title ? escapeHtml(latest.title) : '';
+    const activity = formatRoleLastActivity(latest);
+    return `<button type="button" data-role-nav-id="${escapeHtml(role.id)}" class="w-full flex items-center gap-3 rounded-xl border p-3 text-left transition active:scale-[0.99] ${active ? 'border-teal-400/70 bg-teal-500/15 shadow-sm' : 'border-slate-800 bg-slate-950/55 hover:border-slate-700 hover:bg-slate-800'}">
+      <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border ${active ? 'border-teal-500/40 bg-teal-500/10' : 'border-slate-700/70 bg-slate-900'} text-xl">${escapeHtml(member?.icon || '🧠')}</span>
+      <span class="min-w-0 flex-1">
+        <span class="flex items-center gap-2"><span class="truncate text-xs font-bold text-slate-100">${escapeHtml(role.name)}</span>${active ? '<span class="shrink-0 text-[9px] font-bold text-teal-300">目前</span>' : ''}</span>
+        <span class="block truncate pt-1 text-[10px] text-slate-400">${escapeHtml(roleProjectLabel(role))}</span>
+        <span class="block truncate pt-0.5 text-[9px] text-slate-500">${recentTitle ? `${recentTitle} · ${activity}` : activity}</span>
+      </span>
+      <span class="shrink-0 text-slate-600">›</span>
+    </button>`;
+  }).join('');
+
+  roleNavList.querySelectorAll('[data-role-nav-id]').forEach(button => {
+    button.addEventListener('click', () => selectRole(button.dataset.roleNavId));
+  });
+}
+
+window.renderRoleNavigation = renderRoleNavigation;
 
 function renderWorkspaceOptions() {
   if (!workspaceOptions) return;
@@ -790,6 +871,7 @@ async function selectRole(roleId, isCreatingNewChat = false) {
 
   if (!isCreatingNewChat && currentConversationId && roleId === currentRoleId) {
     closeWorkspaceModal();
+    if (typeof toggleDrawer === 'function') toggleDrawer(false);
     return;
   }
 
@@ -804,11 +886,28 @@ async function selectRole(roleId, isCreatingNewChat = false) {
     localStorage.setItem('crew_current_workspace', currentWorkspace);
   }
 
-  // Role is the durable identity owner. Switching Role always starts a new
-  // conversation instead of moving an existing provider transcript.
+  updateWorkspaceUI();
+  renderRoleNavigation();
+
+  if (!isCreatingNewChat) {
+    try {
+      if (typeof loadConversations === 'function') await loadConversations({ force: true });
+      const latest = roleLatestConversation(role.id);
+      if (latest && window.openCrewConversation) {
+        closeWorkspaceModal();
+        if (typeof toggleDrawer === 'function') toggleDrawer(false);
+        await window.openCrewConversation(latest.provider, latest.id);
+        return;
+      }
+    } catch (error) {
+      console.warn('[Role Navigation] Failed to restore recent work:', error);
+    }
+  }
+
+  // A Role owns durable identity/memory. A fresh Conversation is created only
+  // when this Role has no prior work or the user explicitly asks for New Work.
   currentConversationId = null;
   localStorage.setItem(activeConversationStorageKey(), '__new__');
-  updateWorkspaceUI();
 
   if (typeof revokeAllBlobUrls === 'function') revokeAllBlobUrls();
   if (typeof clearQueuedBtwMessages === 'function') clearQueuedBtwMessages();
@@ -822,19 +921,18 @@ async function selectRole(roleId, isCreatingNewChat = false) {
   if (typeof attachInput !== 'undefined' && attachInput) attachInput.value = '';
   if (imagePreviewContainer) imagePreviewContainer.classList.add('hidden');
 
-  if (headerTitle) headerTitle.textContent = role.name;
+  if (headerTitle) headerTitle.textContent = '新工作';
   if (messagesContainer) {
     messagesContainer.innerHTML = '';
     if (typeof appendMessage === 'function') {
       const projectLine = role.projectId ? `\n\n專案：${roleProjectLabel(role)}` : '';
-      const workspaceLine = member?.workspace ? `\n工作區：${member.workspace}` : '';
-      appendMessage('assistant', `🧠 ${role.name} 已就位。${projectLine}${workspaceLine}\n\n直接交代要做的事即可。`);
+      appendMessage('assistant', `🧠 ${role.name} 已就位。${projectLine}\n\n這是一段新的工作 Context；Role 的長期記憶仍會保留。`);
     }
   }
 
   closeWorkspaceModal();
+  showRoleNavigationView();
   if (typeof toggleDrawer === 'function') toggleDrawer(false);
-  if (typeof loadConversations === 'function') loadConversations();
   window.requestProviderPrewarm?.(0);
 }
 
