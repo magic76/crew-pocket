@@ -43,6 +43,7 @@ const { createTask, getTask, listTasks, updateTask } = require('./lib/tasks');
 const { listWorkspaces, resolveWorkspace, createWorkspace } = require('./lib/workspaces');
 const { listCrewMembers, getCrewMember, saveCrewMember, buildCrewMemberGuide } = require('./lib/crew-members');
 const { DEFAULT_ROLE_ID, roleIdForProject, listRoles, getRole, saveRole } = require('./lib/roles');
+const { listCrewRoles, sendCrewMessage, getCrewInbox, markCrewMessagesDelivered } = require('./lib/crew-messages');
 const { getProject } = require('./lib/projects');
 const { defaultMemoryProvider } = require('./lib/memory');
 const {
@@ -1494,6 +1495,62 @@ async function handleLiveCameraSnapshot(req, res) {
 
 
 
+async function handleCrewTool(req, res) {
+  try {
+    const body = await parseJsonBody(req);
+    const action = String(body.action || '').trim();
+
+    if (action === 'list_roles') {
+      const roles = await listCrewRoles();
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+      return res.end(JSON.stringify({ success: true, roles }));
+    }
+
+    if (action === 'send_message') {
+      const message = await sendCrewMessage({
+        fromRoleId: body.from_role_id || body.fromRoleId,
+        toRoleId: body.to_role_id || body.toRoleId,
+        content: body.message || body.content,
+        replyToId: body.reply_to_id || body.replyToId || null
+      });
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+      return res.end(JSON.stringify({ success: true, message }));
+    }
+
+    throw new Error('Crew tool action must be list_roles or send_message');
+  } catch (error) {
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: false, error: error.message }));
+  }
+}
+
+function shouldExposeCrewTool(prompt) {
+  const text = String(prompt || '');
+  return /(crew|role|角色|傳話|传话|傳訊息|传讯息|send\s+message|message\s+to|通知.{0,20}(角色|crew)|問.{0,24}(角色|crew)|问.{0,24}(角色|crew)|(角色|crew).{0,24}(問|问|傳|传|通知|message))/i.test(text);
+}
+
+function buildCrewToolGuide(role) {
+  if (!role?.id) return '';
+  const scriptPath = path.join(__dirname, 'scripts', 'crew-tool.js');
+  return [
+    '[Crew Tool]',
+    'Current Role: ' + role.name + ' (' + role.id + ')',
+    'List Roles: node ' + JSON.stringify(scriptPath) + ' roles',
+    'Send plain-text message: node ' + JSON.stringify(scriptPath) + ' send ' + role.id + ' <target-role-id> "<message>"',
+    'Fallback API: POST http://127.0.0.1:' + PORT + '/api/crew-tool with action=list_roles or action=send_message.',
+    'Only the explicit message text is sent. Do not attach or infer Conversation, Context, Memory, Project or workspace data.'
+  ].join('\n');
+}
+
+function formatCrewInbox(messages = []) {
+  if (!messages.length) return '';
+  return [
+    '[Crew Messages]',
+    'These are plain-text messages sent directly to this Role. No sender Context, Memory, Conversation or Project data was shared.',
+    ...messages.map(message => '- [' + message.id + '] From ' + message.fromRoleName + ' (' + message.fromRoleId + '): ' + message.content)
+  ].join('\n');
+}
+
 // 🏷️ Crew Pocket capability guidance
 // Keep the base prompt small. Detailed delivery constraints are only attached
 // to a new conversation when the first request actually needs that capability.
@@ -1692,6 +1749,16 @@ async function handleChat(req, res) {
   }
   turnTiming.workspace_ms = Date.now() - workspaceStartedAt;
 
+  let pendingCrewMessages = [];
+  try {
+    pendingCrewMessages = role?.id
+      ? await getCrewInbox(role.id, { undeliveredOnly: true, limit: 20 })
+      : [];
+  } catch (error) {
+    console.warn('[Crew Messages] Inbox unavailable:', error.message);
+  }
+  const pendingCrewMessageIds = pendingCrewMessages.map(message => message.id);
+
   const effectiveModel = model || savedSettings?.model || crewMember?.model || getDefaultModel(providerId);
   const {
     routedExecutionMode,
@@ -1812,6 +1879,23 @@ async function handleChat(req, res) {
     } catch (error) {
       console.warn('[Memory Context] Refresh after compaction failed:', error.message);
     }
+  }
+
+  const exposeCrewTool = shouldExposeCrewTool(finalPrompt) || pendingCrewMessages.length > 0;
+  const crewToolGuide = exposeCrewTool ? buildCrewToolGuide(role) : '';
+  const crewInboxText = formatCrewInbox(pendingCrewMessages);
+  const crewMetadata = [crewToolGuide, crewInboxText].filter(Boolean).join('\n\n');
+  if (crewMetadata) {
+    assembledContextContributions.push(contributionFromText({
+      id: 'crew-role-messages',
+      type: ContextSourceType.OTHER,
+      text: crewMetadata,
+      label: 'Crew role messages',
+      priority: ContextPriority.HIGH,
+      compactable: true,
+      sourceRef: role?.id ? 'crew-role:' + role.id : undefined
+    }));
+    finalPrompt = '<ADDITIONAL_METADATA>\n' + crewMetadata + '\n</ADDITIONAL_METADATA>\n' + finalPrompt;
   }
 
   if (image_path) {
@@ -2097,6 +2181,10 @@ async function handleChat(req, res) {
         } else if (event.type === 'error') {
           finish({ error: event.message, provider: providerId, conversation_id });
         } else if (event.type === 'turn_completed') {
+          if (pendingCrewMessageIds.length && role?.id) {
+            markCrewMessagesDelivered(role.id, pendingCrewMessageIds)
+              .catch(error => console.warn('[Crew Messages] Mark delivered failed:', error.message));
+          }
           finish({
             response: event.response,
             conversation_id: event.conversationId,
@@ -2671,6 +2759,8 @@ const server = http.createServer(async (req, res) => {
     return handleCrewMembers(req, res);
   } else if (pathname === '/api/roles' && (req.method === 'GET' || req.method === 'POST')) {
     return handleRoles(req, res);
+  } else if (pathname === '/api/crew-tool' && req.method === 'POST') {
+    return handleCrewTool(req, res);
   } else if (pathname === '/api/memories' && ['GET', 'POST', 'DELETE'].includes(req.method)) {
     return handleMemories(req, res, parsedUrl);
   } else if (pathname === '/api/workspaces' && req.method === 'GET') {
