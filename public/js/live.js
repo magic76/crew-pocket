@@ -2698,7 +2698,6 @@
                     }
                   },
                   {
-                    name: "capture_camera_frame",                  {
                     name: "capture_camera_frame",
                     description: "Capture a brand-new high-detail frame from the currently open Gemini Live camera only when no current realtime camera frame is available or fine details, text, numbers, or small objects require it. If continuous camera frames are arriving, answer from the newest frame without this call.",
                     parameters: {
