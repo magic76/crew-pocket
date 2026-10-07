@@ -52,8 +52,11 @@ const DEFAULT_ROLE_ID = 'role-general';
 let currentRoleId = localStorage.getItem('crew_current_role') || '';
 let availableRoles = [];
 let crewStatusByRole = new Map();
+let crewRecentActivities = [];
 let crewStatusRequest = null;
 let crewStatusUpdatedAt = 0;
+let crewActivityInitialized = false;
+let lastCrewActivityId = null;
 
 // Coalesce boot/model/effort/new-chat prewarm requests into one provider call.
 window.requestProviderPrewarm = function(delay = 250) {
@@ -135,6 +138,7 @@ const closeDrawerBtn = document.getElementById('close-drawer-btn');
 const convList = document.getElementById('conv-list');
 const roleNavList = document.getElementById('role-nav-list');
 const crewRoomSummary = document.getElementById('crew-room-summary');
+const crewRoomActivity = document.getElementById('crew-room-activity');
 const roleNavView = document.getElementById('role-nav-view');
 const roleHistoryView = document.getElementById('role-history-view');
 const roleHistoryTitle = document.getElementById('role-history-title');
@@ -842,6 +846,87 @@ function crewStatusMeta(status) {
   };
 }
 
+function crewRoleVisual(roleId) {
+  const role = roleMeta(roleId);
+  const member = role?.projectId ? crewMemberForProject(role.projectId) : null;
+  return {
+    name: role?.name || roleId || 'Crew',
+    icon: member?.icon || '🧠'
+  };
+}
+
+function currentCrewActivity() {
+  return crewRecentActivities[0] || null;
+}
+
+function renderCrewRoomActivity() {
+  if (!crewRoomActivity) return;
+  const activity = currentCrewActivity();
+  if (!activity) {
+    crewRoomActivity.classList.add('hidden');
+    crewRoomActivity.innerHTML = '';
+    return;
+  }
+
+  const from = crewRoleVisual(activity.fromRoleId);
+  const to = crewRoleVisual(activity.toRoleId);
+  const kindLabel = activity.kind === 'reply' ? '回覆' : '傳話';
+  crewRoomActivity.classList.remove('hidden');
+  crewRoomActivity.innerHTML = `
+    <div class="flex min-w-0 items-center gap-2">
+      <span class="flex min-w-0 flex-1 items-center gap-1.5">
+        <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-slate-700 bg-slate-900 text-sm">${escapeHtml(from.icon)}</span>
+        <span class="min-w-0 truncate text-[10px] font-semibold text-slate-200">${escapeHtml(activity.fromRoleName || from.name)}</span>
+      </span>
+      <span class="flex shrink-0 items-center gap-1 text-[9px] font-mono text-indigo-300">
+        <span class="h-px w-4 bg-indigo-500/40"></span>
+        <span>→</span>
+        <span class="h-px w-4 bg-indigo-500/40"></span>
+      </span>
+      <span class="flex min-w-0 flex-1 items-center justify-end gap-1.5">
+        <span class="min-w-0 truncate text-right text-[10px] font-semibold text-slate-200">${escapeHtml(activity.toRoleName || to.name)}</span>
+        <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-slate-700 bg-slate-900 text-sm">${escapeHtml(to.icon)}</span>
+      </span>
+    </div>
+    <div class="mt-1.5 flex min-w-0 items-start gap-1.5">
+      <span class="mt-0.5 shrink-0 rounded-full border border-indigo-500/25 bg-indigo-500/10 px-1.5 py-0.5 text-[8px] font-bold text-indigo-300">${kindLabel}</span>
+      <span class="min-w-0 flex-1 line-clamp-2 text-[9px] leading-relaxed text-slate-400">${escapeHtml(activity.content || '')}</span>
+    </div>
+  `;
+}
+
+function findRoleCard(roleId) {
+  if (!roleNavList) return null;
+  return [...roleNavList.querySelectorAll('[data-role-card-id]')]
+    .find(card => card.dataset.roleCardId === String(roleId || '')) || null;
+}
+
+function animateCrewActivity(activity) {
+  if (!activity || !crewRoomActivity || !drawer || drawer.classList.contains('-translate-x-full')) return;
+  if (typeof crewRoomActivity.animate === 'function') {
+    crewRoomActivity.animate([
+      { opacity: 0.45, transform: 'translateY(-3px) scale(0.985)' },
+      { opacity: 1, transform: 'translateY(0) scale(1)' }
+    ], { duration: 360, easing: 'cubic-bezier(.2,.8,.2,1)' });
+  }
+
+  const pulseCard = (roleId, tone) => {
+    const card = findRoleCard(roleId);
+    if (!card || typeof card.animate !== 'function') return;
+    const glow = tone === 'from'
+      ? '0 0 0 1px rgba(99,102,241,.55), 0 0 22px rgba(99,102,241,.20)'
+      : '0 0 0 1px rgba(20,184,166,.60), 0 0 24px rgba(20,184,166,.22)';
+    card.animate([
+      { transform: 'scale(1)', boxShadow: '0 0 0 0 rgba(0,0,0,0)' },
+      { transform: 'scale(1.012)', boxShadow: glow, offset: 0.35 },
+      { transform: 'scale(1)', boxShadow: '0 0 0 0 rgba(0,0,0,0)' }
+    ], { duration: 1050, easing: 'ease-out' });
+  };
+
+  pulseCard(activity.fromRoleId, 'from');
+  pulseCard(activity.toRoleId, 'to');
+}
+
 async function loadCrewStatus({ force = false } = {}) {
   const freshEnough = Date.now() - crewStatusUpdatedAt < 1200;
   if (!force && freshEnough) return crewStatusByRole;
@@ -851,9 +936,30 @@ async function loadCrewStatus({ force = false } = {}) {
     .then(async response => {
       const data = await response.json();
       if (!response.ok || !data.success) throw new Error(data.error || '無法讀取 Crew 狀態');
+
+      const nextActivities = Array.isArray(data.activities) ? data.activities : [];
+      const nextActivity = nextActivities[0] || null;
+      const shouldAnimate = Boolean(
+        crewActivityInitialized &&
+        nextActivity?.id &&
+        nextActivity.id !== lastCrewActivityId &&
+        drawer &&
+        !drawer.classList.contains('-translate-x-full')
+      );
+
       crewStatusByRole = new Map((data.roles || []).map(status => [status.roleId, status]));
+      crewRecentActivities = nextActivities;
       crewStatusUpdatedAt = Number(data.generatedAt) || Date.now();
+
+      if (!crewActivityInitialized) crewActivityInitialized = true;
+      lastCrewActivityId = nextActivity?.id || lastCrewActivityId;
+
       renderRoleNavigation();
+      renderCrewRoomActivity();
+
+      if (shouldAnimate && nextActivity) {
+        window.requestAnimationFrame(() => animateCrewActivity(nextActivity));
+      }
       return crewStatusByRole;
     })
     .catch(error => {
@@ -959,6 +1065,7 @@ function renderRoleNavigation() {
       unreadCount ? `<span class="rounded-full bg-indigo-500/10 px-1.5 py-0.5 text-indigo-300">${unreadCount} unread</span>` : ''
     ].filter(Boolean).join('');
   }
+  renderCrewRoomActivity();
 
   roleNavList.innerHTML = roles.map(role => {
     const selected = role.id === (currentRoleId || DEFAULT_ROLE_ID);
