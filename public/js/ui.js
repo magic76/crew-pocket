@@ -901,7 +901,7 @@ window.openWorkspacePicker = async function() {
   if (!workspaceModal) return;
   workspaceModal.classList.remove('hidden');
   requestAnimationFrame(() => workspaceModal.classList.remove('opacity-0'));
-  if (workspaceOptions) workspaceOptions.innerHTML = '<div class="p-5 text-center text-xs text-slate-400">載入 Crew Members 中…</div>';
+  if (workspaceOptions) workspaceOptions.innerHTML = '<div class="p-5 text-center text-xs text-slate-400">載入 Roles 中…</div>';
 
   const form = document.getElementById('create-workspace-form');
   if (form && !form.dataset.bound) {
