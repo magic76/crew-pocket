@@ -2909,6 +2909,7 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
   const liveProgressListElem = assistantMsgDiv.querySelector('.live-progress-list');
   const isStreamVisible = () => assistantMsgDiv.isConnected && currentProvider === streamProvider
     && (!streamConversationId ? currentConversationId === null : currentConversationId === streamConversationId);
+  const stickyExecution = isBtwQuery ? null : createExecutionStickyController(assistantMsgDiv, isStreamVisible);
 
   let turnFinalized = false;
   function finalizeTurn(doneData = null) {
@@ -2973,6 +2974,30 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
     } else {
       contentElem.innerHTML = formatMessageContent(accumulatedText);
     }
+
+    const structuredTurnResult = isStructuredExecutionResult(doneData?.turn_result)
+      ? doneData.turn_result
+      : null;
+    const hasAuthRecovery = Boolean(doneData?.error && typeof isAuthErrorMessage === 'function' && isAuthErrorMessage(doneData.error));
+    if (structuredTurnResult && !isBtwQuery && !hasAuthRecovery) {
+      const article = assistantMsgDiv.querySelector('.assistant-article');
+      if (article) {
+        article.innerHTML = buildExecutionResultCardHtml(
+          accumulatedText,
+          liveTools,
+          '',
+          structuredTurnResult,
+          { lazy: false }
+        );
+      }
+      stickyExecution?.complete(
+        structuredTurnResult.duration_ms ?? (Number(activityElapsedSec) * 1000),
+        structuredTurnResult.status === 'failed'
+      );
+    } else {
+      stickyExecution?.dispose();
+    }
+
     // Codex streams fresh token usage during the turn. Only reload history
     // when a provider did not provide that event; the drawer itself refreshes
     // lazily when opened, so a closed sidebar does not trigger a filesystem
@@ -3076,8 +3101,10 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
   });
 
   const liveTimerInterval = setInterval(() => {
-    const elapsedSec = (performance.now() - startTs) / 1000;
+    const elapsedMs = performance.now() - startTs;
+    const elapsedSec = elapsedMs / 1000;
     if (liveTimerElem) liveTimerElem.textContent = `${elapsedSec.toFixed(1)}s`;
+    stickyExecution?.update(null, elapsedMs);
   }, 100);
 
   let accumulatedText = '';
@@ -3138,6 +3165,9 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
                   window.setConversationRoleDirect(data.role_id, data.project_id, data.crew_member_id, currentWorkspace);
                 }
               }
+              if (['SURGICAL_EDIT', 'DEBUG', 'BUILD'].includes(String(data.execution_mode || '').toUpperCase())) {
+                stickyExecution?.enable(`執行${executionModeLabel(data.execution_mode)}`);
+              }
             } else if (currentEvent === 'thought') {
               hadThinking = true;
               statusTextElem.textContent = '🧠 正在分析需求與下一步…';
@@ -3176,6 +3206,8 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
               statusTextElem.textContent = progressState === 'running'
                 ? `${progress.icon} ${activePrefix}${progress.text}…`
                 : `${progress.icon} ${activePrefix}${progress.text}`;
+              stickyExecution?.enable(progress.text);
+              stickyExecution?.update(progress.text, performance.now() - startTs);
             } else if (currentEvent === 'chunk' && (data.accumulated !== undefined || data.delta !== undefined)) {
               markProgressDone('phase:analysis');
               upsertProgress('phase:writing', {
@@ -3184,6 +3216,7 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
                 state: 'running'
               });
               statusTextElem.textContent = '✍️ 正在整理並輸出回覆…';
+              stickyExecution?.update('整理並輸出回覆', performance.now() - startTs);
               // New servers send only the delta to avoid repeatedly
               // serializing the full response. Keep accepting accumulated for
               // older cached pages or an external compatible server.
@@ -3214,6 +3247,7 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
   } catch (err) {
     if (err.name === 'AbortError') {
       abortedHandled = true;
+      stickyExecution?.dispose();
       finalizeTurn();
       const abortBadge = document.createElement('div');
       abortBadge.className = 'mt-2 pt-1.5 border-t border-slate-800 text-[11px] text-amber-400 font-mono flex items-center gap-1';
@@ -3222,6 +3256,7 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
       if (typeof enhanceCodeBlocks === 'function') enhanceCodeBlocks(assistantMsgDiv);
     } else {
       // Graceful Disconnection Recovery
+      stickyExecution?.dispose();
       console.warn('[SSE Disconnect] Stream interrupted:', err);
       
       if (accumulatedText && accumulatedText.trim()) {
