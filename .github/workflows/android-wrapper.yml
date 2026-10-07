@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - feature/agent-runtime
+      - feature/companion-runtime
   pull_request:
     branches:
       - main
@@ -31,11 +32,67 @@ jobs:
         with:
           gradle-version: "8.10.2"
 
-      - name: Build debug APK
-        run: gradle -p android-wrapper :app:assembleDebug --stacktrace
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
 
-      - name: Upload APK
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          cmdline-tools-version: "12266719"
+          log-accepted-android-sdk-licenses: false
+
+      - name: Install runtime packaging tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y patchelf
+          sdkmanager "ndk;27.2.12479018"
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/27.2.12479018" >> "$GITHUB_ENV"
+
+      - name: Prepare Android Node payload
+        run: bash android-wrapper/runtime/scripts/fetch-termux-node-payload.sh
+
+      - name: Prepare Android toolchain payload
+        run: bash android-wrapper/runtime/scripts/fetch-toolchain.sh
+
+      - name: Prepare Android Codex payload
+        run: bash android-wrapper/runtime/scripts/fetch-codex-payload.sh
+
+      - name: Probe official Android AGY payload
+        id: agy_payload
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: bash android-wrapper/runtime/scripts/fetch-official-agy-payload.sh
+
+      - name: Report AGY payload state
+        run: |
+          if [ "${{ steps.agy_payload.outcome }}" = "success" ]; then
+            echo "Official Android AGY payload packaged; Runtime can advertise READY when all gates pass."
+          else
+            echo "Official Android AGY payload probe did not resolve a directly runnable ELF; Runtime stays on safe fallback."
+          fi
+
+      - name: Build debug APK
+        env:
+          CREW_RUNTIME_ENABLE_COMPANION: ${{ ((github.head_ref == 'feature/companion-runtime') || (github.ref_name == 'feature/companion-runtime')) && (steps.agy_payload.outcome == 'success') && 'true' || 'false' }}
+        run: |
+          echo "Crew Runtime companion enabled for this artifact: $CREW_RUNTIME_ENABLE_COMPANION"
+          gradle -p android-wrapper :app:assembleDebug :runtime:assembleDebug --stacktrace
+
+      - name: Check packaged toolchain completeness
+        run: python3 android-wrapper/runtime/scripts/check-toolchain-apk.py android-wrapper/runtime/build/outputs/apk/debug/runtime-debug.apk
+
+      - name: Upload Crew Pocket APK
         uses: actions/upload-artifact@v4
         with:
-          name: crew-pocket-android-wrapper-debug
+          name: crew-pocket-dev-debug
           path: android-wrapper/app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Upload Crew Runtime APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: crew-pocket-runtime-dev-debug
+          path: android-wrapper/runtime/build/outputs/apk/debug/runtime-debug.apk

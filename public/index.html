@@ -165,6 +165,8 @@
 
         <div class="px-2 pt-1 pb-0.5 text-[10px] font-bold tracking-wider text-slate-500">操作</div>
 
+        <button id="terminal-menu-btn" type="button" class="w-full min-h-11 flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-xs text-slate-200 hover:bg-slate-800/90 text-left"><span class="w-6 text-center font-mono text-emerald-300">&gt;_</span><span><span class="block font-semibold">Terminal</span><span class="block text-[10px] text-slate-400">輸入指令、Git 與專案操作</span></span></button>
+
         <button id="crew-home-btn" type="button" class="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-xs text-slate-200 hover:bg-slate-800/90 hover:text-indigo-300 transition text-left group" title="任務總覽與 Remote Console">
           <div class="w-6 h-6 rounded-lg bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center text-indigo-300 group-hover:scale-105 transition shrink-0">
             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
@@ -215,6 +217,14 @@
           <div class="flex flex-col min-w-0">
             <span class="font-semibold text-slate-100 group-hover:text-amber-300">無線偵錯設定</span>
             <span class="text-[10px] text-slate-400">更新 Port、測試 ADB 連線</span>
+          </div>
+        </button>
+
+        <button id="downloads-access-btn" type="button" class="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-xs text-slate-200 hover:bg-slate-800/90 transition text-left" title="設定 Runtime 的共用 Downloads 存取權">
+          <div class="w-6 h-6 rounded-lg bg-emerald-500/20 flex items-center justify-center shrink-0">📥</div>
+          <div class="flex flex-col min-w-0">
+            <span class="font-semibold text-slate-100">Downloads 存取</span>
+            <span class="text-[10px] text-slate-400">授權 Agent 讀寫下載資料夾</span>
           </div>
         </button>
 
@@ -1104,14 +1114,14 @@
           </div>
         </div>
 
-        <!-- 4. Termux Runtime Providers -->
+        <!-- 4. Runtime Providers -->
         <div class="p-3 rounded-2xl bg-slate-950/80 border border-slate-700/70 space-y-2.5">
           <div class="flex items-center justify-between">
             <div>
-              <div class="font-bold text-slate-100 text-xs">Termux Runtime Engine</div>
-              <div class="text-[10px] text-slate-400">Crew Pocket 保持 APK 穩定，Codex / AGY 可獨立更新</div>
+              <div id="provider-runtime-title" class="font-bold text-slate-100 text-xs">Runtime Engine</div>
+              <div id="provider-runtime-subtitle" class="text-[10px] text-slate-400">正在讀取 Runtime 與 Provider 版本...</div>
             </div>
-            <span id="provider-runtime-host" class="px-2 py-0.5 rounded-full text-[10px] font-mono bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">Termux</span>
+            <span id="provider-runtime-host" class="px-2 py-0.5 rounded-full text-[10px] font-mono bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">讀取中...</span>
           </div>
 
           <div class="grid grid-cols-1 gap-2">
@@ -1594,6 +1604,7 @@
   <script src="/js/model-settings.js"></script>
   <script src="/js/tools.js"></script>
   <script src="/js/storage.js"></script>
+  <script src="/js/local-files.js"></script>
   <script src="/js/chat.js"></script>
   <script src="/js/tasks.js"></script>
   <script src="/vendor/qrcode.min.js"></script>
@@ -1601,5 +1612,6 @@
   <script src="/js/live.js"></script>
   <script src="/js/auth.js"></script>
   <script src="/js/app.js"></script>
+  <script src="/js/terminal.js"></script>
 </body>
 </html>

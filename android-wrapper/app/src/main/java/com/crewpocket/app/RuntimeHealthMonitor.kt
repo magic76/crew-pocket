@@ -11,7 +11,7 @@ class RuntimeHealthMonitor(
     private val onUnavailable: () -> Unit
 ) {
     companion object {
-        private const val HEALTH_URL = "http://127.0.0.1:8000/healthz"
+        private val HEALTH_URL = "http://127.0.0.1:${BuildConfig.SERVER_PORT}/healthz"
         private const val QUICK_RECHECK_MS = 1_500L
         private const val HEALTHY_RECHECK_MS = 60_000L
     }

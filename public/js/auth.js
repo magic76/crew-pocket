@@ -1,6 +1,7 @@
 // 🔐 Provider Authentication & Login Manager (Codex Device Auth + AGY Token)
 let activeAuthPollInterval = null;
 let currentAuthSessionId = null;
+let providerRuntimeSnapshot = null;
 
 function isAuthErrorMessage(msg = '') {
   if (!msg || typeof msg !== 'string') return false;
@@ -29,14 +30,21 @@ async function refreshProviderRuntime() {
   const codexEl = document.getElementById('provider-version-codex');
   const agyEl = document.getElementById('provider-version-antigravity');
   const statusEl = document.getElementById('provider-update-status');
+  const hostEl = document.getElementById('provider-runtime-host');
+  const titleEl = document.getElementById('provider-runtime-title');
+  const subtitleEl = document.getElementById('provider-runtime-subtitle');
+  const codexButton = document.getElementById('provider-update-codex');
+  const agyButton = document.getElementById('provider-update-antigravity');
 
   try {
     const res = await fetch('/api/runtime/providers');
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || '無法取得 Provider runtime 狀態');
 
+    providerRuntimeSnapshot = data;
     const codex = data.providers?.codex;
     const agy = data.providers?.antigravity;
+    const companion = data.delivery === 'runtime-apk';
 
     if (codexEl) {
       codexEl.textContent = codex?.installed
@@ -48,13 +56,45 @@ async function refreshProviderRuntime() {
         ? (agy.version || '已安裝')
         : '未安裝';
     }
+
+    if (hostEl) {
+      hostEl.textContent = companion
+        ? ('Crew Runtime' + (data.runtimeVersion ? ' ' + data.runtimeVersion : ''))
+        : 'Termux';
+    }
+    if (titleEl) {
+      titleEl.textContent = companion ? 'Crew Runtime Engine' : 'Termux Runtime Engine';
+    }
+    if (subtitleEl) {
+      subtitleEl.textContent = companion
+        ? 'Codex / AGY 隨 Crew Runtime app 更新，不綁 Crew Pocket 版本'
+        : 'Crew Pocket 保持 APK 穩定，Codex / AGY 可獨立更新';
+    }
+
+    const configureUpdateButton = (button, provider) => {
+      if (!button) return;
+      if (provider?.updateMode === 'runtime-app') {
+        button.disabled = false;
+        button.textContent = '更新 Runtime';
+        button.title = 'Codex / AGY 由 Crew Runtime app 提供；更新 Runtime 即可升級 Provider';
+      } else {
+        button.disabled = provider?.updateSupported === false;
+        button.textContent = '更新';
+        button.title = provider?.updateSupported === false ? '此 Provider 不支援直接更新' : '';
+      }
+    };
+    configureUpdateButton(codexButton, codex);
+    configureUpdateButton(agyButton, agy);
+
     if (statusEl && !statusEl.dataset.busy) {
       statusEl.classList.add('hidden');
       statusEl.textContent = '';
     }
   } catch (err) {
+    providerRuntimeSnapshot = null;
     if (codexEl) codexEl.textContent = '讀取失敗';
     if (agyEl) agyEl.textContent = '讀取失敗';
+    if (hostEl) hostEl.textContent = '未知';
     if (statusEl && !statusEl.dataset.busy) {
       statusEl.classList.remove('hidden');
       statusEl.textContent = 'Provider runtime 狀態讀取失敗：' + err.message;
@@ -62,11 +102,39 @@ async function refreshProviderRuntime() {
   }
 }
 
+function openCrewRuntimeUpdate(packageName = 'com.crewpocket.runtime') {
+  if (typeof window.CrewPocket?.openRuntimeUpdate === 'function') {
+    window.CrewPocket.openRuntimeUpdate();
+    return;
+  }
+  window.open(
+    'https://play.google.com/store/apps/details?id=' + encodeURIComponent(packageName),
+    '_blank',
+    'noopener'
+  );
+}
+
 async function updateRuntimeProvider(provider) {
   const id = provider === 'antigravity' ? 'antigravity' : 'codex';
   const button = document.getElementById('provider-update-' + id);
   const statusEl = document.getElementById('provider-update-status');
   const label = id === 'codex' ? 'Codex' : 'Antigravity';
+  const runtimeInfo = providerRuntimeSnapshot?.providers?.[id];
+
+  if (runtimeInfo?.updateMode === 'runtime-app') {
+    const runtimeVersion = providerRuntimeSnapshot?.runtimeVersion;
+    const message = label + ' 目前由 Crew Runtime app 提供。\n\n' +
+      (runtimeVersion ? '目前 Runtime：' + runtimeVersion + '\n' : '') +
+      '要前往更新 Crew Runtime 嗎？';
+    if (confirm(message)) {
+      openCrewRuntimeUpdate(
+        runtimeInfo.runtimePackage ||
+        providerRuntimeSnapshot?.runtimePackage ||
+        'com.crewpocket.runtime'
+      );
+    }
+    return;
+  }
 
   if (!confirm('要更新 ' + label + ' 嗎？更新期間該 Provider 的進行中工作會停止。')) {
     return;
@@ -90,6 +158,16 @@ async function updateRuntimeProvider(provider) {
       body: JSON.stringify({ provider: id })
     });
     const data = await res.json();
+
+    if (res.status === 409 && data.action?.type === 'update-runtime-app') {
+      if (statusEl) {
+        statusEl.className = 'text-[10px] leading-relaxed rounded-lg px-2.5 py-2 bg-indigo-950/40 text-indigo-300 border border-indigo-500/30';
+        statusEl.textContent = label + ' 由 Crew Runtime app 提供，請更新 Runtime。';
+      }
+      openCrewRuntimeUpdate(data.action.packageName);
+      return;
+    }
+
     if (!res.ok || !data.success) {
       throw new Error(data.details || data.error || '更新失敗');
     }
@@ -108,7 +186,9 @@ async function updateRuntimeProvider(provider) {
     if (statusEl) delete statusEl.dataset.busy;
     if (button) {
       button.disabled = false;
-      button.textContent = '更新';
+      button.textContent = providerRuntimeSnapshot?.providers?.[id]?.updateMode === 'runtime-app'
+        ? '更新 Runtime'
+        : '更新';
     }
   }
 }

@@ -3,6 +3,7 @@ package com.crewpocket.app
 import android.Manifest
 import android.app.Activity
 import android.app.AlertDialog
+import android.app.DownloadManager
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.BroadcastReceiver
@@ -14,6 +15,7 @@ import android.graphics.Color
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Environment
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
@@ -21,6 +23,7 @@ import android.text.InputType
 import android.view.Gravity
 import android.view.View
 import android.webkit.GeolocationPermissions
+import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
 import android.webkit.PermissionRequest
 import android.webkit.ValueCallback
@@ -46,7 +49,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 class MainActivity : Activity() {
     companion object {
-        private const val SERVER_URL = "http://127.0.0.1:8000/"
+        private val SERVER_URL = "http://127.0.0.1:${BuildConfig.SERVER_PORT}/"
+        private val LOCALHOST_SERVER_URL = "http://localhost:${BuildConfig.SERVER_PORT}/"
         private const val REQUEST_TERMUX = 7601
         private const val REQUEST_NOTIFICATION = 7602
         private const val REQUEST_WEB_MEDIA = 7603
@@ -62,6 +66,7 @@ class MainActivity : Activity() {
     private val pageLoaded = AtomicBoolean(false)
     private lateinit var runtimeHealthMonitor: RuntimeHealthMonitor
     private lateinit var wirelessDebugController: WirelessDebugController
+    private lateinit var runtimeUpdateController: RuntimeUpdateController
 
     private var pendingWebPermission: PermissionRequest? = null
     private var pendingWebResources: Array<String> = emptyArray()
@@ -70,12 +75,16 @@ class MainActivity : Activity() {
     private var filePathCallback: ValueCallback<Array<Uri>>? = null
     private val webSessionId = System.currentTimeMillis()
     private var legacyPwaCleanupPending = false
+    private var appVisible = false
     private var pendingConversationProvider: String? = null
     private var pendingConversationId: String? = null
     private var pendingTaskId: String? = null
     private var pendingConversationAttempts = 0
     private val runtimeReloadReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == "${packageName}.RUNTIME_UPDATE_RESULT" && appVisible) {
+                runtimeUpdateController.resume()
+            }
             if (intent?.action == CrewRuntimeService.ACTION_RELOAD_WEBVIEW && ::webView.isInitialized) {
                 webView.reload()
             }
@@ -87,10 +96,13 @@ class MainActivity : Activity() {
         captureConversationIntent(intent)
         buildUi()
         wirelessDebugController = WirelessDebugController(this)
+        runtimeUpdateController = RuntimeUpdateController(this) { callback ->
+            webView.evaluateJavascript("Boolean((typeof isStreaming !== 'undefined' && isStreaming) || window.isLiveSessionActive?.())") { active -> callback(active == "false") }
+        }
         runtimeHealthMonitor = RuntimeHealthMonitor(
             onHealthy = {
                 runOnUiThread {
-                    statusText.text = "Crew active · Termux engine"
+                    statusText.text = "Crew active · ${RuntimeManager.productionHost(this@MainActivity).label}"
                     if (pageLoaded.compareAndSet(false, true)) {
                         webView.loadUrl(appUrl())
                     }
@@ -104,7 +116,7 @@ class MainActivity : Activity() {
             }
         )
         configureWebView()
-        registerReceiver(runtimeReloadReceiver, IntentFilter(CrewRuntimeService.ACTION_RELOAD_WEBVIEW), Context.RECEIVER_NOT_EXPORTED)
+        registerReceiver(runtimeReloadReceiver, IntentFilter(CrewRuntimeService.ACTION_RELOAD_WEBVIEW).apply { addAction("${packageName}.RUNTIME_UPDATE_RESULT") }, Context.RECEIVER_NOT_EXPORTED)
         prepareLegacyPwaRetirement()
         requestNotificationPermissionIfNeeded()
         requestTermuxPermissionIfPossible()
@@ -119,11 +131,13 @@ class MainActivity : Activity() {
 
     override fun onStart() {
         super.onStart()
+        appVisible = true
         startCrewRuntime()
         runtimeHealthMonitor.start()
     }
 
     override fun onStop() {
+        appVisible = false
         runtimeHealthMonitor.stop()
         notifyRuntimeBackground()
         super.onStop()
@@ -132,12 +146,14 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         refreshSetupStatus()
+        if (::runtimeUpdateController.isInitialized) runtimeUpdateController.resume()
     }
 
     override fun onDestroy() {
         unregisterReceiver(runtimeReloadReceiver)
         runtimeHealthMonitor.close()
         wirelessDebugController.close()
+        runtimeUpdateController.close()
         webView.destroy()
         super.onDestroy()
     }
@@ -223,6 +239,32 @@ class MainActivity : Activity() {
             allowContentAccess = true
             allowFileAccess = false
         }
+        webView.setDownloadListener { target, _, _, _, _ ->
+            val uri = Uri.parse(target)
+            val artifact = uri.path?.matches(Regex("/api/build-artifacts/[a-f0-9-]{36}/[A-Za-z0-9._-]+\\.apk")) == true
+            if (uri.scheme != "http" || uri.host !in listOf("127.0.0.1", "localhost") || uri.port != BuildConfig.SERVER_PORT || !artifact) {
+                Toast.makeText(this, "此下載連結不屬於目前 Runtime", Toast.LENGTH_SHORT).show()
+            } else {
+                runCatching {
+                    val filename = "crew-${System.currentTimeMillis()}-${uri.lastPathSegment}"
+                    val request = DownloadManager.Request(uri)
+                        .setTitle(filename)
+                        .setMimeType("application/vnd.android.package-archive")
+                        .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                    CookieManager.getInstance().getCookie(target)?.let { request.addRequestHeader("Cookie", it) }
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        request.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, filename)
+                    } else {
+                        request.setDestinationInExternalFilesDir(this, Environment.DIRECTORY_DOWNLOADS, filename)
+                    }
+                    (getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager).enqueue(request)
+                }.onSuccess {
+                    Toast.makeText(this, "正在下載 APK，可從下載通知開啟", Toast.LENGTH_SHORT).show()
+                }.onFailure {
+                    Toast.makeText(this, "APK 下載失敗：${it.message}", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
         webView.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(
                 view: WebView?,
@@ -232,7 +274,7 @@ class MainActivity : Activity() {
                 val target = uri.toString()
                 if (
                     target.startsWith(SERVER_URL) ||
-                    target.startsWith("http://localhost:8000/")
+                    target.startsWith(LOCALHOST_SERVER_URL)
                 ) {
                     return false
                 }
@@ -447,6 +489,28 @@ class MainActivity : Activity() {
                 }
             }
         }
+
+        @JavascriptInterface
+        fun openDownloadsAccess() {
+            runOnUiThread {
+                if (!webView.url.orEmpty().startsWith(SERVER_URL)) return@runOnUiThread
+                runCatching {
+                    startActivity(Intent().setClassName(BuildConfig.RUNTIME_PACKAGE,
+                        "com.crewpocket.runtime.DownloadsAccessActivity"))
+                }.onFailure {
+                    Toast.makeText(this@MainActivity, "請先安裝支援 Downloads 存取的 Crew Runtime", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+
+        @JavascriptInterface
+        fun openRuntimeUpdate() {
+            runOnUiThread {
+                if (!webView.url.orEmpty().startsWith(SERVER_URL)) return@runOnUiThread
+
+                runtimeUpdateController.show()
+            }
+        }
     }
 
     private fun startCrewRuntime() {
@@ -470,6 +534,10 @@ class MainActivity : Activity() {
     }
 
     private fun requestTermuxPermissionIfPossible() {
+        if (RuntimeManager.productionHost(this).id != TermuxAgentRuntime.id) {
+            refreshSetupStatus()
+            return
+        }
         if (!TermuxBridge.isInstalled(this)) {
             refreshSetupStatus()
             return
@@ -495,11 +563,21 @@ class MainActivity : Activity() {
     }
 
     private fun refreshSetupStatus() {
+        val selected = RuntimeManager.productionHost(this)
+        val companionInstalled = CompanionAgentRuntime.isInstalled(this)
+        val companionReady = CompanionAgentRuntime.isReady(this)
         val message = when {
-            !TermuxBridge.isInstalled(this) ->
-                "Termux is required as the Crew Pocket runtime engine."
-            !TermuxBridge.hasRunCommandPermission(this) ->
-                "Grant “Run commands in Termux environment” so Crew Pocket can start and recover the runtime."
+            !BuildConfig.ALLOW_TERMUX_FALLBACK && !companionInstalled ->
+                "Crew Runtime Dev is not installed. Install the matching Dev Runtime APK to use this isolated build."
+            !BuildConfig.ALLOW_TERMUX_FALLBACK && !companionReady ->
+                "Crew Runtime Dev is installed but is not ready. Check the matching Dev Runtime build and payloads."
+            selected.id == CompanionAgentRuntime.id -> null
+            !TermuxBridge.isInstalled(this) && !companionInstalled ->
+                "Crew Runtime is not installed. Termux remains a temporary fallback during the runtime migration."
+            !TermuxBridge.isInstalled(this) && companionInstalled ->
+                "Crew Runtime is installed but this build is not ready to replace the fallback runtime yet."
+            selected.id == TermuxAgentRuntime.id && !TermuxBridge.hasRunCommandPermission(this) ->
+                "Grant “Run commands in Termux environment” while Crew Runtime migration is still in progress."
             else -> null
         }
         setupText.text = message ?: ""
@@ -616,6 +694,14 @@ class MainActivity : Activity() {
 
     @Deprecated("Deprecated in Java")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        if (requestCode == RuntimeUpdateController.REQUEST_APK) {
+            if (resultCode == RESULT_OK) data?.data?.let { runtimeUpdateController.selected(it) }
+            return
+        }
+        if (requestCode == RuntimeUpdateController.REQUEST_INSTALL_PERMISSION) {
+            runtimeUpdateController.show()
+            return
+        }
         if (requestCode == REQUEST_FILE) {
             val callback = filePathCallback
             filePathCallback = null

@@ -1,0 +1,15 @@
+#terminal-panel[hidden] { display: none; }
+#terminal-panel { position: fixed; inset: 0; z-index: 100; display: flex; flex-direction: column; background: #020617; color: #e2e8f0; padding: max(8px, env(safe-area-inset-top)) 8px max(8px, env(safe-area-inset-bottom)); }
+#terminal-panel header { display: flex; align-items: center; gap: 7px; min-height: 42px; }
+#terminal-panel header strong { font-size: 14px; }
+#terminal-status { flex: 1; font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#terminal-panel button { border: 1px solid #334155; border-radius: 8px; padding: 8px 9px; min-height: 38px; color: #e2e8f0; background: #0f172a; font-size: 12px; }
+#terminal-panel button:active { background: #334155; }
+#terminal-panel .terminal-note { margin: 5px 0 8px; color: #94a3b8; font-size: 10px; }
+#terminal-screen { flex: 1; min-height: 0; overflow: hidden; }
+#terminal-screen .xterm { height: 100%; }
+#terminal-panel nav { display: flex; gap: 5px; padding: 7px 0; overflow-x: auto; flex-shrink: 0; }
+#terminal-panel nav button { flex-shrink: 0; }
+#terminal-command { display: flex; gap: 6px; flex-shrink: 0; }
+#terminal-command input { flex: 1; min-width: 0; border: 1px solid #334155; border-radius: 8px; background: #0f172a; color: #e2e8f0; padding: 10px; font-family: monospace; font-size: 16px; }
+#terminal-command button { color: #6ee7b7; }

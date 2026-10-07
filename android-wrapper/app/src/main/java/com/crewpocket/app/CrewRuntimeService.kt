@@ -26,6 +26,7 @@ class CrewRuntimeService : Service() {
         const val ACTION_STOP = "com.crewpocket.app.action.STOP_RUNTIME"
         const val ACTION_REFRESH_EMBEDDED = "com.crewpocket.app.action.REFRESH_EMBEDDED"
         const val ACTION_RESTART_EMBEDDED = "com.crewpocket.app.action.RESTART_EMBEDDED"
+        const val ACTION_RESTART_RUNTIME = "com.crewpocket.app.action.RESTART_RUNTIME"
         const val ACTION_RELOAD_WEBVIEW = "com.crewpocket.app.action.RELOAD_WEBVIEW"
         const val ACTION_APP_FOREGROUND = "com.crewpocket.app.action.APP_FOREGROUND"
         const val ACTION_APP_BACKGROUND = "com.crewpocket.app.action.APP_BACKGROUND"
@@ -37,8 +38,8 @@ class CrewRuntimeService : Service() {
         private const val CHANNEL_ID = "crew_runtime"
         private const val TASK_CHANNEL_ID = "crew_tasks"
         private const val NOTIFICATION_ID = 7601
-        private const val SERVER_HEALTH_URL = "http://127.0.0.1:8000/healthz"
-        private const val SERVER_TASKS_URL = "http://127.0.0.1:8000/api/tasks?limit=80"
+        private val SERVER_HEALTH_URL = "http://127.0.0.1:${BuildConfig.SERVER_PORT}/healthz"
+        private val SERVER_TASKS_URL = "http://127.0.0.1:${BuildConfig.SERVER_PORT}/api/tasks?limit=80"
         private const val RESTART_COOLDOWN_MS = 20_000L
         private const val INITIAL_MONITOR_DELAY_SEC = 4L
         private const val HEALTHY_MIN_DELAY_SEC = 10L
@@ -47,6 +48,8 @@ class CrewRuntimeService : Service() {
         private const val BACKGROUND_GRACE_SEC = 30L
         private const val BACKGROUND_TASK_POLL_SEC = 5L
         private const val BACKGROUND_TASK_MAX_WATCH_MS = 30L * 60L * 1000L
+        private const val COMPANION_FALLBACK_GRACE_MS = 15_000L
+        private const val COMPANION_FALLBACK_FAILURES = 3
     }
 
     private val scheduler = Executors.newSingleThreadScheduledExecutor()
@@ -59,6 +62,8 @@ class CrewRuntimeService : Service() {
     @Volatile private var appInForeground = true
     @Volatile private var backgroundStartedAt = 0L
     @Volatile private var sawRunningBackgroundTask = false
+    @Volatile private var activeRuntime: AgentRuntime? = null
+    @Volatile private var companionStartRequestedAt = 0L
     private val notifiedTaskIds = mutableSetOf<String>()
     private var idleStopTask: ScheduledFuture<*>? = null
 
@@ -72,7 +77,7 @@ class CrewRuntimeService : Service() {
             .putBoolean("embedded_runtime_enabled", false)
             .putBoolean("embedded_ready", false)
             .putString("runtime_mode", "in-use")
-            .putString("host_mode", "termux-runtime")
+            .putString("host_mode", currentHost().id)
             .apply()
     }
 
@@ -81,7 +86,7 @@ class CrewRuntimeService : Service() {
             ACTION_STOP -> {
                 cancelIdleStop()
                 updateNotification("Stopping Crew runtime…")
-                RuntimeManager.productionHost.stopCrewHost(this)
+                currentHost().stopCrewHost(this)
                 getSharedPreferences("crew_runtime", MODE_PRIVATE)
                     .edit()
                     .putString("host_mode", "stopped")
@@ -106,22 +111,23 @@ class CrewRuntimeService : Service() {
                 backgroundStartedAt = 0L
                 sawRunningBackgroundTask = false
                 cancelIdleStop()
-                ensureTermuxRuntime("app foreground")
+                ensureRuntime("app foreground")
                 startMonitorIfNeeded()
             }
 
             ACTION_REFRESH_EMBEDDED,
-            ACTION_RESTART_EMBEDDED -> {
+            ACTION_RESTART_EMBEDDED,
+            ACTION_RESTART_RUNTIME -> {
                 appInForeground = true
                 cancelIdleStop()
-                restartTermuxRuntime()
+                restartRuntime()
                 startMonitorIfNeeded()
             }
 
             else -> {
                 appInForeground = true
                 cancelIdleStop()
-                ensureTermuxRuntime("start command")
+                ensureRuntime("start command")
                 startMonitorIfNeeded()
             }
         }
@@ -208,7 +214,7 @@ class CrewRuntimeService : Service() {
         if (appInForeground) return
         getSharedPreferences("crew_runtime", MODE_PRIVATE)
             .edit()
-            .putString("host_mode", "termux-runtime-idle")
+            .putString("host_mode", "${currentHost().id}-idle")
             .putLong("monitor_interval_ms", 0L)
             .apply()
 
@@ -347,13 +353,16 @@ class CrewRuntimeService : Service() {
         if (serverAlive()) {
             failedChecks = 0
             healthyChecks += 1
-            updateNotification("Crew runtime active · Termux engine")
+            updateNotification("Crew runtime active · ${currentHost().label}")
             return healthyDelaySeconds(healthyChecks)
         }
 
         healthyChecks = 0
         failedChecks += 1
-        ensureTermuxRuntime("health check")
+        if (maybeFallbackToTermux("health check")) {
+            return 1L
+        }
+        ensureRuntime("health check")
         return failureDelaySeconds(failedChecks)
     }
 
@@ -375,10 +384,11 @@ class CrewRuntimeService : Service() {
         }
     }
 
-    private fun restartTermuxRuntime() {
+    private fun restartRuntime() {
         scheduler.execute {
-            updateNotification("Restarting Crew Termux runtime…")
-            RuntimeManager.productionHost.stopCrewHost(this)
+            val previousHost = currentHost()
+            updateNotification("Restarting ${previousHost.label}…")
+            previousHost.stopCrewHost(this)
 
             val deadline = System.currentTimeMillis() + 3_000L
             while (serverAlive() && System.currentTimeMillis() < deadline) {
@@ -388,7 +398,9 @@ class CrewRuntimeService : Service() {
             healthyChecks = 0
             failedChecks = 0
             lastRestartAt = 0L
-            ensureTermuxRuntime("manual restart")
+            companionStartRequestedAt = 0L
+            activeRuntime = RuntimeManager.productionHost(this)
+            ensureRuntime("manual restart")
             scheduler.schedule({
                 if (serverAlive()) {
                     sendBroadcast(Intent(ACTION_RELOAD_WEBVIEW).setPackage(packageName))
@@ -397,9 +409,9 @@ class CrewRuntimeService : Service() {
         }
     }
 
-    private fun ensureTermuxRuntime(reason: String) {
+    private fun ensureRuntime(reason: String) {
         if (serverAlive()) {
-            updateNotification("Crew runtime active · Termux engine")
+            updateNotification("Crew runtime active · ${currentHost().label}")
             return
         }
 
@@ -407,20 +419,74 @@ class CrewRuntimeService : Service() {
         if (now - lastRestartAt < RESTART_COOLDOWN_MS) return
         lastRestartAt = now
 
+        val host = currentHost()
+        if (host === CompanionAgentRuntime && companionStartRequestedAt == 0L) {
+            companionStartRequestedAt = now
+        }
+
         getSharedPreferences("crew_runtime", MODE_PRIVATE)
             .edit()
-            .putString("host_mode", "termux-runtime")
+            .putString("host_mode", host.id)
             .apply()
 
-        RuntimeManager.productionHost.startCrewHost(this)
+        host.startCrewHost(this)
             .onSuccess {
-                Log.i(TAG, "Requested Termux runtime start: $reason")
-                updateNotification("Starting Crew Termux runtime…")
+                Log.i(TAG, "Requested ${host.label} start: $reason")
+                updateNotification("Starting ${host.label}…")
             }
             .onFailure { error ->
-                Log.w(TAG, "Termux runtime start failed: $reason", error)
+                Log.w(TAG, "${host.label} start failed: $reason", error)
                 updateNotification("Crew runtime unavailable · ${error.message}")
             }
+    }
+
+    private fun currentHost(): AgentRuntime {
+        activeRuntime?.let { return it }
+        return RuntimeManager.productionHost(this).also { activeRuntime = it }
+    }
+
+    private fun maybeFallbackToTermux(reason: String): Boolean {
+        if (!BuildConfig.ALLOW_TERMUX_FALLBACK) return false
+
+        val host = currentHost()
+        if (host !== CompanionAgentRuntime) return false
+        if (failedChecks < COMPANION_FALLBACK_FAILURES) return false
+
+        val startedAt = companionStartRequestedAt
+        if (startedAt <= 0L || System.currentTimeMillis() - startedAt < COMPANION_FALLBACK_GRACE_MS) {
+            return false
+        }
+
+        val fallback = RuntimeManager.fallbackHost(this)
+        if (!fallback.isAvailable(this)) return false
+
+        Log.w(
+            TAG,
+            "Companion runtime did not become healthy; falling back to Termux for this service session: $reason"
+        )
+        host.stopCrewHost(this)
+
+        val fallbackResult = fallback.startCrewHost(this)
+        if (fallbackResult.isFailure) {
+            Log.w(TAG, "Termux fallback failed", fallbackResult.exceptionOrNull())
+            return false
+        }
+
+        activeRuntime = fallback
+        companionStartRequestedAt = 0L
+        lastRestartAt = System.currentTimeMillis()
+        healthyChecks = 0
+        failedChecks = 0
+
+        getSharedPreferences("crew_runtime", MODE_PRIVATE)
+            .edit()
+            .putString("host_mode", "termux-fallback")
+            .putString("fallback_reason", reason)
+            .putLong("fallback_at", System.currentTimeMillis())
+            .apply()
+
+        updateNotification("Crew Runtime unavailable · using Termux fallback")
+        return true
     }
 
     private fun serverAlive(): Boolean {
@@ -449,7 +515,7 @@ class CrewRuntimeService : Service() {
             "Crew Runtime",
             NotificationManager.IMPORTANCE_LOW
         ).apply {
-            description = "Keeps the Termux-backed Crew Pocket runtime available."
+            description = "Keeps the selected Crew Pocket runtime available."
             setShowBadge(false)
         }
         val taskChannel = NotificationChannel(
@@ -493,7 +559,7 @@ class CrewRuntimeService : Service() {
         )
         val restartPendingIntent = PendingIntent.getService(
             this, 2,
-            Intent(this, CrewRuntimeService::class.java).setAction(ACTION_RESTART_EMBEDDED),
+            Intent(this, CrewRuntimeService::class.java).setAction(ACTION_RESTART_RUNTIME),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
         val stopPendingIntent = PendingIntent.getService(
@@ -510,7 +576,7 @@ class CrewRuntimeService : Service() {
         }
 
         return builder
-            .setContentTitle("Crew Pocket")
+            .setContentTitle(if (BuildConfig.DEBUG) "Crew Pocket Dev" else "Crew Pocket")
             .setContentText(text)
             .setSmallIcon(android.R.drawable.stat_notify_sync_noanim)
             .setContentIntent(openPendingIntent)

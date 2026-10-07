@@ -1,0 +1,8 @@
+{
+  "posix-semaphore": {
+    "url": "https://raw.githubusercontent.com/termux/termux-packages/0cb89e24e5d872af1d4cd84f452100a45d3696a0/packages/libandroid-posix-semaphore/semaphore.c",
+    "sha256": "333e0027667d8a82568fbe5617b1ef381a8c6a920d1a44a07570fb695a302253",
+    "license": "MIT",
+    "changes": "Use the Runtime TMPDIR instead of compiled _PATH_TMP; expose libandroid semaphore symbols with NDK headers."
+  }
+}

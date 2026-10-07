@@ -16,3 +16,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "CrewPocketAndroid"
 include(":app")
+include(":runtime")

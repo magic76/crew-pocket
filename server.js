@@ -33,13 +33,15 @@ const { getProvider, normalizeProviderId, listProviders, listProviderMetadata } 
 const { handleLiveSync, handleLiveTranscribe, handleQuickTranscribe } = require('./lib/history');
 const { generateCompactedSummary, buildCompactionSource } = require('./lib/compact');
 const { handleRunCode } = require('./lib/sandbox');
+const { handleTerminal, hasActiveTerminals } = require('./lib/terminal');
+const { handleBuildArtifact } = require('./lib/build-artifacts');
 const { handleUsage } = require('./lib/usage');
 const { handleListFiles, handleReadFile, handleSaveFile, handleDeleteFile, handleTransferFile } = require('./lib/files');
 const { handleListPublicAssets } = require('./lib/public-assets');
 const { createExtensionBridge } = require('./lib/extension_bridge');
 const { getStorageReport, deleteMediaItems, getMediaThumbnail } = require('./lib/storage');
 const { getConversationSettings, getProviderConversationSettings, saveConversationSettings, saveConversationTitle, deleteConversationSettings } = require('./lib/conversation-settings');
-const { createTask, getTask, listTasks, updateTask } = require('./lib/tasks');
+const { createTask, getTask, listTasks, updateTask, hasRunningTasks } = require('./lib/tasks');
 const { listWorkspaces, resolveWorkspace, createWorkspace } = require('./lib/workspaces');
 const auth = require('./lib/auth');
 const {
@@ -56,6 +58,7 @@ const {
 } = require('./lib/http-security');
 const { createHistoryMigration } = require('./lib/runtime/history-migration');
 const { getProviderRuntimeStatus, updateProvider } = require('./lib/runtime/provider-manager');
+const { findExecutable, toolchainSnapshot } = require('./lib/runtime/toolchain');
 const { getJevCliStatus } = require('./lib/jev-router');
 const { prepareTurnExecution } = require('./lib/runtime/turn-orchestrator');
 const { normalizeExecutionIntent } = require('./lib/execution-intent');
@@ -125,7 +128,9 @@ async function handleAdbStatus(res) {
     } catch (_) {}
 
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ target, connected, devices: devicesOutput.trim(), last_output: lastOutput }));
+    const available = Boolean(findExecutable('adb'));
+    res.end(JSON.stringify({ available, target, connected, devices: devicesOutput.trim(), last_output: lastOutput,
+      error: available ? undefined : '目前 Runtime 未提供 ADB' }));
   } catch (err) {
     res.writeHead(500, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: err.message }));
@@ -134,6 +139,10 @@ async function handleAdbStatus(res) {
 
 async function handleAdbUpdate(req, res) {
   try {
+    if (!findExecutable('adb')) {
+      res.writeHead(409, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({ success: false, code: 'RUNTIME_DEPENDENCY_UNAVAILABLE', error: '目前 Runtime 未提供 ADB' }));
+    }
     const body = await parseJsonBody(req);
     let target = (body.target || body.port || '').toString().trim();
     let pairingTarget = (body.pairing_target || body.pair_target || '').toString().trim();
@@ -313,7 +322,10 @@ const extensionBridge = createExtensionBridge({ onInboundMessage: enqueueInbound
 // 📦 Export / Copy Browser Extension to custom location
 async function handleExportExtension(req, res) {
   try {
-    const { execSync } = require('node:child_process');
+    if (!findExecutable('python3')) {
+      res.writeHead(409, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({ success: false, code: 'RUNTIME_DEPENDENCY_UNAVAILABLE', error: '匯出 ZIP 需要 Python；目前 Runtime 未提供 Python' }));
+    }
     const body = await parseJsonBody(req);
     const targetDir = body.targetDir || '/sdcard/crew-pocket-extension';
     const sourceDir = path.join(__dirname, 'extensions', 'crew-pocket-bridge');
@@ -321,17 +333,16 @@ async function handleExportExtension(req, res) {
     await fsPromises.mkdir(targetDir, { recursive: true });
 
     // Dynamic repack of all latest files and icons
-    const zipScript = `python3 -c "
-import zipfile, os
-src = '${sourceDir}'
-tgt = '${targetDir}'
+    const zipScript = `
+import zipfile, os, sys
+src, tgt = sys.argv[1:3]
 files = [f for f in os.listdir(src) if not f.endswith('.zip') and not f.endswith('.log') and os.path.isfile(os.path.join(src, f))]
 for d in [src, tgt]:
     with zipfile.ZipFile(os.path.join(d, 'crew-pocket-bridge.zip'), 'w') as z:
         for f in files:
             z.write(os.path.join(src, f), arcname=f)
-"`;
-    try { execSync(zipScript); } catch (e) {}
+`;
+    await execFileAsync('python3', ['-c', zipScript, sourceDir, targetDir]);
 
     const files = await fsPromises.readdir(sourceDir);
     for (const f of files) {
@@ -370,14 +381,19 @@ function handleGetProviders(res) {
 async function handleRuntimeStatus(res) {
   try {
     const providerRuntime = await getProviderRuntimeStatus();
+    const companionRuntime = providerRuntime.delivery === 'runtime-apk';
     const host = {
-      runtime: 'termux-node',
+      runtime: companionRuntime
+        ? (process.env.CREW_HOST_RUNTIME || 'companion-runtime')
+        : 'termux-node',
       pid: process.pid,
       home: RUNTIME_HOME,
-      updateModel: 'provider-managed'
+      runtimeVersion: providerRuntime.runtimeVersion || null,
+      runtimePackage: providerRuntime.runtimePackage || null,
+      updateModel: companionRuntime ? 'runtime-app' : 'provider-managed'
     };
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ host, providers: providerRuntime.providers }));
+    res.end(JSON.stringify({ host, providers: providerRuntime.providers, toolchain: toolchainSnapshot() }));
   } catch (err) {
     res.writeHead(500, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: err.message }));
@@ -399,6 +415,22 @@ async function handleRuntimeProviders(req, res) {
       return res.end(JSON.stringify({ error: 'provider must be codex or antigravity' }));
     }
 
+    const runtimeStatus = await getProviderRuntimeStatus();
+    const providerRuntime = runtimeStatus.providers?.[providerId];
+    if (providerRuntime?.updateMode === 'runtime-app') {
+      res.writeHead(409, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({
+        success: false,
+        code: 'RUNTIME_APP_UPDATE_REQUIRED',
+        error: 'Codex and AGY are bundled with Crew Runtime on Android.',
+        action: {
+          type: 'update-runtime-app',
+          packageName: runtimeStatus.runtimePackage || 'com.crewpocket.runtime',
+          runtimeVersion: runtimeStatus.runtimeVersion || null
+        }
+      }));
+    }
+
     if (providerId === 'codex') {
       const codex = getProvider('codex');
       if (typeof codex.shutdownRuntime === 'function') {
@@ -415,9 +447,11 @@ async function handleRuntimeProviders(req, res) {
     res.end(JSON.stringify({ success: true, ...result }));
   } catch (err) {
     const details = String(err.stderr || err.stdout || err.message || err).trim();
-    res.writeHead(500, { 'Content-Type': 'application/json' });
+    res.writeHead(err.statusCode || 500, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
       success: false,
+      code: err.code || null,
+      action: err.action || null,
       error: err.message || 'Provider update failed',
       details: details.slice(-8000)
     }));
@@ -2615,6 +2649,12 @@ async function handleRemoteAccess(req, res) {
       return res.end(JSON.stringify({ success: false, error: 'enabled must be boolean' }));
     }
 
+    if (process.env.CREW_HOST_RUNTIME === 'companion-runtime') {
+      res.writeHead(409, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({ success: false, restarting: false, code: 'COMPANION_REMOTE_ACCESS_UNSUPPORTED',
+        error: 'Companion Runtime 尚未支援遠端存取；此操作需要原生服務重啟流程' }));
+    }
+
     await fsPromises.mkdir(REMOTE_ACCESS_DIR, { recursive: true, mode: 0o700 });
     if (body.enabled) {
       await fsPromises.writeFile(REMOTE_ACCESS_FLAG, 'enabled\n', { mode: 0o600 });
@@ -2726,7 +2766,11 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
-  if (pathname === '/api/home' && req.method === 'GET') {
+  if (pathname.startsWith('/api/build-artifacts/')) {
+    return handleBuildArtifact(req, res, pathname);
+  } else if (pathname === '/api/terminal' || pathname.startsWith('/api/terminal/')) {
+    return handleTerminal(req, res, parsedUrl);
+  } else if (pathname === '/api/home' && req.method === 'GET') {
     return handleCrewHome(req, res);
   } else if (pathname === '/api/remote-pairing' && req.method === 'POST') {
     return handleRemotePairing(req, res);
@@ -2797,6 +2841,12 @@ const server = http.createServer(async (req, res) => {
     return handleGetModels(res);
   } else if (pathname === '/api/providers' && req.method === 'GET') {
     return handleGetProviders(res);
+  } else if (pathname === '/api/runtime/update-readiness' && req.method === 'GET') {
+    const busy = Boolean(getProvider('codex').getWarmupStatus?.().busy) ||
+      sessionManager.getStatus().activeSessions.some(session => session.isBusy) ||
+      await hasRunningTasks() || hasActiveTerminals();
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+    return res.end(JSON.stringify({ idle: !busy }));
   } else if (pathname === '/api/runtime/status' && req.method === 'GET') {
     return handleRuntimeStatus(res);
   } else if (pathname === '/api/runtime/providers' && (req.method === 'GET' || req.method === 'POST')) {
