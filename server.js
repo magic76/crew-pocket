@@ -45,7 +45,7 @@ const { listCrewMembers, getCrewMember, saveCrewMember, buildCrewMemberGuide } =
 const { DEFAULT_ROLE_ID, roleIdForProject, listRoles, getRole, saveRole } = require('./lib/roles');
 const { listCrewRoles, sendCrewMessage, getCrewInbox, getCrewMessageActivity, markCrewMessagesDelivered } = require('./lib/crew-messages');
 const { createCrewAutoResponder } = require('./lib/crew-auto-response');
-const { getRoleRuntime, listRoleRuntimes, activateRoleConversation, clearRoleConversation, clearRoleConversationByConversation } = require('./lib/role-runtime');
+const { getRoleRuntime, listRoleRuntimes, activateRoleConversation, prepareNewRoleConversation, clearRoleConversation, clearRoleConversationByConversation } = require('./lib/role-runtime');
 const { buildCrewStatus } = require('./lib/crew-status');
 const { getProject } = require('./lib/projects');
 const { defaultMemoryProvider } = require('./lib/memory');
@@ -1285,6 +1285,34 @@ async function handleCrewStatus(res) {
   } catch (error) {
     res.writeHead(500, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
     res.end(JSON.stringify({ success: false, roles: [], error: error.message || 'Crew status unavailable' }));
+  }
+}
+
+async function handleRoleRuntime(req, res) {
+  try {
+    const body = await parseJsonBody(req);
+    const action = String(body.action || '').trim();
+    const roleId = String(body.role_id || body.roleId || '').trim();
+    const role = roleId ? await getRole(roleId) : null;
+    if (!role) throw new Error('Role does not exist');
+
+    if (action === 'prepare_new') {
+      const providerId = normalizeProviderId(body.provider);
+      const runtime = await prepareNewRoleConversation({
+        roleId: role.id,
+        providerId,
+        model: body.model || getDefaultModel(providerId),
+        effort: body.effort || 'low',
+        workspace: body.workspace || null
+      });
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+      return res.end(JSON.stringify({ success: true, runtime }));
+    }
+
+    throw new Error('Role runtime action must be prepare_new');
+  } catch (error) {
+    res.writeHead(400, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+    res.end(JSON.stringify({ success: false, error: error.message }));
   }
 }
 
@@ -2834,6 +2862,8 @@ const server = http.createServer(async (req, res) => {
     return handleRoles(req, res);
   } else if (pathname === '/api/crew-status' && req.method === 'GET') {
     return handleCrewStatus(res);
+  } else if (pathname === '/api/role-runtime' && req.method === 'POST') {
+    return handleRoleRuntime(req, res);
   } else if (pathname === '/api/crew-tool' && req.method === 'POST') {
     return handleCrewTool(req, res);
   } else if (pathname === '/api/memories' && ['GET', 'POST', 'DELETE'].includes(req.method)) {
