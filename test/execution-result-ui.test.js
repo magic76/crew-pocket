@@ -16,6 +16,25 @@ function run() {
     elapsedMs: 420
   }), null, 'tool-less inspect answers must stay ordinary answers');
 
+  assert.equal(buildTurnResult({
+    executionPolicy: { mode: 'CHAT' },
+    toolMetrics: { events: 2, unique_tools: 1, executions: 1, polls: 0, changed_files: [] },
+    elapsedMs: 900
+  }), null, 'ordinary tool-assisted chat must stay expanded');
+
+  assert.equal(buildTurnResult({
+    executionPolicy: { mode: 'INSPECT' },
+    toolMetrics: { events: 2, unique_tools: 1, executions: 1, polls: 0, changed_files: [] },
+    elapsedMs: 900
+  }), null, 'single-step inspect should not be collapsed as a heavy execution');
+
+  const inspected = buildTurnResult({
+    executionPolicy: { mode: 'INSPECT' },
+    toolMetrics: { events: 4, unique_tools: 2, executions: 2, polls: 0, changed_files: [] },
+    elapsedMs: 1200
+  });
+  assert.equal(inspected.kind, 'execution', 'multi-step inspect should become an execution result');
+
   const result = buildTurnResult({
     requestId: 'req-1',
     executionPolicy: { mode: 'SURGICAL_EDIT' },
@@ -39,7 +58,7 @@ function run() {
   assert.equal(Object.prototype.hasOwnProperty.call(result, 'checks'), false, 'build/test checks must not be inferred');
 
   const failed = buildTurnResult({
-    executionPolicy: { mode: 'CHAT' },
+    executionPolicy: { mode: 'DEBUG' },
     toolMetrics: { unique_tools: 1, executions: 1, changed_files: [] },
     elapsedMs: 1000,
     error: 'boom'
