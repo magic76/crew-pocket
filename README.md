@@ -58,7 +58,6 @@ crew start   # 啟動服務並開啟 Crew Pocket
 - 📍 **GPS 即時定位與地圖**：一鍵獲取手機 GPS 並生成可於新分頁開啟的 Google Maps 導航卡片。
 - 📁 **Termux 本地檔案總管**：行動端目錄導航、代碼預覽與直接送入 AI 對話。
 - 🗑️ **檔案批次管理**：檔案總管支援多選檔案／資料夾後一次刪除。
-- 🧭 **JEV 路由摘要**：Codex 回覆的執行資訊可查看本次路由模式、信心、接受狀態與延遲。
 - ⚡ **Codex Session 預熱**：可選擇在設定中預熱 Codex session，閒置後自動釋放。
 - 📊 **模型用量監控 (`/usage`)**：即時掌握各模型重置週期與配額進度。
 - 🛡️ **會話隔離與無損日誌引擎**：徹底杜絕多 Session 切換串台 Race Condition，並優先讀取完整日誌避免代碼截斷。
@@ -246,7 +245,7 @@ AGY 每次 compact 前會把 active `transcript.jsonl` 的新增 records 依完�
 | Provider | 預設狀態 | 對話與 Session | 特有能力 |
 | :--- | :--- | :--- | :--- |
 | Antigravity / agy | 預設，原有行為不變 | 既有 resident session 與本機 brain 歷史 | `/compact` 記憶摘要、`/usage` 用量彈窗、Gemini Live 語音 |
-| OpenAI Codex | 可選 | `codex app-server` thread，與 AGY 完全隔離 | 動態模型、工具／reasoning 串流、context 用量、原生 compact、JEV 路由摘要 |
+| OpenAI Codex | 可選 | `codex app-server` thread，與 AGY 完全隔離 | 動態模型、工具／reasoning 串流、context 用量、原生 compact、Execution Policy |
 
 切換 Provider 不會遷移、覆寫或刪除另一個 Provider 的對話。左側歷史列表會以 `AGY` 或 `Codex` 標籤區分來源。
 

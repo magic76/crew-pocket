@@ -2281,8 +2281,6 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
           </span>
         </summary>
         <div class="execution-detail-body">
-          <div class="live-jev-route"></div>
-          <div class="live-runtime-decisions"></div>
           <div class="live-progress-list"></div>
         </div>
       </details>
@@ -2297,8 +2295,6 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
   const statusTextElem = assistantMsgDiv.querySelector('.status-text');
   const liveTimerElem = assistantMsgDiv.querySelector('.live-timer');
   const responseTimeElem = assistantMsgDiv.querySelector('.response-time');
-  const liveJevRouteElem = assistantMsgDiv.querySelector('.live-jev-route');
-  const liveRuntimeDecisionsElem = assistantMsgDiv.querySelector('.live-runtime-decisions');
   const liveProgressListElem = assistantMsgDiv.querySelector('.live-progress-list');
   const isStreamVisible = () => assistantMsgDiv.isConnected && currentProvider === streamProvider
     && (!streamConversationId ? currentConversationId === null : currentConversationId === streamConversationId);
@@ -2320,56 +2316,6 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
 
     const activityElapsedSec = ((performance.now() - startTs) / 1000).toFixed(1);
     if (hadThinking && !progressEntries.has('phase:analysis')) {
-      function renderRuntimeDecision(snapshot) {
-    if (!liveRuntimeDecisionsElem || !snapshot || typeof snapshot !== 'object') return;
-    const displayValue = value => value === null || value === undefined || value === ''
-      ? '—'
-      : typeof value === 'boolean'
-      ? (value ? '是' : '否')
-      : String(value);
-    const isFailure = snapshot.type === 'TOOL_FAILURE';
-    const title = isFailure ? 'JEV Tool Failure' : 'JEV Soft Budget';
-    const fields = isFailure
-      ? [
-          ['failure', snapshot.failureType],
-          ['retry_same', snapshot.retrySame],
-          ['alternative', snapshot.tryAlternative],
-          ['escalation', snapshot.escalation],
-          ['ask_user', snapshot.askUser],
-          ['stop', snapshot.shouldStop],
-          ['stuck', snapshot.stuckRisk],
-          ['confidence', snapshot.confidence],
-          ['latency_ms', snapshot.latencyMs]
-        ]
-      : [
-          ['progress', snapshot.goalProgress],
-          ['remaining', snapshot.remainingWork],
-          ['approach_working', snapshot.approachWorking],
-          ['finish_in_budget', snapshot.finishWithinHardBudget],
-          ['action', snapshot.action],
-          ['ask_user', snapshot.askUser],
-          ['stuck', snapshot.stuckRisk],
-          ['confidence', snapshot.confidence],
-          ['latency_ms', snapshot.latencyMs]
-        ];
-    liveRuntimeDecisionsElem.insertAdjacentHTML('beforeend', `
-      <details class="my-1 overflow-hidden rounded-lg border border-violet-900/60 bg-slate-950/70 text-[11px]">
-        <summary class="px-2.5 py-1.5 cursor-pointer flex items-center justify-between text-violet-300 select-none">
-          <span class="flex items-center gap-1.5"><span>🧠</span><span>${escapeHtml(title)}</span></span>
-          <span class="text-[10px] text-slate-500">${escapeHtml(snapshot.trigger || '')} · 展開 ▼</span>
-        </summary>
-        <div class="px-2.5 py-2 border-t border-violet-950/70 space-y-1 font-mono">
-          ${fields.map(([label, value]) => `
-            <div class="flex gap-2 min-w-0">
-              <span class="text-slate-500 shrink-0">${escapeHtml(label)}</span>
-              <span class="text-slate-300 break-words">${escapeHtml(displayValue(value))}</span>
-            </div>
-          `).join('')}
-        </div>
-      </details>
-    `);
-  }
-
   upsertProgress('phase:analysis', { icon: '🧠', text: '分析需求與執行方案', state: 'done' });
     }
     renderProgressTimeline();
@@ -2385,7 +2331,7 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
       if (liveTimerElem) liveTimerElem.textContent = `${activityElapsedSec}s`;
     }
     if (responseTimeElem) responseTimeElem.textContent = `🕒 回覆時間 ${formatMessageTimestamp()}`;
-    if (!doneData?.error && liveTools.length === 0 && !liveJevRouteElem?.innerHTML && !liveRuntimeDecisionsElem?.innerHTML) {
+    if (!doneData?.error && liveTools.length === 0) {
       liveStatusElem.classList.add('execution-heartbeat-only');
       window.setTimeout(() => {
         if (!liveStatusElem?.isConnected) return;
@@ -2510,39 +2456,6 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
     renderProgressTimeline();
   }
 
-  function renderJevRoute(route) {
-    if (!liveJevRouteElem || !route || typeof route !== 'object') return;
-    const displayValue = value => value === null || value === undefined || value === ''
-      ? '—'
-      : typeof value === 'boolean'
-      ? (value ? '是' : '否')
-      : String(value);
-    const fields = [
-      ['JEV 輸入摘要', String(route.input_summary || '').slice(0, 160)],
-      ['mode', route.mode],
-      ['suggested_mode', route.suggested_mode],
-      ['confidence', route.confidence],
-      ['accepted', route.accepted],
-      ['reason', route.reason],
-      ['latency_ms', route.latency_ms]
-    ];
-    liveJevRouteElem.innerHTML = `
-      <details class="my-1 overflow-hidden rounded-lg border border-cyan-800/60 bg-slate-950/70 text-[11px]">
-        <summary class="px-2.5 py-1.5 cursor-pointer flex items-center justify-between text-cyan-300 select-none">
-          <span class="flex items-center gap-1.5"><span>🧭</span><span>JEV 路由</span></span>
-          <span class="text-[10px] text-slate-500">展開 ▼</span>
-        </summary>
-        <div class="px-2.5 py-2 border-t border-cyan-900/50 space-y-1 font-mono">
-          ${fields.map(([label, value]) => `
-            <div class="flex gap-2 min-w-0">
-              <span class="text-slate-500 shrink-0">${escapeHtml(label)}</span>
-              <span class="text-slate-300 break-words">${escapeHtml(displayValue(value))}</span>
-            </div>
-          `).join('')}
-        </div>
-      </details>
-    `;
-  }
 
 
   upsertProgress('phase:analysis', {
@@ -2603,9 +2516,6 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
           if (!rawData) continue;
           try {
             const data = JSON.parse(rawData);
-            if (currentEvent === 'init' && data.jev_route) {
-              renderJevRoute(data.jev_route);
-            }
             if (currentEvent === 'init' && data.conversation_id) {
               streamConversationId = data.conversation_id;
               // 🛡️ Only update global currentConversationId if user hasn't switched to another conversation
@@ -2633,8 +2543,6 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
             } else if (currentEvent === 'context') {
               receivedContextStats = true;
               if (isStreamVisible()) updateContextPill(data);
-            } else if (currentEvent === 'decision') {
-              renderRuntimeDecision(data);
             } else if (currentEvent === 'tool') {
               const mergedTool = mergeToolEventIntoMap(liveToolMap, liveTools, data);
               const progressTool = mergedTool || data;
@@ -2686,7 +2594,6 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
               }
 
             } else if (currentEvent === 'done') {
-              if (data.jev_route) renderJevRoute(data.jev_route);
               finalizeTurn(data);
             }
           } catch (e) {}
