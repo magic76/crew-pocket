@@ -174,7 +174,7 @@ async function run() {
     const seededRoles = await roleStore.list();
     const seededProjectRole = seededRoles.find(role => role.projectId === testProject.id && role.source === 'project');
     assert.ok(seededProjectRole);
-    assert.equal(seededProjectRole.name, 'Crew Helper Developer');
+    assert.equal(seededProjectRole.name, 'Helper Dev');
 
     console.log('role-memory-kernel tests: ok');
   } finally {
