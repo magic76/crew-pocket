@@ -48,7 +48,7 @@ function usage() {
     '  crew-tool roles',
     '  crew-tool send <from-role-id> <to-role-id> <message...>',
     '',
-    'Only plain message text is sent. Context, Memory, Conversation and Project data are never transferred.'
+    'Only the explicit message text is copied from the sender. The recipient handles it inside their own current conversation.'
   ].join('\n');
 }
 
@@ -80,7 +80,14 @@ async function main() {
     const sent = data.message;
     process.stdout.write('sent\t' + sent.id + '\t' + sent.toRoleId + '\t' + (sent.toRoleName || sent.toRoleId) + '\n');
     if (data.auto_response) {
-      process.stdout.write('auto_response\t' + data.auto_response.status + (data.auto_response.reason ? '\t' + data.auto_response.reason : '') + '\n');
+      const response = data.auto_response;
+      process.stdout.write('auto_response\t' + response.status + (response.reason ? '\t' + response.reason : '') + '\n');
+      if (response.reply) {
+        process.stdout.write('reply\t' + response.toRoleId + '\t' + response.reply.replace(/\s+/g, ' ').trim() + '\n');
+      }
+      if (response.conversationId) {
+        process.stdout.write('recipient_conversation\t' + response.conversationId + '\n');
+      }
     }
     return;
   }
