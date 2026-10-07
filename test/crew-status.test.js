@@ -52,6 +52,30 @@ async function run() {
     'role-b': [],
     'role-c': []
   };
+  const recentActivities = [
+    {
+      id: 'reply-1',
+      fromRoleId: 'role-b',
+      fromRoleName: 'Role B',
+      toRoleId: 'role-a',
+      toRoleName: 'Role A',
+      content: 'unread reply',
+      replyToId: 'old',
+      createdAt: 320,
+      deliveredAt: null
+    },
+    {
+      id: 'req-1',
+      fromRoleId: 'role-b',
+      fromRoleName: 'Role B',
+      toRoleId: 'role-a',
+      toRoleName: 'Role A',
+      content: 'queued request',
+      replyToId: null,
+      createdAt: 310,
+      deliveredAt: null
+    }
+  ];
   const tasks = [{
     id: 'task-a',
     provider: 'codex',
@@ -69,6 +93,7 @@ async function run() {
       ? { title: 'Active A', model: 'gpt-a', effort: 'high', workspace: '/a' }
       : { title: 'Active B', model: 'gpt-b', effort: 'medium', workspace: '/b' },
     getCrewInbox: async roleId => inboxByRole[roleId] || [],
+    getCrewRecentActivity: async () => recentActivities,
     getCrewMessageActivity: async roleId => activityByRole[roleId] || [],
     getProvider: () => ({
       getStatus(conversationId) {
@@ -77,6 +102,11 @@ async function run() {
     }),
     listTasks: async () => tasks
   });
+
+  assert.equal(status.activities.length, 2);
+  assert.equal(status.activities[0].id, 'reply-1');
+  assert.equal(status.activities[0].kind, 'reply');
+  assert.equal(status.activities[1].kind, 'message');
 
   const byId = new Map(status.roles.map(item => [item.roleId, item]));
   const a = byId.get('role-a');
@@ -111,6 +141,7 @@ async function run() {
     }],
     getConversationSettings: async () => null,
     getCrewInbox: async () => [],
+    getCrewRecentActivity: async () => [],
     getCrewMessageActivity: async () => [],
     getProvider: () => ({ getStatus: () => ({ isBusy: false }) }),
     listTasks: async () => []
@@ -130,6 +161,7 @@ async function run() {
     }],
     getConversationSettings: async () => ({}),
     getCrewInbox: async () => [{ id: 'q', fromRoleId: 'role-a', toRoleId: 'role-w', content: 'q', replyToId: null, createdAt: 20 }],
+    getCrewRecentActivity: async () => [],
     getCrewMessageActivity: async () => [],
     getProvider: () => ({ getStatus: () => ({ isBusy: false }) }),
     listTasks: async () => []
