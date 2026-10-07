@@ -48,9 +48,19 @@ const { defaultMemoryProvider } = require('./lib/memory');
 const {
   buildAgentContext,
   buildStaticContextContributions,
+  formatMemoryEvidence,
   formatAgentContext
 } = require('./lib/context-builder');
 const { analyzeConversationContext } = require('./lib/context/health');
+const { planContextCompaction } = require('./lib/context/compaction');
+const { contributionFromText } = require('./lib/context/estimator');
+const { ContextSourceType, ContextPriority } = require('./lib/context/types');
+const {
+  getContextSnapshot,
+  saveContextSnapshot,
+  markContextMemoryReretrieve,
+  deleteContextSnapshot
+} = require('./lib/context/state');
 const auth = require('./lib/auth');
 const {
   applyCors,
@@ -915,19 +925,38 @@ async function handleCodexContinuationSummary(req, res) {
   }
 }
 
-async function handleProviderHistory(parsedUrl, res) {
-  const providerId = normalizeProviderId(parsedUrl.query.provider);
-  try {
-    const provider = getProvider(providerId);
-    if (!provider.metadata.capabilities.history || typeof provider.getHistory !== 'function') throw new Error('Provider does not support conversation history');
-    const history = await provider.getHistory(parsedUrl.query.id);
-    const conversationSettings = await getConversationSettings(providerId, parsedUrl.query.id);
-    if (Array.isArray(history.messages)) {
-      history.messages = history.messages.map(message => message.role === 'user'
-        ? { ...message, content: stripLegacyLanguageInstruction(cleanUserContent(message.content)) }
-        : message);
-    }
+function normalizeHistoryForContextHealth(history = {}) {
+  const cleanMessages = messages => Array.isArray(messages)
+    ? messages.map(message => message.role === 'user'
+      ? { ...message, content: stripLegacyLanguageInstruction(cleanUserContent(message.content)) }
+      : message)
+    : messages;
 
+  return {
+    ...history,
+    messages: cleanMessages(history.messages),
+    ...(Array.isArray(history.active_messages)
+      ? { active_messages: cleanMessages(history.active_messages) }
+      : {})
+  };
+}
+
+async function getConversationContextHealth(providerId, conversationId, providedHistory = null) {
+  const provider = getProvider(providerId);
+  if (!provider.metadata.capabilities.history || typeof provider.getHistory !== 'function') {
+    throw new Error('Provider does not support conversation history');
+  }
+
+  const rawHistory = providedHistory || await provider.getHistory(conversationId);
+  const history = normalizeHistoryForContextHealth(rawHistory);
+  const conversationSettings = await getConversationSettings(providerId, conversationId);
+  const contextSnapshot = await getContextSnapshot(providerId, conversationId).catch(() => null);
+
+  let additionalContributions = Array.isArray(contextSnapshot?.contributions)
+    ? contextSnapshot.contributions
+    : [];
+
+  if (!additionalContributions.length) {
     let role = null;
     let project = null;
     try {
@@ -937,16 +966,119 @@ async function handleProviderHistory(parsedUrl, res) {
     } catch (error) {
       console.warn('[Context Health] Identity context unavailable:', error.message);
     }
+    additionalContributions = buildStaticContextContributions({ role, project });
+  }
 
-    const contextHealth = analyzeConversationContext(history, {
-      additionalContributions: buildStaticContextContributions({ role, project })
+  const contextHealth = analyzeConversationContext(history, {
+    additionalContributions
+  });
+
+  return {
+    history,
+    conversationSettings,
+    contextSnapshot,
+    contextHealth
+  };
+}
+
+async function handleContextCompactionPlan(parsedUrl, res) {
+  try {
+    const providerId = normalizeProviderId(parsedUrl.query.provider);
+    const conversationId = String(parsedUrl.query.id || parsedUrl.query.conversation_id || '').trim();
+    if (!conversationId || !/^[a-zA-Z0-9_-]+$/.test(conversationId)) throw new Error('Invalid conversation id');
+
+    const provider = getProvider(providerId);
+    const bundle = await getConversationContextHealth(providerId, conversationId);
+    const plan = planContextCompaction({ health: bundle.contextHealth });
+
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+    res.end(JSON.stringify({
+      success: true,
+      provider: providerId,
+      conversation_id: conversationId,
+      can_compact: Boolean(provider.metadata.capabilities.compact && typeof provider.compactConversation === 'function'),
+      health: bundle.contextHealth,
+      plan
+    }));
+  } catch (error) {
+    res.writeHead(error.statusCode || 400, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: false, error: error.message }));
+  }
+}
+
+async function handleSafeContextCompact(req, res) {
+  try {
+    const body = await parseJsonBody(req);
+    if (body.confirmed !== true) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({ success: false, error: 'Safe compaction requires explicit confirmation' }));
+    }
+
+    const providerId = normalizeProviderId(body.provider);
+    const conversationId = String(body.conversation_id || '').trim();
+    if (!conversationId || !/^[a-zA-Z0-9_-]+$/.test(conversationId)) throw new Error('Invalid conversation id');
+
+    const provider = getProvider(providerId);
+    if (!provider.metadata.capabilities.compact || typeof provider.compactConversation !== 'function') {
+      throw new Error('Provider does not support conversation compaction');
+    }
+
+    const beforeBundle = await getConversationContextHealth(providerId, conversationId);
+    const plan = planContextCompaction({ health: beforeBundle.contextHealth });
+    if (!plan.hasActionableWork) {
+      res.writeHead(409, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({
+        success: false,
+        error: '目前沒有可安全精簡的舊 Context；最近工作內容會保留。',
+        health: beforeBundle.contextHealth,
+        plan
+      }));
+    }
+
+    const result = await provider.compactConversation(conversationId, {
+      focus: body.focus,
+      mode: 'continue',
+      locale: body.locale === 'en' ? 'en' : 'zh-TW'
     });
+
+    if (plan.reretrieve.length > 0) {
+      await markContextMemoryReretrieve(providerId, conversationId);
+    }
+
+    const afterBundle = await getConversationContextHealth(providerId, conversationId);
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+    res.end(JSON.stringify({
+      success: true,
+      provider: providerId,
+      conversation_id: result.conversationId || conversationId,
+      message: result.message,
+      summary: result.summary,
+      checkpoint: result.checkpoint || null,
+      context_verification: result.contextVerification || null,
+      plan,
+      before_health: beforeBundle.contextHealth,
+      after_health: afterBundle.contextHealth
+    }));
+  } catch (error) {
+    console.error('[Safe Context Compact Error]', error);
+    res.writeHead(error.statusCode || 500, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: false, error: error.message || 'Context compaction failed' }));
+  }
+}
+
+async function handleProviderHistory(parsedUrl, res) {
+  const providerId = normalizeProviderId(parsedUrl.query.provider);
+  try {
+    const conversationId = parsedUrl.query.id;
+    const bundle = await getConversationContextHealth(providerId, conversationId);
+    const publicHistory = { ...bundle.history };
+    delete publicHistory.active_messages;
 
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
-      ...history,
-      conversation_settings: conversationSettings,
-      context_health: contextHealth
+      ...publicHistory,
+      conversation_settings: bundle.conversationSettings,
+      context_health: bundle.contextHealth
     }));
   } catch (err) {
     res.writeHead(err.statusCode || 404, { 'Content-Type': 'application/json' });
@@ -967,6 +1099,7 @@ async function handleProviderDelete(parsedUrl, res) {
     if (!provider.metadata.capabilities.delete || typeof provider.deleteConversation !== 'function') throw new Error('Provider does not support deleting conversations');
     const result = await provider.deleteConversation(conversationId);
     await deleteConversationSettings(providerId, conversationId).catch(() => {});
+    await deleteContextSnapshot(providerId, conversationId).catch(() => {});
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
       success: true,
@@ -1595,25 +1728,90 @@ async function handleChat(req, res) {
 
 
   let finalPrompt = prompt || 'Analyze this image';
+  let contextSnapshot = conversation_id
+    ? await getContextSnapshot(providerId, conversation_id).catch(() => null)
+    : null;
+  let assembledContextContributions = Array.isArray(contextSnapshot?.contributions)
+    ? [...contextSnapshot.contributions]
+    : [];
+  let memoryRefreshConsumed = false;
 
-  // Provider-native history records prompt text as a user turn. Long-term
-  // memory therefore enters only on a fresh thread, remains deterministic and
-  // bounded, and is wrapped as removable internal metadata.
+  // New threads receive the bounded Role/Project/Memory/Task metadata once.
+  // We persist only attribution metadata (never prompt text) so Context Health
+  // can later explain what was actually assembled for the model.
   if (!conversation_id) {
     let roleMemoryContext = '';
+    let agentContext = null;
     try {
-      const agentContext = await buildAgentContext({
+      agentContext = await buildAgentContext({
         roleId: role?.id || DEFAULT_ROLE_ID,
         projectId,
         currentTask: approvedExecutionIntent?.summary || '',
         currentPrompt: finalPrompt
       });
       roleMemoryContext = formatAgentContext(agentContext);
+      assembledContextContributions = [...agentContext.contributions];
     } catch (error) {
       console.warn('[Memory Context] Build failed:', error.message);
     }
+
     const memberGuide = buildCrewMemberGuide(crewMember);
-    finalPrompt = `${roleMemoryContext ? `${roleMemoryContext}\n` : ''}${memberGuide ? `${memberGuide}\n` : ''}${buildCapabilityGuide(finalPrompt)}\n\n<USER_REQUEST>${finalPrompt}</USER_REQUEST>`;
+    const capabilityGuide = buildCapabilityGuide(finalPrompt);
+    if (memberGuide) {
+      assembledContextContributions.push(contributionFromText({
+        id: 'crew-member-guide',
+        type: ContextSourceType.SYSTEM,
+        text: memberGuide,
+        label: 'Crew member guide',
+        priority: ContextPriority.HIGH,
+        compactable: false,
+        pinned: true,
+        sourceRef: crewMember?.id ? `crew-member:${crewMember.id}` : undefined
+      }));
+    }
+    if (capabilityGuide) {
+      assembledContextContributions.push(contributionFromText({
+        id: 'capability-guide',
+        type: ContextSourceType.SYSTEM,
+        text: capabilityGuide,
+        label: 'Crew capability rules',
+        priority: ContextPriority.REQUIRED,
+        compactable: false,
+        pinned: true,
+        sourceRef: 'system:capability-guide'
+      }));
+    }
+
+    finalPrompt = `${roleMemoryContext ? `${roleMemoryContext}\n` : ''}${memberGuide ? `${memberGuide}\n` : ''}${capabilityGuide}\n\n<USER_REQUEST>${finalPrompt}</USER_REQUEST>`;
+  } else if (contextSnapshot?.reretrieveMemoryOnNextTurn) {
+    // Safe compaction may remove recalled memory from active context. Refresh it
+    // once on the next real task instead of permanently pinning long-term memory.
+    try {
+      const refreshed = await buildAgentContext({
+        roleId: role?.id || DEFAULT_ROLE_ID,
+        projectId,
+        conversationId: conversation_id,
+        currentTask: approvedExecutionIntent?.summary || '',
+        currentPrompt: finalPrompt
+      });
+      const refreshedMemories = refreshed.memories || [];
+      const memoryContributions = (refreshed.contributions || []).filter(
+        contribution => contribution.type === ContextSourceType.MEMORY
+      );
+      assembledContextContributions = [
+        ...assembledContextContributions.filter(contribution => contribution.type !== ContextSourceType.MEMORY),
+        ...memoryContributions
+      ];
+      if (refreshedMemories.length) {
+        const memoryLines = refreshedMemories.map((hit, index) =>
+          `${index + 1}. ${formatMemoryEvidence(hit.record || {})}`
+        );
+        finalPrompt = `<ADDITIONAL_METADATA>\n[Refreshed Long-Term Memory]\n${memoryLines.join('\n')}\n</ADDITIONAL_METADATA>\n${finalPrompt}`;
+      }
+      memoryRefreshConsumed = true;
+    } catch (error) {
+      console.warn('[Memory Context] Refresh after compaction failed:', error.message);
+    }
   }
 
   if (image_path) {
@@ -1836,6 +2034,13 @@ async function handleChat(req, res) {
             role: body.role || savedSettings?.role || 'general',
             ...(executionPolicy?.mode ? { executionMode: executionPolicy.mode } : {})
           }).catch(err => console.warn('[Conversation Settings] Save failed:', err.message));
+          saveContextSnapshot(providerId, event.conversationId, {
+            contributions: assembledContextContributions,
+            reretrieveMemoryOnNextTurn: memoryRefreshConsumed
+              ? false
+              : Boolean(contextSnapshot?.reretrieveMemoryOnNextTurn),
+            ...(contextSnapshot?.compactedAt ? { compactedAt: contextSnapshot.compactedAt } : {})
+          }).catch(err => console.warn('[Context State] Save failed:', err.message));
           sendEvent('init', {
             conversation_id: event.conversationId,
             provider: providerId,
@@ -2452,6 +2657,10 @@ const server = http.createServer(async (req, res) => {
     return handleProviderConversations(parsedUrl, res);
   } else if (pathname === '/api/history' && req.method === 'GET') {
     return handleProviderHistory(parsedUrl, res);
+  } else if (pathname === '/api/context/compaction-plan' && req.method === 'GET') {
+    return handleContextCompactionPlan(parsedUrl, res);
+  } else if (pathname === '/api/context/compact' && req.method === 'POST') {
+    return handleSafeContextCompact(req, res);
   } else if (pathname === '/api/conversation' && req.method === 'DELETE') {
     return handleProviderDelete(parsedUrl, res);
   } else if (pathname === '/api/conversation-settings' && req.method === 'POST') {

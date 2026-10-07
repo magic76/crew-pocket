@@ -15,12 +15,13 @@ assert.ok(html.includes('id="drawer-new-role-btn"'));
 assert.ok(html.includes('id="drawer-new-work-btn"'));
 assert.equal(html.includes('id="conversation-workspaces"'), false);
 
-// Header puts Role first and demotes the current work title.
+// Header shows who is active; Project/work title are kept out of the visible header.
 assert.ok(html.includes('<button id="workspace-selector-btn"'));
 assert.ok(html.includes('id="workspace-label"'));
 assert.ok(html.includes('General Developer'));
-assert.ok(html.includes('id="header-role-project"'));
-assert.ok(html.includes('title="點擊修改工作標題"'));
+assert.ok(html.includes('id="header-role-project" class="hidden"'));
+assert.ok(html.includes('id="header-title" type="button" class="hidden"'));
+assert.ok(html.includes('id="role-editor-workspace"'));
 assert.ok(app.includes("workspaceSelectorBtn.addEventListener('click', () => toggleDrawer(true))"));
 
 // Each Role owns its own secondary actions.

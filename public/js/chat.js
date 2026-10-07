@@ -575,127 +575,455 @@ function buildCheckpointDividerHtml(summaryText, timestamp) {
   return container;
 }
 
-// 🧠 Context Usage Pill & Modal State Tracker
+// 🧠 Context Health UI: provider total is authoritative when exact; Crew breakdown is heuristic.
 let currentContextStats = null;
+let currentContextHealth = null;
+let currentContextPlan = null;
+let contextToastTimer = null;
+const criticalContextToastSeen = new Set();
 
-function updateContextPill(stats) {
-  currentContextStats = stats || null;
+const CONTEXT_UI_LABELS = {
+  conversation: 'Conversation',
+  tool: 'Tools',
+  code: 'Code',
+  memory: 'Memory',
+  role: 'Role',
+  project: 'Project',
+  task: 'Task',
+  document: 'Documents',
+  system: 'System',
+  other: 'Other'
+};
+
+function formatContextTokens(value, approximate = false) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric < 0) return '—';
+  const prefix = approximate ? '~' : '';
+  if (numeric >= 1000000) return `${prefix}${(numeric / 1000000).toFixed(1).replace(/\.0$/, '')}M`;
+  if (numeric >= 1000) return `${prefix}${Math.round(numeric / 1000)}k`;
+  return `${prefix}${Math.round(numeric)}`;
+}
+
+function deriveContextHealthFromStats(stats = {}) {
+  const activeTokens = Number(stats.active_tokens);
+  const contextWindow = Number(stats.context_window);
+  const hasUsage = Number.isFinite(activeTokens) && activeTokens >= 0;
+  const hasWindow = Number.isFinite(contextWindow) && contextWindow > 0;
+  const usageRatio = hasUsage && hasWindow ? activeTokens / contextWindow : null;
+  const status = usageRatio === null
+    ? 'unknown'
+    : usageRatio >= 0.90
+      ? 'critical'
+      : usageRatio >= 0.70
+        ? 'warning'
+        : 'healthy';
+
+  return {
+    status,
+    ...(usageRatio === null ? {} : { usageRatio }),
+    contributions: [],
+    breakdown: {},
+    warnings: [],
+    unattributedTokens: 0,
+    overAttributedTokens: 0,
+    totalUsage: {
+      value: hasUsage ? activeTokens : 0,
+      exact: stats.active_tokens_exact === true,
+      source: stats.active_tokens_source || (stats.active_tokens_exact === true ? 'provider' : 'heuristic')
+    },
+    breakdownEstimate: {
+      exact: false,
+      source: 'heuristic',
+      attributedTokens: 0,
+      unattributedTokens: 0,
+      overAttributedTokens: 0
+    },
+    budget: {
+      maxTokens: hasWindow ? contextWindow : null,
+      availableInputTokens: hasWindow ? contextWindow : null
+    },
+    largestCompactableContribution: null
+  };
+}
+
+function mergeLiveContextHealth(stats) {
+  const live = deriveContextHealthFromStats(stats);
+  if (!currentContextHealth) return live;
+  return {
+    ...currentContextHealth,
+    status: live.status,
+    ...(Object.prototype.hasOwnProperty.call(live, 'usageRatio') ? { usageRatio: live.usageRatio } : {}),
+    totalUsage: live.totalUsage,
+    budget: {
+      ...currentContextHealth.budget,
+      ...(live.budget?.maxTokens ? { maxTokens: live.budget.maxTokens, availableInputTokens: live.budget.maxTokens } : {})
+    }
+  };
+}
+
+function contextStatusMeta(status) {
+  if (status === 'critical') return { label: 'Critical', dot: 'bg-rose-400', text: 'text-rose-300', progress: 'bg-rose-400' };
+  if (status === 'warning') return { label: 'Warning', dot: 'bg-amber-400', text: 'text-amber-300', progress: 'bg-amber-400' };
+  if (status === 'healthy') return { label: 'Healthy', dot: 'bg-emerald-400', text: 'text-emerald-300', progress: 'bg-emerald-400' };
+  return { label: 'Usage available · limit unknown', dot: 'bg-slate-500', text: 'text-slate-400', progress: 'bg-slate-500' };
+}
+
+function showContextToast(message, { critical = false } = {}) {
+  const toast = document.getElementById('context-health-toast');
+  if (!toast) return;
+  toast.textContent = message;
+  toast.className = `fixed bottom-20 left-1/2 z-[90] w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 rounded-2xl border px-3 py-2.5 text-[11px] shadow-2xl backdrop-blur ${critical ? 'border-rose-500/30 bg-rose-950/95 text-rose-100' : 'border-slate-700 bg-slate-900/95 text-slate-200'}`;
+  clearTimeout(contextToastTimer);
+  contextToastTimer = setTimeout(() => toast.classList.add('hidden'), 4200);
+}
+
+function updateHeaderCompactAction(health) {
+  const button = document.getElementById('header-compact-btn');
+  if (!button) return;
+  const status = health?.status || 'unknown';
+  const show = Boolean(currentConversationId) &&
+    Boolean(providerConfig().capabilities?.compact) &&
+    (status === 'warning' || status === 'critical');
+  button.classList.toggle('hidden', !show);
+  if (!show) return;
+
+  const critical = status === 'critical';
+  button.textContent = critical ? 'Compact now' : 'Compact';
+  button.className = `shrink-0 rounded-md border px-1.5 py-0.5 text-[9px] font-bold transition active:scale-95 ${critical
+    ? 'border-rose-500/40 bg-rose-500/10 text-rose-300'
+    : 'border-amber-500/30 bg-amber-500/10 text-amber-300'}`;
+}
+
+function maybeNotifyCriticalContext(health) {
+  if (health?.status !== 'critical' || !currentConversationId) return;
+  const key = `${currentProvider}:${currentConversationId}`;
+  if (criticalContextToastSeen.has(key)) return;
+  criticalContextToastSeen.add(key);
+  showContextToast('Context is getting full. You can compact safely without losing Role memory.', { critical: true });
+}
+
+function updateContextPill(stats, health = null) {
+  currentContextStats = stats || currentContextStats || null;
+  if (health) currentContextHealth = health;
+  else if (stats) currentContextHealth = mergeLiveContextHealth(stats);
+  else currentContextHealth = null;
+
+  const resolved = currentContextHealth || deriveContextHealthFromStats(currentContextStats || {});
   const pill = document.getElementById('context-pill');
   const indicator = document.getElementById('context-indicator');
   const textEl = document.getElementById('context-tokens-text');
-  const fullFormatted = stats?.active_tokens_formatted
-    || (typeof stats?.active_tokens === 'number' ? `${stats.active_tokens} tok` : '0 tok');
-  const activeTokens = Number(stats?.active_tokens);
-  const compactFormatted = Number.isFinite(activeTokens)
-    ? activeTokens >= 1000000
-      ? `${(activeTokens / 1000000).toFixed(1).replace(/\.0$/, '')}M`
-      : activeTokens >= 1000
-        ? `${Math.round(activeTokens / 1000)}K`
-        : `${Math.max(0, Math.round(activeTokens))}`
-    : fullFormatted.replace(/\s*tok\b/i, '').trim() || '0';
+  const total = resolved.totalUsage || { value: 0, exact: false, source: 'heuristic' };
+  const meta = contextStatusMeta(resolved.status);
+  const display = formatContextTokens(total.value, total.exact !== true);
 
-  if (textEl) textEl.textContent = compactFormatted;
-  if (pill) pill.title = `Context 用量：${fullFormatted} · 點擊查看詳細資訊與記憶提煉`;
-
-  const level = stats?.status_level || 'green';
-  const dotClass = level === 'red'
-    ? 'bg-rose-400'
-    : level === 'yellow'
-    ? 'bg-amber-400'
-    : 'bg-emerald-400';
-  const textClass = level === 'red'
-    ? 'text-rose-300'
-    : level === 'yellow'
-    ? 'text-amber-300'
-    : 'text-slate-300';
-
-  if (indicator) {
-    indicator.className = `w-1.5 h-1.5 rounded-full ${dotClass} shrink-0${level === 'red' ? ' animate-ping' : ''}`;
+  if (textEl) {
+    textEl.textContent = display;
+    textEl.className = `font-mono font-semibold ${meta.text}`;
   }
-  if (textEl) textEl.className = `font-mono font-semibold ${textClass}`;
+  if (indicator) indicator.className = `h-1.5 w-1.5 shrink-0 rounded-full ${meta.dot}`;
 
-  const contextWindow = Number(stats?.context_window) || 80000;
-  const pct = Number.isFinite(activeTokens) && contextWindow > 0
-    ? Math.max(0, Math.min(100, (activeTokens / contextWindow) * 100))
-    : 0;
-  if (pill) pill.dataset.contextLoad = pct >= 90 ? 'critical' : pct >= 70 ? 'warning' : 'normal';
+  const maxTokens = Number(resolved.budget?.maxTokens);
+  if (pill) {
+    pill.dataset.contextLoad = resolved.status || 'unknown';
+    pill.title = Number.isFinite(maxTokens) && maxTokens > 0
+      ? `${meta.label} Context · ${display} / ${formatContextTokens(maxTokens)}`
+      : `${total.exact ? 'Context' : 'Estimated Context'} · ${display} · Context limit unknown`;
+  }
+
+  updateHeaderCompactAction(resolved);
+  maybeNotifyCriticalContext(resolved);
+}
+
+function contributionDisplayName(contribution = {}) {
+  if (contribution.id === 'role-core') return 'Role identity';
+  if (contribution.id === 'project-core') return 'Project context';
+  if (contribution.id === 'task-current') return 'Current task';
+  if (contribution.id === 'conversation-recent') return 'Recent conversation';
+  if (contribution.id === 'tools-recent') return 'Recent tool output';
+  if (contribution.id === 'code-recent') return 'Recent code';
+  return contribution.label || CONTEXT_UI_LABELS[contribution.type] || contribution.type || 'Context';
+}
+
+function warningDisplayText(code) {
+  const map = {
+    NEAR_CONTEXT_LIMIT: 'Context 已接近模型可用上限。',
+    CONVERSATION_LARGE: '對話歷史開始變大。',
+    TOOL_OUTPUT_LARGE: '舊的工具輸出佔用較多空間，可以安全精簡。',
+    MEMORY_OVERFETCH: '這輪載入的長期記憶偏多，需要時可以重新擷取。',
+    LOW_PRIORITY_CONTEXT_LARGE: '可精簡的低優先內容偏多。',
+    UNKNOWN_MODEL_BUDGET: '目前可看到 Context 用量，但 Provider 沒有提供 Context 上限。'
+  };
+  return map[code] || 'Context 有可改善的空間。';
+}
+
+function renderContextBreakdown(health) {
+  const container = document.getElementById('context-breakdown');
+  if (!container) return;
+  const grouped = health?.breakdown || {};
+  const rows = [];
+  const add = (type, label) => {
+    const value = Number(grouped[type]?.estimatedTokens) || 0;
+    if (value > 0) rows.push({ type, label, value });
+  };
+  add('conversation', 'Conversation');
+  add('tool', 'Tools');
+  add('code', 'Code');
+  add('memory', 'Memory');
+  add('role', 'Role');
+  add('project', 'Project');
+  add('task', 'Task');
+  add('document', 'Documents');
+
+  const otherSystem = (Number(grouped.system?.estimatedTokens) || 0) +
+    (Number(grouped.other?.estimatedTokens) || 0) +
+    (Number(health?.unattributedTokens) || 0);
+  if (otherSystem > 0) rows.push({ type: 'other-system', label: 'Other / system', value: otherSystem });
+
+  rows.sort((a, b) => b.value - a.value);
+  if (!rows.length) {
+    container.innerHTML = '<div class="text-[10px] text-slate-600">尚無 attribution 資料。</div>';
+    return;
+  }
+
+  const total = Math.max(1, Number(health?.totalUsage?.value) || rows.reduce((sum, row) => sum + row.value, 0));
+  const maxValue = Math.max(...rows.map(row => row.value), 1);
+  container.innerHTML = rows.map(row => {
+    const share = Math.round((row.value / total) * 100);
+    const width = Math.max(4, Math.min(100, (row.value / maxValue) * 100));
+    return `<div>
+      <div class="mb-1 flex items-center gap-2 text-[10px]">
+        <span class="min-w-0 flex-1 truncate text-slate-400">${row.label}</span>
+        <span class="font-mono text-slate-300">~${formatContextTokens(row.value)}</span>
+        <span class="w-8 text-right font-mono text-slate-600">${share}%</span>
+      </div>
+      <div class="h-1 overflow-hidden rounded-full bg-slate-800"><div class="h-full rounded-full bg-slate-500" style="width:${width}%"></div></div>
+    </div>`;
+  }).join('');
+}
+
+function renderContextContributionLists(health) {
+  const pinned = document.getElementById('context-pinned-list');
+  const compactable = document.getElementById('context-compactable-list');
+  const contributions = Array.isArray(health?.contributions) ? health.contributions : [];
+  const keep = contributions.filter(item => item.pinned || item.compactable === false || item.priority === 'required');
+  const canCompact = contributions.filter(item => item.compactable && !item.pinned && item.priority !== 'required');
+
+  const render = (items, prefix) => {
+    if (!items.length) return '<div>—</div>';
+    const seen = new Set();
+    return items.filter(item => {
+      const name = contributionDisplayName(item);
+      if (seen.has(name)) return false;
+      seen.add(name);
+      return true;
+    }).map(item => `<div>${prefix} ${escapeHtml(contributionDisplayName(item))}</div>`).join('');
+  };
+  if (pinned) pinned.innerHTML = render(keep, '✓');
+  if (compactable) compactable.innerHTML = render(canCompact, '·');
+}
+
+function renderContextWarnings(health) {
+  const section = document.getElementById('context-warnings-section');
+  const container = document.getElementById('context-warnings');
+  if (!section || !container) return;
+  const warnings = (health?.warnings || []).filter(item => item?.code);
+  section.classList.toggle('hidden', warnings.length === 0);
+  container.innerHTML = warnings.map(item => `<div>• ${escapeHtml(warningDisplayText(item.code))}</div>`).join('');
+}
+
+function renderContextAdvanced(health) {
+  const source = document.getElementById('context-advanced-source');
+  const unattributed = document.getElementById('context-advanced-unattributed');
+  const largest = document.getElementById('context-advanced-largest');
+  const warningCodes = document.getElementById('context-advanced-warning-codes');
+  if (source) source.textContent = `total: ${health?.totalUsage?.exact ? 'exact' : 'estimated'} · ${health?.totalUsage?.source || 'unknown'}; breakdown: estimated · heuristic`;
+  if (unattributed) unattributed.textContent = `other/system: ~${formatContextTokens(health?.unattributedTokens || 0)} · over-attributed: ~${formatContextTokens(health?.overAttributedTokens || 0)}`;
+  if (largest) largest.textContent = `largest compactable: ${health?.largestCompactableContribution ? contributionDisplayName(health.largestCompactableContribution) : '—'}`;
+  if (warningCodes) warningCodes.textContent = `warnings: ${(health?.warnings || []).map(item => item.code).join(', ') || '—'}`;
+}
+
+function renderContextModal() {
+  const health = currentContextHealth || deriveContextHealthFromStats(currentContextStats || {});
+  const meta = contextStatusMeta(health.status);
+  const total = health.totalUsage || { value: 0, exact: false };
+  const maxTokens = Number(health.budget?.maxTokens);
+  const usage = document.getElementById('context-modal-usage');
+  const limit = document.getElementById('context-modal-limit');
+  const status = document.getElementById('context-modal-status');
+  const percent = document.getElementById('context-modal-percent');
+  const progressWrap = document.getElementById('context-modal-progress-wrap');
+  const progress = document.getElementById('context-modal-progress');
+  const compactBtn = document.getElementById('modal-trigger-compact-btn');
+
+  if (status) {
+    status.textContent = meta.label;
+    status.className = `text-xs font-bold ${meta.text}`;
+  }
+  if (usage) usage.textContent = formatContextTokens(total.value, total.exact !== true);
+  const hasBudget = Number.isFinite(maxTokens) && maxTokens > 0;
+  if (limit) limit.textContent = hasBudget ? `/ ${formatContextTokens(maxTokens)}` : 'Context limit unknown';
+  if (percent) percent.textContent = hasBudget && Number.isFinite(Number(health.usageRatio))
+    ? `${Math.round(Number(health.usageRatio) * 100)}%`
+    : '—';
+  if (progressWrap) progressWrap.classList.toggle('hidden', !hasBudget);
+  if (progress && hasBudget) {
+    progress.style.width = `${Math.max(0, Math.min(100, Math.round(Number(health.usageRatio || 0) * 100)))}%`;
+    progress.className = `h-full rounded-full transition-all duration-300 ${meta.progress}`;
+  }
+
+  renderContextBreakdown(health);
+  renderContextContributionLists(health);
+  renderContextWarnings(health);
+  renderContextAdvanced(health);
+
+  const canOfferCompact = Boolean(currentConversationId) &&
+    Boolean(providerConfig().capabilities?.compact) &&
+    ['warning', 'critical'].includes(health.status);
+  if (compactBtn) compactBtn.classList.toggle('hidden', !canOfferCompact);
 }
 
 function showContextModal() {
   const modal = document.getElementById('context-modal');
   if (!modal) return;
-
-  const activeTokensEl = document.getElementById('modal-context-active-tokens');
-  const barEl = document.getElementById('modal-context-bar');
-  const statusTextEl = document.getElementById('modal-context-status-text');
-  const turnsEl = document.getElementById('modal-context-turns');
-  const totalTokensEl = document.getElementById('modal-context-total-tokens');
-  const savedPercentEl = document.getElementById('modal-context-saved-percent');
-  const compactBtn = document.getElementById('modal-trigger-compact-btn');
-  const compactMaxBtn = document.getElementById('modal-trigger-compact-max-btn');
-  const compactMaxHint = document.getElementById('modal-compact-max-hint');
-  if (compactBtn) compactBtn.classList.toggle('hidden', !providerConfig().capabilities?.compact);
-  if (compactMaxBtn) {
-    const isCodexContinuation = currentProvider === 'codex' && Boolean(currentConversationId);
-    compactMaxBtn.innerHTML = `<span>${isCodexContinuation ? '✦ 建立低 Context 續接對話' : '🪶 極致壓縮 /compact-max'}</span>`;
-    compactMaxBtn.classList.toggle('from-emerald-700', isCodexContinuation);
-    compactMaxBtn.classList.toggle('to-teal-700', isCodexContinuation);
-    compactMaxBtn.classList.toggle('hover:from-emerald-600', isCodexContinuation);
-    compactMaxBtn.classList.toggle('hover:to-teal-600', isCodexContinuation);
-    compactMaxBtn.classList.toggle('from-violet-700', !isCodexContinuation);
-    compactMaxBtn.classList.toggle('to-fuchsia-700', !isCodexContinuation);
-    compactMaxBtn.classList.toggle('hover:from-violet-600', !isCodexContinuation);
-    compactMaxBtn.classList.toggle('hover:to-fuchsia-600', !isCodexContinuation);
-    if (compactMaxHint) compactMaxHint.textContent = isCodexContinuation
-      ? '舊對話完整保留；只帶關鍵交接摘要開啟新的 Codex 對話，確實降低 Context。'
-      : '任務接近完成時使用：只保留最終成果、待驗證事項與重要交接。';
-  }
-
-  const stats = currentContextStats || {
-    active_tokens: 0,
-    active_tokens_formatted: '0 tok',
-    total_tokens: 0,
-    total_tokens_formatted: '0 tok',
-    saved_percent: 0,
-    status_level: 'green',
-    status_text: '全新對話',
-    user_turns: 0
-  };
-
-  if (activeTokensEl) activeTokensEl.textContent = stats.active_tokens_formatted;
-  if (totalTokensEl) totalTokensEl.textContent = stats.total_tokens_formatted;
-  if (savedPercentEl) savedPercentEl.textContent = `${stats.saved_percent || 0}%`;
-  if (turnsEl) turnsEl.textContent = `${stats.user_turns || 0} 輪對話`;
-
-  const contextLimit = stats.context_window || 80000;
-  const pct = Math.min(100, Math.max(3, Math.round((stats.active_tokens / contextLimit) * 100)));
-  if (barEl) {
-    barEl.style.width = `${pct}%`;
-    if (stats.status_level === 'red') {
-      barEl.className = 'h-full bg-gradient-to-r from-rose-500 to-amber-500 rounded-full transition-all duration-500';
-    } else if (stats.status_level === 'yellow') {
-      barEl.className = 'h-full bg-gradient-to-r from-amber-500 to-teal-400 rounded-full transition-all duration-500';
-    } else {
-      barEl.className = 'h-full bg-gradient-to-r from-emerald-500 to-teal-400 rounded-full transition-all duration-500';
-    }
-  }
-
-  if (statusTextEl) {
-    const icon = stats.status_level === 'red' ? '🔴' : stats.status_level === 'yellow' ? '🟡' : '🟢';
-    statusTextEl.textContent = `${icon} 狀態：${stats.status_text}`;
-  }
-
+  renderContextModal();
   modal.classList.remove('pointer-events-none');
   modal.classList.add('opacity-100');
 }
 
 function hideContextModal() {
   const modal = document.getElementById('context-modal');
-  if (modal) {
-    modal.classList.remove('opacity-100');
-    modal.classList.add('pointer-events-none');
+  if (!modal) return;
+  modal.classList.remove('opacity-100');
+  modal.classList.add('pointer-events-none');
+}
+
+function setContextPreviewOpen(open) {
+  const modal = document.getElementById('context-compact-preview-modal');
+  if (!modal) return;
+  modal.classList.toggle('pointer-events-none', !open);
+  modal.classList.toggle('opacity-100', open);
+}
+
+function renderCompactionPlan(plan) {
+  const keep = document.getElementById('context-preview-keep');
+  const compact = document.getElementById('context-preview-compact');
+  const reretrieve = document.getElementById('context-preview-reretrieve');
+  const before = document.getElementById('context-preview-before');
+  const after = document.getElementById('context-preview-after');
+  const savings = document.getElementById('context-preview-savings');
+
+  const item = (entry, prefix = '✓') => `<div class="flex items-center justify-between gap-3"><span class="min-w-0 truncate">${prefix} ${escapeHtml(contributionDisplayName(entry))}</span><span class="shrink-0 font-mono text-[10px] text-slate-500">~${formatContextTokens(entry.estimatedBeforeTokens)}</span></div>`;
+  if (keep) keep.innerHTML = plan.keep?.length ? plan.keep.map(entry => item(entry, '✓')).join('') : '<div class="text-slate-600">—</div>';
+  const compactItems = [...(plan.summarize || []), ...(plan.drop || [])];
+  if (compact) compact.innerHTML = compactItems.length
+    ? compactItems.map(entry => item(entry, entry.action === 'drop' ? '−' : '↘')).join('')
+    : '<div class="text-slate-600">—</div>';
+  if (reretrieve) reretrieve.innerHTML = plan.reretrieve?.length
+    ? plan.reretrieve.map(entry => item(entry, '↻')).join('')
+    : '<div class="text-slate-600">—</div>';
+
+  if (before) before.textContent = formatContextTokens(plan.estimatedBeforeTokens, !plan.beforeExact);
+  if (after) after.textContent = formatContextTokens(plan.estimatedAfterTokens, true);
+  if (savings) savings.textContent = `~${formatContextTokens(plan.estimatedSavingsTokens)}`;
+}
+
+async function openSafeContextCompactionPreview() {
+  if (!currentConversationId || isStreaming) return;
+  try {
+    const query = new URLSearchParams({
+      provider: currentProvider,
+      id: currentConversationId
+    });
+    const response = await fetch(`/api/context/compaction-plan?${query.toString()}`, { cache: 'no-store' });
+    const data = await response.json();
+    if (!response.ok || !data.success) throw new Error(data.error || '無法建立 compaction plan');
+    currentContextPlan = data.plan;
+    currentContextHealth = data.health || currentContextHealth;
+    updateContextPill(currentContextStats, currentContextHealth);
+
+    if (!data.can_compact) throw new Error('目前 Provider 不支援 Context compaction');
+    if (!data.plan?.hasActionableWork) {
+      showContextToast('目前沒有可安全精簡的舊 Context；最近工作內容會保留。');
+      return;
+    }
+
+    renderCompactionPlan(data.plan);
+    hideContextModal();
+    setContextPreviewOpen(true);
+  } catch (error) {
+    showContextToast(error.message || '無法建立 compaction preview');
   }
 }
+
+async function executeSafeContextCompaction() {
+  if (!currentConversationId || !currentContextPlan || isStreaming) return;
+  const button = document.getElementById('confirm-context-compact-btn');
+  const targetConversationId = currentConversationId;
+  const targetProvider = currentProvider;
+  const originalText = button?.textContent || 'Compact';
+  if (button) {
+    button.disabled = true;
+    button.textContent = 'Compacting…';
+    button.classList.add('opacity-60');
+  }
+
+  try {
+    const response = await fetch('/api/context/compact', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        provider: targetProvider,
+        conversation_id: targetConversationId,
+        confirmed: true,
+        locale: typeof getCrewLocale === 'function' ? getCrewLocale() : 'zh-TW'
+      })
+    });
+    const data = await response.json();
+    if (!response.ok || !data.success) throw new Error(data.error || 'Context compaction failed');
+
+    setContextPreviewOpen(false);
+    if (currentConversationId !== targetConversationId || currentProvider !== targetProvider) return;
+
+    const beforeHealth = data.before_health;
+    const afterHealth = data.after_health;
+    currentContextHealth = afterHealth || currentContextHealth;
+    updateContextPill(null, currentContextHealth);
+
+    const beforeText = formatContextTokens(beforeHealth?.totalUsage?.value || currentContextPlan.estimatedBeforeTokens, beforeHealth?.totalUsage?.exact !== true);
+    const afterText = formatContextTokens(afterHealth?.totalUsage?.value ?? currentContextPlan.estimatedAfterTokens, afterHealth?.totalUsage?.exact !== true);
+    const saved = Math.max(0,
+      Number(beforeHealth?.totalUsage?.value || currentContextPlan.estimatedBeforeTokens) -
+      Number(afterHealth?.totalUsage?.value ?? currentContextPlan.estimatedAfterTokens)
+    );
+    let message = `Context compacted · ${beforeText} → ${afterText}`;
+    if (saved > 0) message += ` · Saved ~${formatContextTokens(saved)}`;
+    if (afterHealth?.status === 'warning' || afterHealth?.status === 'critical') {
+      const largest = afterHealth?.largestCompactableContribution;
+      message += largest ? ` · 仍偏大：${contributionDisplayName(largest)}` : ' · Context 仍偏大';
+    }
+    showContextToast(message, { critical: afterHealth?.status === 'critical' });
+
+    // Re-read provider history so both total usage and heuristic attribution
+    // reflect the actual post-compaction active context.
+    if (typeof loadConversationHistory === 'function') {
+      await loadConversationHistory(targetConversationId, { preserveComposer: true });
+    }
+  } catch (error) {
+    showContextToast(error.message || 'Context compaction failed', { critical: true });
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = originalText;
+      button.classList.remove('opacity-60');
+    }
+  }
+}
+
+window.showContextModal = showContextModal;
+window.hideContextModal = hideContextModal;
+window.openSafeContextCompactionPreview = openSafeContextCompactionPreview;
+window.executeSafeContextCompaction = executeSafeContextCompaction;
+window.setContextPreviewOpen = setContextPreviewOpen;
 
 // A deterministic escape hatch for very long Codex threads. It deliberately
 // creates a new thread with only a compact handoff; the original stays intact
@@ -1323,11 +1651,11 @@ async function loadConversationHistory(convId, { preserveComposer = false } = {}
       window.applyConversationSettings(data.conversation_settings || { provider: currentProvider, workspace: '/data/data/com.termux/files/home' });
     }
     
-    // 🧠 Update Top Context Usage Pill
-    if (data.context_stats) {
-      updateContextPill(data.context_stats);
+    // 🧠 Provider total + Crew heuristic attribution.
+    if (data.context_health || data.context_stats) {
+      updateContextPill(data.context_stats || null, data.context_health || null);
     } else {
-      updateContextPill(null);
+      updateContextPill(null, null);
     }
 
     // ⏳ Re-evaluate queue capsule visibility for this specific conversation

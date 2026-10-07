@@ -446,59 +446,35 @@ function initAppAndListeners() {
   if (refreshUsageBtn) refreshUsageBtn.addEventListener('click', () => loadUsageData(true));
   if (usageModal) usageModal.addEventListener('click', (e) => { if (e.target === usageModal) toggleUsageModal(false); });
 
-  // Context Usage Modal listeners
+  // Context Health + Safe Compaction listeners
   const contextPill = document.getElementById('context-pill');
   const contextModal = document.getElementById('context-modal');
   const closeContextBtn = document.getElementById('close-context-btn');
+  const headerCompactBtn = document.getElementById('header-compact-btn');
   const modalTriggerCompactBtn = document.getElementById('modal-trigger-compact-btn');
-  const modalTriggerCompactMaxBtn = document.getElementById('modal-trigger-compact-max-btn');
+  const contextPreviewModal = document.getElementById('context-compact-preview-modal');
+  const closeContextPreviewBtn = document.getElementById('close-context-preview-btn');
+  const cancelContextPreviewBtn = document.getElementById('cancel-context-preview-btn');
+  const confirmContextCompactBtn = document.getElementById('confirm-context-compact-btn');
 
-  const runCompactFromContext = (command) => {
-    if (typeof window.hideContextModal === 'function') window.hideContextModal();
-    if (promptInput) {
-      promptInput.value = command;
-      promptInput.focus();
-      promptInput.style.height = 'auto';
-      promptInput.style.height = Math.min(promptInput.scrollHeight, 120) + 'px';
-    }
-    if (typeof handleSendClick === 'function') handleSendClick(new Event('click'));
-  };
-
-  if (contextPill) {
-    contextPill.addEventListener('click', () => {
-      if (typeof window.showContextModal === 'function') window.showContextModal();
-    });
-  }
-  if (closeContextBtn) {
-    closeContextBtn.addEventListener('click', () => {
-      if (typeof window.hideContextModal === 'function') window.hideContextModal();
-    });
-  }
-  if (contextModal) {
-    contextModal.addEventListener('click', (e) => {
-      if (e.target === contextModal && typeof window.hideContextModal === 'function') {
-        window.hideContextModal();
-      }
-    });
-  }
-  if (modalTriggerCompactBtn) {
-    modalTriggerCompactBtn.addEventListener('click', () => runCompactFromContext('/compact'));
-  }
-  if (modalTriggerCompactMaxBtn) modalTriggerCompactMaxBtn.addEventListener('click', () => {
-    if (currentProvider === 'codex' && typeof window.startLowContextContinuation === 'function') {
-      window.startLowContextContinuation(modalTriggerCompactMaxBtn);
-    } else {
-      runCompactFromContext('/compact-max');
-    }
+  if (contextPill) contextPill.addEventListener('click', () => window.showContextModal?.());
+  if (closeContextBtn) closeContextBtn.addEventListener('click', () => window.hideContextModal?.());
+  if (contextModal) contextModal.addEventListener('click', event => {
+    if (event.target === contextModal) window.hideContextModal?.();
   });
-  const modalTriggerClearBtn = document.getElementById('modal-trigger-clear-btn');
-  if (modalTriggerClearBtn) {
-    modalTriggerClearBtn.addEventListener('click', () => {
-      if (typeof window.hideContextModal === 'function') window.hideContextModal();
-      if (typeof clearAndResetCurrentConversation === 'function') {
-        clearAndResetCurrentConversation();
-      }
-    });
+
+  const openSafePreview = () => window.openSafeContextCompactionPreview?.();
+  if (headerCompactBtn) headerCompactBtn.addEventListener('click', openSafePreview);
+  if (modalTriggerCompactBtn) modalTriggerCompactBtn.addEventListener('click', openSafePreview);
+
+  const closeSafePreview = () => window.setContextPreviewOpen?.(false);
+  if (closeContextPreviewBtn) closeContextPreviewBtn.addEventListener('click', closeSafePreview);
+  if (cancelContextPreviewBtn) cancelContextPreviewBtn.addEventListener('click', closeSafePreview);
+  if (contextPreviewModal) contextPreviewModal.addEventListener('click', event => {
+    if (event.target === contextPreviewModal) closeSafePreview();
+  });
+  if (confirmContextCompactBtn) {
+    confirmContextCompactBtn.addEventListener('click', () => window.executeSafeContextCompaction?.());
   }
 
   // Model & Effort Selector listeners

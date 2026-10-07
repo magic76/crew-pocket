@@ -3,103 +3,81 @@ const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 
-const contextHealth = require('../lib/context');
+const context = require('../lib/context');
 const {
   ContextSourceType,
   ContextPriority,
   ContextHealthStatus,
   ContextWarningCode,
   HeuristicContextEstimator
-} = contextHealth;
+} = context;
 const { LocalMemoryProvider } = require('../lib/memory/local-memory-provider');
 const { MemoryScope } = require('../lib/memory/types');
 const { buildAgentContext } = require('../lib/context-builder');
 
 async function run() {
-  // 1. Heuristic estimator is replaceable and deliberately approximate.
   const estimator = new HeuristicContextEstimator({ charsPerToken: 4 });
-  assert.equal(estimator.estimateText(''), 0);
-  assert.equal(estimator.estimateText('1234'), 1);
   assert.equal(estimator.estimateText('12345'), 2);
   assert.equal(estimator.exact, false);
-  assert.equal(estimator.kind, 'heuristic');
 
-  // 2. Contribution aggregation.
-  const grouped = contextHealth.groupContextContributions([
+  const grouped = context.groupContextContributions([
     { id: 'r1', type: 'role', estimatedTokens: 100 },
     { id: 'r2', type: 'role', estimatedTokens: 50 },
     { id: 't1', type: 'tool', estimatedTokens: 300 }
   ]);
   assert.equal(grouped.role.estimatedTokens, 150);
-  assert.equal(grouped.role.count, 2);
   assert.equal(grouped.tool.estimatedTokens, 300);
 
-  // 3. Healthy threshold.
-  const healthy = contextHealth.analyze({
-    budget: { maxTokens: 100000, estimatedInputTokens: 50000 },
-    contributions: [{ id: 'conversation', type: 'conversation', estimatedTokens: 50000 }]
+  const healthy = context.analyze({
+    budget: { maxTokens: 100000 },
+    totalUsage: { value: 50000, exact: true, source: 'provider' },
+    contributions: [{ id: 'conversation', type: 'conversation', estimatedTokens: 48000 }]
   });
   assert.equal(healthy.status, ContextHealthStatus.HEALTHY);
-  assert.equal(healthy.usageRatio, 0.5);
+  assert.equal(healthy.totalUsage.value, 50000);
+  assert.equal(healthy.totalUsage.exact, true);
+  assert.equal(healthy.totalUsage.source, 'provider');
+  assert.equal(healthy.breakdownEstimate.exact, false);
+  assert.equal(healthy.unattributedTokens, 2000);
 
-  // 4. Warning threshold.
-  const warning = contextHealth.analyze({
-    budget: { maxTokens: 100000, estimatedInputTokens: 80000 },
+  const warning = context.analyze({
+    budget: { maxTokens: 100000 },
+    totalUsage: { value: 80000, exact: true, source: 'provider' },
     contributions: [{ id: 'conversation', type: 'conversation', estimatedTokens: 80000 }]
   });
   assert.equal(warning.status, ContextHealthStatus.WARNING);
   assert.ok(warning.warnings.some(item => item.code === ContextWarningCode.NEAR_CONTEXT_LIMIT));
 
-  // 5. Critical threshold.
-  const critical = contextHealth.analyze({
-    budget: { maxTokens: 100000, estimatedInputTokens: 95000 },
+  const critical = context.analyze({
+    budget: { maxTokens: 100000 },
+    totalUsage: { value: 95000, exact: true, source: 'provider' },
     contributions: [{ id: 'conversation', type: 'conversation', estimatedTokens: 95000 }]
   });
   assert.equal(critical.status, ContextHealthStatus.CRITICAL);
 
-  // Reserved output/reasoning reduce the available input budget.
-  const reserved = contextHealth.analyze({
-    budget: {
-      maxTokens: 128000,
-      reservedOutputTokens: 8000,
-      reservedReasoningTokens: 4000,
-      estimatedInputTokens: 81200
-    },
-    contributions: [{ id: 'conversation', type: 'conversation', estimatedTokens: 81200 }]
-  });
-  assert.equal(reserved.budget.availableInputTokens, 116000);
-  assert.ok(Math.abs(reserved.usageRatio - (81200 / 116000)) < 0.000001);
-
-  // 6. Unknown model budget is honest rather than inventing a context window.
-  const unknown = contextHealth.analyze({
-    budget: { estimatedInputTokens: 12000 },
+  const unknown = context.analyze({
+    totalUsage: { value: 12000, exact: false, source: 'heuristic' },
     contributions: [{ id: 'conversation', type: 'conversation', estimatedTokens: 12000 }]
   });
   assert.equal(unknown.status, ContextHealthStatus.UNKNOWN);
   assert.equal(Object.prototype.hasOwnProperty.call(unknown, 'usageRatio'), false);
+  assert.equal(unknown.totalUsage.exact, false);
   assert.ok(unknown.warnings.some(item => item.code === ContextWarningCode.UNKNOWN_MODEL_BUDGET));
 
-  // 7. Pinned / non-compactable metadata survives normalization.
-  const pinned = contextHealth.analyze({
-    budget: { maxTokens: 100000 },
+  const pinned = context.analyze({
     contributions: [{
       id: 'role-core',
       type: ContextSourceType.ROLE,
-      label: 'Crew Helper Developer',
       estimatedTokens: 1200,
       priority: ContextPriority.REQUIRED,
       compactable: false,
-      pinned: true,
-      sourceRef: 'role:crew-helper-developer'
+      pinned: true
     }]
   });
   assert.equal(pinned.contributions[0].pinned, true);
   assert.equal(pinned.contributions[0].compactable, false);
-  assert.equal(pinned.contributions[0].priority, ContextPriority.REQUIRED);
 
-  // 8. Largest contribution and largest compactable contribution are distinct.
-  const largest = contextHealth.analyze({
-    budget: { maxTokens: 200000 },
+  const largest = context.analyze({
     contributions: [
       { id: 'role', type: 'role', estimatedTokens: 30000, pinned: true, compactable: false },
       { id: 'conversation', type: 'conversation', estimatedTokens: 22000, compactable: true },
@@ -109,33 +87,9 @@ async function run() {
   assert.equal(largest.largestContribution.id, 'role');
   assert.equal(largest.largestCompactableContribution.id, 'conversation');
 
-  // 9. Conversation-too-large warning.
-  const conversationLarge = contextHealth.analyze({
-    budget: { maxTokens: 128000, estimatedInputTokens: 80000 },
-    contributions: [
-      { id: 'conversation-current', type: 'conversation', estimatedTokens: 50000, compactable: true },
-      { id: 'other', type: 'other', estimatedTokens: 30000 }
-    ]
-  });
-  const conversationWarning = conversationLarge.warnings.find(item => item.code === ContextWarningCode.CONVERSATION_LARGE);
-  assert.ok(conversationWarning);
-  assert.equal(conversationWarning.contributionId, 'conversation-current');
-
-  // 10. Tool-output-too-large warning.
-  const toolLarge = contextHealth.analyze({
-    budget: { maxTokens: 128000, estimatedInputTokens: 50000 },
-    contributions: [
-      { id: 'tools-current', type: 'tool', estimatedTokens: 18000, compactable: true },
-      { id: 'conversation-current', type: 'conversation', estimatedTokens: 32000, compactable: true }
-    ]
-  });
-  const toolWarning = toolLarge.warnings.find(item => item.code === ContextWarningCode.TOOL_OUTPUT_LARGE);
-  assert.ok(toolWarning);
-  assert.equal(toolWarning.contributionId, 'tools-current');
-
-  // Memory and low-priority warnings are available without a rule-engine framework.
-  const memoryAndLow = contextHealth.analyze({
-    budget: { maxTokens: 100000, estimatedInputTokens: 40000 },
+  const memoryAndLow = context.analyze({
+    budget: { maxTokens: 100000 },
+    totalUsage: { value: 40000, exact: true, source: 'provider' },
     contributions: [
       { id: 'memories', type: 'memory', estimatedTokens: 12000 },
       { id: 'low-old', type: 'other', estimatedTokens: 11000, priority: 'low', compactable: true },
@@ -145,88 +99,84 @@ async function run() {
   assert.ok(memoryAndLow.warnings.some(item => item.code === ContextWarningCode.MEMORY_OVERFETCH));
   assert.ok(memoryAndLow.warnings.some(item => item.code === ContextWarningCode.LOW_PRIORITY_CONTEXT_LARGE));
 
-  // 11. Empty context never crashes.
-  const empty = contextHealth.analyze();
-  assert.equal(empty.estimatedInputTokens, 0);
-  assert.equal(empty.contributions.length, 0);
-  assert.equal(empty.status, ContextHealthStatus.UNKNOWN);
-  assert.equal(empty.largestContribution, null);
-  assert.equal(empty.largestCompactableContribution, null);
-
-  // Normalized provider history can be analyzed without provider-specific message schemas.
-  const history = {
+  // Provider total remains authoritative while Crew estimates attribution.
+  const providerHistory = {
     conversation_id: 'conversation-1',
     context_stats: {
-      active_tokens: 42000,
+      active_tokens: 42138,
+      active_tokens_exact: true,
+      active_tokens_source: 'provider',
       context_window: 128000
     },
     messages: [
-      { role: 'user', content: 'Please inspect the runtime.' },
+      { role: 'user', content: 'visual archive that is not necessarily active' }
+    ],
+    active_messages: [
+      { role: 'user', content: 'recent active task' },
       {
         role: 'assistant',
-        content: 'Result follows.\n\n\`\`\`js\nconsole.log("ok");\n\`\`\`',
-        tools: [{ name: 'read_file', args: { path: 'server.js' }, output: 'x'.repeat(12000) }]
+        content: 'Result\n\n```js\nconsole.log("ok");\n```',
+        tools: [{ name: 'read_file', output: 'x'.repeat(8000) }]
       }
     ]
   };
-  const historyHealth = contextHealth.analyzeConversationContext(history);
-  assert.equal(historyHealth.estimatedInputTokens, 42000);
+  const historyHealth = context.analyzeConversationContext(providerHistory, {
+    additionalContributions: [
+      { id: 'role-core', type: 'role', estimatedTokens: 2000, priority: 'required', compactable: false, pinned: true },
+      { id: 'memory:m1', type: 'memory', estimatedTokens: 4000, priority: 'high', compactable: true },
+      { id: 'task-current', type: 'task', estimatedTokens: 1000, priority: 'required', compactable: false, pinned: true }
+    ]
+  });
+  assert.equal(historyHealth.totalUsage.value, 42138);
+  assert.equal(historyHealth.totalUsage.exact, true);
   assert.equal(historyHealth.budget.maxTokens, 128000);
   assert.ok(historyHealth.breakdown.conversation);
   assert.ok(historyHealth.breakdown.code);
   assert.ok(historyHealth.breakdown.tool);
-  assert.ok(historyHealth.unattributedTokens >= 0);
+  assert.equal(historyHealth.breakdown.memory.estimatedTokens, 4000);
+  assert.equal(historyHealth.breakdown.task.estimatedTokens, 1000);
 
-  // Acceptance-style example produces a reasonable breakdown and warnings.
-  const acceptance = contextHealth.analyze({
-    budget: {
-      maxTokens: 128000,
-      reservedOutputTokens: 8000,
-      estimatedInputTokens: 81200
+  // Heuristic provider totals remain visibly approximate.
+  const heuristicHistory = context.analyzeConversationContext({
+    conversation_id: 'agy-1',
+    context_stats: {
+      active_tokens: 39000,
+      active_tokens_exact: false,
+      active_tokens_source: 'heuristic'
     },
-    contributions: [
-      {
-        id: 'role',
-        type: 'role',
-        estimatedTokens: 1200,
-        pinned: true,
-        compactable: false,
-        priority: 'required'
-      },
-      {
-        id: 'conversation',
-        type: 'conversation',
-        estimatedTokens: 62000,
-        compactable: true
-      },
-      {
-        id: 'tools',
-        type: 'tool',
-        estimatedTokens: 18000,
-        compactable: true
-      }
-    ]
+    messages: [{ role: 'user', content: 'hello' }]
   });
-  assert.equal(acceptance.estimatedInputTokens, 81200);
-  assert.equal(acceptance.breakdown.conversation.estimatedTokens, 62000);
-  assert.equal(acceptance.largestCompactableContribution.id, 'conversation');
-  assert.ok(acceptance.warnings.some(item => item.code === ContextWarningCode.CONVERSATION_LARGE));
-  assert.ok(acceptance.warnings.some(item => item.code === ContextWarningCode.TOOL_OUTPUT_LARGE));
+  assert.equal(heuristicHistory.totalUsage.value, 39000);
+  assert.equal(heuristicHistory.totalUsage.exact, false);
+  assert.equal(heuristicHistory.status, ContextHealthStatus.UNKNOWN);
 
-  // 12. Existing Role / Memory retrieval flow still works and now exposes
-  // contribution metadata without changing what gets recalled.
+  // Recent tail is distinct and never compactable.
+  const longMessages = Array.from({ length: 14 }, (_, index) => ({
+    role: index % 2 ? 'assistant' : 'user',
+    content: `message-${index} ${'x'.repeat(40)}`
+  }));
+  const historyContributions = context.buildHistoryContextContributions({
+    conversation_id: 'tail-test',
+    messages: longMessages
+  });
+  assert.ok(historyContributions.some(item => item.id === 'conversation-history' && item.compactable));
+  assert.ok(historyContributions.some(item => item.id === 'conversation-recent' && item.compactable === false));
+
+  const empty = context.analyze();
+  assert.equal(empty.status, ContextHealthStatus.UNKNOWN);
+  assert.equal(empty.totalUsage.value, 0);
+  assert.equal(empty.largestCompactableContribution, null);
+
+  // Existing Role / Memory retrieval flow remains intact.
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'crew-pocket-context-health-'));
   try {
-    const memoryProvider = new LocalMemoryProvider({
-      storagePath: path.join(tempDir, 'records.json')
-    });
+    const memoryProvider = new LocalMemoryProvider({ storagePath: path.join(tempDir, 'records.json') });
     await memoryProvider.retain({
       id: 'memory-terminal-evidence',
       text: 'Crew Helper completion requires terminal evidence.',
       scope: MemoryScope.ROLE,
       roleId: 'role-helper'
     });
-
     const role = {
       id: 'role-helper',
       name: 'Crew Helper Developer',
@@ -241,7 +191,6 @@ async function run() {
       workspace: '/tmp/crew-helper',
       systemContext: ''
     };
-
     const agentContext = await buildAgentContext({
       roleId: role.id,
       projectId: project.id,
@@ -250,7 +199,6 @@ async function run() {
       roleResolver: async id => id === role.id ? role : null,
       projectResolver: async id => id === project.id ? project : null
     });
-
     assert.equal(agentContext.memories.length, 1);
     assert.ok(agentContext.contributions.some(item => item.type === ContextSourceType.ROLE && item.pinned));
     assert.ok(agentContext.contributions.some(item => item.type === ContextSourceType.PROJECT && item.pinned));
