@@ -13,7 +13,6 @@ const RUNTIME_HOME = path.resolve(process.env.HOME || '/data/data/com.termux/fil
 const REUSABLE_TOOL_DIR = process.env.CREW_REUSABLE_TOOL_DIR || path.join(__dirname, 'public', 'extra');
 const TURN_METRICS_DIR = path.join(os.homedir(), '.crew-pocket');
 const TURN_METRICS_FILE = path.join(TURN_METRICS_DIR, 'turn-metrics.jsonl');
-const JEV_ELAPSED_CHECKPOINT_MS = 2 * 60 * 1000;
 
 const {
   PORT,
@@ -67,11 +66,9 @@ const {
 } = require('./lib/http-security');
 const { createHistoryMigration } = require('./lib/runtime/history-migration');
 const { getProviderRuntimeStatus, updateProvider } = require('./lib/runtime/provider-manager');
-const { getJevCliStatus } = require('./lib/jev-router');
 const { prepareTurnExecution } = require('./lib/runtime/turn-orchestrator');
 const { normalizeExecutionIntent } = require('./lib/execution-intent');
 const { getDefaultModel } = require('./lib/model-runtime');
-const { reviewElapsedCheckpointWithJev, reviewSoftBudgetWithJev, reviewToolFailureWithJev, sanitizeText: sanitizeRuntimeDecisionText, shouldUseRuntimeSnapshots } = require('./lib/runtime-decision');
 
 
 async function handleStorageReport(res) {
@@ -1480,9 +1477,7 @@ async function handleChat(req, res) {
     to_session_ms: null,
     to_first_text_ms: null,
     to_first_tool_ms: null,
-    jev_ms: null,
     intent_ms: null,
-    intent_review_ms: null,
     to_done_ms: null
   };
   const elapsed = () => Date.now() - requestStartedAt;
@@ -1566,14 +1561,12 @@ async function handleChat(req, res) {
 
   const effectiveModel = model || savedSettings?.model || crewMember?.model || getDefaultModel(providerId);
   const {
-    jevInputSummary,
     routedExecutionMode,
     executionSource,
     executionPolicy,
     executionIntent,
     intentReview,
     approvedExecutionIntent,
-    jevRoute,
     planningOutcome
   } = await prepareTurnExecution({
     providerId,
@@ -1591,32 +1584,15 @@ async function handleChat(req, res) {
     console.log('[ExecutionIntent] ' + JSON.stringify({
       request_id: requestId,
       conversation_id: conversation_id || null,
-      mode_before_review: jevRoute?.mode || routedExecutionMode || null,
+      mode_before_review: routedExecutionMode || null,
       mode_after_review: executionPolicy?.mode || null,
       intent: executionIntent,
       review: intentReview,
       outcome: planningOutcome,
-      intent_ms: turnTiming.intent_ms,
-      review_ms: turnTiming.intent_review_ms
+      intent_ms: turnTiming.intent_ms
     }));
   }
 
-  if (jevRoute) {
-    console.log('[JevRoute] ' + JSON.stringify({
-      request_id: requestId,
-      conversation_id: conversation_id || null,
-      provider: providerId,
-      model: effectiveModel,
-      accepted: Boolean(jevRoute.accepted),
-      outcome: jevRoute.outcome || planningOutcome || null,
-      mode: jevRoute.mode || null,
-      suggested_mode: jevRoute.suggestedMode || null,
-      confidence: jevRoute.confidence ?? null,
-      threshold: jevRoute.threshold ?? null,
-      latency_ms: jevRoute.latencyMs ?? turnTiming.jev_ms,
-      reason: jevRoute.reason || null
-    }));
-  }
 
   let finalPrompt = prompt || 'Analyze this image';
 
@@ -1671,20 +1647,7 @@ async function handleChat(req, res) {
     let abortTurn = () => {};
     let lastContextStats = null;
     let policyWarned = false;
-    let policyStopped = false;
-    let runtimeStopped = false;
-    let softBudgetSnapshotQueued = false;
-    let elapsedCheckpointTimer = null;
     let activeConversationId = conversation_id || null;
-    let currentAssistantTail = '';
-    const recentToolEvents = [];
-    const runtimeSnapshotsEnabled = shouldUseRuntimeSnapshots({
-      provider: providerId,
-      model: effectiveModel
-    });
-    const runtimeDecisions = [];
-    const pendingRuntimeDecisions = new Set();
-    let runtimeDecisionQueue = Promise.resolve();
 
     const getToolMetrics = () => {
       let executions = 0;
@@ -1710,18 +1673,8 @@ async function handleChat(req, res) {
         conversation_id: conversation_id || null,
         execution_mode: executionPolicy?.mode || null,
         execution_policy_source: executionPolicy?.source || null,
-        jev_route: jevRoute ? {
-          input_summary: jevInputSummary,
-          accepted: Boolean(jevRoute.accepted),
-          mode: jevRoute.mode || null,
-          suggested_mode: jevRoute.suggestedMode || null,
-          confidence: jevRoute.confidence ?? null,
-          reason: jevRoute.reason || null,
-          latency_ms: jevRoute.latencyMs ?? null
-        } : null,
         execution_intent: approvedExecutionIntent,
         intent_review: intentReview,
-        runtime_decisions: runtimeDecisions.slice(-8),
         reason,
         elapsed_ms: elapsed(),
         turn_timing: turnTiming,
@@ -1762,16 +1715,6 @@ async function handleChat(req, res) {
       toolRuns.set(key, run);
       toolEventCount += 1;
       collectChangedFiles(event, changedFiles);
-      recentToolEvents.push({
-        name: event.name || event.tool_name || 'tool',
-        state,
-        output: sanitizeRuntimeDecisionText(stableToolSerialize({
-          output: event.info?.output ?? null,
-          exitCode: event.info?.exitCode ?? null,
-          error: event.info?.error ?? null
-        }), 1200)
-      });
-      if (recentToolEvents.length > 6) recentToolEvents.splice(0, recentToolEvents.length - 6);
       return {
         key,
         attempts: run.attempts,
@@ -1785,30 +1728,14 @@ async function handleChat(req, res) {
     const finish = (payload) => {
       if (ended) return;
       ended = true;
-      if (elapsedCheckpointTimer) {
-        clearTimeout(elapsedCheckpointTimer);
-        elapsedCheckpointTimer = null;
-      }
       markOnce('to_done_ms');
       const finalPayload = {
         ...(payload || {}),
         request_id: requestId,
         tool_metrics: getToolMetrics(),
         execution_policy: executionPolicy || undefined,
-        jev_route: jevRoute ? {
-          input_summary: jevInputSummary,
-          accepted: Boolean(jevRoute.accepted),
-          mode: jevRoute.mode || null,
-          suggested_mode: jevRoute.suggestedMode || null,
-          confidence: jevRoute.confidence ?? null,
-          threshold: jevRoute.threshold ?? null,
-          reason: jevRoute.reason || null,
-          latency_ms: jevRoute.latencyMs ?? null,
-          model: jevRoute.model || null
-        } : undefined,
         execution_intent: approvedExecutionIntent || undefined,
         intent_review: intentReview || undefined,
-        runtime_decisions: runtimeDecisions.length ? runtimeDecisions : undefined,
         turn_timing: turnTiming
       };
       logToolMetrics(finalPayload.error ? 'error' : 'completed');
@@ -1816,443 +1743,8 @@ async function handleChat(req, res) {
       res.end();
     };
 
-    const persistRuntimeMode = () => {
-      if (!activeConversationId || !executionPolicy?.mode) return;
-      saveConversationSettings(providerId, activeConversationId, {
-        model: effectiveModel || model || savedSettings?.model || getDefaultModel(providerId),
-        effort: effort || savedSettings?.effort || 'low',
-        workspace,
-        roleId: role?.id || savedSettings?.roleId || DEFAULT_ROLE_ID,
-        role: body.role || savedSettings?.role || 'general',
-        executionMode: executionPolicy.mode
-      }).catch(error => console.warn('[RuntimeDecision] Save mode failed:', error.message));
-    };
-
-    const applyRuntimeEscalation = (targetMode, trigger) => {
-      const ranks = { CHAT: 0, INSPECT: 0, SURGICAL_EDIT: 1, DEBUG: 2, BUILD: 3 };
-      const currentMode = executionPolicy?.mode || null;
-      if (!targetMode || !currentMode) return false;
-      if (explicitExecutionMode) return false;
-      if ((ranks[targetMode] || 0) <= (ranks[currentMode] || 0)) return false;
-
-      const nextPolicy = resolveExecutionPolicy({
-        provider: providerId,
-        model: effectiveModel,
-        executionMode: targetMode,
-        executionPolicy: body.execution_policy || body.executionPolicy,
-        executionSource: 'jev-runtime'
-      });
-      if (!nextPolicy) return false;
-
-      executionPolicy = nextPolicy;
-      routedExecutionMode = targetMode;
-      executionSource = 'jev-runtime';
-      persistRuntimeMode();
-      console.log('[RuntimeDecision] policy escalation ' + JSON.stringify({
-        request_id: requestId,
-        trigger,
-        from: currentMode,
-        to: targetMode
-      }));
-      sendEvent('policy', {
-        mode: targetMode,
-        level: 'escalated',
-        source: 'jev-runtime',
-        trigger,
-        hard_tool_limit: executionPolicy.hardToolExecutions,
-        poll_limit: executionPolicy.maxPolls,
-        file_limit: executionPolicy.maxFilesChanged
-      });
-      return true;
-    };
-
-    const steerRuntime = async (lines) => {
-      if (ended || runtimeStopped || !activeConversationId || typeof provider.steerActiveTurn !== 'function') {
-        return { accepted: false, reason: 'not_available' };
-      }
-      const directive = [
-        '<ADDITIONAL_METADATA>',
-        '[Crew Runtime Decision Snapshot]',
-        'This is internal runtime control, not a new user request.',
-        'Continue only the original user task and stay within the current execution policy.',
-        ...lines,
-        '</ADDITIONAL_METADATA>'
-      ].join('\n');
-      return provider.steerActiveTurn(activeConversationId, directive);
-    };
-
-    const stopForRuntimeDecision = (snapshot, message) => {
-      if (ended || runtimeStopped) return;
-      runtimeStopped = true;
-      policyStopped = true;
-      try { abortTurn(); } catch (_) {}
-      sendEvent('policy', {
-        mode: executionPolicy?.mode || null,
-        level: 'runtime-stop',
-        source: 'jev-runtime',
-        snapshot_type: snapshot?.type || null,
-        reason: message
-      });
-      finish({
-        error: message,
-        provider: providerId,
-        conversation_id: activeConversationId || conversation_id,
-        runtime_decision_stop: true
-      });
-    };
-
-    const applyRuntimeDecision = async (snapshot, trigger) => {
-      if (!snapshot || ended) return;
-      const record = {
-        ...snapshot,
-        trigger,
-        at: Date.now()
-      };
-      runtimeDecisions.push(record);
-      if (runtimeDecisions.length > 12) runtimeDecisions.splice(0, runtimeDecisions.length - 12);
-      console.log('[RuntimeDecision] ' + JSON.stringify({
-        request_id: requestId,
-        conversation_id: activeConversationId || conversation_id || null,
-        ...record
-      }));
-      sendEvent('decision', record);
-
-      if (!snapshot.ok || ended || runtimeStopped) return;
-
-      if (snapshot.type === 'TOOL_FAILURE') {
-        if (snapshot.askUser) {
-          return stopForRuntimeDecision(
-            snapshot,
-            'Crew Runtime paused because this tool failure needs user input, authentication, permission, or an external action before useful work can continue.'
-          );
-        }
-        if (snapshot.shouldStop) {
-          return stopForRuntimeDecision(
-            snapshot,
-            'Crew Runtime stopped this turn because Jev judged that more autonomous tool calls are unlikely to help the original task.'
-          );
-        }
-
-        let escalated = false;
-        if (snapshot.escalation === 'BUILD') {
-          escalated = applyRuntimeEscalation('BUILD', trigger);
-        } else if (snapshot.escalation === 'DEBUG') {
-          escalated = applyRuntimeEscalation('DEBUG', trigger);
-        }
-
-        const directive = [];
-        if (!snapshot.retrySame) {
-          directive.push('Do not retry essentially the same failed tool/action with the same approach.');
-        }
-        if (snapshot.tryAlternative) {
-          directive.push('Use a meaningfully different, narrower approach based on the failure evidence already available.');
-        }
-        if (!snapshot.taskOnTrack) {
-          directive.push('Re-anchor on the original user goal before taking another tool action; drop unrelated exploration.');
-        }
-        if (snapshot.stuckRisk === 'HIGH') {
-          directive.push('High loop risk: avoid repeated probing and use the minimum additional tools needed to resolve or report the blocker.');
-        }
-        if (escalated) {
-          directive.push(`Runtime approved escalation to ${executionPolicy.mode}; use the broader budget only for work required by the original task.`);
-        }
-        if (directive.length) await steerRuntime(directive);
-        return;
-      }
-
-      if (snapshot.type === 'ELAPSED_CHECKPOINT') {
-        if (snapshot.askUser || snapshot.decision === 'BLOCK') {
-          return stopForRuntimeDecision(
-            snapshot,
-            snapshot.askUser
-              ? 'Crew Runtime paused after the two-minute Jev checkpoint because user input is required before useful work can continue.'
-              : 'Crew Runtime stopped after the two-minute Jev checkpoint because the current autonomous path was not justified.'
-          );
-        }
-        if (snapshot.decision === 'ACCEPT' && snapshot.revisedCandidate) {
-          const candidate = snapshot.revisedCandidate;
-          await steerRuntime([
-            'Jev requested one Luna replan and accepted the revised candidate.',
-            `Re-anchor the active turn on this revised candidate: ${candidate.summary || 'continue with the narrower revised plan'}.`,
-            `Expected files: ${candidate.expectedFiles}; estimated tools: ${candidate.estimatedTools}.`,
-            'Do not restart completed work. Continue from the current runtime state using only the minimum remaining actions.'
-          ]);
-        }
-        return;
-      }
-
-      if (snapshot.type === 'SOFT_BUDGET') {
-        if (snapshot.askUser) {
-          return stopForRuntimeDecision(
-            snapshot,
-            'Crew Runtime paused at the soft budget because useful continuation requires user input or an external action.'
-          );
-        }
-        if (snapshot.action === 'STOP') {
-          return stopForRuntimeDecision(
-            snapshot,
-            'Crew Runtime stopped at the soft budget because the current autonomous path is unlikely to finish the original task efficiently.'
-          );
-        }
-
-        let escalated = false;
-        if (snapshot.action === 'ESCALATE_BUILD') {
-          escalated = applyRuntimeEscalation('BUILD', trigger);
-        } else if (snapshot.action === 'ESCALATE_DEBUG') {
-          escalated = applyRuntimeEscalation('DEBUG', trigger);
-        }
-
-        const directive = [];
-        if (snapshot.action === 'CHANGE_APPROACH') {
-          directive.push('Stop broad or repeated exploration. Reassess the evidence already collected and switch to a narrower different approach.');
-        }
-        if (snapshot.stuckRisk === 'HIGH') {
-          directive.push('High loop risk: do not spend the remaining budget on repeated checks or unrelated improvements.');
-        }
-        if (!snapshot.finishWithinHardBudget) {
-          directive.push('The remaining hard budget is tight. Prioritize the minimum path to the requested result or clearly report the blocker.');
-        }
-        if (escalated) {
-          directive.push(`Runtime approved escalation to ${executionPolicy.mode}; do not use it for unrelated scope.`);
-        }
-        if (directive.length) await steerRuntime(directive);
-      }
-    };
-
-    const queueRuntimeDecision = (trigger, runner) => {
-      const promise = runtimeDecisionQueue
-        .catch(() => {})
-        .then(async () => {
-          if (ended || runtimeStopped) return null;
-          try {
-            const snapshot = await runner();
-            await applyRuntimeDecision(snapshot, trigger);
-            return snapshot;
-          } catch (error) {
-            const snapshot = {
-              type: trigger === 'tool_failure'
-                ? 'TOOL_FAILURE'
-                : (trigger === 'elapsed_120s' ? 'ELAPSED_CHECKPOINT' : 'SOFT_BUDGET'),
-              ok: false,
-              reason: 'snapshot_error',
-              error: String(error.message || error).slice(0, 600)
-            };
-            await applyRuntimeDecision(snapshot, trigger);
-            return snapshot;
-          }
-        });
-      runtimeDecisionQueue = promise;
-      pendingRuntimeDecisions.add(promise);
-      promise.finally(() => pendingRuntimeDecisions.delete(promise));
-      return promise;
-    };
-
-    const queueToolFailureDecision = (event, tracking) => {
-      if (!runtimeSnapshotsEnabled || !executionPolicy || !tracking.failedTransition || ended || runtimeStopped) return;
-      const parameters = event.info?.parameters || {};
-      const output = event.info?.output;
-      queueRuntimeDecision('tool_failure', () => reviewToolFailureWithJev({
-        task: prompt,
-        mode: executionPolicy?.mode,
-        tool: {
-          name: event.name || event.tool_name || 'tool',
-          state: tracking.state,
-          attempts: tracking.attempts,
-          parameters: sanitizeRuntimeDecisionText(stableToolSerialize(parameters), 1400),
-          output: sanitizeRuntimeDecisionText(
-            stableToolSerialize({
-              output: typeof output === 'string' ? output : (output || null),
-              exitCode: event.info?.exitCode ?? null,
-              error: event.info?.error ?? null
-            }),
-            2200
-          )
-        },
-        metrics: getToolMetrics(),
-        intent: approvedExecutionIntent
-      }));
-    };
-
-    const queueSoftBudgetDecision = () => {
-      if (!runtimeSnapshotsEnabled || !executionPolicy || softBudgetSnapshotQueued || ended || runtimeStopped) return;
-      softBudgetSnapshotQueued = true;
-      queueRuntimeDecision('soft_budget', () => reviewSoftBudgetWithJev({
-        task: prompt,
-        mode: executionPolicy?.mode,
-        metrics: getToolMetrics(),
-        policy: {
-          mode: executionPolicy.mode,
-          softToolExecutions: executionPolicy.softToolExecutions,
-          hardToolExecutions: executionPolicy.hardToolExecutions,
-          maxPolls: executionPolicy.maxPolls,
-          maxFilesChanged: executionPolicy.maxFilesChanged,
-          allowBuild: executionPolicy.allowBuild,
-          allowDependencyChanges: executionPolicy.allowDependencyChanges
-        },
-        intent: approvedExecutionIntent,
-        recentFailures: runtimeDecisions
-          .filter(item => item.type === 'TOOL_FAILURE')
-          .slice(-3)
-          .map(item => ({
-            failureType: item.failureType,
-            retrySame: item.retrySame,
-            tryAlternative: item.tryAlternative,
-            stuckRisk: item.stuckRisk
-          }))
-      }));
-    };
-
-    const loadRecentConversationTurns = async () => {
-      const messages = [];
-      if (activeConversationId && typeof provider.getHistory === 'function') {
-        try {
-          const history = await provider.getHistory(activeConversationId);
-          for (const message of history?.messages || []) {
-            if (!['user', 'assistant'].includes(message?.role)) continue;
-            const content = sanitizeRuntimeDecisionText(message.content, 1200);
-            if (content) messages.push({ role: message.role, content });
-          }
-        } catch (error) {
-          console.warn('[RuntimeDecision] recent history unavailable:', error.message);
-        }
-      }
-      if (currentAssistantTail.trim()) {
-        messages.push({
-          role: 'assistant',
-          content: sanitizeRuntimeDecisionText(currentAssistantTail, 1200)
-        });
-      }
-      return messages.slice(-10);
-    };
-
-    const runElapsedCheckpoint = async () => {
-      const recentTurns = await loadRecentConversationTurns();
-      const policySnapshot = {
-        mode: executionPolicy?.mode || null,
-        softToolExecutions: executionPolicy?.softToolExecutions ?? null,
-        hardToolExecutions: executionPolicy?.hardToolExecutions ?? null,
-        maxPolls: executionPolicy?.maxPolls ?? null,
-        maxFilesChanged: executionPolicy?.maxFilesChanged ?? null,
-        allowBuild: executionPolicy?.allowBuild ?? null,
-        allowDependencyChanges: executionPolicy?.allowDependencyChanges ?? null
-      };
-      const metrics = getToolMetrics();
-      const firstReview = await reviewElapsedCheckpointWithJev({
-        task: prompt,
-        mode: executionPolicy?.mode,
-        metrics,
-        policy: policySnapshot,
-        intent: approvedExecutionIntent,
-        recentTurns,
-        recentTools: recentToolEvents,
-        elapsedMs: elapsed(),
-        stage: 'CHECKPOINT'
-      });
-
-      if (!firstReview.ok || firstReview.askUser || firstReview.decision !== 'REPLAN') {
-        return firstReview;
-      }
-
-      if (typeof provider.planExecutionIntent !== 'function') {
-        return {
-          ...firstReview,
-          decision: 'BLOCK',
-          reason: 'replan_unavailable',
-          reviewChain: [firstReview]
-        };
-      }
-
-      const replanPrompt = [
-        '[Crew Runtime Replan Request]',
-        'The active user turn has been running for at least two minutes.',
-        'Do not use tools. Generate exactly ONE revised bounded execution candidate.',
-        'The candidate must continue the same user goal, respect the recent conversation, and remove unnecessary scope.',
-        '',
-        '[Original user request]',
-        sanitizeRuntimeDecisionText(prompt, 3500),
-        '',
-        '[Recent conversation]',
-        JSON.stringify(recentTurns),
-        '',
-        '[Current approved intent]',
-        JSON.stringify(approvedExecutionIntent || null),
-        '',
-        '[Runtime evidence]',
-        JSON.stringify({ metrics, recent_tools: recentToolEvents.slice(-4) }),
-        '',
-        '[Jev checkpoint review]',
-        JSON.stringify(firstReview)
-      ].join('\n');
-
-      let rawIntent;
-      try {
-        rawIntent = await provider.planExecutionIntent({
-          model: effectiveModel,
-          prompt: replanPrompt,
-          workspace,
-          executionPolicy
-        });
-      } catch (error) {
-        return {
-          ...firstReview,
-          decision: 'BLOCK',
-          reason: 'luna_replan_failed',
-          error: String(error.message || error).slice(0, 600),
-          reviewChain: [firstReview]
-        };
-      }
-
-      const rawCandidate = Array.isArray(rawIntent?.candidates)
-        ? rawIntent.candidates[0]
-        : rawIntent;
-      const revisedCandidate = normalizeExecutionIntent(rawCandidate);
-      if (!revisedCandidate) {
-        return {
-          ...firstReview,
-          decision: 'BLOCK',
-          reason: 'invalid_replan_candidate',
-          reviewChain: [firstReview]
-        };
-      }
-
-      const finalReview = await reviewElapsedCheckpointWithJev({
-        task: prompt,
-        mode: executionPolicy?.mode,
-        metrics: getToolMetrics(),
-        policy: policySnapshot,
-        intent: approvedExecutionIntent,
-        recentTurns,
-        recentTools: recentToolEvents,
-        elapsedMs: elapsed(),
-        stage: 'REPLAN_REVIEW',
-        revisedCandidate
-      });
-
-      const finalDecision = finalReview.decision === 'REPLAN' ? 'BLOCK' : finalReview.decision;
-      return {
-        ...finalReview,
-        decision: finalDecision,
-        reason: finalReview.decision === 'REPLAN' ? 'replan_limit_reached' : finalReview.reason,
-        initialDecision: firstReview.decision,
-        revisedCandidate,
-        reviewChain: [firstReview, { ...finalReview, decision: finalDecision }]
-      };
-    };
-
-    const queueElapsedCheckpointDecision = () => {
-      if (!runtimeSnapshotsEnabled || !executionPolicy || ended || runtimeStopped) return;
-      queueRuntimeDecision('elapsed_120s', runElapsedCheckpoint);
-    };
-
-    const finishAfterRuntimeDecisions = (payload) => {
-      // The provider has already completed the user-visible turn. Runtime
-      // snapshots that are still in flight can no longer steer it, so never
-      // hold the final SSE event open waiting for Jev.
-      finish(payload);
-    };
-
     const enforceExecutionPolicy = () => {
-      if (!executionPolicy || policyStopped || ended) return;
+      if (!executionPolicy || ended) return;
       const metrics = getToolMetrics();
       const softReached = executionPolicy.softToolExecutions > 0 &&
         metrics.executions >= executionPolicy.softToolExecutions;
@@ -2270,7 +1762,6 @@ async function handleChat(req, res) {
         };
         console.warn('[ExecutionPolicy] soft budget reached ' + JSON.stringify({ request_id: requestId, ...warning }));
         sendEvent('policy', warning);
-        queueSoftBudgetDecision();
       }
 
       const violations = [];
@@ -2310,22 +1801,11 @@ async function handleChat(req, res) {
     res.on('close', () => {
       if (!ended && !res.writableEnded) {
         ended = true;
-        if (elapsedCheckpointTimer) {
-          clearTimeout(elapsedCheckpointTimer);
-          elapsedCheckpointTimer = null;
-        }
         abortTurn();
         markOnce('to_done_ms');
         logToolMetrics('client_closed');
       }
     });
-
-    if (runtimeSnapshotsEnabled) {
-      elapsedCheckpointTimer = setTimeout(() => {
-        elapsedCheckpointTimer = null;
-        queueElapsedCheckpointDecision();
-      }, JEV_ELAPSED_CHECKPOINT_MS);
-    }
 
     await provider.startTurn({
       conversationId: conversation_id,
@@ -2367,21 +1847,11 @@ async function handleChat(req, res) {
             role_name: role?.name || null,
             crew_member_id: crewMember?.id || savedSettings?.crewMemberId || null,
             project_id: projectId || crewMember?.project?.id || null,
-            jev_route: jevRoute ? {
-              input_summary: jevInputSummary,
-              accepted: Boolean(jevRoute.accepted),
-              mode: jevRoute.mode || null,
-              suggested_mode: jevRoute.suggestedMode || null,
-              confidence: jevRoute.confidence ?? null,
-              reason: jevRoute.reason || null,
-              latency_ms: jevRoute.latencyMs ?? null
-            } : null,
             execution_intent: approvedExecutionIntent,
             intent_review: intentReview
           });
         } else if (event.type === 'text_delta') {
           markOnce('to_first_text_ms');
-          currentAssistantTail = `${currentAssistantTail}${event.delta || ''}`.slice(-2400);
           // The browser already appends deltas locally. Sending the complete
           // response on every token makes one long answer O(n²) in SSE bytes
           // and JSON serialization work on the phone.
@@ -2415,7 +1885,6 @@ async function handleChat(req, res) {
               file_limit: executionPolicy?.maxFilesChanged ?? null
             }
           });
-          queueToolFailureDecision(event, tracking);
           enforceExecutionPolicy();
         } else if (event.type === 'context_usage') {
           lastContextStats = event.stats || null;
@@ -2423,7 +1892,7 @@ async function handleChat(req, res) {
         } else if (event.type === 'error') {
           finish({ error: event.message, provider: providerId, conversation_id });
         } else if (event.type === 'turn_completed') {
-          finishAfterRuntimeDecisions({
+          finish({
             response: event.response,
             conversation_id: event.conversationId,
             provider: providerId,
@@ -2658,20 +2127,13 @@ async function handleSaveVoiceprint(req, res) {
 
 async function handleGetAuthStatus(res) {
   try {
-    const [codexStatus, providerStatus, jevCliStatus] = await Promise.all([
+    const [codexStatus, providerStatus] = await Promise.all([
       getProvider('codex').getAuthStatus(),
-      auth.getAuthStatus(),
-      getJevCliStatus()
+      auth.getAuthStatus()
     ]);
     const status = {
       ...providerStatus,
-      codex: codexStatus,
-      jev: {
-        ...(providerStatus.jev || {}),
-        cliAvailable: Boolean(jevCliStatus.available),
-        cliVersion: jevCliStatus.version || null,
-        cliError: jevCliStatus.available ? null : (jevCliStatus.error || null)
-      }
+      codex: codexStatus
     };
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(status));
@@ -2736,19 +2198,6 @@ async function handleAgyToken(req, res) {
     res.end(JSON.stringify({ error: err.message }));
   }
 }
-
-async function handleJevApiKey(req, res) {
-  try {
-    const body = await parseJsonBody(req);
-    const result = await auth.setJevApiKey(body.apiKey);
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify(result));
-  } catch (err) {
-    res.writeHead(400, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ success: false, error: err.message }));
-  }
-}
-
 
 const REMOTE_ACCESS_DIR = path.join(os.homedir(), '.crew-pocket');
 const REMOTE_ACCESS_FLAG = path.join(REMOTE_ACCESS_DIR, 'remote-enabled');
@@ -3092,8 +2541,6 @@ const server = http.createServer(async (req, res) => {
     return handleCodexApiKey(req, res);
   } else if (pathname === '/api/auth/agy/token' && req.method === 'POST') {
     return handleAgyToken(req, res);
-  } else if (pathname === '/api/auth/jev/api-key' && req.method === 'POST') {
-    return handleJevApiKey(req, res);
   } else if (pathname === '/api/session-status' && req.method === 'GET') {
     return handleSessionStatus(parsedUrl, res);
   } else if (pathname === '/api/usage' && req.method === 'GET') {
