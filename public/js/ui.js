@@ -48,9 +48,9 @@ let currentWorkspace = localStorage.getItem('crew_current_workspace') || HOME_WO
 let availableWorkspaces = [];
 let currentCrewMemberId = localStorage.getItem('crew_current_member') || '';
 let availableCrewMembers = [];
-// Conversation roles were removed from the product UI. Crew Member now owns
-// the durable project boundary; transport roles remain internal.
-localStorage.removeItem('crew_current_role');
+const DEFAULT_ROLE_ID = 'role-general';
+let currentRoleId = localStorage.getItem('crew_current_role') || '';
+let availableRoles = [];
 
 // Coalesce boot/model/effort/new-chat prewarm requests into one provider call.
 window.requestProviderPrewarm = function(delay = 250) {
@@ -555,8 +555,27 @@ function crewMemberMeta(memberId = currentCrewMemberId) {
   return availableCrewMembers.find(item => item.id === memberId) || null;
 }
 
+function roleMeta(roleId = currentRoleId) {
+  return availableRoles.find(item => item.id === roleId) || null;
+}
+
 function inferCrewMemberForWorkspace(workspace = currentWorkspace) {
   return availableCrewMembers.find(item => item.workspace === workspace) || null;
+}
+
+function crewMemberForProject(projectId) {
+  if (!projectId) return null;
+  return availableCrewMembers.find(item => item.project?.id === projectId) || null;
+}
+
+function inferRoleForCrewMember(member) {
+  const projectId = member?.project?.id;
+  if (!projectId) return null;
+  const current = roleMeta();
+  if (current?.projectId === projectId) return current;
+  return availableRoles.find(item => item.projectId === projectId && item.source === 'project')
+    || availableRoles.find(item => item.projectId === projectId)
+    || null;
 }
 
 function compactWorkspaceLabel(meta) {
@@ -566,13 +585,44 @@ function compactWorkspaceLabel(meta) {
 }
 
 function updateWorkspaceUI() {
+  let role = roleMeta();
   let member = crewMemberMeta();
+
   if (!member) {
     member = inferCrewMemberForWorkspace();
     if (member) {
       currentCrewMemberId = member.id;
       localStorage.setItem('crew_current_member', currentCrewMemberId);
     }
+  }
+
+  if (!role && !currentRoleId && member) {
+    role = inferRoleForCrewMember(member);
+    if (role) {
+      currentRoleId = role.id;
+      localStorage.setItem('crew_current_role', currentRoleId);
+    }
+  }
+
+  if (role?.projectId) {
+    const projectMember = crewMemberForProject(role.projectId);
+    if (projectMember) {
+      member = projectMember;
+      currentCrewMemberId = projectMember.id;
+      currentWorkspace = projectMember.workspace;
+      localStorage.setItem('crew_current_member', currentCrewMemberId);
+      localStorage.setItem('crew_current_workspace', currentWorkspace);
+    }
+  }
+
+  if (role) {
+    if (workspaceIcon) workspaceIcon.textContent = member?.icon || '🧠';
+    if (workspaceLabel) workspaceLabel.textContent = role.name;
+    if (workspaceSelectorBtn) {
+      const projectLabel = member?.project?.label || (role.projectId ? role.projectId : 'General');
+      workspaceSelectorBtn.title = `${role.name} · ${projectLabel}${member?.workspace ? `\n${member.workspace}` : ''}`;
+    }
+    return;
   }
 
   if (member) {
@@ -591,6 +641,29 @@ function updateWorkspaceUI() {
 }
 
 window.getCurrentCrewMemberId = () => currentCrewMemberId || '';
+window.getCurrentRoleId = () => currentRoleId || DEFAULT_ROLE_ID;
+
+window.setConversationRoleDirect = function(roleId, projectId, memberId, workspace) {
+  currentRoleId = roleId || DEFAULT_ROLE_ID;
+  localStorage.setItem('crew_current_role', currentRoleId);
+
+  let member = memberId ? crewMemberMeta(memberId) : null;
+  if (!member && projectId) member = crewMemberForProject(projectId);
+  if (!member) {
+    const role = roleMeta(currentRoleId);
+    if (role?.projectId) member = crewMemberForProject(role.projectId);
+  }
+  if (member) {
+    currentCrewMemberId = member.id;
+    currentWorkspace = member.workspace;
+    localStorage.setItem('crew_current_member', currentCrewMemberId);
+    localStorage.setItem('crew_current_workspace', currentWorkspace);
+  } else if (workspace) {
+    currentWorkspace = workspace;
+    localStorage.setItem('crew_current_workspace', currentWorkspace);
+  }
+  updateWorkspaceUI();
+};
 
 window.setConversationCrewMemberDirect = function(memberId, workspace) {
   if (memberId) {
@@ -598,6 +671,13 @@ window.setConversationCrewMemberDirect = function(memberId, workspace) {
     localStorage.setItem('crew_current_member', currentCrewMemberId);
   }
   const member = crewMemberMeta(memberId);
+  if (!currentRoleId && member) {
+    const inferredRole = inferRoleForCrewMember(member);
+    if (inferredRole) {
+      currentRoleId = inferredRole.id;
+      localStorage.setItem('crew_current_role', currentRoleId);
+    }
+  }
   const nextWorkspace = member?.workspace || workspace;
   if (nextWorkspace) {
     currentWorkspace = nextWorkspace;
@@ -614,24 +694,49 @@ window.setConversationWorkspaceDirect = function(workspace) {
   if (member) {
     currentCrewMemberId = member.id;
     localStorage.setItem('crew_current_member', currentCrewMemberId);
+    if (!currentRoleId) {
+      const inferredRole = inferRoleForCrewMember(member);
+      if (inferredRole) {
+        currentRoleId = inferredRole.id;
+        localStorage.setItem('crew_current_role', currentRoleId);
+      }
+    }
   }
   updateWorkspaceUI();
 };
 
 async function loadWorkspaces() {
-  const [workspaceResponse, memberResponse] = await Promise.all([
+  const [workspaceResponse, memberResponse, roleResponse] = await Promise.all([
     fetch('/api/workspaces'),
-    fetch('/api/crew-members')
+    fetch('/api/crew-members'),
+    fetch('/api/roles')
   ]);
   if (!workspaceResponse.ok) throw new Error('無法讀取工作區');
   if (!memberResponse.ok) throw new Error('無法讀取 Crew Members');
+  if (!roleResponse.ok) throw new Error('無法讀取 Roles');
 
-  const [workspaceData, memberData] = await Promise.all([workspaceResponse.json(), memberResponse.json()]);
+  const [workspaceData, memberData, roleData] = await Promise.all([
+    workspaceResponse.json(),
+    memberResponse.json(),
+    roleResponse.json()
+  ]);
   availableWorkspaces = Array.isArray(workspaceData.workspaces) ? workspaceData.workspaces : [];
   availableCrewMembers = Array.isArray(memberData.crewMembers) ? memberData.crewMembers : [];
+  availableRoles = Array.isArray(roleData.roles) ? roleData.roles : [];
 
   let member = crewMemberMeta();
   if (!member) member = inferCrewMemberForWorkspace(currentWorkspace);
+
+  let role = roleMeta();
+  if (!role && member) role = inferRoleForCrewMember(member);
+  if (!role) role = roleMeta(DEFAULT_ROLE_ID) || availableRoles[0] || null;
+
+  if (role) {
+    currentRoleId = role.id;
+    localStorage.setItem('crew_current_role', currentRoleId);
+    if (role.projectId) member = crewMemberForProject(role.projectId) || member;
+  }
+
   if (!member && availableCrewMembers.length) member = availableCrewMembers[0];
   if (member) {
     currentCrewMemberId = member.id;
@@ -649,51 +754,58 @@ function closeWorkspaceModal() {
   window.setTimeout(() => workspaceModal.classList.add('hidden'), 160);
 }
 
-function memberRoleLabel(member) {
-  if (member?.role === 'software_engineer') return 'Project Developer';
-  if (member?.role === 'general') return 'General Assistant';
-  return member?.role || 'Crew Member';
+function roleProjectLabel(role) {
+  if (!role?.projectId) return 'General';
+  const member = crewMemberForProject(role.projectId);
+  return member?.project?.label || role.projectId;
 }
 
 function renderWorkspaceOptions() {
   if (!workspaceOptions) return;
-  workspaceOptions.innerHTML = availableCrewMembers.map(member => {
-    const active = member.id === currentCrewMemberId;
-    const projectLabel = member.project?.label || compactWorkspaceLabel(workspaceMeta(member.workspace));
-    return `<button type="button" data-crew-member-id="${escapeHtml(member.id)}" class="crew-member-option w-full flex items-center gap-3 rounded-xl border p-3 text-left transition active:scale-[0.99] ${active ? 'border-teal-400/70 bg-teal-500/15' : 'border-slate-800 bg-slate-950/70 hover:border-slate-700 hover:bg-slate-800'}">
-      <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-700/70 bg-slate-900 text-xl">${escapeHtml(member.icon || '💻')}</span>
+  workspaceOptions.innerHTML = availableRoles.map(role => {
+    const active = role.id === (currentRoleId || DEFAULT_ROLE_ID);
+    const member = role.projectId ? crewMemberForProject(role.projectId) : null;
+    const projectLabel = roleProjectLabel(role);
+    return `<button type="button" data-role-id="${escapeHtml(role.id)}" class="role-option w-full flex items-center gap-3 rounded-xl border p-3 text-left transition active:scale-[0.99] ${active ? 'border-teal-400/70 bg-teal-500/15' : 'border-slate-800 bg-slate-950/70 hover:border-slate-700 hover:bg-slate-800'}">
+      <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-700/70 bg-slate-900 text-xl">${escapeHtml(member?.icon || '🧠')}</span>
       <span class="min-w-0 flex-1">
-        <span class="flex items-center gap-2"><span class="truncate text-xs font-bold text-slate-100">${escapeHtml(member.name)}</span><span class="shrink-0 rounded-full border border-indigo-500/30 bg-indigo-500/10 px-1.5 py-0.5 text-[9px] text-indigo-300">${escapeHtml(memberRoleLabel(member))}</span></span>
+        <span class="flex items-center gap-2"><span class="truncate text-xs font-bold text-slate-100">${escapeHtml(role.name)}</span><span class="shrink-0 rounded-full border border-indigo-500/30 bg-indigo-500/10 px-1.5 py-0.5 text-[9px] text-indigo-300">Role</span></span>
         <span class="block truncate pt-1 text-[10px] text-slate-400">專案：${escapeHtml(projectLabel)}</span>
-        <span class="block truncate pt-0.5 text-[9px] font-mono text-slate-500">${escapeHtml(member.workspace)}</span>
+        ${role.description ? `<span class="block truncate pt-0.5 text-[9px] text-slate-500">${escapeHtml(role.description)}</span>` : ''}
       </span>
       ${active ? '<span class="text-xs font-bold text-teal-300">✓</span>' : ''}
     </button>`;
-  }).join('') || '<div class="p-5 text-center text-xs text-slate-400">尚未找到 Crew Member；先建立一個專案。</div>';
+  }).join('') || '<div class="p-5 text-center text-xs text-slate-400">尚未找到 Role。</div>';
 
-  workspaceOptions.querySelectorAll('.crew-member-option').forEach(button => {
-    button.addEventListener('click', () => selectCrewMember(button.dataset.crewMemberId));
+  workspaceOptions.querySelectorAll('.role-option').forEach(button => {
+    button.addEventListener('click', () => selectRole(button.dataset.roleId));
   });
 }
 
-async function selectCrewMember(memberId, isCreatingNewChat = false) {
-  if (!memberId) return closeWorkspaceModal();
-  if (isStreaming) return alert('目前正在回覆中，請完成後再切換 Crew Member。');
-  const member = availableCrewMembers.find(item => item.id === memberId);
-  if (!member) return alert('找不到這位 Crew Member。');
+async function selectRole(roleId, isCreatingNewChat = false) {
+  if (!roleId) return closeWorkspaceModal();
+  if (isStreaming) return alert('目前正在回覆中，請完成後再切換 Role。');
+  const role = roleMeta(roleId);
+  if (!role) return alert('找不到這個 Role。');
 
-  if (!isCreatingNewChat && currentConversationId && memberId === currentCrewMemberId) {
+  if (!isCreatingNewChat && currentConversationId && roleId === currentRoleId) {
     closeWorkspaceModal();
     return;
   }
 
-  currentCrewMemberId = member.id;
-  currentWorkspace = member.workspace;
-  localStorage.setItem('crew_current_member', currentCrewMemberId);
-  localStorage.setItem('crew_current_workspace', currentWorkspace);
+  currentRoleId = role.id;
+  localStorage.setItem('crew_current_role', currentRoleId);
 
-  // Crew Member is the durable project boundary. Switching members always
-  // starts a new conversation instead of moving an existing thread.
+  let member = role.projectId ? crewMemberForProject(role.projectId) : crewMemberMeta();
+  if (member) {
+    currentCrewMemberId = member.id;
+    currentWorkspace = member.workspace;
+    localStorage.setItem('crew_current_member', currentCrewMemberId);
+    localStorage.setItem('crew_current_workspace', currentWorkspace);
+  }
+
+  // Role is the durable identity owner. Switching Role always starts a new
+  // conversation instead of moving an existing provider transcript.
   currentConversationId = null;
   localStorage.setItem(activeConversationStorageKey(), '__new__');
   updateWorkspaceUI();
@@ -710,11 +822,13 @@ async function selectCrewMember(memberId, isCreatingNewChat = false) {
   if (typeof attachInput !== 'undefined' && attachInput) attachInput.value = '';
   if (imagePreviewContainer) imagePreviewContainer.classList.add('hidden');
 
-  if (headerTitle) headerTitle.textContent = member.name;
+  if (headerTitle) headerTitle.textContent = role.name;
   if (messagesContainer) {
     messagesContainer.innerHTML = '';
     if (typeof appendMessage === 'function') {
-      appendMessage('assistant', `${member.icon || '💻'} ${member.name} 已就位。\n\n專案：${member.project?.label || compactWorkspaceLabel(workspaceMeta(member.workspace))}\n工作區：${member.workspace}\n\n直接交代這個專案要做的事即可。`);
+      const projectLine = role.projectId ? `\n\n專案：${roleProjectLabel(role)}` : '';
+      const workspaceLine = member?.workspace ? `\n工作區：${member.workspace}` : '';
+      appendMessage('assistant', `🧠 ${role.name} 已就位。${projectLine}${workspaceLine}\n\n直接交代要做的事即可。`);
     }
   }
 
@@ -722,6 +836,25 @@ async function selectCrewMember(memberId, isCreatingNewChat = false) {
   if (typeof toggleDrawer === 'function') toggleDrawer(false);
   if (typeof loadConversations === 'function') loadConversations();
   window.requestProviderPrewarm?.(0);
+}
+
+async function selectCrewMember(memberId, isCreatingNewChat = false) {
+  if (!memberId) return closeWorkspaceModal();
+  const member = availableCrewMembers.find(item => item.id === memberId);
+  if (!member) return alert('找不到這位 Crew Member。');
+  const role = inferRoleForCrewMember(member);
+  if (role) return selectRole(role.id, isCreatingNewChat);
+
+  currentCrewMemberId = member.id;
+  currentWorkspace = member.workspace;
+  localStorage.setItem('crew_current_member', currentCrewMemberId);
+  localStorage.setItem('crew_current_workspace', currentWorkspace);
+  currentRoleId = DEFAULT_ROLE_ID;
+  localStorage.setItem('crew_current_role', currentRoleId);
+  currentConversationId = null;
+  localStorage.setItem(activeConversationStorageKey(), '__new__');
+  updateWorkspaceUI();
+  closeWorkspaceModal();
 }
 
 async function selectWorkspace(workspace, isCreatingNewChat = false) {
@@ -732,6 +865,8 @@ async function selectWorkspace(workspace, isCreatingNewChat = false) {
   localStorage.removeItem('crew_current_member');
   currentWorkspace = workspace;
   localStorage.setItem('crew_current_workspace', currentWorkspace);
+  currentRoleId = DEFAULT_ROLE_ID;
+  localStorage.setItem('crew_current_role', currentRoleId);
   updateWorkspaceUI();
   closeWorkspaceModal();
 }
@@ -928,6 +1063,9 @@ window.applyConversationSettings = function(settings) {
     localStorage.setItem('crew_current_provider', currentProvider);
     renderProviderOptions();
   }
+  const roleId = settings.roleId || settings.role_id || DEFAULT_ROLE_ID;
+  currentRoleId = roleId;
+  localStorage.setItem('crew_current_role', currentRoleId);
   const memberId = settings.crewMemberId || settings.crew_member_id || '';
   if (memberId) {
     currentCrewMemberId = memberId;
@@ -987,6 +1125,7 @@ window.saveCurrentConversationSettings = function(overrides = {}) {
     effort: overrides.effort !== undefined ? overrides.effort : currentEffort,
     workspace: overrides.workspace !== undefined ? overrides.workspace : currentWorkspace,
     crew_member_id: overrides.crewMemberId !== undefined ? overrides.crewMemberId : (currentCrewMemberId || undefined),
+    role_id: overrides.roleId !== undefined ? overrides.roleId : (currentRoleId || DEFAULT_ROLE_ID),
     role: 'general'
   };
   return fetch('/api/conversation-settings', {
