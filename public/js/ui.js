@@ -51,6 +51,9 @@ let availableCrewMembers = [];
 const DEFAULT_ROLE_ID = 'role-general';
 let currentRoleId = localStorage.getItem('crew_current_role') || '';
 let availableRoles = [];
+let crewStatusByRole = new Map();
+let crewStatusRequest = null;
+let crewStatusUpdatedAt = 0;
 
 // Coalesce boot/model/effort/new-chat prewarm requests into one provider call.
 window.requestProviderPrewarm = function(delay = 250) {
@@ -449,6 +452,7 @@ function toggleDrawer(open) {
     showRoleNavigationView();
     Promise.all([
       loadWorkspaces().catch(() => null),
+      loadCrewStatus({ force: true }).catch(() => null),
       typeof loadConversations === 'function' ? loadConversations({ force: true }).catch(() => []) : Promise.resolve([])
     ]).then(() => renderRoleNavigation());
   } else {
@@ -794,9 +798,74 @@ async function loadWorkspaces() {
     localStorage.setItem('crew_current_workspace', currentWorkspace);
   }
   updateWorkspaceUI();
+  await loadCrewStatus({ force: true }).catch(() => null);
   renderRoleNavigation();
   return availableWorkspaces;
 }
+
+function crewStatusForRole(roleId) {
+  return crewStatusByRole.get(String(roleId || DEFAULT_ROLE_ID)) || null;
+}
+
+function crewStatusMeta(status) {
+  const state = status?.state || 'new';
+  if (state === 'working') {
+    return {
+      label: 'WORKING',
+      dot: 'bg-emerald-400 animate-pulse',
+      badge: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
+      avatar: 'border-emerald-500/40 bg-emerald-500/10'
+    };
+  }
+  if (state === 'waiting') {
+    return {
+      label: 'WAITING',
+      dot: 'bg-amber-400 animate-pulse',
+      badge: 'border-amber-500/30 bg-amber-500/10 text-amber-300',
+      avatar: 'border-amber-500/40 bg-amber-500/10'
+    };
+  }
+  if (state === 'idle') {
+    return {
+      label: 'IDLE',
+      dot: 'bg-slate-500',
+      badge: 'border-slate-700 bg-slate-800/70 text-slate-400',
+      avatar: 'border-slate-700/70 bg-slate-900'
+    };
+  }
+  return {
+    label: 'NEW',
+    dot: 'bg-indigo-400',
+    badge: 'border-indigo-500/30 bg-indigo-500/10 text-indigo-300',
+    avatar: 'border-indigo-500/30 bg-indigo-500/10'
+  };
+}
+
+async function loadCrewStatus({ force = false } = {}) {
+  const freshEnough = Date.now() - crewStatusUpdatedAt < 1200;
+  if (!force && freshEnough) return crewStatusByRole;
+  if (crewStatusRequest) return crewStatusRequest;
+
+  crewStatusRequest = fetch('/api/crew-status', { cache: 'no-store' })
+    .then(async response => {
+      const data = await response.json();
+      if (!response.ok || !data.success) throw new Error(data.error || '無法讀取 Crew 狀態');
+      crewStatusByRole = new Map((data.roles || []).map(status => [status.roleId, status]));
+      crewStatusUpdatedAt = Number(data.generatedAt) || Date.now();
+      renderRoleNavigation();
+      return crewStatusByRole;
+    })
+    .catch(error => {
+      console.warn('[Crew Status] Failed:', error.message);
+      return crewStatusByRole;
+    })
+    .finally(() => {
+      crewStatusRequest = null;
+    });
+  return crewStatusRequest;
+}
+
+window.loadCrewStatus = loadCrewStatus;
 
 function closeWorkspaceModal() {
   if (!workspaceModal) return;
