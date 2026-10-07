@@ -195,12 +195,19 @@ case "${1:-start}" in
         pgrep -af 'node.*server\.js' || echo "Crew Pocket 目前已停止"
         ;;
     doctor) doctor ;;
+    roles)
+        node "$TARGET_DIR/scripts/crew-tool.js" roles
+        ;;
+    send)
+        shift
+        node "$TARGET_DIR/scripts/crew-tool.js" send "$@"
+        ;;
     update)
         git -C "$TARGET_DIR" pull --ff-only origin main
         echo "更新完成；重新啟動 Crew Pocket Runtime / APK 即可套用新版。"
         ;;
     *)
-        echo "用法：crew [start|stop|status|doctor|update]"
+        echo "用法：crew [start|stop|status|doctor|update|roles|send]"
         exit 1
         ;;
 esac

@@ -38,6 +38,8 @@ jobs:
           node --check lib/conversation-settings.js
           node --check lib/projects.js
           node --check lib/roles.js
+          node --check lib/crew-messages.js
+          node --check lib/crew-auto-response.js
           node --check lib/context-builder.js
           node --check lib/context/types.js
           node --check lib/context/estimator.js
@@ -55,11 +57,16 @@ jobs:
           node --check test/context-health.test.js
           node --check test/context-compaction.test.js
           node --check test/role-centric-navigation.test.js
+          node --check test/crew-role-messaging.test.js
+          node --check test/crew-auto-response.test.js
           node test/role-memory-kernel.test.js
           node test/memory-provenance.test.js
           node test/context-health.test.js
           node test/context-compaction.test.js
           node test/role-centric-navigation.test.js
+          node test/crew-role-messaging.test.js
+          node test/crew-auto-response.test.js
+          node --check scripts/crew-tool.js
           node --check lib/runtime/agy-transport.js
           node --check lib/providers/codex.js
           node --check lib/model-runtime.js
