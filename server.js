@@ -958,7 +958,12 @@ async function handleConversationSettings(req, res) {
     const providerId = normalizeProviderId(body.provider);
     const previous = await getConversationSettings(providerId, body.conversation_id);
     const requestedMemberId = String(body.crew_member_id || body.crewMemberId || '').trim();
-    const memberId = requestedMemberId || previous?.crewMemberId || '';
+    if (previous?.crewMemberId && requestedMemberId && requestedMemberId !== previous.crewMemberId) {
+      const error = new Error('這個 conversation 已屬於另一個 Crew Member；請切換 Member 後建立新 conversation。');
+      error.statusCode = 409;
+      throw error;
+    }
+    const memberId = previous?.crewMemberId || requestedMemberId || '';
     const member = memberId ? await getCrewMember(memberId) : null;
     if (requestedMemberId && !member) throw new Error('Crew Member 不存在或專案工作區已不可用');
 
@@ -977,7 +982,7 @@ async function handleConversationSettings(req, res) {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ success: true, conversation_settings: settings, crew_member: member }));
   } catch (err) {
-    res.writeHead(400, { 'Content-Type': 'application/json' });
+    res.writeHead(err.statusCode || 400, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: err.message }));
   }
 }

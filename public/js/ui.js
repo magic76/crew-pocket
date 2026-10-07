@@ -682,42 +682,46 @@ async function selectCrewMember(memberId, isCreatingNewChat = false) {
   const member = availableCrewMembers.find(item => item.id === memberId);
   if (!member) return alert('找不到這位 Crew Member。');
 
-  if (!isCreatingNewChat && currentConversationId && memberId !== currentCrewMemberId &&
-      !window.confirm(`切換給「${member.name}」後，這個對話會改由專案 ${member.project?.label || ''} 接手。\n\n對話歷史會保留。是否切換？`)) return;
+  if (!isCreatingNewChat && currentConversationId && memberId === currentCrewMemberId) {
+    closeWorkspaceModal();
+    return;
+  }
 
-  const previousMemberId = currentCrewMemberId;
-  const previousWorkspace = currentWorkspace;
   currentCrewMemberId = member.id;
   currentWorkspace = member.workspace;
   localStorage.setItem('crew_current_member', currentCrewMemberId);
   localStorage.setItem('crew_current_workspace', currentWorkspace);
+
+  // Crew Member is the durable project boundary. Switching members always
+  // starts a new conversation instead of moving an existing thread.
+  currentConversationId = null;
+  localStorage.setItem(activeConversationStorageKey(), '__new__');
   updateWorkspaceUI();
 
-  try {
-    if (currentConversationId) {
-      const saved = await window.saveCurrentConversationSettings({
-        workspace: currentWorkspace,
-        crewMemberId: currentCrewMemberId
-      });
-      if (!saved) throw new Error('儲存 Crew Member 失敗');
-      if (typeof loadConversations === 'function') loadConversations();
-    } else if (typeof messagesContainer !== 'undefined' && messagesContainer) {
-      messagesContainer.innerHTML = '';
-      if (typeof appendMessage === 'function') {
-        appendMessage('assistant', `${member.icon || '💻'} ${member.name} 已就位。\n\n專案：${member.project?.label || compactWorkspaceLabel(workspaceMeta(member.workspace))}\n工作區：${member.workspace}\n\n直接交代這個專案要做的事即可。`);
-      }
-    }
-    closeWorkspaceModal();
-    window.requestProviderPrewarm?.(0);
-  } catch (error) {
-    currentCrewMemberId = previousMemberId;
-    currentWorkspace = previousWorkspace;
-    if (currentCrewMemberId) localStorage.setItem('crew_current_member', currentCrewMemberId);
-    else localStorage.removeItem('crew_current_member');
-    localStorage.setItem('crew_current_workspace', currentWorkspace);
-    updateWorkspaceUI();
-    alert(error.message || '切換 Crew Member 失敗');
+  if (typeof revokeAllBlobUrls === 'function') revokeAllBlobUrls();
+  if (typeof clearQueuedBtwMessages === 'function') clearQueuedBtwMessages();
+  if (typeof updateContextPill === 'function') updateContextPill(null);
+  if (promptInput) {
+    promptInput.value = '';
+    promptInput.style.height = 'auto';
   }
+  uploadedImagePath = null;
+  if (cameraInput) cameraInput.value = '';
+  if (typeof attachInput !== 'undefined' && attachInput) attachInput.value = '';
+  if (imagePreviewContainer) imagePreviewContainer.classList.add('hidden');
+
+  if (headerTitle) headerTitle.textContent = member.name;
+  if (messagesContainer) {
+    messagesContainer.innerHTML = '';
+    if (typeof appendMessage === 'function') {
+      appendMessage('assistant', `${member.icon || '💻'} ${member.name} 已就位。\n\n專案：${member.project?.label || compactWorkspaceLabel(workspaceMeta(member.workspace))}\n工作區：${member.workspace}\n\n直接交代這個專案要做的事即可。`);
+    }
+  }
+
+  closeWorkspaceModal();
+  if (typeof toggleDrawer === 'function') toggleDrawer(false);
+  if (typeof loadConversations === 'function') loadConversations();
+  window.requestProviderPrewarm?.(0);
 }
 
 async function selectWorkspace(workspace, isCreatingNewChat = false) {
