@@ -89,8 +89,8 @@ async function tick() {
     AbortController, setTimeout, console
   });
 
-  const markdownA = '## Architecture\n\n' + 'Describe the architecture and relationships. '.repeat(9);
-  const markdownB = '## Plan\n\n' + 'Explain the workstreams and timeline. '.repeat(11);
+  const markdownA = '## Architecture\n\n' + 'Describe the architecture and relationships. '.repeat(21);
+  const markdownB = '## Plan\n\n' + 'Explain the workstreams and timeline. '.repeat(22);
   const article = () => {
     const message = new FakeElement();
     const content = new FakeElement();
