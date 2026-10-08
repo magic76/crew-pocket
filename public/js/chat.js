@@ -553,10 +553,13 @@ function buildExecutionResultBodyHtml(content, tools = [], thinking = '', turnRe
   const summaryBits = [];
   if (turnResult?.execution_mode) summaryBits.push(executionModeLabel(turnResult.execution_mode));
   if (Number(turnResult?.executions) > 0) summaryBits.push(`${Number(turnResult.executions)} 次操作`);
+  const resultState = executionResultState(turnResult);
+  const resultStatusText = { completed: '已完成', failed: '未完成', interrupted: '已中斷', unknown: '終態未確認' }[resultState];
+  const resultStatusClass = resultState === 'completed' ? '' : resultState === 'unknown' ? 'is-unknown' : 'is-failed';
 
   const changedFilesHtml = changedFiles.length ? `
     <section class="execution-result-section">
-      <div class="execution-result-section-title">修改檔案</div>
+      <div class="execution-result-section-title execution-result-section-heading">修改檔案 · ${changedFiles.length}</div>
       <div class="execution-result-file-list">
         ${changedFiles.map(file => `<div class="execution-result-file"><span>↳</span><span class="truncate">${escapeHtml(file)}</span></div>`).join('')}
       </div>
@@ -565,13 +568,16 @@ function buildExecutionResultBodyHtml(content, tools = [], thinking = '', turnRe
 
   const checksHtml = checks.length ? `
     <section class="execution-result-section">
-      <div class="execution-result-section-title">驗證結果</div>
+      <div class="execution-result-section-title execution-result-section-heading">驗證結果 · ${checks.length}</div>
       <div class="execution-result-check-list">
         ${checks.map(check => {
           const state = String(check.status || check.state || '').toLowerCase();
-          const icon = ['passed', 'success', 'succeeded', 'completed'].includes(state) ? '✓' : ['failed', 'error'].includes(state) ? '!' : '•';
+          const passed = ['passed', 'success', 'succeeded', 'completed'].includes(state);
+          const failed = ['failed', 'error'].includes(state);
+          const checkState = passed ? 'passed' : failed ? 'failed' : 'unknown';
+          const icon = passed ? '✓' : failed ? '!' : '•';
           const label = check.label || check.name || check.type || 'Check';
-          return `<div class="execution-result-check"><span>${escapeHtml(icon)}</span><span class="truncate">${escapeHtml(label)}</span></div>`;
+          return `<div class="execution-result-check" data-check-state="${checkState}"><span>${icon}</span><span>${escapeHtml(label)}</span></div>`;
         }).join('')}
       </div>
     </section>
@@ -589,16 +595,18 @@ function buildExecutionResultBodyHtml(content, tools = [], thinking = '', turnRe
     : formatMessageContent(content);
 
   return `
-    <div class="execution-result-overview">
-      <span>${({ completed: '已完成', failed: '未完成', interrupted: '已中斷', unknown: '終態未確認' })[executionResultState(turnResult)]}</span>
-      ${summaryBits.length ? `<span>· ${escapeHtml(summaryBits.join(' · '))}</span>` : ''}
-      ${structuredCommit ? `<span class="font-mono">· ${escapeHtml(String(structuredCommit).slice(0, 12))}</span>` : ''}
-    </div>
+    <header class="execution-result-hero">
+      <span class="execution-result-hero-status ${resultStatusClass}"><span aria-hidden="true">${resultState === 'completed' ? '✓' : resultState === 'unknown' ? '•' : '!'}</span>${resultStatusText}</span>
+      <span class="execution-result-hero-meta">
+        ${summaryBits.map(bit => `<span>${escapeHtml(bit)}</span>`).join('')}
+        ${structuredCommit ? `<span class="execution-result-commit" title="Commit">${escapeHtml(String(structuredCommit).slice(0, 12))}</span>` : ''}
+      </span>
+    </header>
     ${changedFilesHtml}
     ${checksHtml}
     ${executionHtml}
     <section class="execution-result-section execution-result-response">
-      <div class="execution-result-section-title">回覆內容</div>
+      <div class="execution-result-section-title execution-result-section-heading">工作說明</div>
       <div class="msg-content min-w-0">${responseHtml}</div>
     </section>
   `;

@@ -48,8 +48,10 @@ const { prepareVisualDraft, renderVisualAnswer } = require('../lib/visual-answer
   assert.match(chat, /attachVisualAnswerAction\(msgDiv, content, \{/);
   assert.match(chat, /attachVisualAnswerAction\(assistantMsgDiv, accumulatedText, \{/);
   assert.ok(index.indexOf('src="/js/visual-answer.js"') < index.indexOf('src="/js/chat.js"'));
-  assert.match(visualUi, /sandbox=""/);
+  assert.doesNotMatch(visualUi, /<iframe|sandbox=""/, 'the primary answer must not create a second scrolling reader');
   assert.match(visualUi, /visualAnswerEligible/);
+  assert.match(visualUi, /enhanceContent\(/, 'completed answers are enhanced in place');
+  assert.doesNotMatch(visualUi, /\/api\/visual-answer/, 'normal reading never starts another server-side render');
   console.log('visual answer regression tests passed');
 })().catch(err => {
   console.error(err);
