@@ -86,16 +86,34 @@
 .visual-answer-launch:hover { background: #263451; }
 
 
-/* Inline reader belongs to the message, not a new navigation destination. */
+/* Inline reading is one content mode, not a second duplicated answer. */
 .visual-answer-inline[hidden],
 .visual-answer-inline iframe[hidden] { display: none !important; }
 .visual-answer-inline {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
   min-width: 0;
   max-width: 100%;
-  margin: 5px 0 13px;
-  border: 1px solid #334155;
+  margin: 0;
+  border: 1px solid transparent;
   border-radius: 14px;
   background: #0b1220;
+  overflow: hidden;
+  transition:
+    grid-template-rows 280ms cubic-bezier(.2,.75,.2,1),
+    opacity 210ms ease,
+    margin 280ms ease,
+    border-color 240ms ease;
+}
+.visual-answer-inline[data-expanded="true"] {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  margin: 6px 0 12px;
+  border-color: #334155;
+}
+.visual-answer-inline-shell {
+  min-height: 0;
   overflow: hidden;
 }
 .visual-answer-inline-toolbar {
@@ -156,12 +174,64 @@
   overflow-wrap: anywhere;
 }
 .visual-answer-inline-status[hidden] { display: none !important; }
+.visual-answer-launch {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: background-color 180ms ease, border-color 180ms ease,
+    color 180ms ease, transform 180ms ease;
+}
+.visual-answer-launch::after {
+  content: '⌄';
+  display: inline-block;
+  font-size: 15px;
+  line-height: 1;
+  transform: rotate(0);
+  transition: transform 280ms cubic-bezier(.2,.75,.2,1);
+}
 .visual-answer-launch[aria-expanded="true"] {
   background: #263451;
   color: #e0e7ff;
   border-color: #6366f1;
 }
+.visual-answer-launch[aria-expanded="true"]::after { transform: rotate(180deg); }
+.visual-answer-launch:active { transform: scale(.97); }
 .visual-answer-inline-toolbar button:focus-visible { outline: 2px solid #818cf8; outline-offset: 2px; }
+
+/* The execution detail card owns both reading modes. No duplicate viewer below. */
+.execution-result-response .execution-result-section-title:has(> .visual-answer-actions-in-heading) {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-height: 38px;
+}
+.execution-result-response .visual-answer-actions-in-heading {
+  margin-left: auto;
+  padding: 0;
+}
+.execution-result-response .visual-answer-actions-in-heading .visual-answer-launch {
+  min-height: 34px;
+  font-size: 11px;
+  padding: 5px 10px;
+  text-transform: none;
+  letter-spacing: normal;
+}
+.execution-result-response[data-reading-mode="visual"] > .msg-content {
+  display: none;
+}
+.execution-result-response .visual-answer-inline {
+  margin-bottom: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .visual-answer-inline,
+  .visual-answer-launch,
+  .visual-answer-launch::after {
+    transition: none !important;
+  }
+}
 
 /* P0: improve ordinary Markdown readability without changing its content. */
 .assistant-article .msg-content {
