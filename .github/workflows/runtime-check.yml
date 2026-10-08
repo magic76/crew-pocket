@@ -41,6 +41,7 @@ jobs:
           node --check lib/role-delete.js
           node --check lib/crew-messages.js
           node --check lib/role-runtime.js
+          node --check lib/role-message-queue.js
           node --check lib/crew-status.js
           node --check lib/crew-auto-response.js
           node --check lib/context-builder.js
@@ -65,6 +66,8 @@ jobs:
           node --check test/crew-roster-grid.test.js
           node --check test/crew-role-messaging.test.js
           node --check test/role-runtime.test.js
+          node --check test/role-message-queue.test.js
+          node --check test/role-runtime-kernel-v2.test.js
           node --check test/role-delete-lifecycle.test.js
           node --check test/crew-status.test.js
           node --check test/crew-auto-response.test.js
@@ -78,6 +81,8 @@ jobs:
           node test/crew-roster-grid.test.js
           node test/crew-role-messaging.test.js
           node test/role-runtime.test.js
+          node test/role-message-queue.test.js
+          node test/role-runtime-kernel-v2.test.js
           node test/role-delete-lifecycle.test.js
           node test/crew-status.test.js
           node test/crew-auto-response.test.js

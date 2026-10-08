@@ -917,7 +917,7 @@ async function handleConversationSettings(req, res) {
   }
 }
 
-async function handleCrewMembers(req, res) {async function handleCrewMembers(req, res) {
+async function handleCrewMembers(req, res) {
   try {
     if (req.method === 'GET') {
       const members = await listCrewMembers();
@@ -1679,7 +1679,7 @@ async function handleChat(req, res) {
       agentContext = await buildAgentContext({
         roleId: role?.id || DEFAULT_ROLE_ID,
         projectId,
-        currentTask: approvedExecutionIntent?.summary || '',
+        currentWork: approvedExecutionIntent?.summary || '',
         currentPrompt: finalPrompt
       });
       roleMemoryContext = formatAgentContext(agentContext);
@@ -1711,7 +1711,7 @@ async function handleChat(req, res) {
         roleId: role?.id || DEFAULT_ROLE_ID,
         projectId,
         conversationId: conversation_id,
-        currentTask: approvedExecutionIntent?.summary || '',
+        currentWork: approvedExecutionIntent?.summary || '',
         currentPrompt: finalPrompt
       });
       const refreshedMemories = refreshed.memories || [];

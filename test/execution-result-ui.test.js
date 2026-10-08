@@ -80,7 +80,8 @@ function run() {
   assert.match(chatSource, /registerActiveRoleStream\(\{/, 'live turns must register against their role');
   assert.match(chatSource, /clearActiveRoleStream\(streamRoleId, streamAbortController\)/, 'finishing one role must only clear its own stream');
   assert.match(chatSource, /activeStream\?\.provider \|\| currentProvider/, 'stop must target the active role provider');
-  assert.match(chatSource, /const pendingQueuedMessagesByRole = new Map\(\)/, 'queued messages must be isolated per role');
+  assert.match(chatSource, /const queuedMessagesByRole = new Map\(\)/, 'queued messages must be cached per role');
+  assert.match(chatSource, /\/api\/role-queue/, 'queued messages must persist through the backend Role queue');
   assert.match(chatSource, /updateHeader: isStreamVisible\(\)/, 'background role completion must not overwrite the visible role header');
   assert.match(appSource, /window\.stopGeneration/, 'new work should stop only the current role stream');
 

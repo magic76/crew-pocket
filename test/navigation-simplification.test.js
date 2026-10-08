@@ -29,8 +29,8 @@ assert.equal(html.includes('id="tools-menu-btn"'), false);
 assert.ok(html.includes('<div id="workspace-selector-btn"'));
 assert.ok(html.includes('id="workspace-label"'));
 assert.ok(html.includes('id="header-current-task"'));
-assert.ok(ui.includes("const taskTitle = status?.currentTask?.title || status?.conversationTitle || latest?.title || '新工作'"));
-assert.ok(ui.includes('if (headerCurrentTask) headerCurrentTask.textContent = taskTitle'));
+assert.ok(ui.includes("const workTitle = status?.currentWork?.title || status?.conversationTitle || latest?.title || '新工作'"));
+assert.ok(ui.includes('if (headerCurrentTask) headerCurrentTask.textContent = workTitle'));
 
 // Settings remains a first-class primary view.
 assert.ok(html.includes('id="tools-menu-dropdown"'));
@@ -55,9 +55,12 @@ assert.ok(chat.includes("textEl.textContent = percent === null"));
 assert.ok(chat.includes("progressTrack.classList.toggle('hidden', percent === null)"));
 
 // Role cards surface one work summary only.
-assert.ok(ui.includes("const title = status?.currentTask?.title || status?.conversationTitle || latest?.title || ''"));
+assert.ok(ui.includes("const title = status?.currentWork?.title || status?.conversationTitle || latest?.title || ''"));
 assert.ok(ui.includes("hasWork ? escapeHtml(title) : '尚無工作'"));
 assert.equal(ui.includes("'尚未開始工作'"), false);
 assert.ok(ui.includes('unreadReplyCount'));
 
 console.log('navigation-simplification tests: ok');
+
+assert.equal(ui.includes('currentTask'), false, 'Role UI should use currentWork terminology');
+assert.match(ui, /new EventSource\('\/api\/crew-status\/events'\)/, 'Crew status should be event-driven');

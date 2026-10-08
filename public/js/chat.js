@@ -2583,7 +2583,7 @@ function renderQueuedMessageCapsule() {
   }
 }
 
-function updateBtwQueueStatus() {function updateBtwQueueStatus() {
+function updateBtwQueueStatus() {
   const status = document.getElementById('btw-queue-status');
   if (status) status.classList.add('hidden');
 }
