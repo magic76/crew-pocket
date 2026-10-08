@@ -1,82 +1,60 @@
-# Visual Answer (P0/P1)
+# Unified answer presentation (P0 / P1 / P2)
 
-Crew Pocket keeps **Markdown as the source of truth** for Role-owned conversations and memory.
-Visual Answer is an optional **on-demand** derivative reading view; it does not alter
-stored transcript text, project/workspace context, provider prompts, or execution events.
+The AI's stored Markdown remains the **single source of truth** in each Role-owned
+conversation. Rich reading and task results are presentation only. They never
+change memory, provider prompts, transcript text, or source tool events.
 
-## User flow
+## UX
 
-- During streaming: standard Markdown UI, unchanged.
-- After successful completion: long, structured responses get a small
-  "◇ 視覺化閱讀" action. Short replies do not.
-- Tapping an ordinary chat response expands a mobile-friendly HTML reader **beneath the same message**.
-  Tapping again smoothly collapses it; the original Markdown stays in place.
-- Inside the expanded reader, **Full screen** is an optional secondary action.
-  Back returns to the expanded message at the same conversation position.
-- Execution result cards retain their original collapsed status / changed file /
-  verification views. After opening a result card, its **回覆內容** section
-  contains a single **文字 / 圖文** switch; switching to visual temporarily hides
-  its Markdown response instead of displaying a second copy below the card.
-- Only one answer remains expanded in the visible conversation by default.
-  Each Role/Provider/Conversation has an independent in-memory selection: after
-  switching Roles and reloading that conversation, its last expanded answer
-  reopens when it is in history.
-- Successful rendered HTML is held in a small role-scoped client cache and a
-  short-lived server cache, so closing/reopening or returning from full screen
-  needs no additional model call or HTML render while cached.
+- During streaming, the usual Markdown response updates without a second surface.
+- On successful completion, structured/long Markdown is enhanced **in place**:
+  headings, titled panels, lists, code and responsive tables keep the original
+  content and order. Short, plain replies remain unchanged.
+- No "圖文閱讀", "文字版" or duplicate reader button; no fixed-height nested
+  iframe, and no extra vertical scroll container. Long answers use the chat's
+  own scroll position. Tables and code may scroll **horizontally** on small screens.
+- Recognized headings (summary/comparison/risks/conclusion/implementation, with
+  Chinese and English aliases) get visual treatment only when present in the
+  actual Markdown. No new summary or evidence is inferred.
+- Long task results remain **collapsed** by default. The expanded card has a
+  structured state header, the supplied file paths, supplied verification checks,
+  optional commit metadata, execution record accordion, and **one** original
+  response. A missing check or commit is never presented as a success.
+- Historical task bodies are lazy: they receive enhancement when the card is
+  first opened. No second answer is appended outside the task card.
+- Code blocks, code-enhancement hooks, links, table accessibility, switching
+  between Roles, and conversational history continue to use the current renderer.
 
-## Implementation
+## Files
 
-- public/js/visual-answer.js: eligibility heuristic, inline accordion, role-scoped
-  in-memory selection/cache, optional full-screen modal, fetch and cleanup.
-- public/css/visual-answer.css: reader layout and normal Markdown typography.
-- lib/visual-answer.js: server-side draft adapter, isolated subprocess,
-  bounded output, restricted CSP and ephemeral LRU result cache.
-- lib/vendor/answer-me-with-html/am.mjs: offline, bundled standalone Node CLI
-  from https://github.com/QingYunA/answer-me-with-html (MIT).
-- POST /api/visual-answer: authenticated by the existing /api/ route guard.
-  Accepts { "content": "<markdown>" }, returns { "success": true, "html": "..." }.
+- `public/js/visual-answer.js`: idempotent in-place enhancement. Reuses already
+  DOMPurify-sanitized Markdown from `formatMessageContent`. No fetch is made.
+- `public/css/visual-answer.css`: responsive native content and semantic panels.
+- `public/js/chat.js`: structured execution result view (only actual `turn_result`
+  metadata for commit/checks/files; no inference).
+- `test/visual-answer-inline.test.js`: no duplicates, no iframe, report section
+  grouping, original-node preservation, and lazy history coverage.
+- `test/execution-result-ui.test.js`: task card invariants.
 
-The rendering input is sanitized separately from the user's original Markdown:
-local image references are replaced with their descriptions, and HTML/SVG
-source fences are displayed as code rather than trusted page components.
-The result is rendered in a fixed-height, independently scrollable inline
-iframe with **no sandbox permissions**, plus a restrictive Content Security
-Policy. No scripts, forms or network access are needed for the static document.
-The outer chat supplies Expand/Collapse, Copy and Full screen controls.
-The panel uses a 280ms height/opacity transition with a rotating chevron; a
-reduced-motion preference removes the transition. Rapid reopen cancels the
-pending hide timer, preventing intermittent blank readers. Historical result
-cards attach the visual-mode control after lazy details hydration.
+## Compatibility
 
-The renderer uses Node.js >=20. It runs only after a user taps the action,
-with an 8-second timeout, 48,000-character source limit, at most two
-concurrent renders and temporary files deleted after use. A renderer error
-leaves the original answer untouched.
+`lib/visual-answer.js` and `POST /api/visual-answer` remain available for
+legacy / explicit exports. The normal chat UI no longer uses the older
+`answer-me-with-html` iframe, its generated secondary layout, or its extra render
+request. This avoids a nested vertical scroll surface while retaining the
+capability for a future intentional export use case.
 
-## Supported and later
+## Verification
 
-P1 supports readable panel layouts, Markdown tables, and the renderer's
-extended fenced components when already present in the AI's answer:
-flow, sequence, tree, timeline, limits, kv, annot and callout.
+```bash
+node --check public/js/visual-answer.js
+node --check public/js/chat.js
+node --check test/visual-answer-inline.test.js
+node test/visual-answer-inline.test.js
+node test/execution-result-ui.test.js
+node test/visual-answer.test.js
+```
 
-P2 should make agents optionally produce these visual blocks **when useful**;
-do not silently ask an extra model to rewrite every reply. The P1 adapter
-does not invent a diagram from ordinary Markdown bullet points.
-
-## Validation
-
-- node --check lib/visual-answer.js
-- node --check public/js/visual-answer.js
-- node --check public/js/chat.js
-- node --check server.js
-- node test/visual-answer.test.js
-- node test/visual-answer-inline.test.js (animated collapse, rapid reopen,
-  task response mode switching, and lazy task history)
-- git diff --check origin/main...HEAD
-
-On Android, confirm: different Role history, completion/failure, switching
-between conversations, long response panels and tables, scroll inside the
-inline frame, expand/collapse, back/escape from optional fullscreen, offline
-rendering, and no model
-request or persistent memory mutation when opening a reader.
+Manually check Android narrow screens, long tables/code, streaming completion,
+failure states, lazy historical task cards, changed files, large reports, Role
+switching and conversation restoration.
