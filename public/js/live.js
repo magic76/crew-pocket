@@ -1251,7 +1251,7 @@
     return { message, imagePath };
   }
 
-  function sendCurrentRoleMessage(args = {}) {
+  async function sendCurrentRoleMessage(args = {}) {
     const payload = buildLiveRoleMessage(args);
     if (!payload.message) {
       return { success: false, error: '訊息內容不可為空。' };
@@ -1264,7 +1264,7 @@
       ? window.getCurrentRoleId()
       : 'role-general';
     const roleName = document.getElementById('workspace-label')?.textContent?.trim() || '目前 Role';
-    const result = window.sendRoleMessage({
+    const result = await window.sendRoleMessage({
       text: payload.message,
       imagePath: payload.imagePath,
       source: 'live'
@@ -2439,7 +2439,7 @@
           }, 1200);
 
         } else if (name === 'send_role_message') {
-          toolResult = sendCurrentRoleMessage(args);
+          toolResult = await sendCurrentRoleMessage(args);
 
         } else if (name === 'draft_message') {
           const draftText = String(args.text || args.message || '').trim();

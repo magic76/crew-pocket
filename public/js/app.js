@@ -1061,31 +1061,15 @@ function initAppAndListeners() {
   })();
 
   // 🌐 Unified real-time intake from Browser Extension and other external clients.
-  const inboundQueue = [];
   const handledInboundIds = new Set();
   const handledInboundOrder = [];
-  let inboundQueueRunning = false;
 
   const rememberInboundId = (id) => {
     if (!id || handledInboundIds.has(id)) return false;
     handledInboundIds.add(id);
     handledInboundOrder.push(id);
-    if (handledInboundOrder.length > 100) {
-      handledInboundIds.delete(handledInboundOrder.shift());
-    }
+    if (handledInboundOrder.length > 100) handledInboundIds.delete(handledInboundOrder.shift());
     return true;
-  };
-
-  const waitForMainStreamIdle = () => {
-    if (!isStreaming) return Promise.resolve();
-    return new Promise(resolve => {
-      const onState = (event) => {
-        if (event.detail?.streaming !== false) return;
-        window.removeEventListener('crew:streaming-state', onState);
-        resolve();
-      };
-      window.addEventListener('crew:streaming-state', onState);
-    });
   };
 
   const formatInboundPrompt = (msg) => {
@@ -1095,38 +1079,25 @@ function initAppAndListeners() {
     return `${prefix}${msg.text}${sourceInfo}`;
   };
 
-  const processInboundQueue = async () => {
-    if (inboundQueueRunning) return;
-    inboundQueueRunning = true;
-    try {
-      while (inboundQueue.length > 0) {
-        await waitForMainStreamIdle();
-        const msg = inboundQueue.shift();
-        if (!msg) continue;
-        if (typeof window.sendMessage !== 'function') {
-          inboundQueue.unshift(msg);
-          break;
-        }
-        await window.sendMessage({
-          text: formatInboundPrompt(msg),
-          imagePath: msg.image_path || null
-        });
-      }
-    } finally {
-      inboundQueueRunning = false;
-    }
-  };
-
-  const enqueueInboundForChat = (msg) => {
+  const enqueueInboundForChat = async (msg) => {
     if (!msg || !msg.text || !rememberInboundId(msg.id)) return;
-    inboundQueue.push(msg);
-    processInboundQueue();
+    const payload = {
+      text: formatInboundPrompt(msg),
+      imagePath: msg.image_path || null,
+      source: msg.source || 'external'
+    };
+    if (typeof window.sendRoleMessage === 'function') {
+      const result = await window.sendRoleMessage(payload);
+      if (!result?.success) console.warn('[Inbound] Role message failed:', result?.error || 'unknown error');
+      return;
+    }
+    if (typeof window.sendMessage === 'function') await window.sendMessage(payload);
   };
 
   const inboundEvents = new EventSource('/api/inbound/events');
   inboundEvents.addEventListener('inbound-message', (event) => {
     try {
-      enqueueInboundForChat(JSON.parse(event.data));
+      enqueueInboundForChat(JSON.parse(event.data)).catch(error => console.warn('[Inbound]', error.message));
     } catch (e) {
       console.warn('Inbound message parse failed', e);
     }

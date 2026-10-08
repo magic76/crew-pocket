@@ -154,6 +154,10 @@ async function run() {
         calls.push(['clearRuntime', id]);
         return true;
       },
+      clearRoleQueueFn: async id => {
+        calls.push(['clearQueue', id]);
+        return 2;
+      },
       removePendingMessagesFn: async (id, name) => {
         calls.push(['removePending', id, name]);
         return { removed: 2, preserved: 4 };
@@ -171,6 +175,7 @@ async function run() {
     assert.equal(deleted.deletedAt, 777);
     assert.equal(deleted.stoppedActiveWork, true);
     assert.equal(deleted.deletedMemories, 3);
+    assert.equal(deleted.queuedMessagesDeleted, 2);
     assert.equal(deleted.pendingMessagesDeleted, 2);
     assert.equal(deleted.historicalMessagesPreserved, 4);
     assert.equal(deleted.conversationSnapshots, 5);

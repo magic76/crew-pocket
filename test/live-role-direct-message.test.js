@@ -11,10 +11,11 @@ const server = fs.readFileSync(path.join(root, 'server.js'), 'utf8');
 const crewStatus = fs.readFileSync(path.join(root, 'lib', 'crew-status.js'), 'utf8');
 
 assert.match(live, /name: "send_role_message"/, 'Live should expose one direct Role message tool');
-assert.match(live, /sendCurrentRoleMessage\(args\)/, 'Live tool should route into the current Role');
+assert.match(live, /await sendCurrentRoleMessage\(args\)/, 'Live tool should await durable routing into the current Role');
 assert.match(live, /window\.sendRoleMessage/, 'Live should use the normal Role Conversation send path');
 assert.match(chat, /window\.sendRoleMessage = sendRoleMessage/, 'chat should expose the direct Role send bridge');
-assert.match(chat, /const pendingQueuedMessagesByRole = new Map\(\)/, 'busy Roles should keep independent queued messages');
+assert.match(chat, /const queuedMessagesByRole = new Map\(\)/, 'busy Roles should cache independent queued messages');
+assert.match(chat, /\/api\/role-queue/, 'busy Role messages should be durably persisted');
 assert.match(chat, /status: 'queued'/, 'direct Live messages should queue on a busy Role');
 
 for (const legacy of ['prepare_main_task', 'confirm_main_task', '/api/live-delegate', '/api/tasks', 'startTaskBriefing']) {
