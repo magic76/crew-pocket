@@ -86,6 +86,11 @@ function run() {
   assert.match(appSource, /window\.stopGeneration/, 'new work should stop only the current role stream');
 
   assert.match(chatSource, /execution-result-card/, 'chat UI should render collapsed execution result cards');
+  assert.match(chatSource, /execution-result-hero/, 'task details must show one structured outcome header');
+  assert.match(chatSource, /data-check-state/, 'check results should preserve actual pass, fail, or unknown status');
+  assert.match(chatSource, /structuredCommit \?/, 'commit metadata may be shown only when supplied');
+  assert.match(chatSource, /execution-result-response/, 'task details keep a single original response');
+
   assert.match(chatSource, /IntersectionObserver/, 'sticky execution capsule should use viewport observation');
   assert.match(chatSource, /scrollIntoView/, 'sticky execution capsule should navigate back to the active card');
   assert.match(chatSource, /turn_result/, 'chat UI should consume structured turn_result metadata');
