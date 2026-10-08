@@ -4,11 +4,11 @@
   'use strict';
 
   const PANEL_KINDS = [
-    ['summary', /^(摘要|重點|概覽|總覽|executive summary|summary|overview|key findings|tl;?dr)\b/i],
-    ['comparison', /^(比較|對比|方案比較|選項|comparison|alternatives?|options?|trade.?offs?)\b/i],
-    ['risks', /^(風險|注意事項|限制|risks?|caveats?|limitations?|concerns?)\b/i],
-    ['conclusion', /^(結論|建議|下一步|後續|行動項目|conclusions?|recommendations?|next steps?|action items?)\b/i],
-    ['implementation', /^(實作|修改|變更|驗證|測試|implementation|changes?|validation|tests?|files?)\b/i]
+    ['summary', /^(摘要|重點|概覽|總覽|executive summary|summary|overview|key findings|tl;?dr)(?=$|[\s:：、\-—])/i],
+    ['comparison', /^(比較|對比|方案比較|選項|comparison|alternatives?|options?|trade.?offs?)(?=$|[\s:：、\-—])/i],
+    ['risks', /^(風險|注意事項|限制|risks?|caveats?|limitations?|concerns?)(?=$|[\s:：、\-—])/i],
+    ['conclusion', /^(結論|建議|下一步|後續|行動項目|conclusions?|recommendations?|next steps?|action items?)(?=$|[\s:：、\-—])/i],
+    ['implementation', /^(實作|修改|變更|驗證|測試|implementation|changes?|validation|tests?|files?)(?=$|[\s:：、\-—])/i]
   ];
 
   function visualAnswerEligible(content) {
