@@ -598,7 +598,7 @@ function buildExecutionResultBodyHtml(content, tools = [], thinking = '', turnRe
     ${checksHtml}
     ${executionHtml}
     <section class="execution-result-section execution-result-response">
-      <div class="execution-result-section-title">詳細回覆</div>
+      <div class="execution-result-section-title">回覆內容</div>
       <div class="msg-content min-w-0">${responseHtml}</div>
     </section>
   `;
@@ -1654,7 +1654,7 @@ function appendMessage(role, content, timestamp, tools = [], thinking = '', isBt
       roleId: typeof currentStreamRoleId === 'function' ? currentStreamRoleId() : null,
       provider: currentProvider,
       conversationId: currentConversationId,
-      failed: shouldCollapseExecution && executionResultState(turnResult) !== 'completed'
+      failed: shouldCollapseExecution && Boolean(turnResult) && executionResultState(turnResult) !== 'completed'
     });
   }
 
