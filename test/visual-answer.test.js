@@ -45,8 +45,8 @@ const { prepareVisualDraft, renderVisualAnswer } = require('../lib/visual-answer
   const chat = fs.readFileSync(path.join(root, 'public/js/chat.js'), 'utf8');
   const index = fs.readFileSync(path.join(root, 'public/index.html'), 'utf8');
   const visualUi = fs.readFileSync(path.join(root, 'public/js/visual-answer.js'), 'utf8');
-  assert.match(chat, /attachVisualAnswerAction\(msgDiv, content\)/);
-  assert.match(chat, /attachVisualAnswerAction\(assistantMsgDiv, accumulatedText\)/);
+  assert.match(chat, /attachVisualAnswerAction\(msgDiv, content, \{/);
+  assert.match(chat, /attachVisualAnswerAction\(assistantMsgDiv, accumulatedText, \{/);
   assert.ok(index.indexOf('src="/js/visual-answer.js"') < index.indexOf('src="/js/chat.js"'));
   assert.match(visualUi, /sandbox=""/);
   assert.match(visualUi, /visualAnswerEligible/);
