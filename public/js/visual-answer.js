@@ -9,8 +9,8 @@
   const motionDelay = () => window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches ? 0 : COLLAPSE_MS;
   const viewExpanded = view => view.button.getAttribute('aria-expanded') === 'true';
   const labelFor = (view, expanded) => view.mode === 'execution'
-    ? (expanded ? '文字版 ↑' : '圖文版 ↓')
-    : (expanded ? '收合圖文 ↑' : '◇ 圖文閱讀 ↓');
+    ? (expanded ? '返回文字' : '圖文版')
+    : (expanded ? '收合圖文' : '◇ 圖文閱讀');
   const pageCache = new Map();
   const openByConversation = new Map();
   let activeInline = null;
@@ -63,7 +63,7 @@
     if (!view || !viewExpanded(view)) return;
     view.button.setAttribute('aria-expanded', 'false');
     view.button.textContent = labelFor(view, false);
-    view.button.setAttribute('aria-label', view.mode === 'execution' ? '切換到文字回覆' : '收合圖文閱讀');
+    view.button.setAttribute('aria-label', view.mode === 'execution' ? '展開圖文閱讀' : '展開圖文閱讀');
     view.panel.setAttribute('data-expanded', 'false');
     view.panel.setAttribute('aria-hidden', 'true');
     view.fullscreenButton.disabled = true;
@@ -257,7 +257,7 @@
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'visual-answer-launch';
-    button.textContent = mode === 'execution' ? '圖文版 ↓' : '◇ 圖文閱讀 ↓';
+    button.textContent = mode === 'execution' ? '圖文版' : '◇ 圖文閱讀';
     button.setAttribute('aria-expanded', 'false');
     button.setAttribute('aria-label', '在此回覆下方展開圖文閱讀');
     actions.appendChild(button);
@@ -286,6 +286,7 @@
     if (responseSection) {
       const heading = responseSection.querySelector('.execution-result-section-title');
       if (heading) {
+        heading.className += ' visual-answer-section-heading';
         heading.appendChild(actions);
       } else {
         responseSection.insertBefore(actions, responseSection.firstChild);
