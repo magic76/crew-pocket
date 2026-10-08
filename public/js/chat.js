@@ -513,7 +513,9 @@ function executionResultPreviewText(content) {
       .replace(/^>\s*/, '')
       .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
       .replace(/[*_]/g, '').trim())
-    .filter(line => line && !line.startsWith('```') && !/^(完整回覆|執行結果|執行紀錄|摘要)[:：]?$/.test(line));
+    .filter(line => line && !line.startsWith('```') && !/^(完整回覆|執行結果|執行紀錄|摘要)[:：]?$/.test(line))
+    .slice(0, 2)
+    .join(' · ');
 }
 function buildExecutionResultBodyHtml(content, tools = [], thinking = '', turnResult = null) {
   const changedFiles = Array.isArray(turnResult?.changed_files) ? turnResult.changed_files.filter(Boolean) : [];
@@ -599,8 +601,8 @@ function buildExecutionResultCardHtml(content, tools = [], thinking = '', turnRe
           ${meta.length ? `<span class="execution-result-meta">${escapeHtml(meta.join(' · '))}</span>` : ''}
           <span class="execution-result-chevron">›</span>
         </span>
+        ${preview ? `<div class="execution-result-peek">${escapeHtml(preview)}</div>` : ''}
       </summary>
-      ${preview ? `<div class="execution-result-peek">${escapeHtml(preview)}</div>` : ''}
       <div class="execution-result-body">${bodyHtml}</div>
     </details>
   `;
