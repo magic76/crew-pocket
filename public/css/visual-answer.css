@@ -200,7 +200,7 @@
 .visual-answer-inline-toolbar button:focus-visible { outline: 2px solid #818cf8; outline-offset: 2px; }
 
 /* The execution detail card owns both reading modes. No duplicate viewer below. */
-.execution-result-response .execution-result-section-title:has(> .visual-answer-actions-in-heading) {
+.execution-result-response .visual-answer-section-heading {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
