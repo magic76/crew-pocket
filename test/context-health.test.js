@@ -203,7 +203,7 @@ async function run() {
     assert.ok(agentContext.contributions.some(item => item.type === ContextSourceType.ROLE && item.pinned));
     assert.ok(agentContext.contributions.some(item => item.type === ContextSourceType.PROJECT && item.pinned));
     assert.ok(agentContext.contributions.some(item => item.type === ContextSourceType.MEMORY));
-    assert.ok(agentContext.contributions.some(item => item.type === ContextSourceType.TASK && item.pinned));
+    assert.ok(agentContext.contributions.some(item => item.type === ContextSourceType.WORK && item.pinned));
   } finally {
     await fs.rm(tempDir, { recursive: true, force: true });
   }
