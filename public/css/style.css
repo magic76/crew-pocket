@@ -759,6 +759,20 @@ footer {
   transform: rotate(90deg);
 }
 
+.execution-result-peek {
+  padding: 0 0.75rem 0.72rem 2.55rem;
+  color: #94a3b8;
+  font-size: 11.5px;
+  line-height: 1.55;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+.execution-result-card[open] .execution-result-peek { display: none; }
+
 .execution-result-body {
   border-top: 1px solid rgba(51, 65, 85, 0.68);
   padding: 0.72rem;
