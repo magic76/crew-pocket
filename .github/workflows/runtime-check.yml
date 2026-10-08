@@ -114,4 +114,6 @@ jobs:
           node --check lib/vendor/answer-me-with-html/am.mjs
           node --check test/visual-answer.test.js
           node test/visual-answer.test.js
+          node --check test/visual-answer-inline.test.js
+          node test/visual-answer-inline.test.js
           for file in public/js/*.js; do node --check "$file"; done
