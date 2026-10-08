@@ -517,6 +517,16 @@ function buildExecutionResultHeadline(turnResult = null, tools = []) {
   return grouped.length > 0 ? '完成執行' : '完成';
 }
 
+function executionResultPreviewText(content) {
+  return String(content || '').split(/\r?\n/)
+    .map(line => line.trim()
+      .replace(/^#{1,6}\s+/, '')
+      .replace(/^[-*+]\s+/, '')
+      .replace(/^>\s*/, '')
+      .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+      .replace(/[*_]/g, '').trim())
+    .filter(line => line && !line.startsWith('```') && !/^(完整回覆|執行結果|執行紀錄|摘要)[:：]?$/.test(line));
+}
 function buildExecutionResultBodyHtml(content, tools = [], thinking = '', turnResult = null) {
   const changedFiles = Array.isArray(turnResult?.changed_files) ? turnResult.changed_files.filter(Boolean) : [];
   const checks = Array.isArray(turnResult?.checks) ? turnResult.checks.filter(Boolean) : [];
@@ -527,7 +537,6 @@ function buildExecutionResultBodyHtml(content, tools = [], thinking = '', turnRe
   const summaryBits = [];
   if (turnResult?.execution_mode) summaryBits.push(executionModeLabel(turnResult.execution_mode));
   if (Number(turnResult?.executions) > 0) summaryBits.push(`${Number(turnResult.executions)} 次操作`);
-  if (Number(turnResult?.polls) > 0) summaryBits.push(`${Number(turnResult.polls)} 次等待`);
 
   const changedFilesHtml = changedFiles.length ? `
     <section class="execution-result-section">
@@ -540,7 +549,7 @@ function buildExecutionResultBodyHtml(content, tools = [], thinking = '', turnRe
 
   const checksHtml = checks.length ? `
     <section class="execution-result-section">
-      <div class="execution-result-section-title">Tests / Build</div>
+      <div class="execution-result-section-title">驗證結果</div>
       <div class="execution-result-check-list">
         ${checks.map(check => {
           const state = String(check.status || check.state || '').toLowerCase();
@@ -554,7 +563,7 @@ function buildExecutionResultBodyHtml(content, tools = [], thinking = '', turnRe
 
   const executionHtml = groupedTools.length ? `
     <section class="execution-result-section">
-      <div class="execution-result-section-title">Execution</div>
+      <div class="execution-result-section-title">執行紀錄</div>
       <div class="execution-detail-body execution-result-steps">${buildExecutionStepRowsHtml(groupedTools, Boolean(String(thinking || '').trim()))}</div>
     </section>
   ` : '';
@@ -573,7 +582,7 @@ function buildExecutionResultBodyHtml(content, tools = [], thinking = '', turnRe
     ${checksHtml}
     ${executionHtml}
     <section class="execution-result-section execution-result-response">
-      <div class="execution-result-section-title">完整回覆</div>
+      <div class="execution-result-section-title">詳細回覆</div>
       <div class="msg-content min-w-0">${responseHtml}</div>
     </section>
   `;
@@ -589,6 +598,7 @@ function buildExecutionResultCardHtml(content, tools = [], thinking = '', turnRe
   if (structuredCommit) meta.push(String(structuredCommit).slice(0, 8));
   if (duration) meta.push(duration);
   const bodyHtml = lazy ? '' : buildExecutionResultBodyHtml(content, tools, thinking, turnResult);
+  const preview = executionResultPreviewText(content).slice(0, 220);
 
   return `
     <details class="execution-result-card ${lazy ? 'lazy-result-card' : ''}" data-result-kind="execution">
@@ -602,6 +612,7 @@ function buildExecutionResultCardHtml(content, tools = [], thinking = '', turnRe
           <span class="execution-result-chevron">›</span>
         </span>
       </summary>
+      ${preview ? `<div class="execution-result-peek">${escapeHtml(preview)}</div>` : ''}
       <div class="execution-result-body">${bodyHtml}</div>
     </details>
   `;
