@@ -742,7 +742,7 @@ async function loadWorkspaces() {
   return availableWorkspaces;
 }
 
-function crewStatusForRole(roleId) {function crewStatusForRole(roleId) {
+function crewStatusForRole(roleId) {
   return crewStatusByRole.get(String(roleId || DEFAULT_ROLE_ID)) || null;
 }
 
@@ -1280,6 +1280,11 @@ function activateRoleIdentity(role) {
   if (typeof window.syncActiveRoleStreamingState === 'function') {
     window.syncActiveRoleStreamingState();
   }
+  if (typeof window.hydrateRoleMessageQueue === 'function') {
+    window.hydrateRoleMessageQueue(role.id, { force: true }).then(() => {
+      window.syncActiveRoleStreamingState?.();
+    }).catch(() => {});
+  }
   return role;
 }
 
@@ -1358,7 +1363,7 @@ async function selectRole(roleId, isCreatingNewChat = false) {
   localStorage.setItem(activeConversationStorageKey(), '__new__');
 
   if (typeof revokeAllBlobUrls === 'function') revokeAllBlobUrls();
-  if (typeof clearQueuedBtwMessages === 'function') clearQueuedBtwMessages();
+  if (typeof clearQueuedBtwMessages === 'function') await clearQueuedBtwMessages();
   if (typeof updateContextPill === 'function') updateContextPill(null);
   if (promptInput) {
     promptInput.value = '';
@@ -1398,7 +1403,7 @@ async function selectWorkspace(workspace, isCreatingNewChat = false) {
   closeWorkspaceModal();
 }
 
-async function handleCreateWorkspaceSubmit(e) {async function handleCreateWorkspaceSubmit(e) {
+async function handleCreateWorkspaceSubmit(e) {
   if (e) e.preventDefault();
   const input = document.getElementById('create-workspace-input');
   const name = input ? input.value.trim() : '';

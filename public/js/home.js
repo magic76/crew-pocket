@@ -9,7 +9,7 @@
   const recent = document.getElementById('crew-home-recent');
   const working = document.getElementById('crew-home-working');
   const waiting = document.getElementById('crew-home-waiting');
-  const unread = document.getElementById('crew-home-unread');
+  const attention = document.getElementById('crew-home-attention');
   const remoteStatus = document.getElementById('crew-home-remote-status');
   const remoteBadge = document.getElementById('crew-home-remote-badge');
   const remoteToggle = document.getElementById('crew-home-remote-toggle');
@@ -94,9 +94,10 @@
     recent.innerHTML = roles.slice(0, 4).map(role => {
       const [label, badgeClass] = roleStatus(role);
       const canOpen = Boolean(role.providerId && role.conversationId);
-      const summary = role.conversationTitle || role.recentMessage?.content || '尚無工作';
+      const summary = role.currentWork?.title || role.conversationTitle || role.recentMessage?.content || '尚無工作';
       const badges = [];
-      if (Number(role.queuedRequestCount || 0) > 0) badges.push(`${Number(role.queuedRequestCount)} queued`);
+      const queued = Number(role.queuedMessageCount || 0) + Number(role.queuedRequestCount || 0);
+      if (queued > 0) badges.push(`${queued} 排隊`);
       if (Number(role.unreadReplyCount || 0) > 0) badges.push(`${Number(role.unreadReplyCount)} 未讀`);
       return `<div class="px-3 py-2.5 flex items-start gap-2.5">
         <div class="min-w-0 flex-1">
@@ -331,7 +332,7 @@
 
       if (working) working.textContent = String(data.counts?.working ?? 0);
       if (waiting) waiting.textContent = String(data.counts?.waiting ?? 0);
-      if (unread) unread.textContent = String(data.counts?.unread ?? 0);
+      if (attention) attention.textContent = String(data.counts?.attention ?? 0);
       if (subtitle) {
         const device = data.runtime?.device ? ` · ${data.runtime.device}` : '';
         subtitle.textContent = `手機是主機 · Role 狀態與 Remote Console${device}`;
