@@ -88,6 +88,7 @@
     view.status.hidden = false;
     view.status.textContent = '正在整理閱讀版面…';
     view.frame.hidden = true;
+    view.fullscreenButton.disabled = true;
 
     const saved = pageCache.get(view.cacheKey);
     if (saved) {
@@ -128,6 +129,7 @@
     if (!view.panel.isConnected || view.panel.hidden) return;
     view.frame.srcdoc = html;
     view.frame.hidden = false;
+    view.fullscreenButton.disabled = false;
     view.status.hidden = true;
   }
 
@@ -239,16 +241,11 @@
       panel,
       frame: panel.querySelector('iframe'),
       status: panel.querySelector('.visual-answer-inline-status'),
-      controller: null
+      controller: null,
+      fullscreenButton: panel.querySelector('.visual-answer-inline-fullscreen')
     };
     const fullscreenButton = panel.querySelector('.visual-answer-inline-fullscreen');
 
-    // The full-screen affordance only activates after the page is rendered.
-    const existingDisplayInline = displayInline;
-    // Enable it when cached HTML is already available or when an iframe loads.
-    view.frame.addEventListener('load', () => {
-      if (!view.panel.hidden && view.frame.hasAttribute('srcdoc')) fullscreenButton.disabled = false;
-    });
     button.addEventListener('click', () => showInline(view));
     panel.querySelector('.visual-answer-inline-copy').addEventListener('click', event => {
       copyOriginal(event.currentTarget, rawMarkdown);
