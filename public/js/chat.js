@@ -1649,6 +1649,10 @@ function appendMessage(role, content, timestamp, tools = [], thinking = '', isBt
 
   prepareDeferredImages(msgDiv);
 
+  if (!isUser && !isBtw && typeof attachVisualAnswerAction === 'function') {
+    attachVisualAnswerAction(msgDiv, content);
+  }
+
   if (!renderOptions.deferEnhancement && typeof enhanceCodeBlocks === 'function') enhanceCodeBlocks(msgDiv);
   if (!renderOptions.deferScroll) scrollToBottom();
   return msgDiv;
@@ -3328,6 +3332,10 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
           toggleBtn.textContent = isCollapsed ? '展開 ▼' : '收合 ▲';
         });
       }
+    }
+
+    if (!incomplete && !isBtwQuery && typeof attachVisualAnswerAction === 'function') {
+      attachVisualAnswerAction(assistantMsgDiv, accumulatedText);
     }
 
     if (typeof enhanceCodeBlocks === 'function') enhanceCodeBlocks(assistantMsgDiv);

@@ -110,4 +110,8 @@ jobs:
           node --check lib/storage.js
           node --check lib/workspaces.js
           node --check server.js
+          node --check lib/visual-answer.js
+          node --check lib/vendor/answer-me-with-html/am.mjs
+          node --check test/visual-answer.test.js
+          node test/visual-answer.test.js
           for file in public/js/*.js; do node --check "$file"; done

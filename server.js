@@ -86,6 +86,7 @@ const { normalizeExecutionIntent } = require('./lib/execution-intent');
 const { getDefaultModel } = require('./lib/model-runtime');
 const { buildTurnResult } = require('./lib/turn-result');
 const { saveExecutionFeedback, enrichExecutionHistory } = require('./lib/execution-feedback');
+const { renderVisualAnswer } = require('./lib/visual-answer');
 
 
 async function handleStorageReport(res) {
@@ -2617,6 +2618,19 @@ async function handleRemoteConnectionRevoke(req, res) {
   }
 }
 
+async function handleVisualAnswer(req, res) {
+  try {
+    const body = await parseJsonBody(req);
+    const result = await renderVisualAnswer(body?.content);
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+    return res.end(JSON.stringify({ success: true, html: result.html, cached: result.cached }));
+  } catch (err) {
+    const status = err.statusCode || (/(沒有可以|過長|too large)/i.test(err.message) ? 400 : 503);
+    res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+    return res.end(JSON.stringify({ success: false, error: err.message || '視覺化渲染失敗' }));
+  }
+}
+
 // 🌐 HTTP Server Request Dispatcher
 const server = http.createServer(async (req, res) => {
   const parsedUrl = url.parse(req.url, true);
@@ -2651,7 +2665,9 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
-  if (pathname === '/api/home' && req.method === 'GET') {
+  if (pathname === '/api/visual-answer' && req.method === 'POST') {
+    return handleVisualAnswer(req, res);
+  } else if (pathname === '/api/home' && req.method === 'GET') {
     return handleCrewHome(req, res);
   } else if (pathname === '/api/remote-pairing' && req.method === 'POST') {
     return handleRemotePairing(req, res);
