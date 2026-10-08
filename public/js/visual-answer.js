@@ -1,329 +1,95 @@
-// Visual Answer is a derivative reading surface. Markdown remains the source of truth.
-// Render only when a user expands a completed response; never modify conversation data.
+// Completed AI replies are enhanced in place. Markdown remains the only stored source.
+// Do not create a second reader, iframe, model call, or independent scroll surface.
 (function () {
   'use strict';
 
-  const MAX_SAVED_PAGES = 8;
-  const MAX_SAVED_VIEWS = 24;
-  const COLLAPSE_MS = 280;
-  const motionDelay = () => window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches ? 0 : COLLAPSE_MS;
-  const viewExpanded = view => view.button.getAttribute('aria-expanded') === 'true';
-  const labelFor = (view, expanded) => view.mode === 'execution'
-    ? (expanded ? '返回文字' : '圖文版')
-    : (expanded ? '收合圖文' : '◇ 圖文閱讀');
-  const pageCache = new Map();
-  const openByConversation = new Map();
-  let activeInline = null;
-  let modal = null;
-  let modalOpener = null;
+  const PANEL_KINDS = [
+    ['summary', /^(摘要|重點|概覽|總覽|executive summary|summary|overview|key findings|tl;?dr)\b/i],
+    ['comparison', /^(比較|對比|方案比較|選項|comparison|alternatives?|options?|trade.?offs?)\b/i],
+    ['risks', /^(風險|注意事項|限制|risks?|caveats?|limitations?|concerns?)\b/i],
+    ['conclusion', /^(結論|建議|下一步|後續|行動項目|conclusions?|recommendations?|next steps?|action items?)\b/i],
+    ['implementation', /^(實作|修改|變更|驗證|測試|implementation|changes?|validation|tests?|files?)\b/i]
+  ];
 
   function visualAnswerEligible(content) {
     if (typeof content !== 'string' || content.length > 48000) return false;
     if (/(?:<!doctype\s+html|<html\b)/i.test(content)) return false;
-    const prose = content.replace(/\x60{3,}[\s\S]*?\x60{3,}/g, '').trim();
+    const prose = content.replace(/`{3,}[\s\S]*?`{3,}/g, '').trim();
     if (prose.length < 180) return false;
     const headings = (prose.match(/^#{1,3}\s+\S/gm) || []).length;
     const listItems = (prose.match(/^\s*[-*+]\s+\S/gm) || []).length;
-    const hasTable = /^\|[^|\n]+\|[^|\n]+\|/m.test(prose);
-    const hasDiagram = /^\s*\x60{3}(?:flow|sequence|tree|timeline|kv|limits|callout)\b/im.test(content);
-    return hasDiagram || (prose.length > 260 && (headings >= 2 || hasTable || listItems >= 4))
+    return (headings >= 2 || /^\|[^|\n]+\|[^|\n]+\|/m.test(prose) || listItems >= 4)
       || (prose.length > 700 && headings >= 1);
   }
 
-  function visualContextKey(options = {}) {
-    // Every Role owns its own conversations. Never use an unscoped message hash.
-    const roleId = String(options.roleId || (window.getCurrentRoleId && window.getCurrentRoleId()) || 'default');
-    const provider = String(options.provider || 'codex');
-    const conversationId = String(options.conversationId || 'draft');
-    return JSON.stringify([roleId, provider, conversationId]);
+  function sectionKind(title) {
+    const normalized = String(title || '').trim().replace(/[：:。.!！?？]\s*$/, '');
+    return PANEL_KINDS.find(([, pattern]) => pattern.test(normalized))?.[0] || 'detail';
   }
 
-  function fingerprint(markdown) {
-    // Bounded, deterministic identity: no source content is persisted in storage.
-    let hash = 2166136261;
-    for (let i = 0; i < markdown.length; i++) {
-      hash ^= markdown.charCodeAt(i);
-      hash = Math.imul(hash, 16777619);
-    }
-    return markdown.length + ':' + (hash >>> 0).toString(16);
-  }
+  function groupSections(container) {
+    const topLevel = Array.from(container.children);
+    const h2s = topLevel.filter(node => node.tagName === 'H2');
+    if (!h2s.length || (h2s.length === 1 && container.textContent.length < 650)) return;
 
-  function remember(map, key, value, limit) {
-    map.delete(key);
-    map.set(key, value);
-    while (map.size > limit) map.delete(map.keys().next().value);
-  }
-
-  function clearFrame(frame) {
-    if (!frame) return;
-    frame.removeAttribute('srcdoc');
-  }
-
-  function collapseInline(view, { keepSelection = false } = {}) {
-    if (!view || !viewExpanded(view)) return;
-    view.button.setAttribute('aria-expanded', 'false');
-    view.button.textContent = labelFor(view, false);
-    view.button.setAttribute('aria-label', view.mode === 'execution' ? '展開圖文閱讀' : '展開圖文閱讀');
-    view.panel.setAttribute('data-expanded', 'false');
-    view.panel.setAttribute('aria-hidden', 'true');
-    view.fullscreenButton.disabled = true;
-    if (view.controller) {
-      view.controller.abort();
-      view.controller = null;
-    }
-    if (view.collapseTimer) clearTimeout(view.collapseTimer);
-    const finish = () => {
-      view.collapseTimer = null;
-      if (viewExpanded(view)) return;
-      view.panel.hidden = true;
-      clearFrame(view.frame);
-      view.frame.hidden = true;
-      if (view.responseSection) view.responseSection.setAttribute('data-reading-mode', 'text');
-    };
-    const duration = motionDelay();
-    if (duration > 0 && view.panel.isConnected) view.collapseTimer = setTimeout(finish, duration);
-    else finish();
-
-    if (!keepSelection && openByConversation.get(view.scope) === view.signature) {
-      openByConversation.delete(view.scope);
-    }
-    if (activeInline === view) activeInline = null;
-  }
-
-  function showInline(view, { restore = false } = {}) {
-    if (viewExpanded(view)) {
-      if (!restore) collapseInline(view);
-      return;
-    }
-    if (activeInline && activeInline !== view) {
-      // Switching Role/Conversation should keep that Role's remembered selection;
-      // opening a second answer in the same conversation replaces the first.
-      collapseInline(activeInline, { keepSelection: activeInline.scope !== view.scope });
-    }
-
-    if (view.collapseTimer) {
-      clearTimeout(view.collapseTimer);
-      view.collapseTimer = null;
-    }
-    activeInline = view;
-    remember(openByConversation, view.scope, view.signature, MAX_SAVED_VIEWS);
-    view.panel.hidden = false;
-    view.panel.setAttribute('aria-hidden', 'false');
-    // Flush the collapsed layout before expanding, so WebView animates grid height.
-    view.panel.getBoundingClientRect?.();
-    view.panel.setAttribute('data-expanded', 'true');
-    if (view.responseSection) view.responseSection.setAttribute('data-reading-mode', 'visual');
-    view.button.setAttribute('aria-expanded', 'true');
-    view.button.textContent = labelFor(view, true);
-    view.button.setAttribute('aria-label', view.mode === 'execution' ? '返回文字回覆' : '收合圖文閱讀');
-    view.status.hidden = false;
-    view.status.textContent = '正在整理閱讀版面…';
-    view.frame.hidden = true;
-    view.fullscreenButton.disabled = true;
-
-    const saved = pageCache.get(view.cacheKey);
-    if (saved) {
-      remember(pageCache, view.cacheKey, saved, MAX_SAVED_PAGES);
-      displayInline(view, saved);
-      return;
-    }
-
-    const controller = new AbortController();
-    view.controller = controller;
-    fetch('/api/visual-answer', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content: view.markdown }),
-      cache: 'no-store',
-      signal: controller.signal
-    }).then(async response => {
-      const result = await response.json();
-      if (!response.ok || !result.success || !result.html) {
-        throw new Error(result.error || '視覺化渲染失敗');
+    // Move, never clone, existing safe Markdown nodes. Anchors and code remain intact.
+    let panel = null;
+    for (const node of Array.from(container.childNodes)) {
+      if (node.nodeType === 1 && node.tagName === 'H2') {
+        panel = document.createElement('section');
+        panel.className = 'visual-answer-panel';
+        panel.dataset.sectionKind = sectionKind(node.textContent);
+        container.insertBefore(panel, node);
       }
-      if (controller.signal.aborted) return;
-      remember(pageCache, view.cacheKey, result.html, MAX_SAVED_PAGES);
-      if (view.panel.isConnected && !view.panel.hidden && activeInline === view) {
-        displayInline(view, result.html);
-      }
-    }).catch(error => {
-      if (controller.signal.aborted || view.panel.hidden || !view.panel.isConnected) return;
-      view.frame.hidden = true;
-      view.status.hidden = false;
-      view.status.textContent = (error.message || '視覺化暫不可用') + '。原始回答仍可正常閱讀。';
-    }).finally(() => {
-      if (view.controller === controller) view.controller = null;
-    });
-  }
-
-  function displayInline(view, html) {
-    if (!view.panel.isConnected || view.panel.hidden) return;
-    view.frame.srcdoc = html;
-    view.frame.hidden = false;
-    view.fullscreenButton.disabled = false;
-    view.status.hidden = true;
-  }
-
-  async function copyOriginal(button, content) {
-    try {
-      await navigator.clipboard.writeText(content);
-      button.textContent = '已複製';
-    } catch (_) {
-      button.textContent = '無法複製';
+      if (panel) panel.appendChild(node);
     }
-    setTimeout(() => {
-      if (button.isConnected) button.textContent = '複製原文';
-    }, 1200);
   }
 
-  function ensureModal() {
-    if (modal) return modal;
-    modal = document.createElement('div');
-    modal.id = 'visual-answer-modal';
-    modal.className = 'visual-answer-modal';
-    modal.hidden = true;
-    modal.setAttribute('role', 'dialog');
-    modal.setAttribute('aria-modal', 'true');
-    modal.setAttribute('aria-label', '視覺化閱讀');
-    modal.innerHTML = [
-      '<div class="visual-answer-toolbar">',
-      '<button type="button" class="visual-answer-back" aria-label="返回對話">‹ <span>返回對話</span></button>',
-      '<div class="visual-answer-toolbar-title">視覺化閱讀</div>',
-      '<button type="button" class="visual-answer-copy">複製原文</button>',
-      '</div>',
-      '<div class="visual-answer-view">',
-      '<iframe title="AI 視覺化閱讀內容（全螢幕）" sandbox="" referrerpolicy="no-referrer"></iframe>',
-      '</div>'
-    ].join('');
-    document.body.appendChild(modal);
-    modal.querySelector('.visual-answer-back').addEventListener('click', closeModal);
-    window.addEventListener('keydown', event => {
-      if (event.key === 'Escape' && modal && !modal.hidden) closeModal();
-    });
-    return modal;
+  function enhanceTables(container) {
+    for (const table of container.querySelectorAll('table')) {
+      if (table.closest('.table-wrapper, .visual-answer-table')) continue;
+      const scroller = document.createElement('div');
+      scroller.className = 'visual-answer-table';
+      table.parentNode.insertBefore(scroller, table);
+      scroller.appendChild(table);
+    }
   }
 
-  function closeModal() {
-    if (!modal || modal.hidden) return;
-    modal.hidden = true;
-    clearFrame(modal.querySelector('iframe'));
-    if (modalOpener && modalOpener.isConnected) modalOpener.focus({ preventScroll: true });
-    modalOpener = null;
-  }
-
-  function showFullscreen(view, button) {
-    const html = pageCache.get(view.cacheKey);
-    if (!html) return;
-    const root = ensureModal();
-    modalOpener = button;
-    root.querySelector('iframe').srcdoc = html;
-    root.querySelector('.visual-answer-copy').onclick = () => {
-      copyOriginal(root.querySelector('.visual-answer-copy'), view.markdown);
-    };
-    root.querySelector('.visual-answer-copy').textContent = '複製原文';
-    root.hidden = false;
-    root.querySelector('.visual-answer-back').focus({ preventScroll: true });
+  function enhanceContent(container, markdown) {
+    if (!container || container.dataset.visualEnhanced === 'true') return;
+    container.dataset.visualEnhanced = 'true';
+    container.classList.add('visual-answer-content');
+    const headingCount = (String(markdown).match(/^#{1,3}\s+\S/gm) || []).length;
+    if (headingCount >= 2) container.classList.add('visual-answer-report');
+    groupSections(container);
+    enhanceTables(container);
+    for (const heading of container.querySelectorAll('h2, h3')) {
+      heading.classList.add('visual-answer-heading');
+    }
   }
 
   function attachVisualAnswerAction(messageNode, rawMarkdown, options = {}) {
-    if (!messageNode || !visualAnswerEligible(rawMarkdown) || options.failed) return;
+    if (!messageNode || options.failed || !visualAnswerEligible(rawMarkdown)) return;
     const article = messageNode.querySelector('.assistant-article');
-    if (!article || article.querySelector('.visual-answer-launch')) return;
+    if (!article) return;
 
     const card = article.querySelector('.execution-result-card');
-    const responseSection = card ? article.querySelector('.execution-result-response') : null;
-    if (card && !responseSection) {
-      // History cards hydrate lazily when opened. The card's existing toggle
-      // listener fills the body first, then we mount the reading control.
-      if (!card.getAttribute('data-visual-waiting')) {
-        card.setAttribute('data-visual-waiting', 'true');
-        card.addEventListener('toggle', () => {
-          if (card.open && article.querySelector('.execution-result-response')) {
-            attachVisualAnswerAction(messageNode, rawMarkdown, options);
-          }
-        });
-      }
-      return;
-    }
-
-    const scope = visualContextKey(options);
-    const signature = fingerprint(rawMarkdown);
-    const cacheKey = scope + ':' + signature;
-    const mode = responseSection ? 'execution' : 'chat';
-    const actions = document.createElement('div');
-    actions.className = mode === 'execution'
-      ? 'visual-answer-actions visual-answer-actions-in-heading'
-      : 'visual-answer-actions';
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'visual-answer-launch';
-    button.textContent = mode === 'execution' ? '圖文版' : '◇ 圖文閱讀';
-    button.setAttribute('aria-expanded', 'false');
-    button.setAttribute('aria-label', '在此回覆下方展開圖文閱讀');
-    actions.appendChild(button);
-
-    const panel = document.createElement('section');
-    panel.className = 'visual-answer-inline';
-    panel.hidden = true;
-    panel.setAttribute('data-expanded', 'false');
-    panel.setAttribute('aria-hidden', 'true');
-    const panelId = 'visual-answer-' + Math.random().toString(36).slice(2, 10);
-    panel.id = panelId;
-    button.setAttribute('aria-controls', panelId);
-    panel.innerHTML = [
-      '<div class="visual-answer-inline-shell">',
-      '<div class="visual-answer-inline-toolbar">',
-      '<span class="visual-answer-inline-title">圖文閱讀</span>',
-      '<button type="button" class="visual-answer-inline-copy">複製原文</button>',
-      '<button type="button" class="visual-answer-inline-fullscreen" disabled>全螢幕</button>',
-      '</div>',
-      '<div class="visual-answer-inline-body">',
-      '<div class="visual-answer-inline-status" role="status" aria-live="polite">正在整理閱讀版面…</div>',
-      '<iframe title="AI 視覺化閱讀內容" sandbox="" referrerpolicy="no-referrer" hidden></iframe>',
-      '</div></div>'
-    ].join('');
-
-    if (responseSection) {
-      const heading = responseSection.querySelector('.execution-result-section-title');
-      if (heading) {
-        heading.className += ' visual-answer-section-heading';
-        heading.appendChild(actions);
-      } else {
-        responseSection.insertBefore(actions, responseSection.firstChild);
-      }
-      responseSection.appendChild(panel);
-    } else {
-      article.appendChild(actions);
-      article.appendChild(panel);
-    }
-
-    const view = {
-      markdown: rawMarkdown,
-      scope,
-      signature,
-      cacheKey,
-      mode,
-      responseSection,
-      button,
-      panel,
-      frame: panel.querySelector('iframe'),
-      status: panel.querySelector('.visual-answer-inline-status'),
-      controller: null,
-      collapseTimer: null,
-      fullscreenButton: panel.querySelector('.visual-answer-inline-fullscreen')
+    const decorate = () => {
+      const response = card ? article.querySelector('.execution-result-response') : article;
+      if (!response) return false;
+      enhanceContent(response.querySelector('.msg-content'), rawMarkdown);
+      return true;
     };
-    button.addEventListener('click', () => showInline(view));
-    panel.querySelector('.visual-answer-inline-copy').addEventListener('click', event => {
-      copyOriginal(event.currentTarget, rawMarkdown);
-    });
-    view.fullscreenButton.addEventListener('click', () => showFullscreen(view, view.fullscreenButton));
 
-    // Role-scoped history can restore its own selected reply without asking AI again.
-    if (openByConversation.get(scope) === signature) {
-      showInline(view, { restore: true });
-    }
+    if (decorate() || !card || card.dataset.visualWaiting === 'true') return;
+    // Historical task cards hydrate only when expanded; reuse their sole reply.
+    card.dataset.visualWaiting = 'true';
+    card.addEventListener('toggle', () => {
+      if (card.open) decorate();
+    });
   }
 
   window.attachVisualAnswerAction = attachVisualAnswerAction;
   window.visualAnswerEligible = visualAnswerEligible;
+  window.visualAnswerSectionKind = sectionKind;
 })();
