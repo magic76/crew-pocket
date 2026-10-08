@@ -73,7 +73,7 @@ async function tick() {
 
 (async function run() {
   const document = { body: new FakeElement('body'), createElement: tag => new FakeElement(tag) };
-  const window = { getCurrentRoleId: () => 'roleA', addEventListener() {} };
+  const window = { getCurrentRoleId: () => 'roleA', addEventListener() {}, matchMedia: () => ({ matches: false }) };
   const source = fs.readFileSync(path.join(__dirname, '..', 'public/js/visual-answer.js'), 'utf8');
   const clipboard = [];
   let renders = 0;
@@ -86,7 +86,7 @@ async function tick() {
       assert.equal(JSON.parse(options.body).content.length > 200, true);
       return { ok: true, json: async () => ({ success: true, html: '<html><body>Rendered</body></html>' }) };
     },
-    AbortController, setTimeout, console
+    AbortController, setTimeout, clearTimeout, console
   });
 
   const markdownA = '## Architecture\n\n' + 'Describe the architecture and relationships. '.repeat(21);
@@ -129,16 +129,20 @@ async function tick() {
   assert.equal(panelA.hidden, false);
 
   launchA.click();
-  assert.equal(panelA.hidden, true, 'click collapses inline');
+  assert.equal(panelA.hidden, false, 'collapse animates before hiding the panel');
+  assert.equal(panelA.getAttribute('data-expanded'), 'false', 'collapse begins a CSS height transition');
   launchA.click();
   await tick();
   assert.equal(renders, 1, 'second expand uses cached HTML');
+  assert.equal(panelA.getAttribute('data-expanded'), 'true', 'rapid reopen cancels the collapse');
+  await new Promise(resolve => setTimeout(resolve, 320));
+  assert.equal(panelA.hidden, false, 'stale collapse timeout must not hide a reopened panel');
 
   const a2 = article();
   window.attachVisualAnswerAction(a2.message, markdownB, optionsA);
   a2.content.querySelector('.visual-answer-launch').click();
   await tick();
-  assert.equal(panelA.hidden, true, 'one expanded answer per conversation');
+  assert.equal(panelA.getAttribute('data-expanded'), 'false', 'previous reader collapses when another opens');
   assert.equal(a2.content.querySelector('.visual-answer-inline').hidden, false);
   assert.equal(renders, 2);
 
@@ -167,9 +171,64 @@ async function tick() {
   await tick();
   assert.equal(clipboard[0], markdownA, 'original Markdown is copied, not HTML');
 
+  // Execution cards should show one reply surface with a text/visual switch
+  // inside the expanded details, not another viewer below the whole card.
+  const execution = article();
+  const executionCard = new FakeElement('details');
+  executionCard.className = 'execution-result-card';
+  const response = new FakeElement('section');
+  response.className = 'execution-result-response';
+  const responseHeading = new FakeElement('div');
+  responseHeading.className = 'execution-result-section-title';
+  const original = new FakeElement('div');
+  original.className = 'msg-content';
+  response.appendChild(responseHeading);
+  response.appendChild(original);
+  executionCard.appendChild(response);
+  execution.content.appendChild(executionCard);
+  window.attachVisualAnswerAction(execution.message, markdownB, {
+    roleId: 'roleA', provider: 'codex', conversationId: 'execution1'
+  });
+  assert.equal(execution.content.children.length, 1, 'no duplicate reader appended after result card');
+  const modeSwitch = responseHeading.querySelector('.visual-answer-launch');
+  assert.ok(modeSwitch, 'reading mode switch lives in the execution response heading');
+  assert.equal(response.querySelector('.visual-answer-inline').hidden, true);
+  modeSwitch.click();
+  await tick();
+  assert.equal(response.getAttribute('data-reading-mode'), 'visual');
+  assert.equal(response.querySelector('.visual-answer-inline').getAttribute('data-expanded'), 'true');
+  modeSwitch.click();
+  assert.equal(response.querySelector('.visual-answer-inline').getAttribute('data-expanded'), 'false');
+  await new Promise(resolve => setTimeout(resolve, 320));
+  assert.equal(response.getAttribute('data-reading-mode'), 'text', 'original response restores after collapse');
+
+  // Lazy history cards hydrate the execution response only when first opened.
+  const lazy = article();
+  const lazyCard = new FakeElement('details');
+  lazyCard.className = 'execution-result-card';
+  lazy.content.appendChild(lazyCard);
+  window.attachVisualAnswerAction(lazy.message, markdownA, {
+    roleId: 'roleA', provider: 'codex', conversationId: 'execution-lazy'
+  });
+  assert.equal(lazy.content.querySelector('.visual-answer-launch'), null);
+  const lazyResponse = new FakeElement('section');
+  lazyResponse.className = 'execution-result-response';
+  const lazyHeading = new FakeElement('div');
+  lazyHeading.className = 'execution-result-section-title';
+  lazyResponse.appendChild(lazyHeading);
+  lazyCard.appendChild(lazyResponse);
+  lazyCard.open = true;
+  for (const handler of lazyCard.handlers.toggle || []) handler();
+  assert.ok(lazyHeading.querySelector('.visual-answer-launch'),
+    'visual mode mounts after lazy execution details are hydrated');
+
   const css = fs.readFileSync(path.join(__dirname, '..', 'public/css/visual-answer.css'), 'utf8');
   assert.match(css, /\.visual-answer-inline\[hidden\]/);
   assert.match(source, /sandbox=""/);
+  assert.match(css, /grid-template-rows: 0fr/);
+  assert.match(css, /grid-template-rows: 1fr/);
+  assert.match(css, /prefers-reduced-motion/);
+  assert.match(css, /data-reading-mode="visual"/);
   console.log('visual-answer-inline regression tests passed');
 })().catch(error => {
   console.error(error);

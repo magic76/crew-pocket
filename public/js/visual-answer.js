@@ -5,6 +5,12 @@
 
   const MAX_SAVED_PAGES = 8;
   const MAX_SAVED_VIEWS = 24;
+  const COLLAPSE_MS = 280;
+  const motionDelay = () => window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches ? 0 : COLLAPSE_MS;
+  const viewExpanded = view => view.button.getAttribute('aria-expanded') === 'true';
+  const labelFor = (view, expanded) => view.mode === 'execution'
+    ? (expanded ? '返回文字' : '圖文版')
+    : (expanded ? '收合圖文' : '◇ 圖文閱讀');
   const pageCache = new Map();
   const openByConversation = new Map();
   let activeInline = null;
@@ -54,15 +60,30 @@
   }
 
   function collapseInline(view, { keepSelection = false } = {}) {
-    if (!view || view.panel.hidden) return;
-    view.panel.hidden = true;
+    if (!view || !viewExpanded(view)) return;
     view.button.setAttribute('aria-expanded', 'false');
-    view.button.textContent = '◇ 視覺化閱讀  ↓';
+    view.button.textContent = labelFor(view, false);
+    view.button.setAttribute('aria-label', view.mode === 'execution' ? '展開圖文閱讀' : '展開圖文閱讀');
+    view.panel.setAttribute('data-expanded', 'false');
+    view.panel.setAttribute('aria-hidden', 'true');
+    view.fullscreenButton.disabled = true;
     if (view.controller) {
       view.controller.abort();
       view.controller = null;
     }
-    clearFrame(view.frame);
+    if (view.collapseTimer) clearTimeout(view.collapseTimer);
+    const finish = () => {
+      view.collapseTimer = null;
+      if (viewExpanded(view)) return;
+      view.panel.hidden = true;
+      clearFrame(view.frame);
+      view.frame.hidden = true;
+      if (view.responseSection) view.responseSection.setAttribute('data-reading-mode', 'text');
+    };
+    const duration = motionDelay();
+    if (duration > 0 && view.panel.isConnected) view.collapseTimer = setTimeout(finish, duration);
+    else finish();
+
     if (!keepSelection && openByConversation.get(view.scope) === view.signature) {
       openByConversation.delete(view.scope);
     }
@@ -70,7 +91,7 @@
   }
 
   function showInline(view, { restore = false } = {}) {
-    if (!view.panel.hidden) {
+    if (viewExpanded(view)) {
       if (!restore) collapseInline(view);
       return;
     }
@@ -80,11 +101,21 @@
       collapseInline(activeInline, { keepSelection: activeInline.scope !== view.scope });
     }
 
+    if (view.collapseTimer) {
+      clearTimeout(view.collapseTimer);
+      view.collapseTimer = null;
+    }
     activeInline = view;
     remember(openByConversation, view.scope, view.signature, MAX_SAVED_VIEWS);
     view.panel.hidden = false;
+    view.panel.setAttribute('aria-hidden', 'false');
+    // Flush the collapsed layout before expanding, so WebView animates grid height.
+    view.panel.getBoundingClientRect?.();
+    view.panel.setAttribute('data-expanded', 'true');
+    if (view.responseSection) view.responseSection.setAttribute('data-reading-mode', 'visual');
     view.button.setAttribute('aria-expanded', 'true');
-    view.button.textContent = '◇ 收合視覺化  ↑';
+    view.button.textContent = labelFor(view, true);
+    view.button.setAttribute('aria-label', view.mode === 'execution' ? '返回文字回覆' : '收合圖文閱讀');
     view.status.hidden = false;
     view.status.textContent = '正在整理閱讀版面…';
     view.frame.hidden = true;
@@ -199,61 +230,95 @@
     const article = messageNode.querySelector('.assistant-article');
     if (!article || article.querySelector('.visual-answer-launch')) return;
 
+    const card = article.querySelector('.execution-result-card');
+    const responseSection = card ? article.querySelector('.execution-result-response') : null;
+    if (card && !responseSection) {
+      // History cards hydrate lazily when opened. The card's existing toggle
+      // listener fills the body first, then we mount the reading control.
+      if (!card.getAttribute('data-visual-waiting')) {
+        card.setAttribute('data-visual-waiting', 'true');
+        card.addEventListener('toggle', () => {
+          if (card.open && article.querySelector('.execution-result-response')) {
+            attachVisualAnswerAction(messageNode, rawMarkdown, options);
+          }
+        });
+      }
+      return;
+    }
+
     const scope = visualContextKey(options);
     const signature = fingerprint(rawMarkdown);
     const cacheKey = scope + ':' + signature;
+    const mode = responseSection ? 'execution' : 'chat';
     const actions = document.createElement('div');
-    actions.className = 'visual-answer-actions';
+    actions.className = mode === 'execution'
+      ? 'visual-answer-actions visual-answer-actions-in-heading'
+      : 'visual-answer-actions';
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'visual-answer-launch';
-    button.textContent = '◇ 視覺化閱讀  ↓';
+    button.textContent = mode === 'execution' ? '圖文版' : '◇ 圖文閱讀';
     button.setAttribute('aria-expanded', 'false');
-    button.setAttribute('aria-label', '在回覆下方展開視覺化閱讀');
+    button.setAttribute('aria-label', '在此回覆下方展開圖文閱讀');
     actions.appendChild(button);
 
     const panel = document.createElement('section');
     panel.className = 'visual-answer-inline';
     panel.hidden = true;
+    panel.setAttribute('data-expanded', 'false');
+    panel.setAttribute('aria-hidden', 'true');
     const panelId = 'visual-answer-' + Math.random().toString(36).slice(2, 10);
     panel.id = panelId;
     button.setAttribute('aria-controls', panelId);
     panel.innerHTML = [
+      '<div class="visual-answer-inline-shell">',
       '<div class="visual-answer-inline-toolbar">',
-      '<span class="visual-answer-inline-title">閱讀版面</span>',
+      '<span class="visual-answer-inline-title">圖文閱讀</span>',
       '<button type="button" class="visual-answer-inline-copy">複製原文</button>',
       '<button type="button" class="visual-answer-inline-fullscreen" disabled>全螢幕</button>',
       '</div>',
       '<div class="visual-answer-inline-body">',
       '<div class="visual-answer-inline-status" role="status" aria-live="polite">正在整理閱讀版面…</div>',
       '<iframe title="AI 視覺化閱讀內容" sandbox="" referrerpolicy="no-referrer" hidden></iframe>',
-      '</div>'
+      '</div></div>'
     ].join('');
 
-    article.appendChild(actions);
-    article.appendChild(panel);
+    if (responseSection) {
+      const heading = responseSection.querySelector('.execution-result-section-title');
+      if (heading) {
+        heading.className += ' visual-answer-section-heading';
+        heading.appendChild(actions);
+      } else {
+        responseSection.insertBefore(actions, responseSection.firstChild);
+      }
+      responseSection.appendChild(panel);
+    } else {
+      article.appendChild(actions);
+      article.appendChild(panel);
+    }
+
     const view = {
       markdown: rawMarkdown,
       scope,
       signature,
       cacheKey,
+      mode,
+      responseSection,
       button,
       panel,
       frame: panel.querySelector('iframe'),
       status: panel.querySelector('.visual-answer-inline-status'),
       controller: null,
+      collapseTimer: null,
       fullscreenButton: panel.querySelector('.visual-answer-inline-fullscreen')
     };
-    const fullscreenButton = panel.querySelector('.visual-answer-inline-fullscreen');
-
     button.addEventListener('click', () => showInline(view));
     panel.querySelector('.visual-answer-inline-copy').addEventListener('click', event => {
       copyOriginal(event.currentTarget, rawMarkdown);
     });
-    fullscreenButton.addEventListener('click', () => showFullscreen(view, fullscreenButton));
+    view.fullscreenButton.addEventListener('click', () => showFullscreen(view, view.fullscreenButton));
 
-    // Each Role's last open response can be restored after navigation rebuilds
-    // message DOM. No page is produced unless that exact answer was opened.
+    // Role-scoped history can restore its own selected reply without asking AI again.
     if (openByConversation.get(scope) === signature) {
       showInline(view, { restore: true });
     }

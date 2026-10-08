@@ -9,12 +9,14 @@ stored transcript text, project/workspace context, provider prompts, or executio
 - During streaming: standard Markdown UI, unchanged.
 - After successful completion: long, structured responses get a small
   "◇ 視覺化閱讀" action. Short replies do not.
-- Tapping expands a mobile-friendly HTML reader **beneath the same message**.
-  Tapping again collapses it; the original Markdown stays in place.
+- Tapping an ordinary chat response expands a mobile-friendly HTML reader **beneath the same message**.
+  Tapping again smoothly collapses it; the original Markdown stays in place.
 - Inside the expanded reader, **Full screen** is an optional secondary action.
   Back returns to the expanded message at the same conversation position.
 - Execution result cards retain their original collapsed status / changed file /
-  verification views; the visual reader is a separate action.
+  verification views. After opening a result card, its **回覆內容** section
+  contains a single **文字 / 圖文** switch; switching to visual temporarily hides
+  its Markdown response instead of displaying a second copy below the card.
 - Only one answer remains expanded in the visible conversation by default.
   Each Role/Provider/Conversation has an independent in-memory selection: after
   switching Roles and reloading that conversation, its last expanded answer
@@ -42,6 +44,10 @@ The result is rendered in a fixed-height, independently scrollable inline
 iframe with **no sandbox permissions**, plus a restrictive Content Security
 Policy. No scripts, forms or network access are needed for the static document.
 The outer chat supplies Expand/Collapse, Copy and Full screen controls.
+The panel uses a 280ms height/opacity transition with a rotating chevron; a
+reduced-motion preference removes the transition. Rapid reopen cancels the
+pending hide timer, preventing intermittent blank readers. Historical result
+cards attach the visual-mode control after lazy details hydration.
 
 The renderer uses Node.js >=20. It runs only after a user taps the action,
 with an 8-second timeout, 48,000-character source limit, at most two
@@ -65,7 +71,8 @@ does not invent a diagram from ordinary Markdown bullet points.
 - node --check public/js/chat.js
 - node --check server.js
 - node test/visual-answer.test.js
-- node test/visual-answer-inline.test.js
+- node test/visual-answer-inline.test.js (animated collapse, rapid reopen,
+  task response mode switching, and lazy task history)
 - git diff --check origin/main...HEAD
 
 On Android, confirm: different Role history, completion/failure, switching
