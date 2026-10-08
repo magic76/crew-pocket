@@ -1583,49 +1583,28 @@ async function handleChat(req, res) {
     res.writeHead(400, { 'Content-Type': 'application/json' });
     return res.end(JSON.stringify({ error: 'Prompt or image is required' }));
   }
-  // Role owns long-lived identity. Project/workspace and legacy Crew Member
-  // remain compatibility bridges so provider transcripts stay untouched.
+  // Role owns long-lived identity. Project owns workspace; Conversation owns short-lived execution context.
   const workspaceStartedAt = Date.now();
   let workspace;
   let savedSettings = null;
-  let crewMember = null;
   let role = null;
   let project = null;
   let projectId = null;
   try {
-    const requestedCrewMemberId = String(body.crew_member_id || body.crewMemberId || '').trim();
-    if (conversation_id) {
-      savedSettings = await getConversationSettings(providerId, conversation_id);
-      if (savedSettings?.crewMemberId && requestedCrewMemberId && savedSettings.crewMemberId !== requestedCrewMemberId) {
-        const error = new Error('這個 conversation 已屬於另一個 Crew Member；請切換 Member 後建立新 conversation。');
-        error.statusCode = 409;
-        throw error;
-      }
-    }
+    if (conversation_id) savedSettings = await getConversationSettings(providerId, conversation_id);
 
-    const boundMemberId = savedSettings?.crewMemberId || requestedCrewMemberId;
-    if (boundMemberId) crewMember = await getCrewMember(boundMemberId);
-    if (requestedCrewMemberId && !crewMember) throw new Error('Crew Member 不存在或專案工作區已不可用');
-
-    const identity = await resolveConversationRole({ body, previous: savedSettings, crewMember });
+    const identity = await resolveConversationRole({ body, previous: savedSettings });
     role = identity.role;
     project = identity.project;
     projectId = identity.projectId;
-    crewMember = identity.crewMember;
+    workspace = await resolveWorkspace(identity.workspace || savedSettings?.workspace || body.workspace || RUNTIME_HOME);
 
-    workspace = await resolveWorkspace(crewMember?.workspace || savedSettings?.workspace || body.workspace);
-
-    if (conversation_id && (
-      !savedSettings?.workspace ||
-      !savedSettings?.roleId ||
-      (crewMember && (!savedSettings?.crewMemberId || savedSettings.workspace !== workspace))
-    )) {
+    if (conversation_id && (!savedSettings?.workspace || !savedSettings?.roleId || savedSettings.workspace !== workspace)) {
       saveConversationSettings(providerId, conversation_id, {
-        model: model || savedSettings?.model || crewMember?.model || getDefaultModel(providerId),
-        effort: effort || savedSettings?.effort || crewMember?.effort || 'low',
+        model: model || savedSettings?.model || getDefaultModel(providerId),
+        effort: effort || savedSettings?.effort || 'low',
         workspace,
         roleId: role.id,
-        ...(crewMember ? { crewMemberId: crewMember.id } : {}),
         role: body.role || savedSettings?.role || 'general'
       }).catch(() => {});
     }
@@ -1646,7 +1625,7 @@ async function handleChat(req, res) {
   }
   const pendingCrewMessageIds = pendingCrewMessages.map(message => message.id);
 
-  const effectiveModel = model || savedSettings?.model || crewMember?.model || getDefaultModel(providerId);
+  const effectiveModel = model || savedSettings?.model || getDefaultModel(providerId);
   const {
     routedExecutionMode,
     executionSource,
@@ -1709,20 +1688,7 @@ async function handleChat(req, res) {
       console.warn('[Memory Context] Build failed:', error.message);
     }
 
-    const memberGuide = buildCrewMemberGuide(crewMember);
     const capabilityGuide = buildCapabilityGuide(finalPrompt);
-    if (memberGuide) {
-      assembledContextContributions.push(contributionFromText({
-        id: 'crew-member-guide',
-        type: ContextSourceType.SYSTEM,
-        text: memberGuide,
-        label: 'Crew member guide',
-        priority: ContextPriority.HIGH,
-        compactable: false,
-        pinned: true,
-        sourceRef: crewMember?.id ? `crew-member:${crewMember.id}` : undefined
-      }));
-    }
     if (capabilityGuide) {
       assembledContextContributions.push(contributionFromText({
         id: 'capability-guide',
@@ -1736,7 +1702,7 @@ async function handleChat(req, res) {
       }));
     }
 
-    finalPrompt = `${roleMemoryContext ? `${roleMemoryContext}\n` : ''}${memberGuide ? `${memberGuide}\n` : ''}${capabilityGuide}\n\n<USER_REQUEST>${finalPrompt}</USER_REQUEST>`;
+    finalPrompt = `${roleMemoryContext ? `${roleMemoryContext}\n` : ''}${capabilityGuide}\n\n<USER_REQUEST>${finalPrompt}</USER_REQUEST>`;
   } else if (contextSnapshot?.reretrieveMemoryOnNextTurn) {
     // Safe compaction may remove recalled memory from active context. Refresh it
     // once on the next real task instead of permanently pinning long-term memory.
@@ -2008,11 +1974,10 @@ async function handleChat(req, res) {
           // as well as on manual selector changes so new conversations are
           // immediately bound to their first model.
           saveConversationSettings(providerId, event.conversationId, {
-            model: event.model || effectiveModel || model || savedSettings?.model || crewMember?.model || getDefaultModel(providerId),
-            effort: event.effort || effort || savedSettings?.effort || crewMember?.effort || 'low',
+            model: event.model || effectiveModel || model || savedSettings?.model || getDefaultModel(providerId),
+            effort: event.effort || effort || savedSettings?.effort || 'low',
             workspace,
             roleId: role?.id || savedSettings?.roleId || DEFAULT_ROLE_ID,
-            ...(crewMember ? { crewMemberId: crewMember.id } : savedSettings?.crewMemberId ? { crewMemberId: savedSettings.crewMemberId } : {}),
             role: body.role || savedSettings?.role || 'general',
             ...(executionPolicy?.mode ? { executionMode: executionPolicy.mode } : {})
           }).then(settings => activateRoleConversation({
@@ -2022,7 +1987,8 @@ async function handleChat(req, res) {
             model: settings.model,
             effort: settings.effort,
             workspace: settings.workspace || workspace || null
-          })).catch(err => console.warn('[Conversation Settings] Save/activate failed:', err.message));
+          })).then(() => broadcastCrewStatusEvent('turn-start', role?.id || null))
+            .catch(err => console.warn('[Conversation Settings] Save/activate failed:', err.message));
           saveContextSnapshot(providerId, event.conversationId, {
             contributions: assembledContextContributions,
             reretrieveMemoryOnNextTurn: memoryRefreshConsumed
@@ -2039,8 +2005,7 @@ async function handleChat(req, res) {
             execution_source: executionPolicy?.source || null,
             role_id: role?.id || savedSettings?.roleId || DEFAULT_ROLE_ID,
             role_name: role?.name || null,
-            crew_member_id: crewMember?.id || savedSettings?.crewMemberId || null,
-            project_id: projectId || crewMember?.project?.id || null,
+            project_id: projectId || null,
             execution_intent: approvedExecutionIntent,
             intent_review: intentReview
           });
@@ -2084,12 +2049,14 @@ async function handleChat(req, res) {
           lastContextStats = event.stats || null;
           sendEvent('context', event.stats);
         } else if (event.type === 'error') {
+          broadcastCrewStatusEvent('turn-error', role?.id || null);
           finish({ error: event.message, provider: providerId, conversation_id });
           if (role?.id) {
             setImmediate(() => crewAutoResponder.drain(role.id)
               .catch(error => console.warn('[Crew Messages] Queue drain failed:', error.message)));
           }
         } else if (event.type === 'turn_completed') {
+          broadcastCrewStatusEvent('turn-complete', role?.id || null);
           if (pendingCrewMessageIds.length && role?.id) {
             markCrewMessagesDelivered(role.id, pendingCrewMessageIds)
               .catch(error => console.warn('[Crew Messages] Mark delivered failed:', error.message));
@@ -2459,13 +2426,14 @@ async function handleCrewHome(req, res) {
       getConversationSettings,
       getCrewInbox,
       getCrewMessageActivity,
-      getProvider
+      getProvider,
+      listRoleQueuedMessages
     });
     const roles = Array.isArray(status.roles) ? status.roles : [];
     const counts = {
       working: roles.filter(role => role.state === 'working').length,
       waiting: roles.filter(role => role.state === 'waiting').length,
-      unread: roles.reduce((sum, role) => sum + Number(role.unreadReplyCount || 0), 0)
+      attention: roles.reduce((sum, role) => sum + Number(role.attentionCount || 0), 0)
     };
     const recentRoles = roles
       .filter(role => role.runtime || role.recentMessage || role.queuedRequestCount || role.unreadReplyCount)
@@ -2479,8 +2447,11 @@ async function handleCrewHome(req, res) {
         providerId: role.runtime?.providerId || null,
         conversationId: role.runtime?.conversationId || null,
         conversationTitle: role.conversationTitle || null,
+        currentWork: role.currentWork || null,
+        queuedMessageCount: Number(role.queuedMessageCount || 0),
         queuedRequestCount: Number(role.queuedRequestCount || 0),
         unreadReplyCount: Number(role.unreadReplyCount || 0),
+        attentionCount: Number(role.attentionCount || 0),
         lastActivityAt: Number(role.lastActivityAt || 0),
         recentMessage: role.recentMessage || null
       }));
@@ -2672,10 +2643,16 @@ const server = http.createServer(async (req, res) => {
     return handleCodexWarmup(req, res);
   } else if (pathname === '/api/crew-members' && (req.method === 'GET' || req.method === 'POST')) {
     return handleCrewMembers(req, res);
+  } else if (pathname === '/api/projects' && req.method === 'GET') {
+    return handleProjects(res);
   } else if (pathname === '/api/roles' && ['GET', 'POST', 'DELETE'].includes(req.method)) {
     return handleRoles(req, res, parsedUrl);
   } else if (pathname === '/api/crew-status' && req.method === 'GET') {
     return handleCrewStatus(res);
+  } else if (pathname === '/api/crew-status/events' && req.method === 'GET') {
+    return handleCrewStatusEvents(req, res);
+  } else if (pathname === '/api/role-queue' && ['GET', 'POST'].includes(req.method)) {
+    return handleRoleQueue(req, res, parsedUrl);
   } else if (pathname === '/api/role-runtime' && req.method === 'POST') {
     return handleRoleRuntime(req, res);
   } else if (pathname === '/api/crew-tool' && req.method === 'POST') {
