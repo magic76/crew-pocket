@@ -1650,7 +1650,12 @@ function appendMessage(role, content, timestamp, tools = [], thinking = '', isBt
   prepareDeferredImages(msgDiv);
 
   if (!isUser && !isBtw && typeof attachVisualAnswerAction === 'function') {
-    attachVisualAnswerAction(msgDiv, content);
+    attachVisualAnswerAction(msgDiv, content, {
+      roleId: typeof currentStreamRoleId === 'function' ? currentStreamRoleId() : null,
+      provider: currentProvider,
+      conversationId: currentConversationId,
+      failed: shouldCollapseExecution && executionResultState(turnResult) !== 'completed'
+    });
   }
 
   if (!renderOptions.deferEnhancement && typeof enhanceCodeBlocks === 'function') enhanceCodeBlocks(msgDiv);
@@ -3335,7 +3340,11 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
     }
 
     if (!incomplete && !isBtwQuery && typeof attachVisualAnswerAction === 'function') {
-      attachVisualAnswerAction(assistantMsgDiv, accumulatedText);
+      attachVisualAnswerAction(assistantMsgDiv, accumulatedText, {
+        roleId: streamRoleId,
+        provider: streamProvider,
+        conversationId: targetDoneConvId || streamConversationId || null
+      });
     }
 
     if (typeof enhanceCodeBlocks === 'function') enhanceCodeBlocks(assistantMsgDiv);
