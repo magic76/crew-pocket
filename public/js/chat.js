@@ -490,8 +490,9 @@ function executionModeLabel(mode) {
 }
 
 function buildExecutionResultHeadline(turnResult = null, tools = []) {
-  const failed = turnResult?.status === 'failed';
-  if (failed) return '執行未完成';
+  const state = String(turnResult?.status || '').toLowerCase();
+  if (['failed', 'error'].includes(state)) return '執行未完成';
+  if (['interrupted', 'cancelled', 'canceled', 'aborted'].includes(state)) return '執行已中斷';
 
   const changedFiles = Array.isArray(turnResult?.changed_files) ? turnResult.changed_files.filter(Boolean) : [];
   if (changedFiles.length === 1) return `完成修改 · ${executionFileName(changedFiles[0])}`;
@@ -561,7 +562,7 @@ function buildExecutionResultBodyHtml(content, tools = [], thinking = '', turnRe
 
   return `
     <div class="execution-result-overview">
-      <span>${turnResult?.status === 'failed' ? '未完成' : '已完成'}</span>
+      <span>${['failed', 'error'].includes(String(turnResult?.status || '').toLowerCase()) ? '未完成' : ['interrupted', 'cancelled', 'canceled', 'aborted'].includes(String(turnResult?.status || '').toLowerCase()) ? '已中斷' : '已完成'}</span>
       ${summaryBits.length ? `<span>· ${escapeHtml(summaryBits.join(' · '))}</span>` : ''}
       ${structuredCommit ? `<span class="font-mono">· ${escapeHtml(String(structuredCommit).slice(0, 12))}</span>` : ''}
     </div>
@@ -576,7 +577,7 @@ function buildExecutionResultBodyHtml(content, tools = [], thinking = '', turnRe
 }
 
 function buildExecutionResultCardHtml(content, tools = [], thinking = '', turnResult = null, { lazy = false } = {}) {
-  const failed = turnResult?.status === 'failed';
+  const failed = ['failed', 'error', 'interrupted', 'cancelled', 'canceled', 'aborted'].includes(String(turnResult?.status || '').toLowerCase());
   const duration = formatExecutionDuration(turnResult?.duration_ms);
   const structuredCommit = turnResult?.commit && typeof turnResult.commit === 'object'
     ? (turnResult.commit.short_hash || turnResult.commit.hash || '')
@@ -3168,8 +3169,11 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
     }
 
     clearInterval(liveTimerInterval);
-    markProgressDone('phase:analysis');
-    markProgressDone('phase:writing');
+    const incomplete = !doneData || Boolean(doneData.error || doneData.completionState === 'interrupted' || ['failed', 'error', 'interrupted', 'cancelled', 'canceled', 'aborted'].includes(String(doneData.turn_result?.status || '').toLowerCase()));
+    if (!incomplete) {
+      markProgressDone('phase:analysis');
+      markProgressDone('phase:writing');
+    }
 
     const activityElapsedSec = ((performance.now() - startTs) / 1000).toFixed(1);
     if (hadThinking && !progressEntries.has('phase:analysis')) {
@@ -3180,15 +3184,15 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
     const activityDot = liveStatusElem.querySelector('.activity-dot');
     if (activityDot) activityDot.classList.remove('animate-pulse');
     if (statusTextElem) {
-      statusTextElem.textContent = doneData?.error
-        ? '⚠️ 執行已停止'
+      statusTextElem.textContent = incomplete
+        ? (doneData?.completionState === 'interrupted' ? '執行已中斷' : '執行未完成')
         : liveTools.length > 0
-        ? `✓ 完成 · ${progressOrder.length} steps`
-        : '✓ 完成';
+        ? `✓ 已完成 · ${liveTools.length} 項操作`
+        : '✓ 已完成';
       if (liveTimerElem) liveTimerElem.textContent = `${activityElapsedSec}s`;
     }
     if (responseTimeElem) responseTimeElem.textContent = `🕒 回覆時間 ${formatMessageTimestamp()}`;
-    if (!doneData?.error && liveTools.length === 0) {
+    if (!incomplete && liveTools.length === 0) {
       liveStatusElem.classList.add('execution-heartbeat-only');
       window.setTimeout(() => {
         if (!liveStatusElem?.isConnected) return;
@@ -3215,7 +3219,7 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
       accumulatedText = doneData.response;
       contentElem.innerHTML = formatMessageContent(accumulatedText);
     } else if (!accumulatedText || !String(accumulatedText).trim()) {
-      contentElem.innerHTML = buildEmptyTurnFallbackHtml();
+      contentElem.innerHTML = incomplete ? '<p class="text-slate-400 text-xs">沒有可顯示的完整回覆。</p>' : buildEmptyTurnFallbackHtml();
     } else {
       contentElem.innerHTML = formatMessageContent(accumulatedText);
     }
@@ -3494,11 +3498,12 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
         }
       }
     }
+    if (!turnFinalized) finalizeTurn({ completionState: 'interrupted' });
   } catch (err) {
     if (err.name === 'AbortError') {
       abortedHandled = true;
       stickyExecution?.dispose();
-      finalizeTurn();
+      finalizeTurn({ completionState: 'interrupted' });
       const abortBadge = document.createElement('div');
       abortBadge.className = 'mt-2 pt-1.5 border-t border-slate-800 text-[11px] text-amber-400 font-mono flex items-center gap-1';
       abortBadge.innerHTML = `<svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg><span>[已手動中斷生成]</span>`;
@@ -3549,7 +3554,7 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
                     `;
                     setTimeout(() => recoveryBadge.remove(), 4000);
                     if (typeof enhanceCodeBlocks === 'function') enhanceCodeBlocks(assistantMsgDiv);
-                    finalizeTurn();
+                    finalizeTurn({ completionState: 'recovered' });
                     return;
                   }
                 }
