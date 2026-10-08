@@ -85,6 +85,7 @@ const { prepareTurnExecution } = require('./lib/runtime/turn-orchestrator');
 const { normalizeExecutionIntent } = require('./lib/execution-intent');
 const { getDefaultModel } = require('./lib/model-runtime');
 const { buildTurnResult } = require('./lib/turn-result');
+const { saveExecutionFeedback, enrichExecutionHistory } = require('./lib/execution-feedback');
 
 
 async function handleStorageReport(res) {
@@ -797,7 +798,10 @@ async function handleProviderHistory(parsedUrl, res) {
         workspace: settings.workspace || null
       }).catch(error => console.warn('[Role Runtime] History activation failed:', error.message));
     }
-    const publicHistory = { ...bundle.history };
+    const publicHistory = await enrichExecutionHistory(providerId, conversationId, bundle.history).catch(error => {
+      console.warn('[Execution Feedback] Read failed:', error.message);
+      return { ...bundle.history };
+    });
     delete publicHistory.active_messages;
 
     res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -1784,6 +1788,8 @@ async function handleChat(req, res) {
     let lastContextStats = null;
     let policyWarned = false;
     let activeConversationId = conversation_id || null;
+    let streamedResponse = '';
+    const feedbackTools = new Map();
 
     const getToolMetrics = () => {
       let executions = 0;
@@ -1850,7 +1856,18 @@ async function handleChat(req, res) {
       run.notified = true;
       toolRuns.set(key, run);
       toolEventCount += 1;
-      collectChangedFiles(event, changedFiles);
+      const info = event.info || {};
+      const effectiveState = info.error || (Number.isInteger(info.exitCode) && info.exitCode !== 0) ? 'failed' : state;
+      feedbackTools.set(key, {
+        tool_group_id: key,
+        tool_name: event.name || event.tool_name,
+        state: effectiveState,
+        tool_info: { parameters: info.parameters, exitCode: info.exitCode, error: info.error },
+        duration_seconds: event.durationSeconds,
+        attempts: run.attempts,
+        poll_count: run.pollCount
+      });
+      if (['completed', 'complete', 'success', 'succeeded'].includes(effectiveState)) collectChangedFiles(event, changedFiles);
       return {
         key,
         attempts: run.attempts,
@@ -1885,8 +1902,15 @@ async function handleChat(req, res) {
         turn_timing: turnTiming
       };
       logToolMetrics(finalPayload.error ? 'error' : 'completed');
-      sendEvent('done', finalPayload);
-      res.end();
+      saveExecutionFeedback(providerId, finalPayload.conversation_id || activeConversationId, {
+        response: finalPayload.response || streamedResponse,
+        startedAt: requestStartedAt,
+        turnResult,
+        tools: [...feedbackTools.values()]
+      }).catch(error => console.warn('[Execution Feedback] Save failed:', error.message)).finally(() => {
+        sendEvent('done', finalPayload);
+        res.end();
+      });
     };
 
     const enforceExecutionPolicy = () => {
@@ -1948,6 +1972,13 @@ async function handleChat(req, res) {
       if (!ended && !res.writableEnded) {
         ended = true;
         abortTurn();
+        saveExecutionFeedback(providerId, activeConversationId, {
+          response: streamedResponse,
+          startedAt: requestStartedAt,
+          turnResult: buildTurnResult({ requestId, executionPolicy, toolMetrics: getToolMetrics(), elapsedMs: elapsed(), status: 'interrupted' }),
+          tools: [...feedbackTools.values()]
+        })
+          .catch(error => console.warn('[Execution Feedback] Interrupted save failed:', error.message));
         markOnce('to_done_ms');
         logToolMetrics('client_closed');
       }
@@ -2014,6 +2045,7 @@ async function handleChat(req, res) {
           // The browser already appends deltas locally. Sending the complete
           // response on every token makes one long answer O(n²) in SSE bytes
           // and JSON serialization work on the phone.
+          streamedResponse += event.delta || '';
           sendEvent('chunk', { delta: event.delta });
         } else if (event.type === 'reasoning_delta') {
           sendEvent('thought', { delta: event.delta });

@@ -1029,3 +1029,22 @@ footer {
     font-size: 10.5px !important;
   }
 }
+
+.execution-result-status.is-unknown {
+  color: #94a3b8;
+  background: rgba(148, 163, 184, 0.08);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+}
+
+.execution-result-body > details > summary {
+  cursor: pointer;
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+}
+
+.live-execution-details.is-failed .execution-summary-main { color: #fbbf24; }
+.live-execution-details.is-failed .activity-dot { background: #fbbf24; }
+
+.execution-result-body > details > summary::after { content: '›'; margin-left: auto; }
+.execution-result-body > details[open] > summary::after { transform: rotate(90deg); }

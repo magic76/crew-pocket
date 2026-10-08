@@ -286,6 +286,8 @@ function getPassiveToolProgress(tool) {
 function toolProgressState(tool) {
   const state = getToolState(tool);
   if (['failed', 'error', 'cancelled', 'canceled', 'interrupted'].includes(state)) return 'failed';
+  const info = tool?.tool_info || tool?.info || {};
+  if (info.error || (Number.isInteger(info.exitCode) && info.exitCode !== 0)) return 'failed';
   if (isTerminalToolState(state)) return 'done';
   return 'running';
 }
@@ -438,7 +440,7 @@ function buildExecutionDetailsHtml(tools, thinking = '', { lazy = false } = {}) 
     <details class="agent-execution-details history-execution-details ${lazy ? 'lazy-execution' : ''}" data-step-count="${stepCount}">
       <summary class="execution-summary">
         <span class="execution-summary-main">
-          <span class="execution-status-icon text-emerald-400">✓</span>
+          <span class="execution-status-icon text-slate-400">•</span>
           <span>執行紀錄 · ${stepCount} 項</span>
         </span>
         <span class="execution-summary-side">
@@ -452,6 +454,7 @@ function buildExecutionDetailsHtml(tools, thinking = '', { lazy = false } = {}) 
 }
 
 function formatExecutionDuration(durationMs) {
+  if (durationMs === null || durationMs === undefined || durationMs === '') return '';
   const ms = Number(durationMs);
   if (!Number.isFinite(ms) || ms < 0) return '';
   const totalSeconds = Math.max(0, Math.round(ms / 1000));
@@ -490,33 +493,56 @@ function executionModeLabel(mode) {
 }
 
 function buildExecutionResultHeadline(turnResult = null, tools = []) {
-  const state = String(turnResult?.status || '').toLowerCase();
-  if (['failed', 'error'].includes(state)) return '執行未完成';
-  if (['interrupted', 'cancelled', 'canceled', 'aborted'].includes(state)) return '執行已中斷';
+  const state = executionResultState(turnResult);
+  if (state === 'failed') return '執行未完成';
+  if (state === 'interrupted') return '執行已中斷';
+  if (state === 'unknown') return '執行紀錄 · 終態未確認';
+  if (coalesceToolEvents(tools).some(tool => toolProgressState(tool) === 'failed')) return '回覆完成 · 有操作失敗';
 
   const changedFiles = Array.isArray(turnResult?.changed_files) ? turnResult.changed_files.filter(Boolean) : [];
   if (changedFiles.length === 1) return `完成修改 · ${executionFileName(changedFiles[0])}`;
-  if (changedFiles.length > 1) return `完成修改 · ${changedFiles.length} files`;
+  if (changedFiles.length > 1) return `完成修改 · ${changedFiles.length} 個檔案`;
 
   const mode = turnResult?.execution_mode;
-  if (mode) return `完成${executionModeLabel(mode)}`;
+  if (mode) return `回覆完成 · ${executionModeLabel(mode)}任務`;
 
   const grouped = coalesceToolEvents(tools);
   return grouped.length > 0 ? '完成執行' : '完成';
 }
 
 function executionResultPreviewText(content) {
-  return String(content || '').split(/\r?\n/)
-    .map(line => line.trim()
-      .replace(/^#{1,6}\s+/, '')
-      .replace(/^[-*+]\s+/, '')
-      .replace(/^>\s*/, '')
-      .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
-      .replace(/[*_]/g, '').trim())
-    .filter(line => line && !line.startsWith('```') && !/^(完整回覆|執行結果|執行紀錄|摘要)[:：]?$/.test(line))
-    .slice(0, 2)
-    .join(' · ');
+  let fence = null;
+  const lines = [];
+  for (const raw of String(content || '').split(/\r?\n/)) {
+    const line = raw.trim();
+    const marker = line.match(/^(`{3,}|~{3,})/);
+    if (marker) {
+      if (!fence) fence = marker[1];
+      else if (marker[1][0] === fence[0] && marker[1].length >= fence.length) fence = null;
+      continue;
+    }
+    if (fence || /^\s{4}|^\t/.test(raw) || /^#{1,6}\s|^<|^\|/.test(line)) continue;
+    const text = line
+      .replace(/^>\s*/, '').replace(/^(?:[-*+]\s+|\d+[.)]\s+)/, '')
+      .replace(/!?\[([^\]]+)\]\([^)]*\)/g, '$1')
+      .replace(/`+([^`]+)`+/g, '$1').replace(/(\*\*|__|~~)/g, '')
+      .replace(/\*([^*]+)\*/g, '$1')
+      .replace(/(^|\s)_([^_]+)_(?=$|[\s.,，。])/g, '$1$2').trim();
+    if (!text || /^(?:完整回覆|詳細回覆|執行結果|執行紀錄|摘要|Summary|Results?|Tests?|Validation|[-=]+)[:：]?$/i.test(text)) continue;
+    lines.push(text);
+    if (lines.length === 2) break;
+  }
+  return lines.join(' · ');
 }
+
+// Missing terminal metadata is unknown, even when a historical tool has output.
+function executionResultState(turnResult) {
+  const state = String(turnResult?.status || '').toLowerCase();
+  if (['failed', 'error'].includes(state)) return 'failed';
+  if (['interrupted', 'cancelled', 'canceled', 'aborted'].includes(state)) return 'interrupted';
+  return ['completed', 'complete', 'success', 'succeeded'].includes(state) ? 'completed' : 'unknown';
+}
+
 function buildExecutionResultBodyHtml(content, tools = [], thinking = '', turnResult = null) {
   const changedFiles = Array.isArray(turnResult?.changed_files) ? turnResult.changed_files.filter(Boolean) : [];
   const checks = Array.isArray(turnResult?.checks) ? turnResult.checks.filter(Boolean) : [];
@@ -552,19 +578,19 @@ function buildExecutionResultBodyHtml(content, tools = [], thinking = '', turnRe
   ` : '';
 
   const executionHtml = groupedTools.length ? `
-    <section class="execution-result-section">
-      <div class="execution-result-section-title">執行紀錄</div>
-      <div class="execution-detail-body execution-result-steps">${buildExecutionStepRowsHtml(groupedTools, Boolean(String(thinking || '').trim()))}</div>
-    </section>
+    <details class="execution-result-section">
+      <summary class="execution-result-section-title">執行紀錄 · ${groupedTools.length} 項</summary>
+      <div class="execution-detail-body execution-result-steps">${buildExecutionStepRowsHtml(groupedTools)}</div>
+    </details>
   ` : '';
 
   const responseHtml = !content || !String(content).trim()
-    ? buildEmptyTurnFallbackHtml()
+    ? (executionResultState(turnResult) === 'completed' ? buildEmptyTurnFallbackHtml() : '<p class="text-slate-400 text-xs">沒有可顯示的完整回覆。</p>')
     : formatMessageContent(content);
 
   return `
     <div class="execution-result-overview">
-      <span>${['failed', 'error'].includes(String(turnResult?.status || '').toLowerCase()) ? '未完成' : ['interrupted', 'cancelled', 'canceled', 'aborted'].includes(String(turnResult?.status || '').toLowerCase()) ? '已中斷' : '已完成'}</span>
+      <span>${({ completed: '已完成', failed: '未完成', interrupted: '已中斷', unknown: '終態未確認' })[executionResultState(turnResult)]}</span>
       ${summaryBits.length ? `<span>· ${escapeHtml(summaryBits.join(' · '))}</span>` : ''}
       ${structuredCommit ? `<span class="font-mono">· ${escapeHtml(String(structuredCommit).slice(0, 12))}</span>` : ''}
     </div>
@@ -579,7 +605,8 @@ function buildExecutionResultBodyHtml(content, tools = [], thinking = '', turnRe
 }
 
 function buildExecutionResultCardHtml(content, tools = [], thinking = '', turnResult = null, { lazy = false } = {}) {
-  const failed = ['failed', 'error', 'interrupted', 'cancelled', 'canceled', 'aborted'].includes(String(turnResult?.status || '').toLowerCase());
+  const state = executionResultState(turnResult);
+  const failed = state === 'failed' || state === 'interrupted';
   const duration = formatExecutionDuration(turnResult?.duration_ms);
   const structuredCommit = turnResult?.commit && typeof turnResult.commit === 'object'
     ? (turnResult.commit.short_hash || turnResult.commit.hash || '')
@@ -594,7 +621,7 @@ function buildExecutionResultCardHtml(content, tools = [], thinking = '', turnRe
     <details class="execution-result-card ${lazy ? 'lazy-result-card' : ''}" data-result-kind="execution">
       <summary class="execution-result-summary">
         <span class="execution-result-summary-main">
-          <span class="execution-result-status ${failed ? 'is-failed' : 'is-complete'}">${failed ? '!' : '✓'}</span>
+          <span class="execution-result-status ${failed ? 'is-failed' : state === 'completed' ? 'is-complete' : 'is-unknown'}">${failed ? '!' : state === 'completed' ? '✓' : '•'}</span>
           <span class="execution-result-title truncate">${escapeHtml(buildExecutionResultHeadline(turnResult, tools))}</span>
         </span>
         <span class="execution-result-summary-side">
@@ -3171,23 +3198,29 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
     }
 
     clearInterval(liveTimerInterval);
-    const incomplete = !doneData || Boolean(doneData.error || doneData.completionState === 'interrupted' || ['failed', 'error', 'interrupted', 'cancelled', 'canceled', 'aborted'].includes(String(doneData.turn_result?.status || '').toLowerCase()));
+    const interrupted = doneData?.completionState === 'interrupted' || executionResultState({ status: doneData?.status }) === 'interrupted' || executionResultState(doneData?.turn_result) === 'interrupted';
+    const terminalUnknown = Boolean((doneData?.status && executionResultState({ status: doneData.status }) === 'unknown') || (isStructuredExecutionResult(doneData?.turn_result) && executionResultState(doneData.turn_result) === 'unknown'));
+    const incomplete = !doneData || terminalUnknown || Boolean(doneData.error || interrupted || executionResultState(doneData.turn_result) === 'failed' || executionResultState({ status: doneData.status }) === 'failed');
     if (!incomplete) {
       markProgressDone('phase:analysis');
       markProgressDone('phase:writing');
+    } else {
+      for (const [key, entry] of progressEntries) {
+        if (entry.state === 'running') progressEntries.set(key, { ...entry, state: 'interrupted' });
+      }
     }
 
     const activityElapsedSec = ((performance.now() - startTs) / 1000).toFixed(1);
-    if (hadThinking && !progressEntries.has('phase:analysis')) {
+    if (!incomplete && hadThinking && !progressEntries.has('phase:analysis')) {
   upsertProgress('phase:analysis', { icon: '🧠', text: '分析需求與執行方案', state: 'done' });
     }
     renderProgressTimeline();
-    liveStatusElem.classList.add('is-complete');
+    liveStatusElem.classList.add(incomplete ? 'is-failed' : 'is-complete');
     const activityDot = liveStatusElem.querySelector('.activity-dot');
     if (activityDot) activityDot.classList.remove('animate-pulse');
     if (statusTextElem) {
       statusTextElem.textContent = incomplete
-        ? (doneData?.completionState === 'interrupted' ? '執行已中斷' : '執行未完成')
+        ? (terminalUnknown ? '終態未確認' : interrupted ? '執行已中斷' : '執行未完成')
         : liveTools.length > 0
         ? `✓ 已完成 · ${liveTools.length} 項操作`
         : '✓ 已完成';
@@ -3227,12 +3260,14 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
     }
 
     const structuredTurnResult = isStructuredExecutionResult(doneData?.turn_result)
-      ? doneData.turn_result
-      : null;
+      ? { ...doneData.turn_result, ...(incomplete ? { status: terminalUnknown ? 'unknown' : interrupted ? 'interrupted' : 'failed' } : {}) }
+      : (isExecutionHistoryTools(liveTools) ? { kind: 'execution', status: incomplete ? (terminalUnknown ? 'unknown' : interrupted ? 'interrupted' : 'failed') : 'completed', duration_ms: performance.now() - startTs } : null);
     const hasAuthRecovery = Boolean(doneData?.error && typeof isAuthErrorMessage === 'function' && isAuthErrorMessage(doneData.error));
     if (structuredTurnResult && !isBtwQuery && !hasAuthRecovery) {
       const article = assistantMsgDiv.querySelector('.assistant-article');
       if (article) {
+        const viewportTop = assistantMsgDiv.getBoundingClientRect().top;
+        const keepReading = userScrolledUp && viewportTop < messagesContainer.getBoundingClientRect().top;
         article.innerHTML = buildExecutionResultCardHtml(
           accumulatedText,
           liveTools,
@@ -3240,10 +3275,16 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
           structuredTurnResult,
           { lazy: false }
         );
+        const card = article.querySelector('.execution-result-card');
+        if (keepReading && card) {
+          card.open = true;
+          messagesContainer.scrollTop += assistantMsgDiv.getBoundingClientRect().top - viewportTop;
+        }
       }
+      if (isStreamVisible()) scrollToBottom();
       stickyExecution?.complete(
         structuredTurnResult.duration_ms ?? (Number(activityElapsedSec) * 1000),
-        structuredTurnResult.status === 'failed'
+        incomplete
       );
     } else {
       stickyExecution?.dispose();
@@ -3292,7 +3333,7 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
     if (typeof enhanceCodeBlocks === 'function') enhanceCodeBlocks(assistantMsgDiv);
     prepareDeferredImages(assistantMsgDiv);
 
-    if (document.hidden) {
+    if (document.hidden && !incomplete) {
       triggerDoneNotification(accumulatedText);
     }
 
@@ -3310,7 +3351,7 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
   const progressOrder = [];
 
   function renderProgressTimeline() {
-    if (!liveProgressListElem) return;
+    if (!liveProgressListElem || !liveStatusElem.open) return;
     const entries = progressOrder
       .map(key => progressEntries.get(key))
       .filter(Boolean);
@@ -3320,6 +3361,8 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
         ? '<span class="execution-step-state text-emerald-400">✓</span>'
         : entry.state === 'failed'
         ? '<span class="execution-step-state text-rose-400">!</span>'
+        : entry.state === 'interrupted'
+        ? '<span class="execution-step-state text-slate-400">•</span>'
         : '<span class="execution-step-running"></span>';
       const textClass = entry.state === 'failed' ? 'text-rose-300' : '';
       return `<div class="execution-step-row ${textClass}">
@@ -3329,6 +3372,10 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
       </div>`;
     }).join('');
   }
+
+  liveStatusElem.addEventListener('toggle', () => {
+    if (liveStatusElem.open) renderProgressTimeline();
+  });
 
   function upsertProgress(key, entry) {
     if (!progressEntries.has(key)) progressOrder.push(key);
@@ -3382,6 +3429,12 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
       signal: streamAbortController.signal
     });
 
+    if (!response.ok) {
+      const detail = await response.json().catch(() => ({}));
+      const error = new Error(detail.error || `HTTP ${response.status}`);
+      error.httpStatus = response.status;
+      throw error;
+    }
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
@@ -3409,7 +3462,7 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
               streamConversationId = data.conversation_id;
               updateActiveRoleStream(streamRoleId, { conversationId: data.conversation_id });
               // 🛡️ Only update global currentConversationId if user hasn't switched to another conversation
-              if (assistantMsgDiv.isConnected && currentProvider === streamProvider
+              if (assistantMsgDiv.isConnected && currentStreamRoleId() === streamRoleId && currentProvider === streamProvider
                 && currentConversationId === activeStreamConvId) {
                 currentConversationId = data.conversation_id;
                 localStorage.setItem(activeConversationStorageKey(), currentConversationId);
@@ -3422,7 +3475,9 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
               }
             } else if (currentEvent === 'thought') {
               hadThinking = true;
-              statusTextElem.textContent = '🧠 正在分析需求與下一步…';
+              isWritingPhase = false;
+              const runningTool = [...liveTools].reverse().find(tool => toolProgressState(tool) === 'running');
+              statusTextElem.textContent = runningTool ? `正在${getPassiveToolProgress(runningTool).text}…` : '正在分析下一步…';
               upsertProgress('phase:analysis', {
                 icon: '🧠',
                 text: '分析需求與可行方案',
@@ -3451,16 +3506,19 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
                 state: progressState
               });
 
-              const activePrefix = progressState === 'running'
+              const activeTool = [...liveTools].reverse().find(tool => toolProgressState(tool) === 'running');
+              const activeProgress = activeTool ? getPassiveToolProgress(activeTool) : progress;
+              const activeState = activeTool ? 'running' : progressState;
+              const activePrefix = activeState === 'running'
                 ? '正在'
-                : progressState === 'failed'
+                : activeState === 'failed'
                 ? '失敗：'
                 : '已完成：';
-              statusTextElem.textContent = progressState === 'running'
-                ? `${progress.icon} ${activePrefix}${progress.text}…`
-                : `${progress.icon} ${activePrefix}${progress.text}`;
-              stickyExecution?.enable(progress.text);
-              stickyExecution?.update(progress.text, performance.now() - startTs);
+              statusTextElem.textContent = activeState === 'running'
+                ? `${activePrefix}${activeProgress.text}…`
+                : `${activePrefix}${activeProgress.text}`;
+              stickyExecution?.enable(activeProgress.text);
+              stickyExecution?.update(activeProgress.text, performance.now() - startTs);
             } else if (currentEvent === 'chunk' && (data.accumulated !== undefined || data.delta !== undefined)) {
               if (!isWritingPhase) {
                 isWritingPhase = true;
@@ -3512,84 +3570,25 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
       assistantMsgDiv.querySelector('.bg-slate-900').appendChild(abortBadge);
       if (typeof enhanceCodeBlocks === 'function') enhanceCodeBlocks(assistantMsgDiv);
     } else {
-      // Graceful Disconnection Recovery
-      stickyExecution?.dispose();
       console.warn('[SSE Disconnect] Stream interrupted:', err);
-      
-      if (accumulatedText && accumulatedText.trim()) {
-        contentElem.innerHTML = formatMessageContent(accumulatedText);
-        
-        const recoveryBadge = document.createElement('div');
-        recoveryBadge.className = 'recovery-badge mt-2 p-1.5 rounded-lg bg-indigo-950/60 border border-indigo-500/40 text-[10px] text-indigo-300 font-mono flex items-center justify-between gap-2';
-        recoveryBadge.innerHTML = `
-          <span class="flex items-center gap-1.5">
-            <span class="inline-block w-2 h-2 rounded-full bg-indigo-400 animate-ping"></span>
-            <span>連線暫時重置，正在自動補齊完整回覆...</span>
-          </span>
-        `;
-        assistantMsgDiv.querySelector('.bg-slate-900').appendChild(recoveryBadge);
-
-        if (streamConversationId) {
-          let attempts = 0;
-          const checkHistory = async () => {
-            attempts++;
-            try {
-              const hRes = await fetch(`/api/history?id=${streamConversationId}&provider=${encodeURIComponent(streamProvider)}`);
-              if (hRes.ok) {
-                const hData = await hRes.json();
-                if (hData.messages && hData.messages.length > 0) {
-                  const lastAssistant = [...hData.messages].reverse().find(m => m.role === 'assistant');
-                  if (lastAssistant && lastAssistant.content && lastAssistant.content.length >= accumulatedText.length) {
-                    accumulatedText = lastAssistant.content;
-                    contentElem.innerHTML = formatMessageContent(accumulatedText);
-                    if (liveProgressListElem && ((lastAssistant.tools && lastAssistant.tools.length > 0) || lastAssistant.thinking)) {
-                      liveProgressListElem.innerHTML = buildExecutionStepRowsHtml(
-                        lastAssistant.tools || [],
-                        Boolean(lastAssistant.thinking)
-                      );
-                    }
-                    recoveryBadge.innerHTML = `
-                      <span class="flex items-center gap-1.5 text-emerald-300">
-                        <span class="text-emerald-400 font-bold">✓</span>
-                        <span>已成功同步並補齊完整回覆</span>
-                      </span>
-                    `;
-                    setTimeout(() => recoveryBadge.remove(), 4000);
-                    if (typeof enhanceCodeBlocks === 'function') enhanceCodeBlocks(assistantMsgDiv);
-                    finalizeTurn({ completionState: 'recovered' });
-                    return;
-                  }
-                }
-              }
-            } catch (e) {}
-
-            if (attempts < 4) {
-              setTimeout(checkHistory, attempts * 1500);
-            } else {
-              recoveryBadge.innerHTML = `
-                <span class="flex items-center gap-1 text-slate-400">
-                  <span>⚠️ 已保留現有回覆內容</span>
-                </span>
-                <button type="button" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-[10px]" onclick="loadConversationHistory('${streamConversationId}')">🔄 重整</button>
-              `;
-            }
-          };
-          setTimeout(checkHistory, 1200);
-        }
-      } else {
-        if (typeof isAuthErrorMessage === 'function' && isAuthErrorMessage(err.message) && typeof renderAuthRecoveryCard === 'function') {
-          renderAuthRecoveryCard(contentElem, streamProvider, err.message, { text, imagePath: imgPath });
-        } else {
-          contentElem.innerHTML = `
-            <div class="p-2 rounded-lg bg-rose-950/40 border border-rose-800/60 text-xs text-rose-300 flex items-center justify-between">
-              <span>連線中斷（${escapeHtml(err.message)}）</span>
-              <button type="button" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-[10px]" onclick="sendMessage()">重試</button>
-            </div>
-          `;
-        }
+      finalizeTurn(err.httpStatus ? { error: err.message } : { completionState: 'interrupted' });
+      const article = assistantMsgDiv.querySelector('.assistant-article, .btw-card');
+      const notice = document.createElement('div');
+      notice.className = 'recovery-badge mt-2 text-xs text-amber-300';
+      notice.textContent = err.httpStatus ? '請求失敗，請確認錯誤後再重試。' : '連線中斷，已保留收到的內容。';
+      if (streamConversationId) {
+        const reload = document.createElement('button');
+        reload.type = 'button';
+        reload.className = 'ml-2 px-2 py-1 rounded bg-slate-800';
+        reload.textContent = '重新載入紀錄';
+        reload.addEventListener('click', () => {
+          if (currentStreamRoleId() === streamRoleId && currentProvider === streamProvider && currentConversationId === streamConversationId) {
+            loadConversationHistory(streamConversationId);
+          }
+        });
+        notice.appendChild(reload);
       }
-
-      if (typeof enhanceCodeBlocks === 'function') enhanceCodeBlocks(assistantMsgDiv);
+      article?.appendChild(notice);
     }
   } finally {
     clearInterval(liveTimerInterval);
