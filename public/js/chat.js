@@ -403,16 +403,11 @@ function buildExecutionStepRowsHtml(tools, hasThinking = false) {
   const groupedTools = coalesceToolEvents(tools);
   const rows = [];
 
-  rows.push(`
-    <div class="execution-step-row">
-      <span class="execution-step-state text-emerald-400">✓</span>
-      <span class="execution-step-icon">🧠</span>
-      <span class="execution-step-text">分析需求與執行方案</span>
-    </div>
-  `);
-
   groupedTools.forEach(tool => {
     const detail = getToolDetails(tool);
+    const state = toolProgressState(tool);
+    const icon = state === 'failed' ? '!' : state === 'done' ? '✓' : '•';
+    const color = state === 'failed' ? 'text-rose-400' : state === 'done' ? 'text-emerald-400' : 'text-slate-500';
     const attempts = Math.max(1, Number(tool.attempts) || 1);
     const polls = Math.max(0, Number(tool.poll_count) || 0);
     const meta = [];
@@ -421,21 +416,13 @@ function buildExecutionStepRowsHtml(tools, hasThinking = false) {
     if (detail.durationStr) meta.push(detail.durationStr);
     rows.push(`
       <div class="execution-step-row">
-        <span class="execution-step-state text-emerald-400">✓</span>
+        <span class="execution-step-state ${color}">${icon}</span>
         <span class="execution-step-icon">${escapeHtml(detail.icon || '⚙️')}</span>
         <span class="execution-step-text">${escapeHtml(detail.desc || detail.label || '執行操作')}</span>
         ${meta.length ? `<span class="execution-step-meta">${escapeHtml(meta.join(' · '))}</span>` : ''}
       </div>
     `);
   });
-
-  rows.push(`
-    <div class="execution-step-row">
-      <span class="execution-step-state text-emerald-400">✓</span>
-      <span class="execution-step-icon">✍️</span>
-      <span class="execution-step-text">整理並輸出回覆</span>
-    </div>
-  `);
 
   return rows.join('');
 }
@@ -445,14 +432,14 @@ function buildExecutionDetailsHtml(tools, thinking = '', { lazy = false } = {}) 
   const hasExecution = groupedTools.length > 0;
   if (!hasExecution) return '';
 
-  const stepCount = groupedTools.length + 2;
+  const stepCount = groupedTools.length;
   const bodyHtml = lazy ? '' : buildExecutionStepRowsHtml(groupedTools, Boolean(String(thinking || '').trim()));
   return `
     <details class="agent-execution-details history-execution-details ${lazy ? 'lazy-execution' : ''}" data-step-count="${stepCount}">
       <summary class="execution-summary">
         <span class="execution-summary-main">
           <span class="execution-status-icon text-emerald-400">✓</span>
-          <span>完成 · ${stepCount} steps</span>
+          <span>執行紀錄 · ${stepCount} 項</span>
         </span>
         <span class="execution-summary-side">
           <span class="text-slate-500">執行詳情</span>
