@@ -2409,13 +2409,13 @@ function syncActiveRoleStreamingState() {
       provider: activeStream?.provider || currentProvider
     }
   }));
-  if (!isStreaming && getPendingQueuedMessageForRole(roleId)) {
-    window.setTimeout(() => {
-      if (currentStreamRoleId() === roleId && !getActiveRoleStream(roleId)) {
-        flushQueuedBtwMessage();
-      }
-    }, 0);
-  }
+  hydrateRoleMessageQueue(roleId).then(() => {
+    renderQueuedMessageCapsule();
+    updateSendButtonMode();
+    if (!isStreaming && currentStreamRoleId() === roleId && !getActiveRoleStream(roleId)) {
+      window.setTimeout(flushQueuedBtwMessage, 0);
+    }
+  }).catch(() => {});
   return activeStream;
 }
 
@@ -2479,53 +2479,111 @@ window.getActiveRoleStream = getActiveRoleStream;
 window.syncActiveRoleStreamingState = syncActiveRoleStreamingState;
 window.clearActiveRoleStream = clearActiveRoleStream;
 
-const pendingQueuedMessagesByRole = new Map();
+const queuedMessagesByRole = new Map();
+const hydratedRoleQueues = new Set();
+const roleQueueHydrationRequests = new Map();
 
+function getQueuedMessagesForRole(roleId = currentStreamRoleId()) {
+  return queuedMessagesByRole.get(String(roleId || 'role-general')) || [];
+}
 function getPendingQueuedMessageForRole(roleId = currentStreamRoleId()) {
-  return pendingQueuedMessagesByRole.get(String(roleId || 'role-general')) || null;
+  return getQueuedMessagesForRole(roleId)[0] || null;
 }
-
-function setPendingQueuedMessage(msg) {
+async function hydrateRoleMessageQueue(roleId = currentStreamRoleId(), { force = false } = {}) {
+  const key = String(roleId || 'role-general');
+  if (!force && hydratedRoleQueues.has(key)) return getQueuedMessagesForRole(key);
+  if (roleQueueHydrationRequests.has(key)) return roleQueueHydrationRequests.get(key);
+  const request = fetch(`/api/role-queue?role_id=${encodeURIComponent(key)}`, { cache: 'no-store' })
+    .then(async response => {
+      const data = await response.json();
+      if (!response.ok || !data.success) throw new Error(data.error || '無法讀取 Role queue');
+      const messages = Array.isArray(data.messages) ? data.messages : [];
+      queuedMessagesByRole.set(key, messages);
+      hydratedRoleQueues.add(key);
+      return messages;
+    })
+    .finally(() => roleQueueHydrationRequests.delete(key));
+  roleQueueHydrationRequests.set(key, request);
+  return request;
+}
+async function setPendingQueuedMessage(msg) {
   const roleId = currentStreamRoleId();
-  pendingQueuedMessagesByRole.set(roleId, {
-    ...msg,
-    roleId,
-    conversationId: currentConversationId,
-    provider: currentProvider
+  const conversationId = currentConversationId || getActiveRoleStream(roleId)?.conversationId || null;
+  const response = await fetch('/api/role-queue', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      action: 'enqueue',
+      role_id: roleId,
+      provider: currentProvider,
+      conversation_id: conversationId,
+      text: msg?.text || '',
+      image_path: msg?.imagePath || msg?.image_path || null,
+      source: msg?.source || 'chat'
+    })
   });
+  const data = await response.json();
+  if (!response.ok || !data.success || !data.message) throw new Error(data.error || '排隊訊息保存失敗');
+  const messages = getQueuedMessagesForRole(roleId).filter(item => item.id !== data.message.id);
+  messages.push(data.message);
+  messages.sort((a, b) => Number(a.createdAt || 0) - Number(b.createdAt || 0));
+  queuedMessagesByRole.set(roleId, messages);
+  hydratedRoleQueues.add(roleId);
   renderQueuedMessageCapsule();
   updateSendButtonMode();
+  return data.message;
 }
-
-function clearPendingQueuedMessage(roleId = currentStreamRoleId()) {
-  pendingQueuedMessagesByRole.delete(String(roleId || 'role-general'));
+async function removePendingQueuedMessage(message, roleId = currentStreamRoleId()) {
+  const key = String(roleId || 'role-general');
+  if (!message?.id) return null;
+  const response = await fetch('/api/role-queue', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'remove', role_id: key, message_id: message.id })
+  });
+  const data = await response.json();
+  if (!response.ok || !data.success) throw new Error(data.error || '移除排隊訊息失敗');
+  queuedMessagesByRole.set(key, getQueuedMessagesForRole(key).filter(item => item.id !== message.id));
   renderQueuedMessageCapsule();
   updateSendButtonMode();
+  return data.removed || message;
 }
-
+async function clearPendingQueuedMessage(roleId = currentStreamRoleId()) {
+  const key = String(roleId || 'role-general');
+  const response = await fetch('/api/role-queue', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'clear', role_id: key })
+  });
+  const data = await response.json();
+  if (!response.ok || !data.success) throw new Error(data.error || '清除 Role queue 失敗');
+  queuedMessagesByRole.set(key, []);
+  hydratedRoleQueues.add(key);
+  renderQueuedMessageCapsule();
+  updateSendButtonMode();
+  return Number(data.removed || 0);
+}
+function currentConversationQueuedMessages() {
+  return getQueuedMessagesForRole().filter(message =>
+    message.conversationId === currentConversationId &&
+    message.providerId === currentProvider
+  );
+}
 function renderQueuedMessageCapsule() {
   const capsule = document.getElementById('queued-msg-capsule');
   const preview = document.getElementById('queued-msg-preview');
   if (!capsule) return;
-
-  const pendingQueuedMessage = getPendingQueuedMessageForRole();
-  // 🛡️ Only show queue capsule if user is currently inside the exact conversation where it was queued
-  const isMatch = pendingQueuedMessage &&
-    pendingQueuedMessage.text &&
-    pendingQueuedMessage.conversationId === currentConversationId &&
-    pendingQueuedMessage.provider === currentProvider;
-
-  if (isMatch) {
-    if (preview) {
-      preview.textContent = pendingQueuedMessage.text;
-    }
+  const messages = currentConversationQueuedMessages();
+  const pendingQueuedMessage = messages[0] || null;
+  if (pendingQueuedMessage) {
+    if (preview) preview.textContent = `${pendingQueuedMessage.text || '圖片訊息'}${messages.length > 1 ? ` · 另有 ${messages.length - 1} 則` : ''}`;
     capsule.classList.remove('hidden');
   } else {
     capsule.classList.add('hidden');
   }
 }
 
-function updateBtwQueueStatus() {
+function updateBtwQueueStatus() {function updateBtwQueueStatus() {
   const status = document.getElementById('btw-queue-status');
   if (status) status.classList.add('hidden');
 }
@@ -2537,13 +2595,12 @@ function updateSendButtonMode() {
   const queueCountBadge = document.getElementById('send-queue-count');
   const srLabel = document.getElementById('send-btn-sr-label');
   const hasInputText = promptInput ? promptInput.value.trim().length > 0 : false;
-  const pendingQueuedMessage = getPendingQueuedMessageForRole();
-  const queuedForCurrentRole = Boolean(
-    pendingQueuedMessage &&
-    pendingQueuedMessage.conversationId === currentConversationId &&
-    pendingQueuedMessage.provider === currentProvider
-  );
-  if (queueCountBadge) queueCountBadge.classList.toggle('hidden', !queuedForCurrentRole);
+  const currentQueue = currentConversationQueuedMessages();
+  const queuedForCurrentRole = currentQueue.length > 0;
+  if (queueCountBadge) {
+    queueCountBadge.classList.toggle('hidden', !queuedForCurrentRole);
+    queueCountBadge.textContent = queuedForCurrentRole ? String(currentQueue.length) : '';
+  }
 
   sendBtn.classList.remove(
     'bg-indigo-600', 'hover:bg-indigo-500', 'active:bg-indigo-700', 'shadow-indigo-600/30',
@@ -2668,7 +2725,7 @@ async function sendBtwConcurrentSidecard(customText = null, customImgPath = null
         workspace: (typeof currentWorkspace !== 'undefined') ? currentWorkspace : '/data/data/com.termux/files/home',
         role_id: typeof window.getCurrentRoleId === 'function' ? window.getCurrentRoleId() : 'role-general',
         role: 'general',
-        crew_member_id: (typeof currentCrewMemberId !== 'undefined' && currentCrewMemberId) ? currentCrewMemberId : undefined
+
       }),
       signal: sideAbort.signal
     });
@@ -2720,57 +2777,56 @@ async function sendBtwConcurrentSidecard(customText = null, customImgPath = null
   }
 }
 
-function flushQueuedBtwMessage() {
-  const msgToSend = getPendingQueuedMessageForRole();
-  const matchesCurrentRole = Boolean(
-    msgToSend &&
-    msgToSend.roleId === currentStreamRoleId() &&
-    msgToSend.conversationId === currentConversationId &&
-    msgToSend.provider === currentProvider
-  );
-  if (!matchesCurrentRole || isStreaming) return;
-  clearPendingQueuedMessage();
-  setTimeout(() => sendMessage(msgToSend), 120);
+async function flushQueuedBtwMessage() {
+  await hydrateRoleMessageQueue(currentStreamRoleId()).catch(() => []);
+  const msgToSend = currentConversationQueuedMessages()[0] || null;
+  if (!msgToSend || isStreaming) return;
+  try {
+    await removePendingQueuedMessage(msgToSend, msgToSend.roleId);
+  } catch (error) {
+    console.warn('[Role Queue] Unable to dequeue message:', error.message);
+    return;
+  }
+  window.setTimeout(() => sendMessage({
+    text: msgToSend.text,
+    imagePath: msgToSend.imagePath || null,
+    source: msgToSend.source || 'queue'
+  }), 120);
 }
 function clearQueuedBtwMessages() {
-  clearPendingQueuedMessage();
+  return clearPendingQueuedMessage().catch(error => {
+    console.warn('[Role Queue] Clear failed:', error.message);
+    return 0;
+  });
 }
-
-function sendRoleMessage(payload = {}) {
+async function sendRoleMessage(payload = {}) {
   const text = String(payload.text || payload.message || '').trim();
   const imagePath = payload.imagePath || payload.image_path || null;
-  if (!text && !imagePath) {
-    return { success: false, error: '訊息不可為空。' };
-  }
-
+  if (!text && !imagePath) return { success: false, error: '訊息不可為空。' };
   const roleId = currentStreamRoleId();
   const activeStream = getActiveRoleStream(roleId);
   if (activeStream) {
-    if (getPendingQueuedMessageForRole(roleId)) {
-      return { success: false, error: '目前 Role 已有一則排隊訊息，請等待它送出後再新增。' };
+    try {
+      const message = await setPendingQueuedMessage({ text, imagePath, source: payload.source || 'external' });
+      return {
+        success: true,
+        status: 'queued',
+        roleId,
+        conversationId: message.conversationId || activeStream.conversationId || null,
+        queueCount: getQueuedMessagesForRole(roleId).length
+      };
+    } catch (error) {
+      return { success: false, error: error.message };
     }
-    setPendingQueuedMessage({ text, imagePath, source: payload.source || 'external' });
-    return {
-      success: true,
-      status: 'queued',
-      roleId,
-      conversationId: currentConversationId || activeStream.conversationId || null
-    };
   }
-
-  Promise.resolve(sendMessage({ text, imagePath })).catch(error => {
-    console.warn('[Role Message] Background send failed:', error?.message || error);
-  });
-  return {
-    success: true,
-    status: 'sent',
-    roleId,
-    conversationId: currentConversationId || null
-  };
+  Promise.resolve(sendMessage({ text, imagePath })).catch(error => console.warn('[Role Message] Background send failed:', error?.message || error));
+  return { success: true, status: 'sent', roleId, conversationId: currentConversationId || null };
 }
 window.sendRoleMessage = sendRoleMessage;
+window.hydrateRoleMessageQueue = hydrateRoleMessageQueue;
+window.getRoleQueuedMessages = getQueuedMessagesForRole;
 
-// Toggle Send / Stop button appearance & state
+// Toggle Send / Stop button appearance & state// Toggle Send / Stop button appearance & state
 function setStreamingState(streaming) {
   const roleId = currentStreamRoleId();
   const activeStream = getActiveRoleStream(roleId);
@@ -3316,7 +3372,7 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
         workspace: (typeof currentWorkspace !== 'undefined') ? currentWorkspace : '/data/data/com.termux/files/home',
         role_id: typeof window.getCurrentRoleId === 'function' ? window.getCurrentRoleId() : 'role-general',
         role: 'general',
-        crew_member_id: (typeof currentCrewMemberId !== 'undefined' && currentCrewMemberId) ? currentCrewMemberId : undefined
+
       }),
       signal: streamAbortController.signal
     });
@@ -3353,7 +3409,7 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
                 currentConversationId = data.conversation_id;
                 localStorage.setItem(activeConversationStorageKey(), currentConversationId);
                 if (data.role_id && typeof window.setConversationRoleDirect === 'function') {
-                  window.setConversationRoleDirect(data.role_id, data.project_id, data.crew_member_id, currentWorkspace);
+                  window.setConversationRoleDirect(data.role_id, data.project_id, currentWorkspace);
                 }
               }
               if (['SURGICAL_EDIT', 'DEBUG', 'BUILD'].includes(String(data.execution_mode || '').toUpperCase())) {
@@ -3564,7 +3620,10 @@ function handleSendClick(e) {
       if (slashMenu) slashMenu.classList.add('hidden');
       if (typeof window.haptic === 'function') window.haptic([20, 20]);
       
-      setPendingQueuedMessage({ text: rawText, imagePath: imgPath });
+      setPendingQueuedMessage({ text: rawText, imagePath: imgPath }).catch(error => {
+        console.warn('[Role Queue] Enqueue failed:', error.message);
+        if (typeof alert === 'function') alert(`排隊失敗：${error.message}`);
+      });
       return;
     }
 
@@ -3611,20 +3670,26 @@ window.getCachedConversations = () => cachedConversations;
 window.setPendingQueuedMessage = setPendingQueuedMessage;
 window.clearPendingQueuedMessage = clearPendingQueuedMessage;
 window.getPendingQueuedMessage = getPendingQueuedMessageForRole;
+window.getQueuedMessageCount = roleId => getQueuedMessagesForRole(roleId).length;
 
 // ⏳ Queued Message Capsule Event Listeners
 document.addEventListener('DOMContentLoaded', () => {
+  hydrateRoleMessageQueue().then(() => {
+    renderQueuedMessageCapsule();
+    updateSendButtonMode();
+    if (!getActiveRoleStream()) flushQueuedBtwMessage();
+  }).catch(() => {});
   const queuedBody = document.getElementById('queued-msg-body');
   const queuedCancelBtn = document.getElementById('queued-msg-cancel-btn');
   const queuedInterruptBtn = document.getElementById('queued-msg-interrupt-btn');
 
   // Click Body -> Call message back to textarea for editing
   if (queuedBody) {
-    queuedBody.addEventListener('click', () => {
-      const pendingQueuedMessage = getPendingQueuedMessageForRole();
+    queuedBody.addEventListener('click', async () => {
+      const pendingQueuedMessage = currentConversationQueuedMessages()[0] || null;
       if (!pendingQueuedMessage) return;
       const text = pendingQueuedMessage.text || '';
-      clearPendingQueuedMessage();
+      await removePendingQueuedMessage(pendingQueuedMessage).catch(() => null);
       if (promptInput) {
         promptInput.value = text;
         promptInput.focus();
@@ -3638,9 +3703,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Click Cancel -> Drop queued message
   if (queuedCancelBtn) {
-    queuedCancelBtn.addEventListener('click', (e) => {
+    queuedCancelBtn.addEventListener('click', async (e) => {
       e.stopPropagation();
-      clearPendingQueuedMessage();
+      const pendingQueuedMessage = currentConversationQueuedMessages()[0] || null;
+      if (pendingQueuedMessage) await removePendingQueuedMessage(pendingQueuedMessage).catch(() => null);
       if (typeof window.haptic === 'function') window.haptic([15, 15]);
     });
   }
@@ -3649,10 +3715,10 @@ document.addEventListener('DOMContentLoaded', () => {
   if (queuedInterruptBtn) {
     queuedInterruptBtn.addEventListener('click', async (e) => {
       e.stopPropagation();
-      const pendingQueuedMessage = getPendingQueuedMessageForRole();
+      const pendingQueuedMessage = currentConversationQueuedMessages()[0] || null;
       if (!pendingQueuedMessage) return;
       const msgToSend = pendingQueuedMessage;
-      clearPendingQueuedMessage();
+      await removePendingQueuedMessage(pendingQueuedMessage).catch(() => null);
       if (typeof window.haptic === 'function') window.haptic('heavy');
       await stopGeneration();
       setTimeout(() => {
