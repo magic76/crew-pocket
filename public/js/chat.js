@@ -601,7 +601,7 @@ function buildExecutionResultCardHtml(content, tools = [], thinking = '', turnRe
           ${meta.length ? `<span class="execution-result-meta">${escapeHtml(meta.join(' · '))}</span>` : ''}
           <span class="execution-result-chevron">›</span>
         </span>
-        ${preview ? `<div class="execution-result-peek">${escapeHtml(preview)}</div>` : ''}
+        ${preview ? `<span class="execution-result-peek">${escapeHtml(preview)}</span>` : ''}
       </summary>
       <div class="execution-result-body">${bodyHtml}</div>
     </details>
