@@ -51,7 +51,7 @@
   height: 100%;
   border: 0;
   flex: 1;
-  display: none;
+  display: block;
   background: #0b1220;
 }
 .visual-answer-status {
