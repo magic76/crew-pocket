@@ -3120,6 +3120,7 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
   const liveTools = [];
   const liveToolMap = new Map();
   let hadThinking = false;
+  let isWritingPhase = false;
   let receivedContextStats = false;
   const startTs = performance.now();
 
@@ -3130,7 +3131,7 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
     ? 'btw-card bg-gradient-to-b from-slate-900 via-slate-900 to-teal-950/40 border border-teal-500/50 text-slate-200 rounded-2xl p-3 sm:p-3.5 text-xs sm:text-sm shadow-lg shadow-teal-950/30 w-full min-w-0 prose'
     : 'assistant-article bg-slate-900 text-slate-200 w-full min-w-0 prose';
 
-  const statusInitText = isBtwQuery ? '💬 順帶一提解答中…' : '🧠 正在分析需求…';
+  const statusInitText = isBtwQuery ? '正在處理補充問題…' : '正在理解你的需求…';
 
   assistantMsgDiv.innerHTML = `
     <div class="${bubbleClass}">
@@ -3142,7 +3143,7 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
             <span class="status-text truncate">${statusInitText}</span>
           </span>
           <span class="execution-summary-side">
-            <span class="live-timer">0.0s</span>
+            <span class="live-timer">0s</span>
             <span class="execution-chevron">›</span>
           </span>
         </summary>
@@ -3360,9 +3361,9 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
   const liveTimerInterval = setInterval(() => {
     const elapsedMs = performance.now() - startTs;
     const elapsedSec = elapsedMs / 1000;
-    if (liveTimerElem) liveTimerElem.textContent = `${elapsedSec.toFixed(1)}s`;
+    if (liveTimerElem) liveTimerElem.textContent = `${Math.floor(elapsedSec)}s`;
     stickyExecution?.update(null, elapsedMs);
-  }, 100);
+  }, 1000);
 
   let accumulatedText = '';
   let abortedHandled = false;
@@ -3443,6 +3444,7 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
               receivedContextStats = true;
               if (isStreamVisible()) updateContextPill(data);
             } else if (currentEvent === 'tool') {
+              isWritingPhase = false;
               const mergedTool = mergeToolEventIntoMap(liveToolMap, liveTools, data);
               const progressTool = mergedTool || data;
               const progress = getPassiveToolProgress(progressTool);
@@ -3467,14 +3469,17 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
               stickyExecution?.enable(progress.text);
               stickyExecution?.update(progress.text, performance.now() - startTs);
             } else if (currentEvent === 'chunk' && (data.accumulated !== undefined || data.delta !== undefined)) {
-              markProgressDone('phase:analysis');
-              upsertProgress('phase:writing', {
-                icon: '✍️',
-                text: '整理並輸出回覆',
-                state: 'running'
-              });
-              statusTextElem.textContent = '✍️ 正在整理並輸出回覆…';
-              stickyExecution?.update('整理並輸出回覆', performance.now() - startTs);
+              if (!isWritingPhase) {
+                isWritingPhase = true;
+                markProgressDone('phase:analysis');
+                upsertProgress('phase:writing', {
+                  icon: '✍️',
+                  text: '整理並輸出回覆',
+                  state: 'running'
+                });
+                statusTextElem.textContent = '正在回覆…';
+                stickyExecution?.update('整理並輸出回覆', performance.now() - startTs);
+              }
               // New servers send only the delta to avoid repeatedly
               // serializing the full response. Keep accepting accumulated for
               // older cached pages or an external compatible server.
