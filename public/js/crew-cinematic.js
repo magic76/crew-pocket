@@ -8,7 +8,6 @@
 })(typeof window !== 'undefined' ? window : null, function () {
   'use strict';
   const TONES = Object.freeze(['pocket', 'teacher', 'story', 'fortune', 'helper', 'general']);
-  const pattern = /[\w\u4e00-\u9fff-]+/g;
   function toneFor(role = {}) {
     const label = [role.project, role.name, role.projectId].filter(Boolean).join(' ').toLowerCase();
     if (/teacher|教學|老師/.test(label)) return 'teacher';
@@ -165,8 +164,13 @@
       const finish = () => {if (focusNode === clone) focusNode=null;clone.remove();};
       win.requestAnimationFrame(() => {
         if (!clone.isConnected || doc.hidden) {finish();return;}
-        const destination = header.getBoundingClientRect();
-        if (!destination.width) {finish();return;}
+        const headerRect = header.getBoundingClientRect();
+        // Role selection can load asynchronously; the target header might
+        // still be hidden this frame. Keep the focus motion uninterrupted.
+        const destination = headerRect.width >= 12 ? headerRect : {
+          left: Math.max(48, doc.documentElement.clientWidth > 400 ? 64 : 52),
+          top: 8, width: 40, height: 40
+        };
         const dx = destination.left + destination.width/2 - (rect.left+rect.width/2);
         const dy = destination.top + destination.height/2 - (rect.top+rect.height/2);
         if (!clone.animate) {finish();return;}
@@ -180,7 +184,9 @@
       });
     }
     function onTabChange() {
-      if (!visible()) {stopLink();focusNode?.remove();focusNode=null;}
+      // A focus orb must survive the Crew -> Chat switch; only the
+      // handoff overlay is tied to Crew visibility.
+      if (!visible()) stopLink();
       else decorate();
     }
     roster.addEventListener('click',focus,true); // identity only; existing navigation remains unchanged
