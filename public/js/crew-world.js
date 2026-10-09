@@ -68,7 +68,7 @@
     const camera = { x: world.map.width/2, y: 325, scale: 1 };
     const size = { w: 0, h: 0, dpr: 1 };
     const pointers = new Map();
-    let startGesture = null, raf = 0, lastFrame = 0, lastPaint = 0, signature = '';
+    let startGesture = null, raf = 0, idleTimer = 0, lastFrame = 0, lastPaint = 0, signature = '';
     let stamp = '', duration = 0;
     let cameraReady = false;
     const prefersReduced = () => !!win.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
@@ -144,18 +144,25 @@
         painter.draw(ctx,world,camera,size,ts/1000,prefersReduced(),win.getCrewLocale?.());
         lastPaint = ts;
       }
-      // Keep a bounded timer only while the office is actually visible.
-      // Returning to chats pauses RAF without affecting any active AI execution.
-      raf = win.requestAnimationFrame(render);
+      // Idle scene runs at a low frame rate. Walking temporarily switches
+      // to smooth animation; hidden/list/chat views stop all drawing.
+      const moving = [...world.actors.values()].some(a =>
+        a.walking || a.queue.length || a.path.length || a.pause > 0);
+      idleTimer = win.setTimeout(() => {
+        idleTimer = 0;
+        request();
+      }, moving ? 20 : prefersReduced() ? 280 : 95);
     }
     function request() {
-      if (!active() || raf) return;
-      lastFrame = 0;
+      if (!active()) return;
+      if (idleTimer) { win.clearTimeout(idleTimer); idleTimer=0; }
+      if (raf) return;
       raf = win.requestAnimationFrame(render);
     }
     function suspend() {
       if (raf) win.cancelAnimationFrame(raf);
-      raf=0;lastFrame=0;
+      if (idleTimer) win.clearTimeout(idleTimer);
+      raf=0;idleTimer=0;lastFrame=0;
       pointers.clear();
       startGesture=null;
     }
@@ -256,7 +263,11 @@
     canvas.addEventListener('pointerdown',pointerDown);
     canvas.addEventListener('pointermove',pointerMove);
     canvas.addEventListener('pointerup',pointerUp);
-    canvas.addEventListener('pointercancel',pointerUp);
+    canvas.addEventListener('pointercancel',e=>{
+      // A cancelled Android gesture must never open a Role conversation.
+      pointers.delete(e.pointerId);
+      startGesture=null;
+    });
     canvas.addEventListener('wheel',e=>{
       if(!active())return;
       e.preventDefault();
