@@ -98,6 +98,8 @@
       this.activeEvents = new Set();
       this.pending = [];
       this.log = [];
+      this.ambientClock = 0;
+      this.ambientCursor = 0;
       this.reconcile({ verified: false, roles: [] });
     }
     reconcile(room) {
@@ -116,6 +118,12 @@
         actor.home = seat.home;
         actor.role = seat.role;
         actor.work = seat.role.state;
+        // Idle wandering is only decorative. A real work or attention
+        // transition immediately returns the character to its verified desk.
+        if (actor.mode === 'ambient' && actor.work !== 'idle') {
+          actor.queue = []; actor.path = []; actor.pause = 0;
+          actor.walking = false; actor.mode = 'seated'; actor.pos = pixel(seat.home);
+        }
         if (!state.verified || actor.work === 'unknown') {
           actor.queue = []; actor.path = []; actor.pause = 0;
           actor.walking = false; actor.mode = 'seated'; actor.pos = pixel(seat.home);
@@ -123,7 +131,7 @@
         next.set(actor.id, actor);
       }
       this.actors = next; this.map = newerMap; this.room = state;
-      if (!state.verified) this.pending = [];
+      if (!state.verified) { this.pending = []; this.ambientClock = 0; }
       return this;
     }
     acceptHandoff(event, now = Date.now()) {
@@ -135,6 +143,13 @@
       this.log.length = Math.min(this.log.length, 5);
       this.pending.push({ fromId: proof.from.id, toId: proof.to.id, id: proof.id });
       this.pending.length = Math.min(this.pending.length, MAX_EVENTS);
+      // Real handoffs outrank visual idle routines, never the reverse.
+      const sender = this.actors.get(proof.from.id);
+      if (sender?.mode === 'ambient') {
+        sender.queue = []; sender.path = []; sender.pause = 0;
+        sender.walking = false; sender.mode = 'seated';
+        sender.pos = pixel(sender.home);
+      }
       return true;
     }
     startNext() {
@@ -152,10 +167,27 @@
       ];
       actor.mode = 'handoff';
     }
+    maybeStroll() {
+      if (this.pending.length || !this.room?.verified) return;
+      const idle = [...this.actors.values()].filter(actor =>
+        actor.work === 'idle' && actor.mode === 'seated' &&
+        !actor.queue.length && !actor.path.length && actor.pause === 0);
+      if (!idle.length) return;
+      const actor = idle[this.ambientCursor++ % idle.length];
+      const stop = at(this.map.lounge.x + 5, this.map.lounge.y - 1);
+      if (!findPath(this.map, actor.home, stop).length) return;
+      actor.mode = 'ambient';
+      actor.queue = [{ go: stop }, { pause: 1.3 }, { go: actor.home }];
+    }
     tick(dt) {
       if (!this.room?.verified) return false;
       this.startNext();
       const seconds = Math.max(0, Math.min(Number(dt) || 0, .06));
+      this.ambientClock += seconds;
+      if (this.ambientClock >= 32) {
+        this.ambientClock = 0;
+        this.maybeStroll();
+      }
       let changing = false;
       for (const actor of this.actors.values()) {
         if (actor.pause > 0) {
