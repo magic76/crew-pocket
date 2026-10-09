@@ -969,12 +969,22 @@ function renderRoleNavigation() {
     const project = projectMeta(role.projectId);
     const latest = roleLatestConversation(role.id);
     const status = crewStatusVerified ? crewStatusForRole(role.id) : null;
-    const state = status ? String(status.state || 'unknown') : 'unknown';
-    const title = status?.currentWork?.title || status?.conversationTitle || latest?.title || '';
-    const hasWork = Boolean(title);
+    const reported = status ? String(status.state || 'unknown') : 'unknown';
+    const state = reported === 'working' && status?.busy !== true ? 'unknown' : reported;
     const queued = Number(status?.queuedMessageCount || 0) + Number(status?.queuedRequestCount || 0);
     const unread = Number(status?.unreadReplyCount || 0);
     const attention = queued + unread;
+    const currentTitle = status?.currentWork?.title || status?.conversationTitle || '';
+    const latestTitle = latest?.title || '';
+    // A past conversation title is not evidence that work is underway.
+    const workDescription = state === 'working'
+      ? '正在處理 · ' + (currentTitle || '目前對話')
+      : state === 'waiting'
+        ? (attention ? attention + ' 則訊息待處理' : '等待處理')
+        : state === 'idle'
+          ? (latestTitle ? '最近對話 · ' + latestTitle : '目前待命')
+          : state === 'new' ? '尚未開始工作'
+          : 'Runtime 狀態尚未同步';
     return '<article class="role-nav-card" data-role-card-id="' + escapeHtml(role.id) +
       '" data-selected="' + selected + '">' +
       '<button type="button" data-role-nav-id="' + escapeHtml(role.id) +
@@ -986,7 +996,7 @@ function renderRoleNavigation() {
         '<span class="crew-role-name">' + escapeHtml(role.name) + '</span>' +
         '<span class="crew-role-state" data-state="' + escapeHtml(state) + '">' +
           escapeHtml(stateName(state)) + '</span>' +
-        '<span class="crew-role-work">' + (hasWork ? escapeHtml(title) : '尚無工作') + '</span>' +
+        '<span class="crew-role-work">' + escapeHtml(workDescription) + '</span>' +
       '</button>' +
       (attention ? '<span class="crew-role-attention" aria-label="' + attention + ' 則待處理">' +
         attention + '</span>' : '') +

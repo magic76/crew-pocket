@@ -1,91 +1,131 @@
-/* Crew Room: original small pixel people; status is always Runtime verified.
-   Visuals layer above the existing two-column, touch-first Role cards. */
-.crew-room-roster-stage { position: relative; isolation: isolate; }
-.crew-room-handoffs {
-  position: absolute; inset: 0; z-index: 5;
-  pointer-events: none; overflow: visible;
-}
+/* Crew Room 2.0: compact Role identity and real collaboration history.
+   No virtual office, simulated movements or cross-Role context mixing. */
 #role-nav-list .crew-role-avatar {
-  width: 48px; height: 48px; border-radius: 12px;
+  width: 48px; height: 48px; border-radius: 13px;
   background: var(--cp-surface-2);
   isolation: isolate;
-  overflow: visible;
 }
 .crew-role-sprite {
   width: 42px; height: 42px;
   image-rendering: pixelated;
   shape-rendering: crispEdges;
-  transform-origin: center bottom;
 }
 .crew-role-avatar[data-state="working"] {
-  border-color: var(--cp-success) !important;
-  background: var(--cp-live-soft);
+  border-color: var(--cp-success);
+  background: var(--cp-accent-soft, var(--cp-surface-2));
 }
-.crew-role-avatar[data-state="working"] .crew-pixel-hand {
-  animation: crew-pixel-type .8s steps(2, end) infinite alternate;
-}
-.crew-role-avatar[data-state="waiting"] {
-  border-color: var(--cp-warning) !important;
-}
+.crew-role-avatar[data-state="waiting"] { border-color: var(--cp-warning); }
 .crew-role-avatar[data-state="waiting"]::after {
-  content: '?';
-  position: absolute; top: -7px; right: -6px;
+  content: '!';
+  position: absolute; top: -6px; right: -7px;
   display: grid; place-items: center;
-  width: 18px; height: 18px; border-radius: 5px;
-  background: var(--cp-warning); color: var(--cp-surface);
+  width: 17px; height: 17px; border-radius: 6px;
+  background: #edca70; color: #30250e;
   font-size: 12px; font-weight: 900;
 }
 .crew-role-avatar[data-state="unknown"] .crew-role-sprite {
   filter: grayscale(1);
-  opacity: .64;
+  opacity: .62;
 }
-.crew-role-avatar[data-state="new"] .crew-role-sprite {
-  opacity: .86;
+.crew-role-avatar[data-state="new"] .crew-role-sprite { opacity: .9; }
+
+/* Small verified state transitions; no claim of success or fabricated progress. */
+#role-nav-list .role-nav-card.crew-handoff-arrived .crew-role-avatar {
+  animation: crew-room-highlight .9s ease-out;
 }
-.crew-room-envelope {
-  position: absolute; z-index: 10;
-  display: grid; place-items: center;
-  width: 27px; height: 22px; line-height: 1;
-  color: var(--cp-accent-strong);
+#role-nav-list .role-nav-card.crew-work-settled .crew-role-avatar {
+  animation: crew-room-highlight .9s ease-out;
+}
+@keyframes crew-room-highlight {
+  0%, 100% { box-shadow: 0 0 0 0 transparent; }
+  42% { box-shadow: 0 0 0 4px var(--cp-accent-soft); }
+}
+
+.crew-activity-panel {
+  margin: 16px 5px 0;
   background: var(--cp-surface);
-  border: 2px solid var(--cp-accent);
-  border-radius: 3px;
-  font-size: 17px; font-weight: 800;
-  box-shadow: 2px 3px 0 rgba(35, 46, 68, .20);
-  transform: translate(-50%, -50%);
-  animation: crew-handoff-fly .9s ease-in-out both;
-  will-change: transform;
+  border: 1px solid var(--cp-border);
+  border-radius: 16px;
+  overflow: hidden;
+  color: var(--cp-text);
 }
-#role-nav-list .role-nav-card.crew-handoff-arrived {
-  animation: crew-handoff-arrival .95s ease-out;
+.crew-activity-heading {
+  min-height: 47px;
+  display: flex; align-items: center;
+  justify-content: space-between;
+  gap: 9px; padding: 11px 13px;
+  border-bottom: 1px solid var(--cp-border);
 }
-/* A verified working → non-working transition is not proof of success;
-   celebrate the pause, never display a fabricated checkmark. */
-#role-nav-list .role-nav-card.crew-work-settled .crew-role-sprite {
-  animation: crew-finish-stretch .95s ease-out;
+.crew-activity-heading strong {
+  font-size: 13px; font-weight: 760;
+  color: var(--cp-text);
 }
-@keyframes crew-finish-stretch {
-  0%, 100% { transform: translateY(0) rotate(0); }
-  32% { transform: translateY(-3px) rotate(-4deg); }
-  64% { transform: translateY(-2px) rotate(4deg); }
+.crew-activity-heading > span {
+  font-size: 10px; line-height: 1.4;
+  text-align: right;
+  color: var(--cp-text-secondary);
 }
-@keyframes crew-pixel-type {
-  from { transform: translateY(0); }
-  to { transform: translateY(-1.5px); }
+.crew-activity-list { min-width: 0; }
+.crew-activity-empty {
+  padding: 17px 13px; margin: 0;
+  color: var(--cp-text-secondary);
+  font-size: 12px; line-height: 1.5;
 }
-@keyframes crew-handoff-fly {
-  0%   { opacity: 0; transform: translate(-50%, -50%) translate(0, 0) scale(.85); }
-  12%  { opacity: 1; }
-  55%  { opacity: 1; transform: translate(-50%, -50%) translate(var(--crew-mid-x), var(--crew-mid-y)) scale(1.08); }
-  100% { opacity: 0; transform: translate(-50%, -50%) translate(var(--crew-fly-x), var(--crew-fly-y)) scale(.85); }
+.crew-activity-row {
+  display: flex; align-items: center;
+  gap: 10px; width: 100%; min-height: 63px;
+  padding: 9px 12px;
+  text-align: left;
+  background: transparent;
+  color: var(--cp-text);
+  border: 0; touch-action: manipulation;
 }
-@keyframes crew-handoff-arrival {
-  0%, 100% { outline: 2px solid transparent; outline-offset: -2px; }
-  36% { outline: 2px solid var(--cp-accent); outline-offset: -2px; }
+.crew-activity-row + .crew-activity-row {
+  border-top: 1px solid var(--cp-border);
+}
+.crew-activity-row:active { background: var(--cp-accent-soft); }
+.crew-activity-row:focus-visible {
+  outline: 2px solid var(--cp-accent);
+  outline-offset: -3px;
+}
+.crew-activity-symbol {
+  display: grid; place-items: center;
+  flex: none; width: 33px; height: 33px;
+  background: var(--cp-accent-soft);
+  color: var(--cp-accent-strong);
+  border-radius: 11px;
+  font-size: 19px; font-weight: 800;
+}
+.crew-activity-main {
+  display: grid; gap: 4px; flex: 1; min-width: 0;
+}
+.crew-activity-route {
+  font-size: 12px; line-height: 1.4;
+  overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+}
+.crew-activity-route strong {
+  font-size: 12px; color: var(--cp-text); font-weight: 720;
+}
+.crew-activity-kind {
+  color: var(--cp-text-secondary);
+  font-size: 10px; line-height: 1.3;
+}
+.crew-activity-time {
+  flex: none; max-width: 86px;
+  color: var(--cp-text-secondary);
+  font-size: 10px; font-variant-numeric: tabular-nums;
+}
+.crew-activity-chevron {
+  flex: none; color: var(--cp-text-secondary);
+  font-size: 19px;
+}
+@media (max-width: 365px) {
+  .crew-activity-row { gap: 7px; padding: 8px; }
+  .crew-activity-time { font-size: 9px; max-width: 67px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .crew-role-avatar[data-state="working"] .crew-pixel-hand,
-  #role-nav-list .role-nav-card.crew-work-settled .crew-role-sprite,
-  #role-nav-list .role-nav-card.crew-handoff-arrived { animation: none !important; }
-  .crew-room-envelope { display: none !important; animation: none !important; }
+  #role-nav-list .role-nav-card.crew-handoff-arrived .crew-role-avatar,
+  #role-nav-list .role-nav-card.crew-work-settled .crew-role-avatar {
+    animation: none !important;
+  }
 }

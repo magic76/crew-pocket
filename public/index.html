@@ -52,8 +52,6 @@
   <link rel="stylesheet" href="/css/theme-light.css">
   <link rel="stylesheet" href="/css/crew-home.css">
   <link rel="stylesheet" href="/css/crew-room.css">
-  <link rel="stylesheet" href="/css/crew-office.css">
-  <link rel="stylesheet" href="/css/crew-world.css">
   <link rel="stylesheet" href="/css/visual-inspector.css">
 </head>
 <body data-primary-tab="crew" class="bg-slate-950 text-slate-100 flex flex-col h-[100dvh] w-full max-w-full overflow-hidden">
@@ -505,21 +503,19 @@
         <div id="cockpit-scroll" class="min-h-0 flex-1 overflow-y-auto overscroll-contain">
           <div id="crew-attention-panel" aria-label="待處理的角色訊息"></div>
           <div class="cockpit-roster-heading">
-            <span>小隊成員</span>
-            <div id="crew-room-view-switch" role="group" aria-label="小隊檢視方式">
-              <button type="button" class="crew-office-view-option" data-crew-office-view="office" aria-pressed="false">辦公室</button>
-              <button type="button" class="crew-office-view-option" data-crew-office-view="list" aria-pressed="true">清單</button>
-            </div>
+            <span>小隊成員</span><span>點擊角色繼續目前對話</span>
           </div>
-          <div id="crew-room-switchyard" data-view="list">
-            <div id="crew-room-roster-stage" class="crew-room-roster-stage">
-              <div id="role-nav-list" class="crew-role-grid">
-                <div class="crew-roster-loading">載入小隊成員中…</div>
-              </div>
-              <div id="crew-room-handoffs" class="crew-room-handoffs" aria-hidden="true"></div>
-            </div>
-            <div id="crew-room-office" aria-label="AI 小隊辦公室"></div>
+          <div id="role-nav-list" class="crew-role-grid">
+            <div class="crew-roster-loading">載入小隊成員中…</div>
           </div>
+          <section id="crew-activity-panel" class="crew-activity-panel" aria-label="最近的角色協作紀錄">
+            <div class="crew-activity-heading">
+              <strong>最近協作</strong><span>已儲存的角色交接與回覆</span>
+            </div>
+            <div id="crew-activity-list" class="crew-activity-list" aria-live="off">
+              <p class="crew-activity-empty">正在載入協作紀錄…</p>
+            </div>
+          </section>
           <button id="crew-collaboration-open" type="button" class="crew-collaboration-launch">
             <span class="crew-collaboration-icon" aria-hidden="true">↗</span>
             <span><strong>團隊協作紀錄</strong><small>查看目前角色的交接與回覆</small></span>
@@ -1885,11 +1881,6 @@
   <!-- Modular Scripts (Cache-busted v7.9) -->
   <script src="/js/i18n.js"></script>
   <script src="/js/crew-room.js"></script>
-  <script src="/js/crew-office-model.js"></script>
-  <script src="/js/crew-office.js"></script>
-  <script src="/js/crew-world-model.js"></script>
-  <script src="/js/crew-world-canvas.js"></script>
-  <script src="/js/crew-world.js"></script>
   <script src="/js/ui.js"></script>
   <script src="/js/memory-xray.js"></script>
   <script src="/js/cockpit-model.js"></script>
@@ -1909,6 +1900,6 @@
   <script src="/js/app.js"></script>
   <script src="/js/dreaming-settings.js"></script>
   <script src="/js/visual-inspector.js"></script>
-  <script>window.CrewRoomVisual?.init(window, document); (window.CrewWorld?.init(window, document) || window.CrewOffice?.init(window, document));</script>
+  <script>window.CrewRoomVisual?.init(window, document);</script>
 </body>
 </html>
