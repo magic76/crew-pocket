@@ -6,7 +6,7 @@
   const MAX_SIDE = 2400;
   const state = {
     image: null, shapes: [], draft: null, tool: 'rect', pointerId: null,
-    objectUrl: null, busy: false, origin: '截圖'
+    objectUrl: null, busy: false, origin: '截圖', loadVersion: 0
   };
   let elements = null;
 
@@ -118,6 +118,7 @@
   function close() {
     if (!elements || state.busy) return;
     elements.modal.classList.add('hidden');
+    state.loadVersion++;
     state.image = null;
     state.shapes = [];
     state.draft = null;
@@ -131,6 +132,7 @@
     if (!elements) return false;
     if (state.busy) return false;
     close();
+    const version = state.loadVersion;
     state.origin = origin || '截圖';
     state.objectUrl = objectUrl || null;
     elements.note.value = '';
@@ -138,7 +140,7 @@
     setStatus('正在載入畫面…');
     const image = new Image();
     image.onload = function () {
-      if (state.objectUrl !== objectUrl && objectUrl) return;
+      if (state.loadVersion !== version) return;
       if (!image.naturalWidth || !image.naturalHeight) {
         setStatus('無法讀取圖片尺寸', true);
         return;
@@ -152,21 +154,26 @@
       render();
       setStatus('圈選畫面後描述需求。圖片只會在你按下「附加到 Role」後送入對話。');
     };
-    image.onerror = function () { setStatus('圖片無法載入，請重新選擇截圖。', true); };
+    image.onerror = function () {
+      if (state.loadVersion === version) setStatus('圖片無法載入，請重新選擇截圖。', true);
+    };
     image.src = url;
     return true;
   }
 
   function openFromSharedScreen(url) {
     if (typeof url !== 'string') return false;
-    const resolved = new URL(url, window.location.origin);
-    if (resolved.origin !== window.location.origin ||
-        resolved.pathname !== '/api/image' ||
-        !resolved.searchParams.has('path')) return false;
-    return openImage(resolved.href, 'Android 其他 App 分享截圖', null);
+    try {
+      const resolved = new URL(url, window.location.origin);
+      if (resolved.origin !== window.location.origin ||
+          resolved.pathname !== '/api/image' ||
+          !resolved.searchParams.has('path')) return false;
+      return openImage(resolved.href, 'Android 其他 App 分享截圖', null);
+    } catch (_) { return false; }
   }
 
   function openFromFile(file) {
+    if (state.busy) return false;
     if (!file || !file.type.startsWith('image/')) {
       if (elements) setStatus('請選擇圖片檔案。', true);
       return false;
