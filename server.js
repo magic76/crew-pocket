@@ -50,6 +50,7 @@ const { buildCrewStatus } = require('./lib/crew-status');
 const { listProjects, getProject } = require('./lib/projects');
 const { listRoleQueuedMessages, enqueueRoleMessage, removeRoleQueuedMessage, clearRoleMessageQueue } = require('./lib/role-message-queue');
 const { defaultMemoryProvider } = require('./lib/memory');
+const { DreamingManager } = require('./lib/memory/dreaming');
 const {
   buildAgentContext,
   buildStaticContextContributions,
@@ -88,6 +89,25 @@ const { buildTurnResult } = require('./lib/turn-result');
 const { saveExecutionFeedback, enrichExecutionHistory } = require('./lib/execution-feedback');
 const { renderVisualAnswer } = require('./lib/visual-answer');
 
+
+const dreamingManager = new DreamingManager({
+  memoryProvider: defaultMemoryProvider,
+  getRole,
+  getProvider
+});
+
+async function handleDreaming(req, res) {
+  try {
+    const result = req.method === 'GET'
+      ? await dreamingManager.getStatus()
+      : { settings: await dreamingManager.configure(await parseJsonBody(req)) };
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+    res.end(JSON.stringify({ success: true, ...result }));
+  } catch (error) {
+    res.writeHead(400, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+    res.end(JSON.stringify({ success: false, error: String(error.message || error) }));
+  }
+}
 
 async function handleStorageReport(res) {
   try {
@@ -976,6 +996,7 @@ async function handleRoles(req, res, parsedUrl) {
       const result = await deleteRoleLifecycle(roleId, {
         stopActiveRoleFn: stopActiveRoleWork
       });
+      await dreamingManager.forgetRole(roleId);
       broadcastCrewStatusEvent('role-delete', roleId);
       res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
       return res.end(JSON.stringify({ success: true, deleted: result }));
@@ -2184,6 +2205,18 @@ async function handleChat(req, res) {
               .catch(error => console.warn('[Crew Messages] Queue drain failed:', error.message)));
           }
         } else if (event.type === 'turn_completed') {
+          if (role?.id) {
+            // A zero-model checkpoint is independent of the stream response.
+            setImmediate(() => dreamingManager.recordTurn({
+              roleId: role.id,
+              projectId: projectId || role.projectId || null,
+              providerId,
+              conversationId: event.conversationId || activeConversationId || conversation_id,
+              prompt: cleanUserContent(prompt || ''),
+              response: event.response,
+              status: event.status
+            }).catch(error => console.warn('[Dreaming] checkpoint failed:', error.message)));
+          }
           broadcastCrewStatusEvent('turn-complete', role?.id || null);
           if (pendingCrewMessageIds.length && role?.id) {
             markCrewMessagesDelivered(role.id, pendingCrewMessageIds)
@@ -2802,6 +2835,8 @@ const server = http.createServer(async (req, res) => {
     return handleCrewTool(req, res);
   } else if (pathname === '/api/memories' && ['GET', 'POST', 'DELETE'].includes(req.method)) {
     return handleMemories(req, res, parsedUrl);
+  } else if (pathname === '/api/dreaming' && ['GET', 'POST'].includes(req.method)) {
+    return handleDreaming(req, res);
   } else if (pathname === '/api/workspaces' && req.method === 'GET') {
     return handleWorkspaces(res);
   } else if (pathname === '/api/workspaces' && req.method === 'POST') {
@@ -2930,6 +2965,7 @@ process.on('unhandledRejection', (reason) => {
 });
 
 server.listen(PORT, HOST, () => {
+  dreamingManager.start();
   console.log(`=================================================`);
   console.log(`🚀 Crew Pocket Web UI (Resident Pipe) at: http://${HOST}:${PORT}`);
   const runtimeSecurity = securityStatus();
