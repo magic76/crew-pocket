@@ -454,22 +454,15 @@ function showRoleHistoryView() {
 window.showRoleNavigationView = showRoleNavigationView;
 window.showRoleHistoryView = showRoleHistoryView;
 
+// Compatibility boundary for existing Role navigation call sites. This is now
+// a primary page transition; there is no Drawer overlay or swipe gesture.
 function toggleDrawer(open) {
-  if (!drawer || !drawerOverlay) return;
-  if (open) {
-    drawer.classList.remove('-translate-x-full');
-    drawerOverlay.classList.remove('opacity-0', 'pointer-events-none');
-    showRoleNavigationView();
-    Promise.all([
-      loadWorkspaces().catch(() => null),
-      loadCrewStatus({ force: true }).catch(() => null),
-      typeof loadConversations === 'function' ? loadConversations({ force: true }).catch(() => []) : Promise.resolve([])
-    ]).then(() => renderRoleNavigation());
-  } else {
-    drawer.classList.add('-translate-x-full');
-    drawerOverlay.classList.add('opacity-0', 'pointer-events-none');
-    if (window.getPrimaryTab?.() === 'crew') window.syncPrimaryTabChrome?.('chat');
+  if (typeof window.setPrimaryTab === 'function') {
+    window.setPrimaryTab(open ? 'crew' : 'chat', { hapticFeedback: false });
+    return;
   }
+  drawer?.classList.toggle('hidden', !open);
+  if (open) showRoleNavigationView();
 }
 
 // Capabilities Cheat Sheet Modal Handlers
@@ -891,121 +884,141 @@ function formatRoleLastActivity(conversation) {
   return new Date(updatedAt).toLocaleDateString('zh-TW', { month: 'numeric', day: 'numeric' });
 }
 
+let lastRoleRosterMarkup = null;
 function renderRoleNavigation() {
   if (!roleNavList) return;
   const roles = availableRoles.length ? availableRoles : [];
-  if (!roles.length) {
-    roleNavList.innerHTML = '<div class="p-4 text-center text-xs text-slate-500">尚未找到 Role。</div>';
-    if (crewRoomSummary) crewRoomSummary.innerHTML = '<span>尚未建立 Crew</span>';
-    return;
-  }
-
   const statuses = crewStatusVerified ? roles.map(role => crewStatusForRole(role.id)).filter(Boolean) : [];
   const workingCount = statuses.filter(status => status.state === 'working').length;
   const attentionCount = statuses.reduce((sum, status) => sum + Number(status.attentionCount || 0), 0);
   if (crewRoomSummary) {
-    crewRoomSummary.innerHTML = crewStatusVerified ? [
-      `<span class="inline-flex items-center gap-1 text-emerald-300"><span class="h-1.5 w-1.5 rounded-full bg-emerald-400"></span>${workingCount} 工作中</span>`,
-      attentionCount ? `<span class="inline-flex items-center gap-1 text-amber-300"><span class="h-1.5 w-1.5 rounded-full bg-amber-400"></span>${attentionCount} 需要注意</span>` : ''
-    ].filter(Boolean).join('') : '<span>Runtime 尚未同步 · 狀態未知</span>';
+    crewRoomSummary.innerHTML = crewStatusVerified
+      ? [
+        '<span class="crew-summary-item" data-kind="working">' + workingCount + ' 工作中</span>',
+        attentionCount ? '<span class="crew-summary-item" data-kind="attention">' + attentionCount + ' 待處理</span>' : '',
+        '<span class="crew-summary-item" data-kind="roles">' + roles.length + ' 位成員</span>'
+      ].filter(Boolean).join('')
+      : '<span class="crew-summary-item" data-kind="roles">' + roles.length +
+        ' 位成員</span><span>Runtime 狀態尚未同步</span>';
   }
 
-  const expandedMenus = new Set([...roleNavList.querySelectorAll('[data-role-menu-panel]:not(.hidden)')]
-    .map(panel => panel.dataset.roleMenuPanel));
-  roleNavList.innerHTML = roles.map(role => {
+  const stateName = state => ({
+    working: '工作中', waiting: '等待處理', idle: '待命', new: '新工作', unknown: '狀態未知'
+  })[state] || '狀態未知';
+
+  const markup = roles.length ? roles.map(role => {
     const selected = role.id === (currentRoleId || DEFAULT_ROLE_ID);
     const project = projectMeta(role.projectId);
     const latest = roleLatestConversation(role.id);
     const status = crewStatusVerified ? crewStatusForRole(role.id) : null;
-    const meta = status
-      ? crewStatusMeta(status)
-      : {
-          label: 'SYNC',
-          dot: 'bg-slate-600',
-          badge: 'border-slate-700 bg-slate-800/70 text-slate-500',
-          avatar: 'border-slate-700/70 bg-slate-900'
-        };
+    const state = status ? String(status.state || 'unknown') : 'unknown';
     const title = status?.currentWork?.title || status?.conversationTitle || latest?.title || '';
     const hasWork = Boolean(title);
-    const activity = hasWork
-      ? formatRoleLastActivity({
-          title,
-          updatedAt: status?.lastActivityAt || latest?.updatedAt || 0
-        })
-      : '';
     const queued = Number(status?.queuedMessageCount || 0) + Number(status?.queuedRequestCount || 0);
     const unread = Number(status?.unreadReplyCount || 0);
-    const counters = [
-      queued ? `<span class="rounded-full border border-amber-500/25 bg-amber-500/10 px-1.5 py-0.5 text-[8px] font-bold text-amber-300">${queued} 排隊</span>` : '',
-      unread ? `<span class="rounded-full border border-indigo-500/25 bg-indigo-500/10 px-1.5 py-0.5 text-[8px] font-bold text-indigo-300">${unread} 未讀</span>` : ''
-    ].filter(Boolean).join('');
+    const attention = queued + unread;
+    return '<article class="role-nav-card" data-role-card-id="' + escapeHtml(role.id) +
+      '" data-selected="' + selected + '">' +
+      '<button type="button" data-role-nav-id="' + escapeHtml(role.id) +
+        '" aria-label="進入 ' + escapeHtml(role.name) + ' 的目前對話">' +
+        '<span class="crew-role-avatar">' + escapeHtml(project?.icon || '🧠') +
+          '<span class="crew-role-dot" data-state="' + escapeHtml(state) +
+          '" aria-hidden="true"></span></span>' +
+        '<span class="crew-role-name">' + escapeHtml(role.name) + '</span>' +
+        '<span class="crew-role-state" data-state="' + escapeHtml(state) + '">' +
+          escapeHtml(stateName(state)) + '</span>' +
+        '<span class="crew-role-work">' + (hasWork ? escapeHtml(title) : '尚無工作') + '</span>' +
+      '</button>' +
+      (attention ? '<span class="crew-role-attention" aria-label="' + attention + ' 則待處理">' +
+        attention + '</span>' : '') +
+      '<button type="button" data-role-menu-btn="' + escapeHtml(role.id) +
+        '" aria-label="管理 ' + escapeHtml(role.name) + '" title="角色管理">⋯</button>' +
+    '</article>';
+  }).join('') : '<div class="crew-roster-loading">尚未建立 AI 角色。點擊右上角＋新增。</div>';
 
-    return `<div class="role-nav-card relative overflow-hidden rounded-2xl border transition ${selected ? 'border-indigo-400/70 bg-indigo-500/10' : 'border-slate-800 bg-slate-950/55'}" data-role-card-id="${escapeHtml(role.id)}" data-selected="${selected}">
-      <button type="button" data-role-nav-id="${escapeHtml(role.id)}" class="block min-h-[158px] w-full min-w-0 px-3 pb-3 pt-4 text-center active:scale-[0.99]">
-        <span class="relative mx-auto flex h-12 w-12 items-center justify-center rounded-2xl border ${meta.avatar} text-[22px]">
-          ${escapeHtml(project?.icon || '🧠')}
-          <span class="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-slate-950 ${meta.dot}" title="${escapeHtml(meta.label)}" aria-label="${escapeHtml(meta.label)}"></span>
-        </span>
-        <span class="mt-2 flex min-w-0 items-center justify-center gap-1">
-          <span class="truncate text-[12px] font-bold text-slate-100">${escapeHtml(role.name)}</span>
-          ${counters}
-        </span>
-        <span class="mt-0.5 block truncate text-[11px] font-medium text-slate-400">${escapeHtml(roleProjectLabel(role))}</span>
-        <span class="crew-role-task mt-2 block min-w-0 rounded-xl border border-slate-800/80 bg-slate-950/70 px-2 py-2 text-left text-[9px] font-medium ${hasWork ? 'text-slate-300' : 'text-slate-600'}">${hasWork ? escapeHtml(title) : '尚無工作'}</span>
-        ${activity ? `<span class="mt-1.5 block truncate text-[10px] text-slate-400">${escapeHtml(activity)}</span>` : ''}
-      </button>
-      <button type="button" data-role-menu-btn="${escapeHtml(role.id)}" class="absolute right-1.5 top-1.5 flex h-8 w-8 items-center justify-center rounded-xl text-base text-slate-500 transition hover:bg-slate-800/80 hover:text-white active:scale-95" aria-label="${escapeHtml(role.name)} 操作">⋯</button>
-      <div data-role-menu-panel="${escapeHtml(role.id)}" class="hidden grid-cols-2 gap-1.5 border-t border-slate-800/80 bg-slate-950/80 p-2">
-        <button type="button" data-role-action="new-work" data-role-id="${escapeHtml(role.id)}" class="rounded-xl bg-indigo-500/10 px-2.5 py-2 text-left text-[10px] font-semibold text-indigo-200">＋ 新工作</button>
-        <button type="button" data-role-action="history" data-role-id="${escapeHtml(role.id)}" class="rounded-xl bg-slate-800/80 px-2.5 py-2 text-left text-[10px] font-semibold text-slate-300">🕘 工作紀錄</button>
-        <button type="button" data-role-action="memory" data-role-id="${escapeHtml(role.id)}" class="rounded-xl bg-violet-500/10 px-2.5 py-2 text-left text-[10px] font-semibold text-violet-200">🧠 Memory</button>
-        <button type="button" data-role-action="settings" data-role-id="${escapeHtml(role.id)}" class="rounded-xl bg-slate-800/80 px-2.5 py-2 text-left text-[10px] font-semibold text-slate-300">⚙ Role 設定</button>
-      </div>
-    </div>`;
-  }).join('');
-
-  roleNavList.querySelectorAll('[data-role-menu-panel]').forEach(panel => {
-    const expanded = expandedMenus.has(panel.dataset.roleMenuPanel);
-    panel.classList.toggle('hidden', !expanded);
-    panel.classList.toggle('grid', expanded);
-  });
-
-  roleNavList.querySelectorAll('[data-role-nav-id]').forEach(button => {
-    button.addEventListener('click', () => selectRole(button.dataset.roleNavId));
-  });
-
-  roleNavList.querySelectorAll('[data-role-menu-btn]').forEach(button => {
-    button.addEventListener('click', event => {
-      event.stopPropagation();
-      const roleId = button.dataset.roleMenuBtn;
-      roleNavList.querySelectorAll('[data-role-menu-panel]').forEach(panel => {
-        const shouldOpen = panel.dataset.roleMenuPanel === roleId && panel.classList.contains('hidden');
-        panel.classList.toggle('hidden', !shouldOpen);
-        panel.classList.toggle('grid', shouldOpen);
-      });
-    });
-  });
-
-  roleNavList.querySelectorAll('[data-role-action]').forEach(button => {
-    button.addEventListener('click', async event => {
-      event.stopPropagation();
-      const roleId = button.dataset.roleId;
-      const action = button.dataset.roleAction;
-      const role = roleMeta(roleId);
-      if (!role) return;
-      if (action === 'new-work') return selectRole(roleId, true);
-      if (action === 'history') {
-        activateRoleIdentity(role);
-        showRoleHistoryView();
-        if (typeof loadConversations === 'function') await loadConversations({ force: true });
-        return;
-      }
-      if (action === 'memory') return openRoleMemory(roleId);
-      if (action === 'settings') return openRoleEditor(roleId);
-    });
-  });
+  // SSE may repeat the same status. Preserve DOM, scroll anchor and touch focus.
+  if (markup === lastRoleRosterMarkup) return;
+  lastRoleRosterMarkup = markup;
+  const focusedRole = document.activeElement?.dataset?.roleNavId;
+  const focusedMenu = document.activeElement?.dataset?.roleMenuBtn;
+  roleNavList.innerHTML = markup;
+  if (focusedRole || focusedMenu) {
+    const target = [...roleNavList.querySelectorAll('[data-role-nav-id], [data-role-menu-btn]')]
+      .find(button => (focusedRole && button.dataset.roleNavId === focusedRole)
+        || (focusedMenu && button.dataset.roleMenuBtn === focusedMenu));
+    target?.focus?.({ preventScroll: true });
+  }
   window.dispatchEvent(new CustomEvent('crew:roster-updated'));
 }
+
+// Delegation is stable across roster refreshes and avoids duplicating handlers.
+roleNavList?.addEventListener('click', event => {
+  const menu = event.target.closest('[data-role-menu-btn]');
+  if (menu) { openCrewRoleDetail(menu.dataset.roleMenuBtn); return; }
+  const role = event.target.closest('[data-role-nav-id]');
+  if (role) selectRole(role.dataset.roleNavId);
+});
+
+const crewRoleDetailModal = document.getElementById('crew-role-detail-modal');
+const crewRoleDetailName = document.getElementById('crew-role-detail-name');
+const crewRoleDetailStatus = document.getElementById('crew-role-detail-status');
+let crewRoleDetailId = null;
+let crewRoleDetailReturnFocus = null;
+function closeCrewRoleDetail() {
+  if (!crewRoleDetailModal) return;
+  crewRoleDetailModal.classList.add('hidden');
+  const previousFocus = crewRoleDetailReturnFocus;
+  crewRoleDetailId = null;
+  crewRoleDetailReturnFocus = null;
+  previousFocus?.focus?.({ preventScroll: true });
+}
+function openCrewRoleDetail(roleId) {
+  const role = roleMeta(roleId);
+  if (!role || !crewRoleDetailModal) return;
+  crewRoleDetailId = role.id;
+  crewRoleDetailReturnFocus = document.activeElement;
+  const status = crewStatusVerified ? crewStatusForRole(role.id) : null;
+  const state = status?.state === 'working' ? '工作中'
+    : status?.state === 'waiting' ? '等待處理'
+    : status?.state === 'idle' ? '待命'
+    : status?.state === 'new' ? '新工作' : '狀態未知';
+  if (crewRoleDetailName) crewRoleDetailName.textContent = role.name;
+  if (crewRoleDetailStatus) crewRoleDetailStatus.textContent =
+    roleProjectLabel(role) + ' · ' + state;
+  crewRoleDetailModal.classList.remove('hidden');
+  document.getElementById('crew-role-detail-close')?.focus({ preventScroll: true });
+}
+crewRoleDetailModal?.addEventListener('click', async event => {
+  if (event.target === crewRoleDetailModal ||
+      event.target.closest('#crew-role-detail-close')) {
+    closeCrewRoleDetail(); return;
+  }
+  const action = event.target.closest('[data-crew-role-detail-action]');
+  if (!action || !crewRoleDetailId) return;
+  const roleId = crewRoleDetailId;
+  const role = roleMeta(roleId);
+  closeCrewRoleDetail();
+  if (!role) return;
+  switch (action.dataset.crewRoleDetailAction) {
+    case 'new-work': return selectRole(roleId, true);
+    case 'history':
+      activateRoleIdentity(role);
+      showRoleHistoryView();
+      if (typeof loadConversations === 'function') await loadConversations({ force: true });
+      return;
+    case 'memory': return openRoleMemory(roleId);
+    case 'settings': return openRoleEditor(roleId);
+    case 'collaboration':
+      showRoleNavigationView();
+      document.getElementById('mission-graph')?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+      window.CrewMissionGraph?.inspectRole(roleId);
+      return;
+  }
+});
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape' && crewRoleDetailId) closeCrewRoleDetail();
+});
+window.openCrewRoleDetail = openCrewRoleDetail;
 
 window.renderRoleNavigation = renderRoleNavigation;
 

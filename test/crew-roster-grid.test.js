@@ -47,15 +47,18 @@ async function run() {
     await fs.rm(tempDir, { recursive: true, force: true });
   }
 
-  assert.ok(html.includes('auto-rows-max grid-cols-2'));
+  assert.ok(html.includes('id="role-nav-list" class="crew-role-grid"'));
+  assert.ok(html.includes('id="crew-role-detail-modal"'));
+  assert.ok(html.includes('href="/css/crew-home.css"'));
   assert.ok(html.includes('id="drawer-new-role-btn"'));
   assert.equal(html.includes('Role 是長期身份；工作只是暫時 Context'), false);
   assert.equal(html.includes('>✓ 任務中心</button>'), false);
   assert.equal(html.includes('General Developer'), false);
-  assert.ok(ui.includes('role-nav-card relative'));
-  assert.ok(ui.includes('absolute right-1.5 top-1.5'));
-  assert.ok(ui.includes('crew-role-task'));
-  assert.ok(css.includes('.crew-role-task'));
+  assert.ok(ui.includes('class="role-nav-card"'));
+  assert.ok(ui.includes('crew-role-avatar'));
+  assert.ok(ui.includes('crew-role-state'));
+  assert.ok(ui.includes('openCrewRoleDetail(menu.dataset.roleMenuBtn)'));
+  assert.ok((await fs.readFile(path.join(root, 'public', 'css', 'crew-home.css'), 'utf8')).includes('grid-template-columns: repeat(2'));
 
   console.log('crew-roster-grid tests: ok');
 }

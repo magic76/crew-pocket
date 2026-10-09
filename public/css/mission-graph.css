@@ -7,7 +7,6 @@
   overflow: hidden;
   color: var(--cp-text-secondary);
 }
-#role-nav-view[data-cockpit-mode="focus"] #mission-graph { display: none; }
 #mission-graph > summary {
   list-style: none;
   cursor: pointer;

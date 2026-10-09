@@ -85,7 +85,8 @@ async function run() {
   }
   assert.ok(html.includes('/js/mission-graph.js'));
   assert.ok(html.includes('/css/mission-graph.css'));
-  assert.ok(css.includes('#role-nav-view[data-cockpit-mode="focus"] #mission-graph'));
+  assert.ok(html.indexOf('id="role-nav-list"') < html.indexOf('id="mission-graph"'));
+  assert.ok(js.includes('window.CrewMissionGraph = {'));
   assert.ok(js.includes("const available = new Set((currentSnapshot()?.roles || []).map(role => role.id))"));
   assert.ok(js.includes('encodeURIComponent(roleId)'));
   assert.ok(js.includes('AbortController'));

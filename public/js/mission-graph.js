@@ -25,7 +25,8 @@
   let lastGraph = null;
   let liveRefreshTimeout = null;
   const currentSnapshot = () => window.getCrewCockpitSnapshot?.();
-  const activeId = () => String(currentSnapshot()?.activeRoleId || '');
+  let inspectedRoleId = null;
+  const activeId = () => inspectedRoleId || String(currentSnapshot()?.activeRoleId || '');
 
   // The graphic is a hub-and-spoke depiction of *observed messages* only.
   // It does not claim task dependencies, percent completion or approval states.
@@ -201,6 +202,7 @@
     }
   });
   window.addEventListener('crew:role-selected', () => {
+    inspectedRoleId = null;
     lastFetched = 0;
     if (root.open) load({ force: true });
   });
@@ -210,4 +212,15 @@
   document.addEventListener('crew:localechange', () => {
     if (lastGraph && lastGraph.focusRoleId === activeId() && root.open) renderGraph(lastGraph);
   });
+  window.CrewMissionGraph = {
+    inspectRole(roleId) {
+      const available = new Set((currentSnapshot()?.roles || []).map(role => role.id));
+      if (!idValid(roleId) || !available.has(roleId)) return;
+      inspectedRoleId = roleId;
+      lastFetched = 0;
+      root.open = true;
+      load({ force: true });
+      root.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+    }
+  };
 })();

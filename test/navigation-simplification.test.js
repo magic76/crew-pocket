@@ -9,7 +9,7 @@ const chat = fs.readFileSync(path.join(root, 'public', 'js', 'chat.js'), 'utf8')
 const app = fs.readFileSync(path.join(root, 'public', 'js', 'app.js'), 'utf8');
 const premium = fs.readFileSync(path.join(root, 'public', 'css', 'style-premium.css'), 'utf8');
 
-// Primary navigation is Role-centric: conversation, crew, settings.
+// Primary navigation is Role-centric: Crew Home, conversation, settings.
 for (const tab of ['chat', 'crew', 'settings']) {
   assert.ok(html.includes(`data-primary-tab="${tab}"`), tab);
 }
@@ -45,7 +45,8 @@ assert.equal(premium.includes('#task-center-modal'), false);
 
 // Crew is a top-level view, not a modal navigation dead end.
 assert.ok(premium.includes('#drawer,'));
-assert.ok(ui.includes("window.getPrimaryTab?.() === 'crew'"));
+assert.ok(ui.includes("window.setPrimaryTab(open ? 'crew' : 'chat'"));
+assert.ok(app.includes("setPrimaryTab('crew', { hapticFeedback: false })"));
 
 // Context is understandable at a glance, but unknown budgets still show token usage rather than a fake percentage.
 assert.ok(html.includes('id="context-progress-track"'));
