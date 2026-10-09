@@ -51,6 +51,10 @@
         '</div>' +
         '<div id="crew-world-quick" class="crew-world-quick" role="group" aria-label="' +
           tr(win,'快速切換角色','Quick access Roles') + '"></div>' +
+        '<p class="crew-world-disclaimer">' +
+          tr(win,'待命角色偶爾散步僅為視覺效果；工作與交接以真實 Runtime 紀錄為準。',
+            'Idle strolls are decorative; work and handoffs follow real Runtime evidence.') +
+        '</p>' +
       '</section>';
     const canvas = doc.getElementById('crew-world-canvas');
     const viewport = doc.getElementById('crew-world-viewport');
@@ -137,7 +141,7 @@
       raf = 0;
       if (!active()) { lastFrame = 0; return; }
       resize();
-      const elapsed = lastFrame ? clamp((ts-lastFrame)/1000,0,.06) : 0;
+      const elapsed = lastFrame ? clamp((ts-lastFrame)/1000,0,.12) : 0;
       lastFrame = ts;
       const changed = world.tick(elapsed);
       if (size.w && size.h && (changed || ts-lastPaint > (prefersReduced()?350:33))) {
