@@ -35,7 +35,10 @@
       .sort((a, b) => a.id.localeCompare(b.id))
       .map(role => {
         const status = verified && role.status && typeof role.status === 'object' ? role.status : null;
-        const state = status && STATES.has(status.state) ? status.state : 'unknown';
+        const reported = status && STATES.has(status.state) ? status.state : 'unknown';
+        // An internally contradictory Runtime status must not animate
+        // work unless its busy flag actually confirms work is in progress.
+        const state = reported === 'working' && status.busy !== true ? 'unknown' : reported;
         const attention = status
           ? safeCount(status.queuedMessageCount) + safeCount(status.queuedRequestCount) +
             safeCount(status.unreadReplyCount) : 0;
@@ -43,8 +46,8 @@
           id: role.id, name: String(role.name || 'Role'),
           kind: specialty(role), state, attention,
           selected: String(snapshot.activeRoleId || '') === role.id,
-          title: String(status?.currentWork?.title || status?.conversationTitle ||
-            role.latestTitle || ''),
+          // Historical conversation titles never become a fake live task.
+          title: String(status?.currentWork?.title || status?.conversationTitle || ''),
           // Never infer "busy" from a stale title or historical conversation.
           busy: state === 'working' && status?.busy === true
         };
