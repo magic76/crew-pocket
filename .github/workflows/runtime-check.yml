@@ -81,6 +81,9 @@ jobs:
           node --check test/crew-auto-response.test.js
           node test/role-memory-kernel.test.js
           node test/memory-provenance.test.js
+          node --check lib/memory/local-memory-provider.js
+          node --check test/memory-xray.test.js
+          node test/memory-xray.test.js
           node test/context-health.test.js
           node test/context-compaction.test.js
           node test/role-centric-navigation.test.js

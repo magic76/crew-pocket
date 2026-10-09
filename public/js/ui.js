@@ -1236,34 +1236,10 @@ async function saveRoleEditor(event) {
 async function openRoleMemory(roleId) {
   const role = roleMeta(roleId);
   if (!role) return;
-  if (roleMemoryTitle) roleMemoryTitle.textContent = `${role.name} · Memory`;
-  if (roleMemorySubtitle) roleMemorySubtitle.textContent = '跨工作保留的 Role Memory；Conversation 本身不等於記憶。';
-  if (roleMemoryList) roleMemoryList.innerHTML = '<div class="p-6 text-center text-xs text-slate-500">載入 Memory 中...</div>';
+  if (roleMemoryTitle) roleMemoryTitle.textContent = `${role.name} · Memory X-Ray`;
+  if (roleMemorySubtitle) roleMemorySubtitle.textContent = '只檢視此 Role 的記憶來源、生命週期與已記錄的版本。';
   toggleRoleModal(roleMemoryModal, true);
-  try {
-    const response = await fetch(`/api/memories?roleId=${encodeURIComponent(role.id)}&scopes=ROLE&limit=50&maxChars=24000`);
-    const data = await response.json();
-    if (!response.ok || !data.success) throw new Error(data.error || 'Memory 載入失敗');
-    const memories = Array.isArray(data.memories) ? data.memories : [];
-    if (!roleMemoryList) return;
-    if (!memories.length) {
-      roleMemoryList.innerHTML = '<div class="rounded-2xl border border-dashed border-slate-700 p-8 text-center text-xs text-slate-500">這個 Role 目前沒有長期 Memory。</div>';
-      return;
-    }
-    roleMemoryList.innerHTML = memories.map(memory => {
-      const provenance = memory.provenance?.derivation || memory.source || 'memory';
-      const confidence = Number.isFinite(Number(memory.confidence)) ? ` · ${Math.round(Number(memory.confidence) * 100)}%` : '';
-      return `<article class="rounded-2xl border border-slate-800 bg-slate-950/70 p-3">
-        <div class="mb-2 flex items-center justify-between gap-2 text-[9px]">
-          <span class="rounded-full border border-violet-500/25 bg-violet-500/10 px-2 py-0.5 font-bold text-violet-300">${escapeHtml(memory.kind || 'experience')}</span>
-          <span class="truncate text-slate-600">${escapeHtml(provenance)}${confidence}</span>
-        </div>
-        <div class="whitespace-pre-wrap text-[11px] leading-relaxed text-slate-300">${escapeHtml(memory.text || '')}</div>
-      </article>`;
-    }).join('');
-  } catch (error) {
-    if (roleMemoryList) roleMemoryList.innerHTML = `<div class="p-6 text-center text-xs text-rose-300">${escapeHtml(error.message)}</div>`;
-  }
+  window.RoleMemoryXRay?.open({ id: role.id, name: role.name });
 }
 
 window.openRoleEditor = openRoleEditor;
