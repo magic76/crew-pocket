@@ -1,0 +1,67 @@
+/* Role DNA: compact Role-owned skill management without mixing with Memory X-Ray. */
+#role-dna-modal .role-dna-sheet {
+  width: 100%; max-width: 520px; max-height: 84dvh; min-height: 220px;
+  display: flex; flex-direction: column; overflow: hidden;
+  border: 1px solid var(--cp-border, #334155); border-radius: 20px;
+  background: var(--cp-surface, #0f172a); color: var(--cp-text, #f8fafc);
+}
+.role-dna-heading {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+  flex: none; padding: 14px; border-bottom: 1px solid var(--cp-border, #334155);
+  background: var(--cp-surface, #0f172a) !important;
+}
+.role-dna-heading h2 { margin: 4px 0; font-size: 17px; font-weight: 700; }
+.role-dna-heading p, .role-dna-kicker { font-size: 11px; color: var(--cp-muted, #94a3b8); }
+.role-dna-kicker { letter-spacing: .14em; font-weight: 800; }
+#role-dna-close, #role-dna-refresh, .role-dna-actions button, .role-dna-form button {
+  min-height: 40px; border: 1px solid var(--cp-border, #475569); border-radius: 10px;
+  padding: 8px 12px; font-weight: 700; font-size: 12px; color: var(--cp-text, #f8fafc);
+  background: var(--cp-surface-2, #1e293b);
+}
+.role-dna-toolbar { display: flex; align-items: center; justify-content: space-between;
+  flex: none; padding: 8px 14px; border-bottom: 1px solid var(--cp-border, #334155);
+  gap: 10px; }
+#role-dna-summary { font-size: 11px; color: var(--cp-muted, #94a3b8); }
+.role-dna-list { flex: 1; overflow-y: auto; min-height: 0; padding: 12px;
+  display: flex; flex-direction: column; gap: 10px; scrollbar-width: none; }
+.role-dna-list::-webkit-scrollbar { display: none; }
+.role-dna-notice, .role-dna-empty { margin: 0; font-size: 11px; line-height: 1.6;
+  color: var(--cp-muted, #94a3b8); }
+.role-dna-empty { padding: 30px 14px; text-align: center; }
+.role-dna-card { border: 1px solid var(--cp-border, #334155);
+  border-radius: 14px; padding: 12px; background: var(--cp-surface-2, #1e293b); }
+.role-dna-row { display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: 8px; }
+.role-dna-row strong { font-size: 13px; overflow-wrap: anywhere; }
+.role-dna-badge { font-size: 10px; padding: 4px 7px; border-radius: 9px;
+  border: 1px solid var(--cp-border, #475569); color: var(--cp-muted, #cbd5e1); }
+.role-dna-badge[data-state="active"] { color: #047857; border-color: #10b981; }
+.role-dna-badge[data-state="candidate"] { color: #b45309; border-color: #f59e0b; }
+.role-dna-card > p, .role-dna-lines, .role-dna-proof { font-size: 12px; line-height: 1.5; }
+.role-dna-card > p { margin: 9px 0; }
+.role-dna-lines { margin-top: 8px; display: grid; gap: 3px; }
+.role-dna-lines > b { font-size: 10px; color: var(--cp-muted, #94a3b8); }
+.role-dna-lines ol, .role-dna-lines ul { margin: 0; padding-left: 20px; list-style: decimal; }
+.role-dna-lines ul { list-style: disc; }
+.role-dna-proof, .role-dna-form { margin-top: 10px;
+  border-top: 1px solid var(--cp-border, #475569); padding-top: 10px; }
+.role-dna-proof summary, .role-dna-form summary { cursor: pointer; font-size: 12px; font-weight: 700; }
+.role-dna-proof p { overflow-wrap: anywhere; margin: 5px 0; }
+.role-dna-proof ul { padding-left: 17px; }
+.role-dna-proof li { margin-top: 8px; overflow-wrap: anywhere; }
+.role-dna-proof small { display: block; font-size: 11px; color: var(--cp-muted, #94a3b8); }
+.role-dna-form-fields { margin-top: 10px; display: grid; gap: 8px; }
+.role-dna-form-fields label { display: grid; gap: 4px; font-size: 11px; font-weight: 700; }
+.role-dna-form-fields select, .role-dna-form-fields input, .role-dna-form-fields textarea {
+  width: 100%; min-height: 40px; padding: 9px;
+  border-radius: 9px; background: var(--cp-surface, #0f172a);
+  border: 1px solid var(--cp-border, #475569); color: var(--cp-text, #f8fafc);
+  font-size: 12px;
+}
+.role-dna-form-fields textarea { resize: vertical; }
+.role-dna-actions { margin-top: 10px; display: flex; gap: 7px; flex-wrap: wrap; }
+.role-dna-actions button:disabled { opacity: .45; }
+.role-dna-actions button[data-skill-action="activate"] { background: #0f766e; color: white; }
+@media (prefers-color-scheme: light) {
+  .role-dna-badge[data-state="active"] { color: #047857; }
+}
