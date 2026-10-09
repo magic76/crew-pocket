@@ -8,7 +8,7 @@
     image: null, shapes: [], draft: null, tool: 'pan', pointerId: null,
     objectUrl: null, busy: false, origin: '截圖', loadVersion: 0,
     zoom: 1, fitWidth: 0, pointers: new Map(), pan: null, pinchDistance: 0,
-    sharedImagePath: null
+    sharedImagePath: null, sharedImageUrl: null
   };
   let elements = null;
 
@@ -222,6 +222,7 @@
     state.pan = null;
     state.pinchDistance = 0;
     state.sharedImagePath = null;
+    state.sharedImageUrl = null;
     state.zoom = 1;
     if (state.objectUrl) URL.revokeObjectURL(state.objectUrl);
     state.objectUrl = null;
@@ -277,7 +278,10 @@
           resolved.pathname !== '/api/image' ||
           !resolved.searchParams.has('path')) return false;
       const opened = openImage(resolved.href, 'Android 其他 App 分享截圖', null);
-      if (opened) state.sharedImagePath = resolved.searchParams.get('path');
+      if (opened) {
+        state.sharedImagePath = resolved.searchParams.get('path');
+        state.sharedImageUrl = resolved.href;
+      }
       return opened;
     } catch (_) { return false; }
   }
@@ -313,7 +317,7 @@
       const path = state.sharedImagePath && !state.shapes.length &&
         typeof window.attachExistingImagePath === 'function'
         ? window.attachExistingImagePath(
-            state.sharedImagePath, elements.canvas.toDataURL('image/jpeg', 0.42)
+            state.sharedImagePath, state.sharedImageUrl
           )
         : await window.processAndUploadImageBase64(
             elements.canvas.toDataURL('image/jpeg', 0.88), 'visual-inspector.jpg'
