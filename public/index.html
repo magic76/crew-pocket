@@ -47,6 +47,7 @@
   <link rel="stylesheet" href="/css/visual-answer.css">
   <link rel="stylesheet" href="/css/design-system.css">
   <link rel="stylesheet" href="/css/cockpit.css">
+  <link rel="stylesheet" href="/css/mission-graph.css">
   <link rel="stylesheet" href="/css/theme-light.css">
 </head>
 <body class="bg-slate-950 text-slate-100 flex flex-col h-[100dvh] w-full max-w-full overflow-hidden">
@@ -488,6 +489,18 @@
         <div id="cockpit-scroll" class="min-h-0 flex-1 overflow-y-auto overscroll-contain">
           <div id="cockpit-focus-panel" class="cockpit-content px-3 pt-3" aria-label="目前 Role"></div>
           <div id="cockpit-command-panel" class="cockpit-content px-3 pt-3" aria-label="小隊即時工作台"></div>
+          <details id="mission-graph" aria-label="Role 交接圖">
+            <summary>
+              <span class="mission-summary-copy">
+                <strong>Mission Graph · 交接圖</strong>
+                <span id="mission-graph-summary">查看已保存的跨角色交接</span>
+              </span>
+              <span class="mission-expand-indicator">查看關係</span>
+            </summary>
+            <div id="mission-graph-body" aria-live="polite">
+              <div class="mission-empty">展開後讀取該 Role 的最近交接紀錄。</div>
+            </div>
+          </details>
           <div class="cockpit-roster-heading">
             <span>小隊成員</span><span>點擊角色繼續其目前工作</span>
           </div>
@@ -1761,6 +1774,7 @@
   <script src="/js/ui.js"></script>
   <script src="/js/cockpit-model.js"></script>
   <script src="/js/cockpit.js"></script>
+  <script src="/js/mission-graph.js"></script>
   <script src="/js/model-settings.js"></script>
   <script src="/js/tools.js"></script>
   <script src="/js/storage.js"></script>
