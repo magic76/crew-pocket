@@ -1415,6 +1415,42 @@ function buildCrewToolGuide(role) {
   ].join('\n');
 }
 
+// Keep stable Role/Project identity and long-term memory updates out of the
+// middle of the existing thread prefix. Changed instructions are appended as
+// a new turn; older turns are never rebuilt.
+function roleProjectFingerprint(role, project) {
+  const identity = {
+    id: role?.id || null,
+    name: role?.name || null,
+    description: role?.description || null,
+    systemContext: role?.systemContext || null,
+    skills: role?.skills || [],
+    projectId: project?.id || null,
+    projectName: project?.name || null,
+    projectWorkspace: project?.workspace || null,
+    projectContext: project?.systemContext || null
+  };
+  return crypto.createHash('sha256').update(JSON.stringify(identity)).digest('hex');
+}
+
+async function memoryStoreRevision() {
+  const storePath = defaultMemoryProvider?.storagePath;
+  if (!storePath) return null;
+  try {
+    const stat = await fsPromises.stat(storePath);
+    return `${stat.size}:${stat.mtimeMs}`;
+  } catch (error) {
+    return error.code === 'ENOENT' ? 'empty' : null;
+  }
+}
+
+function memoryEvidenceSignatures(memories = []) {
+  return Object.fromEntries(memories.filter(hit => hit?.record?.id).map(hit => {
+    const text = formatMemoryEvidence(hit.record);
+    return [hit.record.id, crypto.createHash('sha256').update(text).digest('hex')];
+  }));
+}
+
 function formatCrewInbox(messages = []) {
   if (!messages.length) return '';
   return [
@@ -1673,6 +1709,9 @@ async function handleChat(req, res) {
     ? [...contextSnapshot.contributions]
     : [];
   let memoryRefreshConsumed = false;
+  const currentIdentityFingerprint = roleProjectFingerprint(role, project);
+  const currentMemoryRevision = await memoryStoreRevision();
+  let nextMemorySignatures = { ...(contextSnapshot?.memorySignatures || {}) };
 
   // New threads receive the bounded Role/Project/Memory/Task metadata once.
   // We persist only attribution metadata (never prompt text) so Context Health
@@ -1689,6 +1728,7 @@ async function handleChat(req, res) {
       });
       roleMemoryContext = formatAgentContext(agentContext);
       assembledContextContributions = [...agentContext.contributions];
+      nextMemorySignatures = memoryEvidenceSignatures(agentContext.memories);
     } catch (error) {
       console.warn('[Memory Context] Build failed:', error.message);
     }
@@ -1708,40 +1748,73 @@ async function handleChat(req, res) {
     }
 
     finalPrompt = `${roleMemoryContext ? `${roleMemoryContext}\n` : ''}${capabilityGuide}\n\n<USER_REQUEST>${finalPrompt}</USER_REQUEST>`;
-  } else if (contextSnapshot?.reretrieveMemoryOnNextTurn) {
-    // Safe compaction may remove recalled memory from active context. Refresh it
-    // once on the next real task instead of permanently pinning long-term memory.
-    try {
-      const refreshed = await buildAgentContext({
-        roleId: role?.id || DEFAULT_ROLE_ID,
-        projectId,
-        conversationId: conversation_id,
-        currentWork: approvedExecutionIntent?.summary || '',
-        currentPrompt: finalPrompt
-      });
-      const refreshedMemories = refreshed.memories || [];
-      const memoryContributions = (refreshed.contributions || []).filter(
-        contribution => contribution.type === ContextSourceType.MEMORY
-      );
+  } else {
+    // When a Role's identity or Project instructions change, append only the
+    // new identity. This does not mutate prior messages or cross Role scopes.
+    if (contextSnapshot?.identityFingerprint &&
+        contextSnapshot.identityFingerprint !== currentIdentityFingerprint) {
+      const updatedIdentity = formatAgentContext({ role, project, memories: [] });
+      finalPrompt = `${updatedIdentity}\n\n[Updated Role / Project instructions — use these from now on]\n${finalPrompt}`;
       assembledContextContributions = [
-        ...assembledContextContributions.filter(contribution => contribution.type !== ContextSourceType.MEMORY),
-        ...memoryContributions
+        ...assembledContextContributions.filter(item =>
+          item.type !== ContextSourceType.ROLE && item.type !== ContextSourceType.PROJECT),
+        ...buildStaticContextContributions({ role, project }).filter(item =>
+          item.type === ContextSourceType.ROLE || item.type === ContextSourceType.PROJECT)
       ];
-      if (refreshedMemories.length) {
-        const memoryLines = refreshedMemories.map((hit, index) =>
-          `${index + 1}. ${formatMemoryEvidence(hit.record || {})}`
+    }
+
+    // Memory retrieval is not repeated on ordinary turns. Refresh only after
+    // compaction or when the local memory file has actually changed.
+    const refreshAfterCompaction = Boolean(contextSnapshot?.reretrieveMemoryOnNextTurn);
+    const memoryChanged = Boolean(
+      contextSnapshot?.memoryRevision && currentMemoryRevision &&
+      contextSnapshot.memoryRevision !== currentMemoryRevision
+    );
+    if (refreshAfterCompaction || memoryChanged) {
+      try {
+        const refreshed = await buildAgentContext({
+          roleId: role?.id || DEFAULT_ROLE_ID,
+          projectId,
+          conversationId: conversation_id,
+          currentWork: approvedExecutionIntent?.summary || '',
+          currentPrompt: finalPrompt
+        });
+        const refreshedMemories = refreshed.memories || [];
+        const signatures = memoryEvidenceSignatures(refreshedMemories);
+        const changedMemories = refreshedMemories.filter(hit =>
+          refreshAfterCompaction ||
+          nextMemorySignatures[hit.record?.id] !== signatures[hit.record?.id]
         );
-        finalPrompt = `<ADDITIONAL_METADATA>\n[Refreshed Long-Term Memory]\n${memoryLines.join('\n')}\n</ADDITIONAL_METADATA>\n${finalPrompt}`;
+        const memoryContributions = (refreshed.contributions || []).filter(
+          contribution => contribution.type === ContextSourceType.MEMORY
+        );
+        assembledContextContributions = [
+          ...assembledContextContributions.filter(item => item.type !== ContextSourceType.MEMORY),
+          ...memoryContributions
+        ];
+        if (changedMemories.length) {
+          const memoryLines = changedMemories.map((hit, index) =>
+            `${index + 1}. ${formatMemoryEvidence(hit.record || {})}`
+          );
+          const memoryLabel = refreshAfterCompaction
+            ? '[Refreshed Long-Term Memory]'
+            : '[Updated Long-Term Memory]';
+          finalPrompt = `<ADDITIONAL_METADATA>\n${memoryLabel}\n${memoryLines.join('\n')}\n</ADDITIONAL_METADATA>\n${finalPrompt}`;
+        }
+        nextMemorySignatures = signatures;
+        memoryRefreshConsumed = true;
+      } catch (error) {
+        console.warn('[Memory Context] Incremental refresh failed:', error.message);
       }
-      memoryRefreshConsumed = true;
-    } catch (error) {
-      console.warn('[Memory Context] Refresh after compaction failed:', error.message);
     }
   }
 
   // Every Role can discover the Crew tool. The guide is intentionally tiny:
   // discovery + plain-text messaging only, never implicit context transfer.
-  const crewToolGuide = buildCrewToolGuide(role);
+  const crewToolGuide = (!conversation_id || contextSnapshot?.crewToolGuideVersion !== 1 ||
+    (contextSnapshot?.identityFingerprint && contextSnapshot.identityFingerprint !== currentIdentityFingerprint))
+    ? buildCrewToolGuide(role)
+    : '';
   const crewInboxText = formatCrewInbox(pendingCrewMessages);
   const crewMetadata = [crewToolGuide, crewInboxText].filter(Boolean).join('\n\n');
   if (crewMetadata) {
@@ -1825,7 +1898,22 @@ async function handleChat(req, res) {
           active_tokens: lastContextStats.active_tokens,
           total_tokens: lastContextStats.total_tokens,
           context_window: lastContextStats.context_window,
-          status_level: lastContextStats.status_level
+          status_level: lastContextStats.status_level,
+          last_input_tokens: lastContextStats.last_input_tokens,
+          last_cached_input_tokens: lastContextStats.last_cached_input_tokens,
+          last_cache_write_input_tokens: lastContextStats.last_cache_write_input_tokens,
+          last_uncached_input_tokens: lastContextStats.last_uncached_input_tokens,
+          last_cache_read_rate: lastContextStats.last_cache_read_rate,
+          turn_input_tokens: lastContextStats.turn_input_tokens,
+          turn_cached_input_tokens: lastContextStats.turn_cached_input_tokens,
+          turn_uncached_input_tokens: lastContextStats.turn_uncached_input_tokens,
+          turn_cache_write_input_tokens: lastContextStats.turn_cache_write_input_tokens,
+          turn_cache_read_rate: lastContextStats.turn_cache_read_rate,
+          total_input_tokens: lastContextStats.total_input_tokens,
+          total_cached_input_tokens: lastContextStats.total_cached_input_tokens,
+          total_uncached_input_tokens: lastContextStats.total_uncached_input_tokens,
+          total_cache_write_input_tokens: lastContextStats.total_cache_write_input_tokens,
+          total_cache_read_rate: lastContextStats.total_cache_read_rate
         } : null,
         ...getToolMetrics()
       };
@@ -1988,7 +2076,8 @@ async function handleChat(req, res) {
     await provider.startTurn({
       conversationId: conversation_id,
       model: effectiveModel || model,
-      effort,
+      // Keep effort stable on resumed threads unless the user changed it.
+      effort: effort || savedSettings?.effort || undefined,
       workspace,
       executionMode: executionPolicy?.mode || routedExecutionMode || null,
       executionPolicy,
@@ -2023,6 +2112,12 @@ async function handleChat(req, res) {
             .catch(err => console.warn('[Conversation Settings] Save/activate failed:', err.message));
           saveContextSnapshot(providerId, event.conversationId, {
             contributions: assembledContextContributions,
+            crewToolGuideVersion: 1,
+            identityFingerprint: currentIdentityFingerprint,
+            memoryRevision: memoryRefreshConsumed || !conversation_id
+              ? currentMemoryRevision
+              : (contextSnapshot?.memoryRevision ?? currentMemoryRevision),
+            memorySignatures: nextMemorySignatures,
             reretrieveMemoryOnNextTurn: memoryRefreshConsumed
               ? false
               : Boolean(contextSnapshot?.reretrieveMemoryOnNextTurn),

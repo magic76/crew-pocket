@@ -11,6 +11,8 @@ on:
     paths:
       - "scripts/*.sh"
       - "lib/**/*.js"
+      - "test/*.js"
+      - "scripts/*.js"
       - "server.js"
       - "install.sh"
       - "public/js/*.js"
@@ -89,6 +91,10 @@ jobs:
           node --check scripts/crew-tool.js
           node --check lib/runtime/agy-transport.js
           node --check lib/providers/codex.js
+          node --check lib/providers/codex-usage.js
+          node --check scripts/report-codex-cache.js
+          node --check test/codex-usage.test.js
+          node --test test/codex-usage.test.js
           node --check lib/model-runtime.js
           node --check lib/execution-intent.js
           node --check lib/runtime/turn-orchestrator.js
