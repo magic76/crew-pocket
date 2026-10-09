@@ -1,0 +1,282 @@
+/* Light palette support for legacy Tailwind utility markup.
+ * Explicit utility bridges keep the dark components and their state logic intact.
+ * The permanent destination for new UI is design-system.css tokens.
+ */
+html[data-crew-theme="light"] #app-splash-screen {
+  background-color: #030712 !important;
+  color: #f1f5f9 !important;
+}
+html[data-crew-theme="light"] #drawer,
+html[data-crew-theme="light"] #tools-menu-dropdown,
+html[data-crew-theme="light"] #messages-container {
+  background-color: var(--cp-bg) !important;
+  color: var(--cp-text);
+}
+html[data-crew-theme="light"] #workspace-label,
+html[data-crew-theme="light"] #header-current-task,
+html[data-crew-theme="light"] #model-context-control,
+html[data-crew-theme="light"] #context-pill,
+html[data-crew-theme="light"] #role-nav-list,
+html[data-crew-theme="light"] #tools-menu-dropdown,
+html[data-crew-theme="light"] .role-nav-card,
+html[data-crew-theme="light"] .assistant-article,
+html[data-crew-theme="light"] .execution-result-card,
+html[data-crew-theme="light"] #prompt-input {
+  color: var(--cp-text) !important;
+}
+html[data-crew-theme="light"] #role-nav-list .text-slate-500,
+html[data-crew-theme="light"] #role-nav-list .text-slate-600 {
+  color: var(--cp-muted) !important;
+}
+html[data-crew-theme="light"] #tools-menu-dropdown .settings-view-header {
+  background: var(--cp-bg) !important;
+}
+html[data-crew-theme="light"] #model-context-control,
+html[data-crew-theme="light"] #prompt-input,
+html[data-crew-theme="light"] #scroll-bottom-btn {
+  background: var(--cp-surface-2) !important;
+}
+html[data-crew-theme="light"] :is(h1,h2,h3,h4,p,span,div).text-white {
+  color: var(--cp-text) !important;
+}
+html[data-crew-theme="light"] .prose blockquote,
+html[data-crew-theme="light"] .prose th {
+  background: var(--cp-surface-2);
+  border-color: var(--cp-border);
+  color: var(--cp-text-secondary);
+}
+html[data-crew-theme="light"] .prose td,
+html[data-crew-theme="light"] .prose table,
+html[data-crew-theme="light"] .table-wrapper,
+html[data-crew-theme="light"] .prose img {
+  border-color: var(--cp-border);
+}
+html[data-crew-theme="light"] .prose a { color: var(--cp-accent-strong); }
+html[data-crew-theme="light"] input,
+html[data-crew-theme="light"] select,
+html[data-crew-theme="light"] textarea {
+  color: var(--cp-text);
+  caret-color: var(--cp-accent);
+}
+html[data-crew-theme="light"] input::placeholder,
+html[data-crew-theme="light"] textarea::placeholder {
+  color: var(--cp-muted);
+}
+html[data-crew-theme="light"] #cheat-sheet-modal > div,
+html[data-crew-theme="light"] #context-modal > div,
+html[data-crew-theme="light"] #usage-modal > div,
+html[data-crew-theme="light"] #model-modal > div,
+html[data-crew-theme="light"] #files-modal > div,
+html[data-crew-theme="light"] #storage-modal > div,
+html[data-crew-theme="light"] #voiceprint-modal > div,
+html[data-crew-theme="light"] #live-key-modal > div,
+html[data-crew-theme="light"] #guidelines-modal > div,
+html[data-crew-theme="light"] #role-editor-modal > section,
+html[data-crew-theme="light"] #role-memory-modal > section,
+html[data-crew-theme="light"] #workspace-modal > section {
+  background: var(--cp-surface) !important;
+  border-color: var(--cp-border) !important;
+  box-shadow: 0 12px 32px rgba(25,40,65,.10) !important;
+}
+html[data-crew-theme="light"] #tools-menu-dropdown [class~="text-white"],
+html[data-crew-theme="light"] #role-nav-list [class~="text-white"] {
+  color: var(--cp-text) !important;
+}
+html[data-crew-theme="light"] #send-btn,
+html[data-crew-theme="light"] #send-btn * {
+  color: #fff !important;
+}
+html[data-crew-theme="light"] #app-splash-screen .splash-title-shimmer {
+  color: transparent !important;
+}
+
+html[data-crew-theme="light"] :is(
+  [class~="bg-slate-950"],
+  [class~="bg-slate-950/80"],
+  [class~="bg-slate-950/60"],
+  [class~="bg-slate-950/70"],
+  [class~="bg-slate-950/95"],
+  [class~="bg-slate-950/85"],
+  [class~="bg-slate-950/50"],
+  [class~="bg-slate-950/40"],
+  [class~="bg-slate-950/90"],
+  [class~="bg-slate-950/65"],
+  [class~="bg-slate-950/55"],
+  [class~="bg-slate-950/98"]
+) { background-color: var(--cp-bg) !important; }
+
+html[data-crew-theme="light"] :is(
+  [class~="bg-slate-900/90"],
+  [class~="bg-slate-900"],
+  [class~="bg-slate-900/95"],
+  [class~="bg-slate-900/80"],
+  [class~="bg-slate-900/60"],
+  [class~="bg-slate-900/70"]
+) { background-color: var(--cp-surface) !important; }
+
+html[data-crew-theme="light"] :is(
+  [class~="bg-slate-800/80"],
+  [class~="bg-slate-800"],
+  [class~="bg-slate-800/70"],
+  [class~="bg-slate-800/90"],
+  [class~="bg-slate-800/50"],
+  [class~="bg-slate-800/40"],
+  [class~="bg-slate-800/60"]
+) { background-color: var(--cp-surface-2) !important; }
+
+html[data-crew-theme="light"] :is(
+  [class~="bg-slate-700/80"],
+  [class~="bg-slate-700"]
+) { background-color: var(--cp-elevated) !important; }
+
+html[data-crew-theme="light"] :is(
+  [class~="border-slate-950"]
+) { border-color: var(--cp-border) !important; }
+
+html[data-crew-theme="light"] :is(
+  [class~="border-slate-800/80"],
+  [class~="border-slate-800"],
+  [class~="border-slate-800/90"],
+  [class~="border-slate-800/60"]
+) { border-color: var(--cp-border) !important; }
+
+html[data-crew-theme="light"] :is(
+  [class~="border-slate-700/80"],
+  [class~="border-slate-700"],
+  [class~="border-slate-700/90"],
+  [class~="border-slate-700/70"],
+  [class~="border-slate-700/60"]
+) { border-color: var(--cp-border) !important; }
+
+html[data-crew-theme="light"] :is(
+  [class~="border-slate-600"]
+) { border-color: var(--cp-border) !important; }
+
+html[data-crew-theme="light"] :is(
+  [class~="text-slate-100"]
+) { color: var(--cp-text) !important; }
+
+html[data-crew-theme="light"] :is(
+  [class~="text-slate-200"]
+) { color: var(--cp-text) !important; }
+
+html[data-crew-theme="light"] :is(
+  [class~="text-slate-300"]
+) { color: var(--cp-text-secondary) !important; }
+
+html[data-crew-theme="light"] :is(
+  [class~="text-slate-400"]
+) { color: var(--cp-muted) !important; }
+
+html[data-crew-theme="light"] :is(
+  [class~="text-slate-500"]
+) { color: var(--cp-muted) !important; }
+
+html[data-crew-theme="light"] :is(
+  [class~="text-slate-600"]
+) { color: var(--cp-muted) !important; }
+
+html[data-crew-theme="light"] :is(
+  [class~="text-indigo-400/80"],
+  [class~="text-indigo-300"],
+  [class~="text-indigo-400"],
+  [class~="text-indigo-200"],
+  [class~="text-indigo-100"]
+) { color: var(--cp-accent-strong) !important; }
+
+html[data-crew-theme="light"] :is(
+  [class~="text-violet-400"],
+  [class~="text-violet-300"],
+  [class~="text-violet-200"]
+) { color: var(--cp-accent-strong) !important; }
+
+html[data-crew-theme="light"] :is(
+  [class~="text-purple-400"],
+  [class~="text-purple-300"]
+) { color: var(--cp-accent-strong) !important; }
+
+html[data-crew-theme="light"] :is(
+  [class~="text-teal-200"],
+  [class~="text-teal-300"],
+  [class~="text-teal-400/80"],
+  [class~="text-teal-500/80"],
+  [class~="text-teal-400"],
+  [class~="text-teal-300/90"]
+) { color: var(--cp-live) !important; }
+
+html[data-crew-theme="light"] :is(
+  [class~="text-cyan-400"],
+  [class~="text-cyan-500/80"],
+  [class~="text-cyan-300"]
+) { color: var(--cp-live) !important; }
+
+html[data-crew-theme="light"] :is(
+  [class~="text-emerald-500/80"],
+  [class~="text-emerald-400"],
+  [class~="text-emerald-300"]
+) { color: var(--cp-success) !important; }
+
+html[data-crew-theme="light"] :is(
+  [class~="text-amber-300"],
+  [class~="text-amber-400"],
+  [class~="text-amber-950"],
+  [class~="text-amber-200"],
+  [class~="text-amber-400/80"]
+) { color: var(--cp-warning) !important; }
+
+html[data-crew-theme="light"] :is(
+  [class~="text-rose-300"],
+  [class~="text-rose-200"],
+  [class~="text-rose-400/80"],
+  [class~="text-rose-400"],
+  [class~="text-rose-100"]
+) { color: var(--cp-danger) !important; }
+
+html[data-crew-theme="light"] :is(
+  [class~="hover:bg-slate-800"],
+  [class~="hover:bg-slate-800/90"],
+  [class~="hover:bg-slate-800/70"],
+  [class~="hover:bg-slate-700"],
+  [class~="hover:bg-slate-800/80"]
+):hover {background-color: var(--cp-elevated) !important; }
+
+html[data-crew-theme="light"] :is(
+  [class~="hover:text-slate-200"]
+):hover {color: var(--cp-text) !important; }
+
+html[data-crew-theme="light"] :is(
+  [class~="placeholder:text-slate-500"]
+)::placeholder {color: var(--cp-muted) !important; }
+
+/* Semantic states never lose meaning in either palette. */
+html[data-crew-theme="light"] .execution-result-status.is-complete,
+html[data-crew-theme="light"] .execution-result-hero-status { color: var(--cp-success) !important; }
+html[data-crew-theme="light"] .execution-result-status.is-failed,
+html[data-crew-theme="light"] .execution-result-hero-status.is-failed { color: var(--cp-danger) !important; }
+html[data-crew-theme="light"] .role-nav-card[data-selected="true"] {
+  border-color: var(--cp-accent) !important;
+  background: var(--cp-accent-soft) !important;
+}
+
+/* Specific legacy full-surface overlays win over utility color bridges. */
+html[data-crew-theme="light"] header,
+html[data-crew-theme="light"] #chat-composer-footer,
+html[data-crew-theme="light"] #primary-bottom-nav,
+html[data-crew-theme="light"] #workspace-modal > section,
+html[data-crew-theme="light"] #role-editor-modal > section,
+html[data-crew-theme="light"] #role-memory-modal > section {
+  background: var(--cp-surface) !important;
+  color: var(--cp-text) !important;
+}
+html[data-crew-theme="light"] .appearance-setting,
+html[data-crew-theme="light"] #role-nav-view > div:first-child,
+html[data-crew-theme="light"] #role-nav-view > div:last-child {
+  background: var(--cp-surface-2) !important;
+  border-color: var(--cp-border) !important;
+}
+html[data-crew-theme="light"] #tools-menu-dropdown .appearance-setting .theme-choice.is-active {
+  color: var(--cp-accent-strong) !important;
+}
+html[data-crew-theme="light"] #tools-menu-dropdown .appearance-setting .theme-choice:not(.is-active) {
+  color: var(--cp-muted) !important;
+}

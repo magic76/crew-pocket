@@ -932,7 +932,7 @@ function renderRoleNavigation() {
       unread ? `<span class="rounded-full border border-indigo-500/25 bg-indigo-500/10 px-1.5 py-0.5 text-[8px] font-bold text-indigo-300">${unread} 未讀</span>` : ''
     ].filter(Boolean).join('');
 
-    return `<div class="role-nav-card relative overflow-hidden rounded-2xl border transition ${selected ? 'border-teal-400/70 bg-teal-500/10 shadow-lg shadow-teal-950/20' : 'border-slate-800 bg-slate-950/55'}" data-role-card-id="${escapeHtml(role.id)}">
+    return `<div class="role-nav-card relative overflow-hidden rounded-2xl border transition ${selected ? 'border-indigo-400/70 bg-indigo-500/10' : 'border-slate-800 bg-slate-950/55'}" data-role-card-id="${escapeHtml(role.id)}" data-selected="${selected}">
       <button type="button" data-role-nav-id="${escapeHtml(role.id)}" class="block min-h-[158px] w-full min-w-0 px-3 pb-3 pt-4 text-center active:scale-[0.99]">
         <span class="relative mx-auto flex h-12 w-12 items-center justify-center rounded-2xl border ${meta.avatar} text-[22px]">
           ${escapeHtml(project?.icon || '🧠')}
@@ -942,9 +942,9 @@ function renderRoleNavigation() {
           <span class="truncate text-[12px] font-bold text-slate-100">${escapeHtml(role.name)}</span>
           ${counters}
         </span>
-        <span class="mt-0.5 block truncate text-[9px] font-medium text-slate-500">${escapeHtml(roleProjectLabel(role))}</span>
+        <span class="mt-0.5 block truncate text-[11px] font-medium text-slate-400">${escapeHtml(roleProjectLabel(role))}</span>
         <span class="crew-role-task mt-2 block min-w-0 rounded-xl border border-slate-800/80 bg-slate-950/70 px-2 py-2 text-left text-[9px] font-medium ${hasWork ? 'text-slate-300' : 'text-slate-600'}">${hasWork ? escapeHtml(title) : '尚無工作'}</span>
-        ${activity ? `<span class="mt-1.5 block truncate text-[8px] text-slate-600">${escapeHtml(activity)}</span>` : ''}
+        ${activity ? `<span class="mt-1.5 block truncate text-[10px] text-slate-400">${escapeHtml(activity)}</span>` : ''}
       </button>
       <button type="button" data-role-menu-btn="${escapeHtml(role.id)}" class="absolute right-1.5 top-1.5 flex h-8 w-8 items-center justify-center rounded-xl text-base text-slate-500 transition hover:bg-slate-800/80 hover:text-white active:scale-95" aria-label="${escapeHtml(role.name)} 操作">⋯</button>
       <div data-role-menu-panel="${escapeHtml(role.id)}" class="hidden grid-cols-2 gap-1.5 border-t border-slate-800/80 bg-slate-950/80 p-2">
