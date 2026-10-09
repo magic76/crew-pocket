@@ -51,6 +51,17 @@ const unknown = model.project({ ...snapshot, verified: false });
 assert.equal(unknown.working, null, 'unverified Runtime must not invent work');
 assert.equal(unknown.attention, null);
 assert.ok(unknown.roles.every(r => r.state === 'unknown' && !r.busy));
+const inconsistent = model.project({ ...snapshot, roles: [{
+  id: 'contradictory', name: 'Inconsistent', status: {
+    state: 'working', busy: false, currentWork: { title: 'Previous work' }
+  }
+}] });
+assert.equal(inconsistent.roles[0].state, 'unknown',
+  'no simulated work animation for inconsistent Runtime state');
+assert.equal(inconsistent.working, 0);
+assert.equal(model.project({ ...snapshot, roles: [{
+  id: 'idle', name: 'Idle', latestTitle: 'Stale session', status: { state: 'idle' }
+}] }).roles[0].title, '', 'historical title is not the current task');
 
 const now = Date.now();
 const valid = { id: 'handoff-1', fromRoleId: 'dev', toRoleId: 'teacher',
