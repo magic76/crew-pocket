@@ -122,7 +122,8 @@
     }
 
     function fly(event) {
-      if (!isVisible() || win.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+      if (!isVisible() || stage.closest('#crew-room-switchyard')?.dataset?.view === 'office' ||
+          win.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
       const cards = [...roster.querySelectorAll('[data-role-card-id]')];
       const from = cards.find(card => card.dataset.roleCardId === event.fromRoleId);
       const to = cards.find(card => card.dataset.roleCardId === event.toRoleId);
@@ -165,7 +166,17 @@
         if (!data.success || !Array.isArray(data.events)) return;
         const next = planNewEvents(data.events, seenIds);
         seenIds = next.seenIds;
-        if (isVisible()) next.arrivals.forEach(fly);
+        if (isVisible()) next.arrivals.forEach(event => {
+          // Share only already-verified, saved message metadata. A separate
+          // scene chooses whether/how to animate; no duplicate polling.
+          win.dispatchEvent(new win.CustomEvent('crew:handoff-observed', {
+            detail: {
+              id: event.id, fromRoleId: event.fromRoleId,
+              toRoleId: event.toRoleId, createdAt: event.createdAt
+            }
+          }));
+          fly(event);
+        });
       } catch (_) {
         // Runtime unavailable: no speculative delivery animation.
       } finally {
