@@ -729,6 +729,7 @@ function initAppAndListeners() {
         uploadedImagePath = data.filePath;
         console.log('[Upload] Success! Server file path:', uploadedImagePath);
         if (navigator.vibrate) navigator.vibrate(25);
+        return uploadedImagePath;
       } else {
         alert('圖片上傳失敗：' + (data.error || '未知錯誤'));
       }
@@ -737,6 +738,7 @@ function initAppAndListeners() {
       alert('圖片處理失敗：' + err.message);
       if (imagePreviewContainer) imagePreviewContainer.classList.add('hidden');
     }
+    return null;
   }
 
   async function handleImageSelection(file) {
@@ -757,6 +759,19 @@ function initAppAndListeners() {
     }
   }
 
+  // A screenshot arriving from Android Share has already been uploaded to
+  // localhost. Reuse it directly when there are no annotations.
+  window.attachExistingImagePath = (imagePath, imageUrl) => {
+    if (!imagePath || !imageUrl || !String(imageUrl).startsWith(window.location.origin + '/api/image?')) {
+      return null;
+    }
+    uploadedImagePath = imagePath;
+    if (previewThumb) previewThumb.src = imageUrl;
+    if (previewFilename) previewFilename.textContent = 'shared-screen.jpg';
+    if (previewFilesize) previewFilesize.textContent = '來自 Android 快速分享 · 未重新上傳';
+    if (imagePreviewContainer) imagePreviewContainer.classList.remove('hidden');
+    return uploadedImagePath;
+  };
   window.processAndUploadImageBase64 = processAndUploadImageBase64;
   window.handleImageSelection = handleImageSelection;
 
@@ -805,6 +820,7 @@ function initAppAndListeners() {
     const cameraInput = document.getElementById('camera-input');
     const attachOptCamera = document.getElementById('attach-opt-camera');
     const attachOptGallery = document.getElementById('attach-opt-gallery');
+    const attachOptVisual = document.getElementById('attach-opt-visual');
     const attachOptFiles = document.getElementById('attach-opt-files');
     const attachOptGps = document.getElementById('attach-opt-gps');
     const attachOptDiscussion = document.getElementById('attach-opt-discussion');
@@ -835,6 +851,13 @@ function initAppAndListeners() {
           if (typeof window.haptic === 'function') window.haptic('light');
           attachMenuDropdown.classList.add('hidden');
           attachInput.click();
+        });
+      }
+
+      if (attachOptVisual) {
+        attachOptVisual.addEventListener('click', () => {
+          attachMenuDropdown.classList.add('hidden');
+          document.getElementById('visual-inspector-file')?.click();
         });
       }
 

@@ -47,6 +47,9 @@ jobs:
           node test/mission-graph.test.js
           node --check lib/role-runtime.js
           node --check lib/role-message-queue.js
+          node --check lib/role-submit.js
+          node test/role-submit.test.js
+          node test/role-submit-chat.test.js
           node --check lib/crew-status.js
           node --check lib/crew-auto-response.js
           node --check lib/context-builder.js

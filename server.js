@@ -49,7 +49,7 @@ const { getRoleRuntime, listRoleRuntimes, activateRoleConversation, prepareNewRo
 const { buildCrewStatus } = require('./lib/crew-status');
 const { makeMissionGraph, MAX_GRAPH_EVENTS } = require('./lib/mission-graph');
 const { listProjects, getProject } = require('./lib/projects');
-const { listRoleQueuedMessages, enqueueRoleMessage, removeRoleQueuedMessage, clearRoleMessageQueue } = require('./lib/role-message-queue');
+const { defaultRoleMessageQueueStore, listRoleQueuedMessages, enqueueRoleMessage, removeRoleQueuedMessage, clearRoleMessageQueue } = require('./lib/role-message-queue');
 const { defaultMemoryProvider } = require('./lib/memory');
 const { DreamingManager } = require('./lib/memory/dreaming');
 const {
@@ -1650,7 +1650,65 @@ async function handleCodexWarmup(req, res) {
   }
 }
 
-async function handleChat(req, res) {
+const { createRoleSubmitter, runChatInBackground } = require('./lib/role-submit');
+const roleSubmitter = createRoleSubmitter({
+  store: defaultRoleMessageQueueStore, getRole,
+  listProviders, getProvider, getProviderConversationSettings, getDefaultModel,
+  getRoleRuntime, activateRoleConversation, clearRoleConversation,
+  isRoleReserved: roleId => crewAutoResponder.activeRoles.has(roleId) || activeChatRoles.has(roleId),
+  async validateImage(imagePath) {
+    const real = await fsPromises.realpath(imagePath);
+    const roots = await Promise.all([UPLOADS_DIR, LEGACY_UPLOADS_DIR, PREVIOUS_UPLOADS_DIR]
+      .map(root => fsPromises.realpath(root).catch(() => null)));
+    if (!roots.some(root => root && real.startsWith(root + path.sep)) ||
+        !(await fsPromises.stat(real)).isFile() ||
+        !/\.(png|jpe?g|webp|gif|heic|heif)$/i.test(real)) {
+      throw new Error('只能提交已上傳的圖片');
+    }
+  },
+  onQueueChanged: roleId => broadcastCrewStatusEvent('queue-dispatch', roleId),
+  runChat: body => runChatInBackground(handleChat, body)
+});
+const roleSubmitRecovery = roleSubmitter.recoverInterrupted().then(() => true).catch(error => {
+  console.warn('[Role Submit] Recovery failed:', error.message);
+  return false;
+});
+const roleSubmitTimer = setInterval(() => {
+  roleSubmitRecovery.then(ready => ready ? roleSubmitter.drainAll() : undefined).catch(error => console.warn('[Role Submit]', error.message));
+}, 1500);
+roleSubmitTimer.unref();
+
+async function handleRoleSubmit(req, res) {
+  try {
+    const receipt = await roleSubmitter.submit(await parseJsonBody(req));
+    broadcastCrewStatusEvent('queue-enqueue', receipt.roleId);
+    res.writeHead(202, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+    res.end(JSON.stringify({ success: true, submission: receipt }));
+  } catch (error) {
+    res.writeHead(error.statusCode || 400, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+    res.end(JSON.stringify({ success: false, error: error.message }));
+  }
+}
+
+const activeChatRoles = new Set();
+async function handleChat(req, res, submittedBody = null) {
+  let body;
+  try { body = submittedBody || await parseJsonBody(req); }
+  catch (_) { res.writeHead(400, { 'Content-Type': 'application/json' }); return res.end(JSON.stringify({ error: 'Invalid JSON body' })); }
+  const roleId = requestedRoleId(body) || DEFAULT_ROLE_ID;
+  if (activeChatRoles.has(roleId) || crewAutoResponder.activeRoles.has(roleId)) {
+    res.writeHead(409, { 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify({ error: 'Role 正在處理其他工作', code: 'CONVERSATION_BUSY' }));
+  }
+  activeChatRoles.add(roleId);
+  const release = () => activeChatRoles.delete(roleId);
+  res.once('finish', release);
+  res.once('close', release);
+  try { await handleChatTurn(req, res, body); }
+  catch (error) { release(); throw error; }
+}
+
+async function handleChatTurn(req, res, submittedBody = null) {
   const requestId = crypto.randomUUID();
   const requestStartedAt = Date.now();
   const turnTiming = {
@@ -1672,7 +1730,7 @@ async function handleChat(req, res) {
   let body;
   const bodyStartedAt = Date.now();
   try {
-    body = await parseJsonBody(req);
+    body = submittedBody || await parseJsonBody(req);
   } catch (err) {
     res.writeHead(400, { 'Content-Type': 'application/json' });
     return res.end(JSON.stringify({ error: 'Invalid JSON body' }));
@@ -1930,6 +1988,7 @@ async function handleChat(req, res) {
     let policyWarned = false;
     let activeConversationId = conversation_id || null;
     let streamedResponse = '';
+    let settingsCheckpoint = Promise.resolve();
     const feedbackTools = new Map();
 
     const getToolMetrics = () => {
@@ -2058,12 +2117,12 @@ async function handleChat(req, res) {
         turn_timing: turnTiming
       };
       logToolMetrics(finalPayload.error ? 'error' : 'completed');
-      saveExecutionFeedback(providerId, finalPayload.conversation_id || activeConversationId, {
+      settingsCheckpoint.then(() => saveExecutionFeedback(providerId, finalPayload.conversation_id || activeConversationId, {
         response: finalPayload.response || streamedResponse,
         startedAt: requestStartedAt,
         turnResult,
         tools: [...feedbackTools.values()]
-      }).catch(error => console.warn('[Execution Feedback] Save failed:', error.message)).finally(() => {
+      })).catch(error => console.warn('[Execution Feedback] Save failed:', error.message)).finally(() => {
         sendEvent('done', finalPayload);
         res.end();
       });
@@ -2161,7 +2220,7 @@ async function handleChat(req, res) {
           // A new thread only has an id after its provider starts. Persist here
           // as well as on manual selector changes so new conversations are
           // immediately bound to their first model.
-          saveConversationSettings(providerId, event.conversationId, {
+          settingsCheckpoint = saveConversationSettings(providerId, event.conversationId, {
             model: event.model || effectiveModel || model || savedSettings?.model || getDefaultModel(providerId),
             effort: event.effort || effort || savedSettings?.effort || 'low',
             workspace,
@@ -2294,7 +2353,7 @@ async function handleChat(req, res) {
       turn_timing: turnTiming
     }));
     if (!res.writableEnded && !res.destroyed) {
-      sendEvent('done', { error: err.message, request_id: requestId, turn_timing: turnTiming });
+      sendEvent('done', { error: err.message, code: err.code, request_id: requestId, turn_timing: turnTiming });
       res.end();
     }
   }
@@ -2897,6 +2956,8 @@ const server = http.createServer(async (req, res) => {
     return handleStorageDelete(req, res);
   } else if (pathname === '/api/storage/thumbnail' && req.method === 'GET') {
     return handleStorageThumbnail(parsedUrl, res);
+  } else if (pathname === '/api/role-submit' && req.method === 'POST') {
+    return handleRoleSubmit(req, res);
   } else if (pathname === '/api/chat' && req.method === 'POST') {
     return handleChat(req, res);
   } else if (pathname === '/api/stop' && req.method === 'POST') {
