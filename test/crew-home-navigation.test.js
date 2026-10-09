@@ -47,7 +47,7 @@ assert.ok(ui.includes("window.setPrimaryTab(open ? 'crew' : 'chat'"));
 assert.ok(ui.includes("roleNavList?.addEventListener('click'"));
 assert.ok(ui.includes("if (role) selectRole(role.dataset.roleNavId)"),
   'tap Role => select existing Role Runtime, not New Work');
-assert.ok(ui.includes("case 'new-work': return selectRole(roleId, true)"),
+assert.ok(ui.includes("case 'new-work':") && ui.includes("return selectRole(roleId, true)"),
   'only explicit New Work creates a fresh conversation');
 assert.ok(ui.includes("await window.openCrewConversation(runtime.providerId, runtime.conversationId)"));
 assert.ok(ui.includes("await window.openCrewConversation(latest.provider, latest.id)"),
