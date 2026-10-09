@@ -194,3 +194,7 @@
     animation: none !important; transition: none !important;
   }
 }
+
+/* Avoid duplicate aggregate counts in Command and duplicate new-work CTA in Focus. */
+#role-nav-view[data-cockpit-mode="command"] #crew-room-summary { display: none !important; }
+#role-nav-view[data-cockpit-mode="focus"] > .border-t { display: none !important; }

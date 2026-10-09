@@ -27,6 +27,9 @@ assert.match(ui, /crewStatusVerified = true/);
 assert.match(ui, /window.getCrewCockpitSnapshot/);
 assert.match(ui, /window.openCrewCockpitRole = \(roleId, newWork = false\) => selectRole\(roleId, newWork\)/);
 assert.match(ui, /new CustomEvent\('crew:status-updated'\)/);
+assert.match(ui, /crewStatusEvents\.addEventListener\('error'/);
+assert.match(ui, /document\.addEventListener\('visibilitychange'/);
+assert.match(css, /data-cockpit-mode="focus"/);
 assert.match(css, /prefers-reduced-motion: reduce/);
 
 const mockRoles = [

@@ -1035,7 +1035,19 @@ crewStatusEvents.addEventListener('crew-status', () => {
   loadCrewStatus({ force: true }).catch(() => {});
 });
 crewStatusEvents.addEventListener('error', () => {
+  // Connection status is not proof of current agent state. Clear trusted status
+  // until a fresh API response arrives instead of displaying stale live counts.
+  crewStatusVerified = false;
+  crewStatusUpdatedAt = 0;
+  renderRoleNavigation();
+  window.dispatchEvent(new CustomEvent('crew:status-updated'));
   console.warn('[Crew Status] Event stream disconnected; browser will reconnect automatically.');
+});
+document.addEventListener('visibilitychange', () => {
+  // Android WebView may suspend SSE while the app is in the background.
+  if (!document.hidden && window.getPrimaryTab?.() === 'crew') {
+    loadCrewStatus({ force: true }).catch(() => {});
+  }
 });
 window.addEventListener('crew:streaming-state', () => {
   crewStatusUpdatedAt = 0;
