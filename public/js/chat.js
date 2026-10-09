@@ -2003,7 +2003,7 @@ function renderHistoryMessages(messages, convId, renderVersion, options = {}) {
 }
 
 // Load History for a Conversation
-async function loadConversationHistory(convId, { preserveComposer = false } = {}) {
+async function loadConversationHistory(convId, { preserveComposer = false, preserveCrewHome = false } = {}) {
   if (typeof window.isLiveSessionActive === 'function' && window.isLiveSessionActive()) {
     alert('🎙️ 目前仍在語音通話中，請先按紅色掛斷，完成備忘錄保存後再切換歷史對話。');
     return false;
@@ -2026,7 +2026,7 @@ async function loadConversationHistory(convId, { preserveComposer = false } = {}
   localStorage.setItem(activeConversationStorageKey(), convId);
   revokeAllBlobUrls();
   messagesContainer.innerHTML = '<div class="p-5 text-center text-xs text-slate-400 animate-pulse">正在載入對話紀錄…</div>';
-  toggleDrawer(false);
+  if (!preserveCrewHome) toggleDrawer(false);
 
   // 🎯 Instantly sync workspace & role from cachedConversations if available so there is 0ms window for cross-session pollution!
   if (Array.isArray(cachedConversations)) {

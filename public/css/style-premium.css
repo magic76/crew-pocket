@@ -132,53 +132,16 @@ body.ai-streaming #send-btn {
 }
 
 
-/* === Primary navigation simplification: 2026-10 === */
+/* Role-first surface metrics. No persistent primary tab footer. */
 :root {
   --crew-header-height: 58px;
-  --crew-primary-nav-height: calc(58px + env(safe-area-inset-bottom, 0px));
-}
-
-#primary-bottom-nav {
-  min-height: var(--crew-primary-nav-height);
-  padding-bottom: env(safe-area-inset-bottom, 0px);
-  position: relative;
-  z-index: 60;
-  box-shadow: 0 -8px 28px rgba(0, 0, 0, 0.28);
-}
-
-.primary-tab {
-  min-height: 58px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 2px;
-  color: #64748b;
-  font-size: 10px;
-  font-weight: 700;
-  transition: color 140ms ease, background-color 140ms ease;
-  touch-action: manipulation;
-}
-
-.primary-tab-icon {
-  font-size: 16px;
-  line-height: 1;
-  filter: grayscale(0.35);
-}
-
-.primary-tab.is-active {
-  color: #99f6e4;
-  background: linear-gradient(180deg, rgba(20,184,166,0.08), rgba(20,184,166,0.02));
-}
-
-.primary-tab.is-active .primary-tab-icon {
-  filter: none;
+  --crew-primary-nav-height: 0px;
 }
 
 #drawer,
 #tools-menu-dropdown {
   top: var(--crew-header-height) !important;
-  bottom: var(--crew-primary-nav-height) !important;
+  bottom: 0 !important;
 }
 
 #drawer {
@@ -217,7 +180,7 @@ body.ai-streaming #send-btn {
 }
 
 #scroll-bottom-btn {
-  bottom: calc(9.5rem + env(safe-area-inset-bottom, 0px)) !important;
+  bottom: 14px !important;
 }
 
 @media (max-width: 640px) {

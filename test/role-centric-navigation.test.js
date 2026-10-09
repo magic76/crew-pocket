@@ -24,7 +24,7 @@ assert.ok(html.includes('id="header-current-task"'));
 assert.ok(html.includes('id="header-role-project" class="hidden"'));
 assert.ok(html.includes('id="header-title" type="button" class="hidden"'));
 assert.ok(html.includes('id="role-editor-workspace"'));
-assert.ok(app.includes("data-primary-tab"));
+assert.ok(app.includes("document.body.dataset.primaryTab"));
 assert.equal(app.includes("workspaceSelectorBtn.addEventListener('click', () => toggleDrawer(true))"), false);
 
 // Each Role owns its own secondary actions.

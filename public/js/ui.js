@@ -484,10 +484,10 @@ function openCrewCollaboration(roleId = currentRoleId || DEFAULT_ROLE_ID) {
   window.CrewMissionGraph?.inspectRole(role.id);
   document.getElementById('close-role-collaboration-btn')?.focus({ preventScroll: true });
 }
-function closeCrewCollaboration() {
+function closeCrewCollaboration({ handoff = false } = {}) {
   if (!roleCollaborationModal || roleCollaborationModal.classList.contains('hidden')) return;
   window.CrewMissionGraph?.close?.();
-  toggleRoleModal(roleCollaborationModal, false);
+  toggleRoleModal(roleCollaborationModal, false, { handoff });
   const focus = collaborationReturnFocus;
   collaborationReturnFocus = null;
   focus?.focus?.({ preventScroll: true });
@@ -1022,9 +1022,10 @@ const crewRoleDetailName = document.getElementById('crew-role-detail-name');
 const crewRoleDetailStatus = document.getElementById('crew-role-detail-status');
 let crewRoleDetailId = null;
 let crewRoleDetailReturnFocus = null;
-function closeCrewRoleDetail() {
-  if (!crewRoleDetailModal) return;
+function closeCrewRoleDetail({ handoff = false, fromHistory = false } = {}) {
+  if (!crewRoleDetailModal || crewRoleDetailModal.classList.contains('hidden')) return;
   crewRoleDetailModal.classList.add('hidden');
+  if (!handoff && !fromHistory) window.CrewNavigation?.closeOverlay('role-detail');
   const previousFocus = crewRoleDetailReturnFocus;
   crewRoleDetailId = null;
   crewRoleDetailReturnFocus = null;
@@ -1044,6 +1045,7 @@ function openCrewRoleDetail(roleId) {
   if (crewRoleDetailStatus) crewRoleDetailStatus.textContent =
     roleProjectLabel(role) + ' · ' + state;
   crewRoleDetailModal.classList.remove('hidden');
+  window.CrewNavigation?.openOverlay('role-detail');
   document.getElementById('crew-role-detail-close')?.focus({ preventScroll: true });
 }
 crewRoleDetailModal?.addEventListener('click', async event => {
@@ -1055,10 +1057,15 @@ crewRoleDetailModal?.addEventListener('click', async event => {
   if (!action || !crewRoleDetailId) return;
   const roleId = crewRoleDetailId;
   const role = roleMeta(roleId);
-  closeCrewRoleDetail();
-  if (!role) return;
+  closeCrewRoleDetail({ handoff: true });
+  if (!role) {
+    window.CrewNavigation?.dropOverlay('role-detail');
+    return;
+  }
   switch (action.dataset.crewRoleDetailAction) {
-    case 'new-work': return selectRole(roleId, true);
+    case 'new-work':
+      window.CrewNavigation?.dropOverlay('role-detail');
+      return selectRole(roleId, true);
     case 'history': return showRoleHistoryView(roleId);
     case 'memory': return openRoleMemory(roleId);
     case 'settings': return openRoleEditor(roleId);
@@ -1118,20 +1125,24 @@ window.addEventListener('crew:streaming-state', () => {
 });
 
 const roleModalCloseTimers = new WeakMap();
-function toggleRoleModal(modal, open) {
+function toggleRoleModal(modal, open, { fromHistory = false, handoff = false } = {}) {
   if (!modal) return;
+  const wasHidden = modal.classList.contains('hidden');
   const pendingClose = roleModalCloseTimers.get(modal);
   if (pendingClose) window.clearTimeout(pendingClose);
   roleModalCloseTimers.delete(modal);
   if (open) {
     modal.classList.remove('hidden');
     modal.classList.add('flex');
+    if (wasHidden) window.CrewNavigation?.openOverlay(modal.id);
     requestAnimationFrame(() => {
       if (!modal.classList.contains('hidden') && !roleModalCloseTimers.has(modal)) {
         modal.classList.remove('opacity-0');
       }
     });
   } else {
+    if (!fromHistory && !handoff && !wasHidden) window.CrewNavigation?.closeOverlay(modal.id);
+    if (handoff) window.CrewNavigation?.dropOverlay(modal.id);
     modal.classList.add('opacity-0');
     roleModalCloseTimers.set(modal, window.setTimeout(() => {
       roleModalCloseTimers.delete(modal);
@@ -1140,6 +1151,23 @@ function toggleRoleModal(modal, open) {
     }, 150));
   }
 }
+// Native Android Back calls WebView.goBack(); close any sheets not belonging to
+// the restored history entry, without adding another history transition.
+window.addEventListener('crew:navigation-popstate', event => {
+  const active = event.detail?.overlay || null;
+  if (active !== 'role-detail' && crewRoleDetailId) {
+    closeCrewRoleDetail({ fromHistory: true });
+  }
+  for (const modal of [roleHistoryModal, roleCollaborationModal,
+    roleMemoryModal, roleEditorModal, roleDeleteModal]) {
+    if (modal && modal.id !== active && !modal.classList.contains('hidden')) {
+      if (modal === roleHistoryModal) historyRoleId = null;
+      if (modal === roleCollaborationModal) window.CrewMissionGraph?.close?.();
+      if (modal === roleMemoryModal) window.RoleMemoryXRay?.close?.();
+      toggleRoleModal(modal, false, { fromHistory: true });
+    }
+  }
+});
 
 function updateRoleEditorWorkspace(projectId = '') {
   if (!roleEditorWorkspace) return;

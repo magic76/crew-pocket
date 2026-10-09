@@ -149,9 +149,11 @@ function initAppAndListeners() {
     });
   }
 
-  const primaryTabButtons = [...document.querySelectorAll('[data-primary-tab]')];
+  // Role-first navigation. Android WebView's native Back uses browser history.
   const chatComposerFooter = document.getElementById('chat-composer-footer');
   const crewBackHomeBtn = document.getElementById('crew-back-home-btn');
+  const crewOpenSettingsBtn = document.getElementById('crew-open-settings-btn');
+  const crewSettingsBackBtn = document.getElementById('crew-settings-back-btn');
   let primaryTab = 'crew';
   let lastCrewRefresh = 0;
 
@@ -159,27 +161,16 @@ function initAppAndListeners() {
     const header = document.querySelector('header');
     if (header) {
       document.documentElement.style.setProperty('--crew-header-height',
-        `${Math.max(0, Math.round(header.getBoundingClientRect().height))}px`);
-    }
-    const nav = document.getElementById('primary-bottom-nav');
-    if (nav) {
-      document.documentElement.style.setProperty('--crew-primary-nav-height',
-        `${Math.max(1, Math.round(nav.getBoundingClientRect().height))}px`);
+        String(Math.max(0, Math.round(header.getBoundingClientRect().height))) + 'px');
     }
   };
 
   function syncPrimaryTabChrome(tab) {
     primaryTab = ['crew', 'chat', 'settings'].includes(tab) ? tab : 'crew';
     document.body.dataset.primaryTab = primaryTab;
-    primaryTabButtons.forEach(button => {
-      const active = button.dataset.primaryTab === primaryTab;
-      button.classList.toggle('is-active', active);
-      if (active) button.setAttribute('aria-current', 'page');
-      else button.removeAttribute('aria-current');
-    });
-    // Role selection is a page transition; do not unmount the active chat.
     drawer?.classList.toggle('hidden', primaryTab !== 'crew');
     chatComposerFooter?.classList.toggle('hidden', primaryTab !== 'chat');
+    // Keep the active conversation and its stream mounted across pages.
     updatePrimaryChromeMetrics();
   }
 
@@ -194,9 +185,15 @@ function initAppAndListeners() {
     ]).then(() => window.renderRoleNavigation?.()).catch(() => {});
   }
 
-  function setPrimaryTab(tab, { hapticFeedback = true } = {}) {
+  function setPrimaryTab(tab, { hapticFeedback = true, recordHistory = true } = {}) {
     const target = ['crew', 'chat', 'settings'].includes(tab) ? tab : 'crew';
-    const switchingToCrew = target === 'crew' && primaryTab !== 'crew';
+    const changed = target !== primaryTab;
+    const switchingToCrew = target === 'crew' && changed;
+    if (recordHistory && changed) {
+      window.history.pushState({
+        ...(window.history.state || {}), crewPage: target, crewOverlay: null
+      }, '');
+    }
     syncPrimaryTabChrome(target);
     if (hapticFeedback && typeof window.haptic === 'function') window.haptic('light');
     if (target === 'crew') {
@@ -206,17 +203,63 @@ function initAppAndListeners() {
     setSettingsViewOpen(target === 'settings');
   }
 
+  function openCrewOverlay(id) {
+    if (!id) return;
+    const current = window.history.state || {};
+    // A delete confirmation is nested inside Role Settings: Android Back
+    // should return to Settings, not close both dialogs.
+    const nestedDelete = current.crewOverlay === 'role-editor-modal'
+      && id === 'role-delete-modal';
+    const method = current.crewOverlay && !nestedDelete ? 'replaceState' : 'pushState';
+    window.history[method]({ ...current, crewPage: primaryTab, crewOverlay: id }, '');
+  }
+
+  function closeCrewOverlay(id) {
+    if (window.history.state?.crewOverlay === id) window.history.back();
+  }
+
+  function dropCrewOverlay(id) {
+    const current = window.history.state || {};
+    if (current.crewOverlay === id) {
+      window.history.replaceState({ ...current, crewOverlay: null }, '');
+    }
+  }
+
+  window.CrewNavigation = Object.freeze({
+    openOverlay: openCrewOverlay,
+    closeOverlay: closeCrewOverlay,
+    dropOverlay: dropCrewOverlay,
+    back() {
+      if (primaryTab !== 'crew' || window.history.state?.crewOverlay) {
+        window.history.back();
+      }
+    }
+  });
   window.setPrimaryTab = setPrimaryTab;
   window.getPrimaryTab = () => primaryTab;
   window.syncPrimaryTabChrome = syncPrimaryTabChrome;
   window.refreshCrewHome = refreshCrewHome;
 
-  primaryTabButtons.forEach(button => {
-    button.addEventListener('click', () => setPrimaryTab(button.dataset.primaryTab));
+  window.addEventListener('popstate', event => {
+    window.dispatchEvent(new CustomEvent('crew:navigation-popstate', {
+      detail: { overlay: event.state?.crewOverlay || null }
+    }));
+    setPrimaryTab(event.state?.crewPage || 'crew', {
+      hapticFeedback: false, recordHistory: false
+    });
   });
-  crewBackHomeBtn?.addEventListener('click', () => setPrimaryTab('crew'));
+  crewBackHomeBtn?.addEventListener('click', () => {
+    if (primaryTab === 'chat') window.CrewNavigation.back();
+  });
+  crewOpenSettingsBtn?.addEventListener('click', () => setPrimaryTab('settings'));
+  crewSettingsBackBtn?.addEventListener('click', () => window.CrewNavigation.back());
+
+  // Always start at Crew; preserve token-cleanup state fields.
+  window.history.replaceState({
+    ...(window.history.state || {}), crewPage: 'crew', crewOverlay: null
+  }, '');
+  setPrimaryTab('crew', { hapticFeedback: false, recordHistory: false });
   window.addEventListener('resize', updatePrimaryChromeMetrics);
-  setPrimaryTab('crew', { hapticFeedback: false });
   window.setTimeout(updatePrimaryChromeMetrics, 0);
 
   // 📦 Browser Extension Export listeners
@@ -885,7 +928,7 @@ function initAppAndListeners() {
                 role: target.role
               });
             }
-            await loadConversationHistory(target.id);
+            await loadConversationHistory(target.id, { preserveCrewHome: true });
           }
         })();
       }

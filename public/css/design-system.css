@@ -52,7 +52,7 @@ html[data-crew-theme="light"] {
 }
 html, body { background: var(--cp-bg) !important; color: var(--cp-text); }
 body::before { display: none !important; }
-header, #chat-composer-footer, #primary-bottom-nav {
+header, #chat-composer-footer {
   background: var(--cp-surface) !important;
   border-color: var(--cp-border) !important;
   box-shadow: none !important;
@@ -72,20 +72,6 @@ header::after, footer::after { display: none !important; }
 #tools-menu-dropdown > .px-2.pt-1 {
   color: var(--cp-muted);
 }
-/* Calm, consistent navigation. SVG icons inherit the currentColor. */
-.primary-tab {
-  color: var(--cp-muted) !important;
-  font-size: 11px;
-  font-weight: 600;
-  transition: color 150ms ease, background-color 150ms ease;
-}
-.primary-tab-icon { display: flex; filter: none !important; }
-.primary-tab-icon svg { width: 20px; height: 20px; stroke-width: 1.8; }
-.primary-tab.is-active {
-  color: var(--cp-accent-strong) !important;
-  background: var(--cp-accent-soft) !important;
-}
-.primary-tab:focus-visible, .theme-choice:focus-visible,
 .role-nav-card button:focus-visible, button:focus-visible, input:focus-visible,
 textarea:focus-visible, select:focus-visible {
   outline: 2px solid var(--cp-focus);
@@ -264,7 +250,7 @@ body.ai-streaming #send-btn { animation: none !important; }
 .theme-choice:not(.is-active):active { background: var(--cp-accent-soft); }
 /* Accessibility and WebView: user-set reduced motion applies to all decorative effects. */
 @media (prefers-reduced-motion: reduce) {
-  .role-nav-card, .primary-tab, .theme-choice, #send-btn {
+  .role-nav-card, .theme-choice, #send-btn {
     transition: none !important;
   }
 }

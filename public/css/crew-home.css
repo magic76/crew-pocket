@@ -383,3 +383,83 @@ body[data-primary-tab="crew"] #crew-back-home-btn { display: none; }
   #role-nav-list .role-nav-card > [data-role-menu-btn] { transition: none !important; }
   .crew-record-modal { transition: none !important; }
 }
+
+
+/* Role-first navigation — no persistent tab footer. */
+:root { --crew-primary-nav-height: 0px; }
+body[data-primary-tab="settings"] > header,
+body[data-primary-tab="settings"] #crew-main-layout,
+body[data-primary-tab="settings"] #chat-composer-footer {
+  display: none !important;
+}
+body[data-primary-tab="crew"] #tools-menu-dropdown { display: none !important; }
+body[data-primary-tab="chat"] #tools-menu-dropdown { display: none !important; }
+body[data-primary-tab="settings"] #tools-menu-dropdown.crew-settings-view {
+  display: block !important;
+  position: relative !important;
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  overflow-y: auto !important;
+  overscroll-behavior: contain;
+  width: 100% !important;
+  max-width: none !important;
+  max-height: none !important;
+  height: auto !important;
+  top: auto !important; right: auto !important;
+  bottom: auto !important; left: auto !important;
+  z-index: 1 !important;
+  margin: 0 !important;
+  padding: 0 max(13px, env(safe-area-inset-right, 0px))
+    max(16px, env(safe-area-inset-bottom, 0px)) max(13px, env(safe-area-inset-left, 0px)) !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  background: var(--cp-bg) !important;
+  color: var(--cp-text) !important;
+  scrollbar-width: none;
+}
+body[data-primary-tab="settings"] #tools-menu-dropdown::-webkit-scrollbar { display: none; }
+body[data-primary-tab="settings"] #tools-menu-dropdown .settings-view-header {
+  display: flex !important; align-items: center; gap: 12px;
+  padding: 15px 4px !important;
+  margin: 0 -4px 15px !important;
+  border-bottom: 1px solid var(--cp-border) !important;
+  border-radius: 0 !important;
+  color: var(--cp-text) !important;
+  background: var(--cp-bg) !important;
+  box-shadow: none !important;
+}
+body[data-primary-tab="settings"] #tools-menu-dropdown .settings-view-header h1 {
+  color: var(--cp-text) !important;
+}
+#crew-settings-back-btn {
+  width: 44px; height: 44px; flex: none;
+  border: 1px solid var(--cp-border);
+  border-radius: 13px;
+  display: grid; place-items: center;
+  background: var(--cp-surface) !important;
+  color: var(--cp-accent-strong);
+  font-size: 24px; font-weight: 650;
+}
+#crew-open-settings-btn {
+  width: 42px; height: 42px;
+  display: grid; place-items: center;
+  flex: none; border: 1px solid var(--cp-border);
+  border-radius: 12px; background: var(--cp-surface);
+  color: var(--cp-text-secondary);
+  touch-action: manipulation;
+}
+#crew-open-settings-btn:active,
+#crew-settings-back-btn:active { background: var(--cp-accent-soft) !important; }
+#role-nav-view #cockpit-scroll {
+  padding-bottom: max(24px, env(safe-area-inset-bottom, 0px));
+}
+body[data-primary-tab="chat"] #scroll-bottom-btn {
+  bottom: 14px !important;
+}
+@media (min-width: 720px) {
+  body[data-primary-tab="settings"] #tools-menu-dropdown.crew-settings-view {
+    padding-left: max(24px, calc((100vw - 860px) / 2)) !important;
+    padding-right: max(24px, calc((100vw - 860px) / 2)) !important;
+  }
+}
