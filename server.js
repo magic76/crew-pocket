@@ -1184,6 +1184,27 @@ function memoryStatusesFromQuery(query = {}) {
   return statuses.length ? statuses : undefined;
 }
 
+async function handleRoleMemoryInspect(parsedUrl, res) {
+  try {
+    const roleId = String(parsedUrl?.query?.role_id || '').trim();
+    if (!/^[A-Za-z0-9._-]{1,160}$/.test(roleId)) {
+      res.writeHead(400, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+      return res.end(JSON.stringify({ success: false, error: 'Invalid role id' }));
+    }
+    const role = await getRole(roleId);
+    if (!role) {
+      res.writeHead(404, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+      return res.end(JSON.stringify({ success: false, error: 'Role not found' }));
+    }
+    const inspection = await defaultMemoryProvider.inspectRole(role.id, { limit: 200 });
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+    return res.end(JSON.stringify({ success: true, roleId: role.id, ...inspection }));
+  } catch (error) {
+    res.writeHead(500, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+    return res.end(JSON.stringify({ success: false, error: 'Memory inspection unavailable' }));
+  }
+}
+
 async function handleMemories(req, res, parsedUrl) {
   try {
     if (req.method === 'GET') {
@@ -2860,6 +2881,8 @@ const server = http.createServer(async (req, res) => {
     return handleRoleRuntime(req, res);
   } else if (pathname === '/api/crew-tool' && req.method === 'POST') {
     return handleCrewTool(req, res);
+  } else if (pathname === '/api/role-memory-inspect' && req.method === 'GET') {
+    return handleRoleMemoryInspect(parsedUrl, res);
   } else if (pathname === '/api/memories' && ['GET', 'POST', 'DELETE'].includes(req.method)) {
     return handleMemories(req, res, parsedUrl);
   } else if (pathname === '/api/dreaming' && ['GET', 'POST'].includes(req.method)) {

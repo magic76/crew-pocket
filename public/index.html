@@ -48,6 +48,7 @@
   <link rel="stylesheet" href="/css/design-system.css">
   <link rel="stylesheet" href="/css/cockpit.css">
   <link rel="stylesheet" href="/css/mission-graph.css">
+  <link rel="stylesheet" href="/css/memory-xray.css">
   <link rel="stylesheet" href="/css/theme-light.css">
 </head>
 <body class="bg-slate-950 text-slate-100 flex flex-col h-[100dvh] w-full max-w-full overflow-hidden">
@@ -225,6 +226,24 @@
       <div class="flex items-start justify-between gap-3 border-b border-slate-800 p-4">
         <div><div class="text-[9px] font-bold tracking-[0.18em] text-indigo-400/80">LONG-TERM MEMORY</div><h2 id="role-memory-title" class="mt-1 text-base font-bold text-white">Role Memory</h2><p id="role-memory-subtitle" class="mt-1 text-[11px] text-slate-400">這些記憶跨工作保留。</p></div>
         <button id="close-role-memory-btn" type="button" class="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-700 bg-slate-800 text-slate-400">✕</button>
+      </div>
+      <div class="memory-xray-toolbar">
+        <div class="memory-xray-tabs" role="group" aria-label="記憶檢視">
+          <button type="button" data-memory-xray-tab="overview" class="is-active" aria-pressed="true">X-Ray · 記憶總覽</button>
+          <button type="button" data-memory-xray-tab="timeline" aria-pressed="false">Time Machine · 時光機</button>
+        </div>
+        <div class="memory-xray-filters">
+          <input id="memory-xray-search" type="search" maxlength="120" placeholder="搜尋記憶內容與來源" aria-label="搜尋記憶" />
+          <select id="memory-xray-filter" aria-label="記憶狀態">
+            <option value="all">全部狀態</option>
+            <option value="active">啟用</option>
+            <option value="superseded">已被取代</option>
+            <option value="disputed">有爭議</option>
+            <option value="archived">已封存</option>
+          </select>
+          <button id="memory-xray-refresh" type="button" aria-label="重新載入記憶" title="重新載入記憶">↻</button>
+        </div>
+        <p id="memory-xray-note" class="memory-xray-note" role="status">只檢視目前 Role 的長期記憶。</p>
       </div>
       <div id="role-memory-list" class="flex-1 space-y-2 overflow-y-auto p-3"><div class="p-6 text-center text-xs text-slate-500">載入 Memory 中...</div></div>
     </section>
@@ -1772,6 +1791,7 @@
   <!-- Modular Scripts (Cache-busted v7.9) -->
   <script src="/js/i18n.js"></script>
   <script src="/js/ui.js"></script>
+  <script src="/js/memory-xray.js"></script>
   <script src="/js/cockpit-model.js"></script>
   <script src="/js/cockpit.js"></script>
   <script src="/js/mission-graph.js"></script>
