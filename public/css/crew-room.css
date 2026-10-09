@@ -59,6 +59,16 @@
 #role-nav-list .role-nav-card.crew-handoff-arrived {
   animation: crew-handoff-arrival .95s ease-out;
 }
+/* A verified working → non-working transition is not proof of success;
+   celebrate the pause, never display a fabricated checkmark. */
+#role-nav-list .role-nav-card.crew-work-settled .crew-role-sprite {
+  animation: crew-finish-stretch .95s ease-out;
+}
+@keyframes crew-finish-stretch {
+  0%, 100% { transform: translateY(0) rotate(0); }
+  32% { transform: translateY(-3px) rotate(-4deg); }
+  64% { transform: translateY(-2px) rotate(4deg); }
+}
 @keyframes crew-pixel-type {
   from { transform: translateY(0); }
   to { transform: translateY(-1.5px); }
@@ -75,6 +85,7 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .crew-role-avatar[data-state="working"] .crew-pixel-hand,
+  #role-nav-list .role-nav-card.crew-work-settled .crew-role-sprite,
   #role-nav-list .role-nav-card.crew-handoff-arrived { animation: none !important; }
   .crew-room-envelope { display: none !important; animation: none !important; }
 }
