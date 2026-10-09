@@ -8,6 +8,8 @@
     /^\s*\[Approved Execution Intent\]\r?\n\{[^\r\n]*\}\r?\nThe intent is advisory and remains strictly bounded by the Execution Contract\. Do not perform intent items that exceed the approved mode or the original user request\.\s*/u;
   const LEGACY_SELF_DEBUG_PREAMBLE =
     /^\s*【Crew Embedded Self-Debug】\r?\n[^\r\n]*\r?\n\s*/u;
+  const LEGACY_LIVE_MEMO_PREAMBLE =
+    /^\s*以下是上一段 Gemini Live 語音的背景紀錄，只供理解脈絡，並非目前的新指令：\r?\n[\s\S]*?\r?\n\r?\n【目前使用者訊息】\r?\n\s*/u;
 
   function cleanCrewUserContent(raw) {
     if (raw == null || raw === '') return '';
@@ -30,7 +32,8 @@
       previous = text;
       text = text
         .replace(LEGACY_SELF_DEBUG_PREAMBLE, '')
-        .replace(LEGACY_INTENT_PREAMBLE, '');
+        .replace(LEGACY_INTENT_PREAMBLE, '')
+        .replace(LEGACY_LIVE_MEMO_PREAMBLE, '');
     } while (text !== previous);
 
     return text

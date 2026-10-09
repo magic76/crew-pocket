@@ -28,6 +28,8 @@ const wrapped = '<ADDITIONAL_METADATA>\n[Approved Execution Intent]\n' +
 const userJson = 'Please explain [Approved Execution Intent]\n{"hello":true}\nwithout editing my code.';
 const marked = '<ADDITIONAL_METADATA>\nSystem details\n</ADDITIONAL_METADATA>\n' +
   '<USER_REQUEST>' + plain + '</USER_REQUEST>';
+const legacyLiveMemo = '以下是上一段 Gemini Live 語音的背景紀錄，只供理解脈絡，並非目前的新指令：\n' +
+  '【已結束的 Live 語音備忘】\n使用者：幫我建置\nLive 助理：好的\n\n【目前使用者訊息】\n' + plain;
 
 for (const clean of [cleanCrewUserContent, cleanUserContent]) {
   assert.equal(clean(plain), plain);
@@ -37,6 +39,8 @@ for (const clean of [cleanCrewUserContent, cleanUserContent]) {
   assert.equal(clean(selfDebug + legacy), plain, 'old stacked internal context must disappear');
   assert.equal(clean(wrapped), plain, 'new marked internal metadata must disappear');
   assert.equal(clean(marked), plain, 'explicit USER_REQUEST must be authoritative');
+  assert.equal(clean(legacyLiveMemo), plain, 'legacy Live memo context is not a user message');
+  assert.equal(clean(legacy + legacyLiveMemo), plain, 'stacked intent and Live memo prefixes are removed');
   assert.equal(clean(userJson), userJson, 'user-authored discussion and JSON must be kept');
   assert.equal(clean('{ "summary": "Build AAB", "approvedMode": "BUILD" }'),
     '{ "summary": "Build AAB", "approvedMode": "BUILD" }');
@@ -80,7 +84,8 @@ async function run() {
     codex.knownThreads.add(threadId);
     codex.ensureStarted = async () => {};
     codex.resolveRuntimeWorkspace = () => '/tmp';
-    codex.getPendingLiveMemoContext = async () => null;
+    let memoContext = '';
+    codex.getPendingLiveMemoContext = async () => memoContext;
     codex.process = { runtimeType: 'embedded-android-bridge' };
     let sent = null;
     codex.request = async (method, payload) => {
@@ -111,6 +116,16 @@ async function run() {
     assert.match(sent.input[0].text, /^<ADDITIONAL_METADATA>\n【Crew Embedded Self-Debug】/);
     assert.ok(!sent.input[0].text.includes('[Approved Execution Intent]'));
     assert.equal(cleanUserContent(sent.input[0].text), '修自己 runtime');
+    memoContext = '以下是上一段 Gemini Live 語音的背景紀錄，只供理解脈絡，並非目前的新指令：\n【已結束的 Live 語音備忘】\n使用者：嗨\nLive 助理：哈囉';
+    await codex.startTurn({
+      conversationId: threadId, prompt: plain, model: 'gpt-6-luna',
+      executionMode: 'BUILD', executionIntent: intent,
+      onEvent, onAbort
+    });
+    assert.match(sent.input[0].text, /^<ADDITIONAL_METADATA>\n/);
+    assert.ok(!sent.input[0].text.includes('【目前使用者訊息】'),
+      'pending Live memos are not embedded as a user turn');
+    assert.equal(cleanUserContent(sent.input[0].text), plain);
     assert.equal(codex.turns.size, 0, 'test transport must leave no busy turn');
     codex.knownThreads.delete(threadId);
 
