@@ -182,6 +182,18 @@
       panel(ctx,12,-38,22,20,'#d7f8e5','#64a994');
       label(ctx,'⌘',23,-28,11,'#2b7463',19);
     }
+    // Only verified state and the current Runtime title may appear as a
+    // bubble. Never fabricate filenames, tool calls or percent progress.
+    if (a.work === 'working' || a.work === 'waiting') {
+      const active = a.work === 'working';
+      const message = active ? (a.role?.title ||
+        (language === 'en' ? 'Working' : '工作中')) :
+        (language === 'en' ? 'Needs attention' : '等待處理');
+      panel(ctx,-61,-67,122,24,active ? '#d7f4e2' : '#fff0c4',
+        active ? '#5c9986' : '#bc9354');
+      label(ctx,message,0,-55,11,'#334c54',113);
+      rect(ctx,-2,-43,5,5,active ? '#d7f4e2' : '#fff0c4');
+    }
     ctx.restore();
   }
   function globalPalette(id) {
