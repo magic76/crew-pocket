@@ -1,0 +1,300 @@
+/* Crew Pocket | Cinematic Command Center.
+ * Token-first light/dark contrast, static by default, animated on real events. */
+:root {
+  --crew-cinema-duration: 240ms;
+  --crew-cinema-ease: cubic-bezier(.22,1,.36,1);
+}
+body[data-crew-tone="pocket"] { --crew-active-rgb: 52,151,234; }
+body[data-crew-tone="teacher"] { --crew-active-rgb: 30,171,146; }
+body[data-crew-tone="story"] { --crew-active-rgb: 151,104,228; }
+body[data-crew-tone="fortune"] { --crew-active-rgb: 197,142,67; }
+body[data-crew-tone="helper"] { --crew-active-rgb: 78,167,189; }
+body[data-crew-tone="general"] { --crew-active-rgb: 116,137,170; }
+#role-nav-list .role-nav-card[data-crew-tone="pocket"] { --crew-card-rgb:52,151,234; }
+#role-nav-list .role-nav-card[data-crew-tone="teacher"] { --crew-card-rgb:30,171,146; }
+#role-nav-list .role-nav-card[data-crew-tone="story"] { --crew-card-rgb:151,104,228; }
+#role-nav-list .role-nav-card[data-crew-tone="fortune"] { --crew-card-rgb:197,142,67; }
+#role-nav-list .role-nav-card[data-crew-tone="helper"] { --crew-card-rgb:78,167,189; }
+#role-nav-list .role-nav-card[data-crew-tone="general"] { --crew-card-rgb:116,137,170; }
+#role-nav-list .role-nav-card {
+  --crew-card-rgb:116,137,170;
+  isolation:isolate;
+  transition: border-color var(--crew-cinema-duration) ease,
+    box-shadow var(--crew-cinema-duration) ease,
+    transform var(--crew-cinema-duration) var(--crew-cinema-ease);
+  background:linear-gradient(145deg,
+    rgba(var(--crew-card-rgb),.065),transparent 70%),var(--cp-surface) !important;
+  border-color:var(--cp-border) !important;
+  box-shadow:inset 0 1px 0 rgba(135,154,169,.10),0 3px 12px rgba(3,14,28,.08) !important;
+}
+#role-nav-list .role-nav-card::before {
+  content:""; position:absolute;z-index:0;
+  left:0;top:0;bottom:0;width:3px;
+  background:rgba(var(--crew-card-rgb),.76);
+  opacity:.75;pointer-events:none;
+}
+#role-nav-list .role-nav-card > [data-role-nav-id] {
+  position:relative;z-index:1;
+}
+#role-nav-list .role-nav-card[data-selected="true"] {
+  order:-1;grid-column:1/-1;
+  background:linear-gradient(112deg,
+    rgba(var(--crew-card-rgb),.13),rgba(var(--crew-card-rgb),.035) 72%),
+    var(--cp-surface) !important;
+  border-color:rgba(var(--crew-card-rgb),.65) !important;
+  box-shadow:0 0 0 1px rgba(var(--crew-card-rgb),.13),
+    0 9px 30px rgba(var(--crew-card-rgb),.11) !important;
+}
+#role-nav-list .role-nav-card[data-selected="true"]::before { width:4px; opacity:1; }
+#role-nav-list .role-nav-card[data-selected="true"]::after {
+  content:"";position:absolute;inset:-70px -90px auto auto;
+  height:210px;width:210px;border-radius:50%;
+  background:radial-gradient(circle,rgba(var(--crew-card-rgb),.14),transparent 68%);
+  pointer-events:none;
+}
+#role-nav-list .role-nav-card[data-selected="true"] > [data-role-nav-id] {
+  min-height:174px !important;
+  padding:14px 17px 18px !important;
+}
+#role-nav-list .role-nav-card[data-selected="true"] .crew-role-avatar {
+  width:61px;height:61px;border-radius:17px;
+  background:linear-gradient(150deg,rgba(var(--crew-card-rgb),.18),var(--cp-surface-2));
+  border:1px solid rgba(var(--crew-card-rgb),.46) !important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 5px 15px rgba(var(--crew-card-rgb),.15);
+}
+#role-nav-list .role-nav-card .crew-role-avatar {
+  border-color:rgba(var(--crew-card-rgb),.3) !important;
+  background:linear-gradient(145deg,rgba(var(--crew-card-rgb),.09),var(--cp-surface-2));
+}
+#role-nav-list .role-nav-card .crew-role-sprite {
+  image-rendering:pixelated;shape-rendering:crispEdges;
+  filter:drop-shadow(0 2px 3px rgba(0,0,0,.18));
+}
+#role-nav-list .role-nav-card[data-selected="true"] .crew-role-sprite {
+  width:53px;height:53px;
+}
+.crew-role-eyebrow {
+  font-size:9px;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--cp-text-secondary);font-weight:780;
+  display:flex;align-items:center;gap:7px;
+  margin:2px 0 1px;min-height:13px;
+}
+.crew-role-eyebrow::before {
+  content:"";width:12px;height:1px;background:rgba(var(--crew-card-rgb),.85);
+}
+#role-nav-list .role-nav-card:not([data-selected="true"]) .crew-role-eyebrow {display:none;}
+#role-nav-list .role-nav-card[data-selected="true"] .crew-role-name {
+  font-size:18px;letter-spacing:-.025em;margin-top:10px;
+}
+#role-nav-list .role-nav-card[data-selected="true"] .crew-role-state {
+  font-size:12px;font-weight:690;min-height:20px;
+}
+#role-nav-list .role-nav-card[data-selected="true"] .crew-role-work {
+  min-height:17px;margin-top:6px;font-size:12px !important;
+  max-width:calc(100% - 55px);
+  color:var(--cp-text-secondary);line-height:1.45;
+}
+#role-nav-list .role-nav-card[data-selected="true"] [data-role-menu-btn] {
+  background:var(--cp-surface-2);
+}
+#role-nav-list .role-nav-card[data-state="working"]::before {
+  background:rgba(var(--crew-card-rgb),1);
+}
+#role-nav-list .role-nav-card.crew-handoff-source,
+#role-nav-list .role-nav-card.crew-handoff-target {
+  box-shadow:0 0 0 1px rgba(var(--crew-card-rgb),.45),
+    0 0 23px rgba(var(--crew-card-rgb),.25) !important;
+  border-color:rgba(var(--crew-card-rgb),.75) !important;
+}
+#role-nav-list .role-nav-card[data-selected="true"] .crew-role-attention {
+  right:65px;top:22px;
+}
+@media(hover:hover) and (pointer:fine) {
+  #role-nav-list .role-nav-card:hover {
+    transform:translateY(-3px);
+    border-color:rgba(var(--crew-card-rgb),.62) !important;
+    box-shadow:0 9px 22px rgba(var(--crew-card-rgb),.12) !important;
+  }
+}
+#role-nav-list .role-nav-card > [data-role-nav-id]:focus-visible {
+  outline:2px solid rgba(var(--crew-card-rgb),.95);
+  outline-offset:-3px;border-radius:13px;
+}
+.crew-home-header {
+  position:relative;isolation:isolate;overflow:hidden;
+  background:var(--cp-bg) !important;
+}
+.crew-home-header::before {
+  content:"";position:absolute;inset:0 0 auto 0;height:3px;
+  background:linear-gradient(90deg,transparent,rgba(var(--crew-active-rgb,116,137,170),.7),transparent);
+  pointer-events:none;
+}
+.crew-home-header::after {
+  content:"";position:absolute;z-index:-1;right:-78px;top:-115px;
+  width:260px;height:250px;border-radius:50%;
+  background:radial-gradient(circle,
+    rgba(var(--crew-active-rgb,116,137,170),.08),transparent 73%);
+  pointer-events:none;
+}
+.crew-home-kicker {letter-spacing:.17em;font-size:10px;}
+.crew-home-top h1 {letter-spacing:-.04em;font-size:27px;}
+#crew-room-summary .crew-summary-item {
+  border:1px solid var(--cp-border);
+  background:var(--cp-surface);
+  padding:5px 8px;border-radius:8px;font-weight:670;
+  color:var(--cp-text-secondary);
+}
+#crew-room-summary [data-kind="working"] {color:var(--cp-success);}
+#crew-room-summary [data-kind="attention"] {color:var(--cp-warning);}
+#crew-room-summary .crew-summary-item[data-kind="roles"]::before {
+  background:var(--cp-accent);
+}
+#crew-activity-panel.crew-activity-panel {
+  box-shadow:0 8px 26px rgba(3,14,28,.06);
+  border-color:var(--cp-border);
+}
+#crew-activity-panel .crew-activity-heading {
+  background:linear-gradient(95deg,rgba(var(--crew-active-rgb,116,137,170),.08),transparent),
+  var(--cp-surface-2);
+}
+#crew-activity-panel .crew-activity-symbol {
+  color:var(--cp-accent-strong);
+  border:1px solid var(--cp-border);
+}
+#crew-activity-panel .crew-activity-row {
+  transition:background var(--crew-cinema-duration) ease;
+}
+#crew-activity-panel .crew-activity-row:active {
+  background:rgba(var(--crew-active-rgb,116,137,170),.10);
+}
+/* Visual link exists only when a freshly saved handoff is observed. */
+.crew-neural-link {
+  position:fixed;inset:0;width:100vw;height:100dvh;
+  z-index:55;pointer-events:none;overflow:visible;
+  filter:drop-shadow(0 0 7px rgba(59,185,214,.35));
+}
+.crew-neural-path {
+  fill:none;stroke:#65c9df;stroke-width:2.5;
+  stroke-linecap:round;stroke-dasharray:5 9;
+  opacity:.67;
+}
+.crew-neural-pulse {
+  fill:#eafcff;stroke:#48aec2;stroke-width:3;
+  filter:drop-shadow(0 0 6px rgba(83,219,245,.8));
+}
+.crew-focus-orb.crew-role-avatar {
+  position:fixed;z-index:65;pointer-events:none;
+  margin:0 !important;display:grid;place-items:center;
+  overflow:hidden;
+  border:1px solid rgba(var(--crew-active-rgb,116,137,170),.7) !important;
+  background:var(--cp-surface-2);
+  box-shadow:0 0 24px rgba(var(--crew-active-rgb,116,137,170),.25);
+  will-change:transform,opacity;
+}
+/* Actual Role identity carries into conversation header; no content changes. */
+body[data-primary-tab="chat"] header {
+  border-bottom:1px solid rgba(var(--crew-active-rgb,116,137,170),.30) !important;
+  background:var(--cp-bg) !important;
+}
+body[data-primary-tab="chat"] #workspace-selector-btn {
+  border-color:rgba(var(--crew-active-rgb,116,137,170),.55) !important;
+  background:linear-gradient(145deg,rgba(var(--crew-active-rgb,116,137,170),.18),transparent),
+    var(--cp-surface-2) !important;
+  box-shadow:0 2px 14px rgba(var(--crew-active-rgb,116,137,170),.12);
+  color:var(--cp-text) !important;
+}
+body[data-primary-tab="chat"] #workspace-label {
+  color:var(--cp-text) !important;letter-spacing:-.025em;
+}
+body[data-primary-tab="chat"] #header-current-task {
+  color:var(--cp-text-secondary) !important;
+}
+#crew-chat-role-state {
+  flex:none;display:inline-flex;align-items:center;
+  gap:5px;font-size:9px;line-height:1;
+  padding:4px 6px;border-radius:7px;
+  background:var(--cp-surface-2);
+  border:1px solid var(--cp-border);
+  color:var(--cp-text-secondary);font-weight:780;
+  white-space:nowrap;
+}
+#crew-chat-role-state::before {
+  content:"";width:5px;height:5px;
+  border-radius:100%;background:currentColor;
+}
+#crew-chat-role-state[data-state="working"] {color:var(--cp-success);}
+#crew-chat-role-state[data-state="waiting"] {color:var(--cp-warning);}
+body.crew-role-streaming[data-primary-tab="chat"] #workspace-selector-btn {
+  box-shadow:0 0 0 1px rgba(var(--crew-active-rgb,116,137,170),.26),
+    0 0 18px rgba(var(--crew-active-rgb,116,137,170),.17);
+}
+/* Workbench: clearer hierarchy. Never decorate unknown outcome as success. */
+.living-workbench {
+  border:1px solid var(--cp-border);
+  border-radius:16px;
+  background:var(--cp-surface);
+  box-shadow:0 12px 28px rgba(9,22,45,.07);
+  animation:crew-result-arrive 290ms var(--crew-cinema-ease) both;
+}
+.living-workbench .living-hero {
+  position:relative;overflow:hidden;
+  background:linear-gradient(115deg,
+    rgba(var(--crew-active-rgb,116,137,170),.09),transparent 75%),var(--cp-surface-2);
+}
+.living-workbench .living-hero::before {
+  content:"";position:absolute;inset:0 auto 0 0;width:3px;
+  background:rgba(var(--crew-active-rgb,116,137,170),.74);
+}
+.living-workbench .living-metric {
+  background:var(--cp-surface);
+  border-radius:11px;
+}
+.execution-result-card {
+  border-radius:15px !important;
+  border-color:var(--cp-border) !important;
+  box-shadow:0 5px 19px rgba(9,22,45,.06);
+}
+.execution-result-card[open] .execution-result-body {
+  animation:crew-result-expand 210ms var(--crew-cinema-ease);
+}
+body.crew-role-streaming #messages-container .live-status,
+body.crew-role-streaming #messages-container .thinking-active-glow {
+  border-color:rgba(var(--crew-active-rgb,116,137,170),.44) !important;
+}
+@keyframes crew-result-arrive {
+  from {opacity:.6;transform:translateY(8px);}
+  to {opacity:1;transform:translateY(0);}
+}
+@keyframes crew-result-expand {
+  from {opacity:.4;transform:translateY(-6px);}
+  to {opacity:1;transform:translateY(0);}
+}
+@media(max-width:370px) {
+  #role-nav-list .role-nav-card[data-selected="true"] > [data-role-nav-id] {
+    min-height:166px !important;
+  }
+  #role-nav-list .role-nav-card[data-selected="true"] .crew-role-work {
+    max-width:100%;
+  }
+  #crew-chat-role-state {font-size:9px;padding:4px 5px;}
+  .crew-home-top h1 {font-size:24px;}
+}
+html[data-crew-theme="light"] :is(#role-nav-list .role-nav-card,
+  #crew-activity-panel, .living-workbench) {
+  color:var(--cp-text) !important;
+}
+html[data-crew-theme="light"] #role-nav-list .role-nav-card[data-selected="true"] {
+  background:linear-gradient(112deg,
+    rgba(var(--crew-card-rgb),.11),transparent 72%),var(--cp-surface) !important;
+}
+html[data-crew-theme="light"] :is(#crew-chat-role-state,.crew-activity-kind,.crew-activity-time) {
+  color:var(--cp-text-secondary);
+}
+@media(prefers-reduced-motion:reduce) {
+  #role-nav-list .role-nav-card,
+  #crew-activity-panel .crew-activity-row,
+  .living-workbench, .execution-result-card[open] .execution-result-body {
+    animation:none !important;transition:none !important;transform:none !important;
+  }
+  .crew-neural-link,.crew-focus-orb {display:none !important;}
+}
