@@ -102,7 +102,7 @@ function initAppAndListeners() {
   const backToRoleNavBtn = document.getElementById('back-to-role-nav-btn');
   if (drawerNewWorkBtn) drawerNewWorkBtn.addEventListener('click', () => newChatBtn?.click());
   if (openWorkHistoryBtn) openWorkHistoryBtn.addEventListener('click', () => window.showRoleHistoryView?.());
-  if (backToRoleNavBtn) backToRoleNavBtn.addEventListener('click', () => window.showRoleNavigationView?.());
+  // History's close button is handled by the Role sheet controller in ui.js.
   if (closeWorkspaceModalBtn) closeWorkspaceModalBtn.addEventListener('click', () => window.closeWorkspacePicker?.());
   if (workspaceModal) workspaceModal.addEventListener('click', event => {
     if (event.target === workspaceModal) window.closeWorkspacePicker?.();

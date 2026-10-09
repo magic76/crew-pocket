@@ -142,4 +142,6 @@ jobs:
           node test/crew-cockpit.test.js
           node --check test/crew-home-navigation.test.js
           node test/crew-home-navigation.test.js
+          node --check test/crew-role-record-drawers.test.js
+          node test/crew-role-record-drawers.test.js
           for file in public/js/*.js; do node --check "$file"; done
