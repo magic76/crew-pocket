@@ -248,6 +248,55 @@ html[data-crew-theme="light"] :is(
   [class~="placeholder:text-slate-500"]
 )::placeholder {color: var(--cp-muted) !important; }
 
+/* Light-theme response reading surfaces: the base article and Markdown renderer
+ * still contain dark-mode-only foregrounds. Scope the corrections to AI output
+ * so light-on-dark buttons, badges and the dark palette remain untouched. */
+html[data-crew-theme="light"] #messages-container .assistant-article :is(.msg-content, .visual-answer-content) {
+  color: var(--cp-text) !important;
+}
+html[data-crew-theme="light"] #messages-container .assistant-article :is(.msg-content, .visual-answer-content) :is(h1, h2, h3, h4, strong) {
+  color: var(--cp-text) !important;
+}
+html[data-crew-theme="light"] #messages-container .assistant-article :is(.msg-content, .visual-answer-content) a {
+  color: var(--cp-accent-strong) !important;
+}
+/* Google Maps link chips use a hard-coded pale link that disappears on white. */
+html[data-crew-theme="light"] #messages-container .assistant-article .msg-content a:is([href*="maps.google.com"], [href*="google.com/maps"]) {
+  color: var(--cp-accent-strong) !important;
+  background: var(--cp-accent-soft);
+  border-color: var(--cp-border);
+}
+html[data-crew-theme="light"] #messages-container .assistant-article .msg-content tr:nth-child(even) {
+  background: var(--cp-surface-2);
+}
+html[data-crew-theme="light"] #messages-container .assistant-article .visual-answer-content :is(
+  .visual-answer-panel[data-section-kind="summary"],
+  .visual-answer-panel[data-section-kind="conclusion"]
+) {
+  background: var(--cp-surface-2);
+}
+html[data-crew-theme="light"] #messages-container .assistant-article .visual-answer-content li::marker {
+  color: var(--cp-muted);
+}
+html[data-crew-theme="light"] #messages-container .assistant-article .execution-result-hero-status.is-unknown {
+  color: var(--cp-text-secondary);
+}
+html[data-crew-theme="light"] #messages-container .assistant-article .execution-result-check[data-check-state="passed"] > span:first-child {
+  color: var(--cp-success);
+}
+html[data-crew-theme="light"] #messages-container .assistant-article .execution-result-check[data-check-state="failed"] > span:first-child {
+  color: var(--cp-danger);
+}
+/* Retain a dark code canvas for atom-one-dark syntax colors and plain code text. */
+html[data-crew-theme="light"] #messages-container .assistant-article .msg-content pre {
+  background: #172338 !important;
+  color: #e2e8f0 !important;
+  border-color: #334155 !important;
+}
+html[data-crew-theme="light"] #messages-container .assistant-article .msg-content pre code {
+  color: #e2e8f0;
+}
+
 /* Semantic states never lose meaning in either palette. */
 html[data-crew-theme="light"] .execution-result-status.is-complete,
 html[data-crew-theme="light"] .execution-result-hero-status { color: var(--cp-success) !important; }
