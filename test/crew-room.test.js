@@ -15,8 +15,11 @@ async function run() {
     fs.readFile(path.join(root, 'lib/crew-messages.js'), 'utf8')
   ]);
 
-  assert.match(page, /id="crew-room-roster-stage"/);
-  assert.match(page, /id="crew-room-handoffs"/);
+  assert.match(page, /id="role-nav-list" class="crew-role-grid"/);
+  assert.match(page, /id="crew-activity-panel"/);
+  assert.match(page, /id="crew-activity-list"/);
+  assert.doesNotMatch(page, /crew-room-switchyard|crew-room-view-switch|crew-world|crew-office/);
+  assert.doesNotMatch(css, /crew-room-envelope|crew-handoff-fly|crew-room-roster-stage/);
   assert.ok(page.indexOf('/js/crew-room.js') < page.indexOf('/js/ui.js'));
   assert.match(page, /CrewRoomVisual\?\.init\(window, document\)/);
   assert.match(css, /prefers-reduced-motion: reduce/);
@@ -49,6 +52,43 @@ async function run() {
   assert.equal(visual.planNewEvents([{
     id: 'same', fromRoleId: 'helper', toRoleId: 'helper', createdAt: now
   }], baseline.seenIds, now).arrivals.length, 0, 'no fake self handoffs');
+
+  // Render stored metadata as real role-to-role activity, never as active
+  // work or imagined conversations. Unknown/deleted participant IDs are hidden.
+  const participants = [
+    { id: 'helper', name: 'Helper <script>alert(1)</script>' },
+    { id: 'teacher', name: 'Teacher & Dev' }
+  ];
+  const events = [
+    { id: 'prior', fromRoleId: 'helper', toRoleId: 'teacher',
+      kind: 'handoff', createdAt: now - 20000, content: 'SECRET MESSAGE' },
+    { id: 'recent', fromRoleId: 'teacher', toRoleId: 'helper',
+      kind: 'reply', createdAt: now - 2000 },
+    { id: 'recent', fromRoleId: 'teacher', toRoleId: 'helper',
+      kind: 'reply', createdAt: now - 2000 },
+    { id: 'deleted', fromRoleId: 'deleted', toRoleId: 'helper', createdAt: now },
+    { id: 'self', fromRoleId: 'helper', toRoleId: 'helper', createdAt: now },
+    { id: 'future', fromRoleId: 'helper', toRoleId: 'teacher',
+      createdAt: now + 100000 },
+    { id: 'invalid-time', fromRoleId: 'helper', toRoleId: 'teacher',
+      createdAt: NaN }
+  ];
+  const rows = visual.activityRows(events, participants);
+  assert.deepEqual(rows.map(event => event.id), ['recent', 'prior']);
+  assert.equal(rows[0].kind, 'reply');
+  assert.equal(rows[1].kind, 'handoff');
+  assert.ok(!JSON.stringify(rows).includes('SECRET MESSAGE'));
+  const activityHtml = visual.activityMarkup(rows, 'zh-TW');
+  assert.match(activityHtml, /data-crew-activity-role="helper"/);
+  assert.match(activityHtml, /已記錄回覆/);
+  assert.match(activityHtml, /已記錄交接/);
+  assert.match(activityHtml, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
+  assert.match(activityHtml, /Teacher &amp; Dev/);
+  assert.doesNotMatch(activityHtml, /<script>|SECRET MESSAGE|onerror=/);
+  assert.match(visual.activityMarkup([], 'zh-TW'), /目前沒有角色間的協作紀錄/);
+  assert.match(visual.activityMarkup([], 'en', '<bad>'), /&lt;bad&gt;/);
+  assert.equal(visual.activityRows(events, [], 5).length, 0,
+    'deleted/unknown Role events cannot render as participants');
 
   const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'crew-room-events-'));
   try {
