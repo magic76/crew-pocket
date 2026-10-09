@@ -73,6 +73,25 @@ assert.equal(final.mode, 'seated', 'returns home after the handoff');
 assert.ok(Math.hypot(final.pos.x-engine.pixel(final.home).x,
   final.pos.y-engine.pixel(final.home).y)<2);
 
+// Real-event choreography has priority over cosmetic idle wandering.
+for (const actor of world.actors.values()) {
+  if (actor.work !== 'idle') continue;
+  actor.mode = 'seated'; actor.queue = []; actor.path = [];
+  actor.pause = 0; actor.walking = false; actor.pos = engine.pixel(actor.home);
+}
+world.ambientClock = 31.99;
+world.tick(.03);
+const stroller = [...world.actors.values()].find(a => a.mode === 'ambient');
+assert.ok(stroller && stroller.work === 'idle',
+  'only a verified idle role may take a decorative break');
+assert.ok(stroller.queue.length > 0 || stroller.path.length > 0);
+const receiver = [...world.actors.values()].find(a => a.id !== stroller.id);
+const urgent = { id:'urgent-real-handoff', fromRoleId:stroller.id,
+  toRoleId:receiver.id, createdAt:Date.now() };
+assert.equal(world.acceptHandoff(urgent), true);
+assert.equal(stroller.mode, 'seated', 'real handoff interrupts decorative strolling');
+assert.equal(stroller.queue.length, 0);
+
 const before = world.actors.get('role-0');
 world.reconcile(projector.project({...snapshot, verified:false}));
 assert.equal(world.room.verified, false);
