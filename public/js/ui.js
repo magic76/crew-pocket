@@ -985,10 +985,13 @@ function renderRoleNavigation() {
           ? (latestTitle ? '最近對話 · ' + latestTitle : '目前待命')
           : state === 'new' ? '尚未開始工作'
           : 'Runtime 狀態尚未同步';
+    const tone = window.CrewCinematic?.toneFor({ ...role, project: roleProjectLabel(role) }) || 'general';
     return '<article class="role-nav-card" data-role-card-id="' + escapeHtml(role.id) +
+      '" data-crew-tone="' + escapeHtml(tone) + '" data-state="' + escapeHtml(state) +
       '" data-selected="' + selected + '">' +
       '<button type="button" data-role-nav-id="' + escapeHtml(role.id) +
         '" aria-label="進入 ' + escapeHtml(role.name) + ' 的目前對話">' +
+        (selected ? '<span class="crew-role-eyebrow">目前使用的 Agent</span>' : '') +
         '<span class="crew-role-avatar" data-state="' + escapeHtml(state) + '">' +
           (window.CrewRoomVisual?.portraitMarkup(role) || escapeHtml(project?.icon || '🧠')) +
           '<span class="crew-role-dot" data-state="' + escapeHtml(state) +

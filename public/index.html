@@ -52,6 +52,7 @@
   <link rel="stylesheet" href="/css/theme-light.css">
   <link rel="stylesheet" href="/css/crew-home.css">
   <link rel="stylesheet" href="/css/crew-room.css">
+  <link rel="stylesheet" href="/css/crew-cinematic.css">
   <link rel="stylesheet" href="/css/visual-inspector.css">
 </head>
 <body data-primary-tab="crew" class="bg-slate-950 text-slate-100 flex flex-col h-[100dvh] w-full max-w-full overflow-hidden">
@@ -101,6 +102,7 @@
           <div class="flex min-w-0 items-center gap-1.5">
             <span id="network-dot" class="hidden" title="網路連線正常"></span>
             <h1 id="workspace-label" class="truncate text-sm font-bold text-white sm:text-base">General</h1>
+            <span id="crew-chat-role-state" data-state="unknown" aria-label="目前角色執行狀態">狀態未同步</span>
             <span id="network-offline-badge" class="hidden shrink-0 rounded border border-rose-500/40 bg-rose-500/20 px-1.5 py-0.2 text-[9px] font-mono text-rose-300">離線</span>
           </div>
           <div class="mt-0.5 flex min-w-0 items-center gap-1.5">
@@ -487,9 +489,9 @@
         <div class="crew-home-header">
           <div class="crew-home-top">
             <div>
-              <p class="crew-home-kicker">YOUR AI CREW</p>
+              <p class="crew-home-kicker">YOUR AI CREW · COMMAND CENTER</p>
               <h1>AI 小隊</h1>
-              <p class="crew-home-subtitle">選擇一位成員，繼續目前的工作。</p>
+              <p class="crew-home-subtitle">掌握每位 Agent 的真實狀態，點擊角色繼續工作。</p>
             </div>
             <div class="crew-home-actions">
               <button id="cockpit-refresh-btn" type="button" aria-label="重新同步小隊狀態" title="重新同步小隊狀態">↻</button>
@@ -1881,6 +1883,7 @@
   <!-- Modular Scripts (Cache-busted v7.9) -->
   <script src="/js/i18n.js"></script>
   <script src="/js/crew-room.js"></script>
+  <script src="/js/crew-cinematic.js"></script>
   <script src="/js/ui.js"></script>
   <script src="/js/memory-xray.js"></script>
   <script src="/js/cockpit-model.js"></script>
@@ -1900,6 +1903,6 @@
   <script src="/js/app.js"></script>
   <script src="/js/dreaming-settings.js"></script>
   <script src="/js/visual-inspector.js"></script>
-  <script>window.CrewRoomVisual?.init(window, document);</script>
+  <script>window.CrewRoomVisual?.init(window, document); window.CrewCinematic?.init(window, document);</script>
 </body>
 </html>
