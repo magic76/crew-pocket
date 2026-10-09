@@ -152,7 +152,7 @@ async function run() {
     assert.match(file('server.js'), /pathname === '\/api\/role-skills'/);
     assert.match(file('server.js'), /defaultSkillRegistry\.forgetRole\(roleId\)/);
     assert.match(file('public/index.html'), /data-crew-role-detail-action="skills"/);
-    assert.match(file('public/js/role-dna.js'), /not independently/);
+    assert.match(file('public/js/role-dna.js'), /user-attested/);
     console.log('role-dna: all checks passed');
   } finally {
     await fs.rm(dir, { recursive: true, force: true });
