@@ -99,6 +99,11 @@
 .crew-world-role small {
   font-size:10px;line-height:1.3;color:var(--cp-text-secondary);
 }
+.crew-world-disclaimer {
+  margin:0; padding:0 12px 11px;
+  font-size:10px;line-height:1.55;
+  color:var(--cp-muted);
+}
 @media(min-width:690px) {
   .crew-world-viewport { height:min(70dvh,680px); }
   .crew-world-quick { flex-wrap:wrap; }
