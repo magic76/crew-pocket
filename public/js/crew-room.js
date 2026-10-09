@@ -88,10 +88,38 @@
     if (!stage || !roster || !flights) return;
 
     let seenIds = null;
+    let previouslyVerified = false;
+    let previousStates = new Map();
     let pendingTimer = null;
     let lastRequestAt = 0;
     let inFlight = false;
     const isVisible = () => !doc.hidden && doc.body?.dataset?.primaryTab === 'crew';
+
+    function reflectWorkTransitions() {
+      const snapshot = win.getCrewCockpitSnapshot?.();
+      if (!snapshot?.verified) {
+        previouslyVerified = false;
+        previousStates.clear();
+        return;
+      }
+      const roles = Array.isArray(snapshot.roles) ? snapshot.roles : [];
+      const states = new Map(roles.map(role => [
+        String(role.id), String(role.status?.state || 'unknown')
+      ]));
+      if (previouslyVerified && isVisible()) {
+        const cards = [...roster.querySelectorAll('[data-role-card-id]')];
+        for (const card of cards) {
+          const id = card.dataset.roleCardId;
+          if (previousStates.get(id) !== 'working' ||
+              !['idle', 'waiting'].includes(states.get(id))) continue;
+          // "No longer busy", never falsely claim that a task succeeded.
+          card.classList.add('crew-work-settled');
+          win.setTimeout(() => card.classList.remove('crew-work-settled'), 1000);
+        }
+      }
+      previousStates = states;
+      previouslyVerified = true;
+    }
 
     function fly(event) {
       if (!isVisible() || win.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
@@ -150,8 +178,14 @@
       pendingTimer = win.setTimeout(synchronize, Math.max(120, 2500 - (Date.now() - lastRequestAt)));
     }
 
-    win.addEventListener('crew:status-updated', schedule);
-    win.addEventListener('crew:roster-updated', schedule);
+    win.addEventListener('crew:status-updated', () => {
+      reflectWorkTransitions();
+      schedule();
+    });
+    win.addEventListener('crew:roster-updated', () => {
+      reflectWorkTransitions();
+      schedule();
+    });
     doc.addEventListener('visibilitychange', () => {
       if (doc.hidden) seenIds = null;
       else schedule();
