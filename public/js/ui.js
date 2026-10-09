@@ -174,6 +174,7 @@ const closeRoleDeleteBtn = document.getElementById('close-role-delete-btn');
 const cancelRoleDeleteBtn = document.getElementById('cancel-role-delete-btn');
 const confirmRoleDeleteBtn = document.getElementById('confirm-role-delete-btn');
 const roleMemoryModal = document.getElementById('role-memory-modal');
+const roleDnaModal = document.getElementById('role-dna-modal');
 const roleMemoryTitle = document.getElementById('role-memory-title');
 const roleMemorySubtitle = document.getElementById('role-memory-subtitle');
 const roleMemoryList = document.getElementById('role-memory-list');
@@ -1068,6 +1069,7 @@ crewRoleDetailModal?.addEventListener('click', async event => {
       return selectRole(roleId, true);
     case 'history': return showRoleHistoryView(roleId);
     case 'memory': return openRoleMemory(roleId);
+    case 'skills': return openRoleDNA(roleId);
     case 'settings': return openRoleEditor(roleId);
     case 'collaboration': return openCrewCollaboration(roleId);
   }
@@ -1342,6 +1344,14 @@ async function openRoleMemory(roleId) {
   window.RoleMemoryXRay?.open({ id: role.id, name: role.name });
 }
 
+function openRoleDNA(roleId) {
+  const role = roleMeta(roleId);
+  if (!role || !roleDnaModal) return;
+  toggleRoleModal(roleDnaModal, true);
+  window.RoleDNA?.open({ id: role.id, name: role.name });
+}
+
+window.openRoleDNA = openRoleDNA;
 window.openRoleEditor = openRoleEditor;
 window.openRoleMemory = openRoleMemory;
 
@@ -1361,6 +1371,18 @@ if (roleEditorModal) roleEditorModal.addEventListener('click', event => {
   if (event.target === roleEditorModal) closeRoleEditor();
 });
 if (closeRoleMemoryBtn) closeRoleMemoryBtn.addEventListener('click', () => toggleRoleModal(roleMemoryModal, false));
+if (roleDnaModal) {
+  document.getElementById('role-dna-close')?.addEventListener('click', () => {
+    window.RoleDNA?.close();
+    toggleRoleModal(roleDnaModal, false);
+  });
+  roleDnaModal.addEventListener('click', event => {
+    if (event.target === roleDnaModal) {
+      window.RoleDNA?.close();
+      toggleRoleModal(roleDnaModal, false);
+    }
+  });
+}
 if (roleMemoryModal) roleMemoryModal.addEventListener('click', event => {
   if (event.target === roleMemoryModal) toggleRoleModal(roleMemoryModal, false);
 });
