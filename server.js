@@ -996,6 +996,7 @@ async function handleRoles(req, res, parsedUrl) {
       const result = await deleteRoleLifecycle(roleId, {
         stopActiveRoleFn: stopActiveRoleWork
       });
+      await dreamingManager.forgetRole(roleId);
       broadcastCrewStatusEvent('role-delete', roleId);
       res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
       return res.end(JSON.stringify({ success: true, deleted: result }));
