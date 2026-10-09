@@ -977,7 +977,9 @@ function maybeNotifyCriticalContext(health) {
 }
 
 function updateContextPill(stats, health = null) {
-  currentContextStats = stats || currentContextStats || null;
+  // Null means an actual conversation switch or post-compaction refresh.
+  // Do not show another Role's last cache metrics on the next conversation.
+  currentContextStats = stats || null;
   if (health) currentContextHealth = health;
   else if (stats) currentContextHealth = mergeLiveContextHealth(stats);
   else currentContextHealth = null;
@@ -1136,6 +1138,45 @@ function renderContextAdvanced(health) {
   if (warningCodes) warningCodes.textContent = `warnings: ${(health?.warnings || []).map(item => item.code).join(', ') || '—'}`;
 }
 
+function renderCodexCacheStats() {
+  const section = document.getElementById('codex-cache-section');
+  if (!section) return;
+  const usage = currentContextStats || {};
+  const isCodex = currentProvider === 'codex';
+  const hasTurn = Number.isSafeInteger(usage.turn_input_tokens) && usage.turn_input_tokens > 0;
+  const scope = hasTurn ? 'turn' : 'last';
+  const input = usage[`${scope}_input_tokens`];
+  const cached = usage[`${scope}_cached_input_tokens`];
+  const uncached = usage[`${scope}_uncached_input_tokens`];
+  const writes = usage[`${scope}_cache_write_input_tokens`];
+  const rate = usage[`${scope}_cache_read_rate`];
+  const present = isCodex && (Number.isSafeInteger(input) || Number.isSafeInteger(usage.total_input_tokens));
+  section.classList.toggle('hidden', !present);
+  if (!present) return;
+
+  const format = value => Number.isSafeInteger(value) && value >= 0 ? formatContextTokens(value) : '—';
+  const label = document.getElementById('codex-cache-scope');
+  if (label) label.textContent = hasTurn ? 'Current turn · all model calls' : 'Latest model call · whole-turn baseline unavailable';
+  const rateEl = document.getElementById('codex-cache-rate');
+  if (rateEl) rateEl.textContent = typeof rate === 'number' && Number.isFinite(rate)
+    ? `${(rate * 100).toFixed(1)}% read`
+    : '—';
+  for (const [id, value] of [
+    ['codex-cache-input', input],
+    ['codex-cache-read', cached],
+    ['codex-cache-uncached', uncached],
+    ['codex-cache-write', writes]
+  ]) {
+    const element = document.getElementById(id);
+    if (element) element.textContent = format(value);
+  }
+  const thread = document.getElementById('codex-cache-thread');
+  if (thread) {
+    const totalRate = usage.total_cache_read_rate;
+    thread.textContent = `Thread total: ${format(usage.total_input_tokens)} input · ${format(usage.total_cached_input_tokens)} cached · ${typeof totalRate === 'number' && Number.isFinite(totalRate) ? (totalRate * 100).toFixed(1) + '%' : '—'} read`;
+  }
+}
+
 function renderContextModal() {
   const health = currentContextHealth || deriveContextHealthFromStats(currentContextStats || {});
   const meta = contextStatusMeta(health.status);
@@ -1165,6 +1206,7 @@ function renderContextModal() {
     progress.className = `h-full rounded-full transition-all duration-300 ${meta.progress}`;
   }
 
+  renderCodexCacheStats();
   renderContextBreakdown(health);
   renderContextContributionLists(health);
   renderContextWarnings(health);
