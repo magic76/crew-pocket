@@ -226,15 +226,35 @@
         { transform: 'translate(' + dx + 'px,' + dy + 'px)', offset: .65 },
         { transform: 'translate(0px,0px)', offset: 1 }
       ], { duration: 1350, easing: 'ease-in-out' });
+      const station = actor.closest?.('.crew-office-seat');
+      station?.classList.add('is-handoff-walker');
       actor.classList.add('is-walking');
       receiver.classList.add('has-handoff');
       const done = () => {
         actor.classList.remove('is-walking');
+        station?.classList.remove('is-handoff-walker');
         receiver.classList.remove('has-handoff');
       };
       motion.addEventListener?.('finish', done, { once: true });
       motion.addEventListener?.('cancel', done, { once: true });
       win.setTimeout(done, 1600);
+    }
+
+    function onVerifiedStatus() {
+      const before = current;
+      render();
+      if (!isActive() || !before?.verified || !current?.verified ||
+          before === current || reducedMotion()) return;
+      for (const oldRole of before.roles) {
+        const nextRole = current.roles.find(role => role.id === oldRole.id);
+        if (oldRole.state !== 'working' ||
+            !['idle', 'waiting'].includes(nextRole?.state)) continue;
+        const actor = [...office.querySelectorAll('[data-office-actor-id]')]
+          .find(node => node.dataset.officeActorId === oldRole.id);
+        if (!actor) continue;
+        actor.classList.add('crew-office-settled');
+        win.setTimeout(() => actor.classList.remove('crew-office-settled'), 1000);
+      }
     }
 
     buttons.addEventListener('click', event => {
@@ -244,7 +264,7 @@
     });
     office.addEventListener('click', actOnClick);
     win.addEventListener('crew:roster-updated', () => render());
-    win.addEventListener('crew:status-updated', () => render());
+    win.addEventListener('crew:status-updated', onVerifiedStatus);
     win.addEventListener('crew:role-selected', () => render());
     win.addEventListener('crew:handoff-observed', onHandoff);
     doc.addEventListener('visibilitychange', () => {
