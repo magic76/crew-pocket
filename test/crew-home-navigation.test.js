@@ -24,17 +24,18 @@ assert.ok(html.includes('id="crew-back-home-btn"'));
 assert.ok(html.includes('id="crew-role-detail-modal"'));
 assert.ok(html.includes('id="crew-attention-panel"'));
 
-const crewTab=html.indexOf('data-primary-tab="crew" class="primary-tab');
-const chatTab=html.indexOf('data-primary-tab="chat" class="primary-tab');
-const settingsTab=html.indexOf('data-primary-tab="settings" class="primary-tab');
-assert.ok(crewTab >= 0 && crewTab < chatTab && chatTab < settingsTab,
-  'bottom nav must be Crew > Conversation > Settings');
-assert.match(html, /data-primary-tab="crew" class="primary-tab is-active"/);
-assert.ok(app.includes("setPrimaryTab('crew', { hapticFeedback: false })"),
+assert.ok(html.includes('id="crew-open-settings-btn"'));
+assert.ok(html.includes('id="crew-settings-back-btn"'));
+assert.equal(html.includes('id="primary-bottom-nav"'), false);
+assert.ok(app.includes("setPrimaryTab('crew', { hapticFeedback: false, recordHistory: false })"),
   'startup must select Crew Home without requiring a Role Conversation');
 assert.ok(app.includes("drawer?.classList.toggle('hidden', primaryTab !== 'crew')"));
 assert.ok(app.includes("chatComposerFooter?.classList.toggle('hidden', primaryTab !== 'chat')"));
-assert.ok(app.includes("crewBackHomeBtn?.addEventListener('click', () => setPrimaryTab('crew'))"));
+assert.ok(app.includes("crewBackHomeBtn?.addEventListener('click'"));
+assert.ok(app.includes("crewOpenSettingsBtn?.addEventListener('click'"));
+assert.ok(app.includes("crewSettingsBackBtn?.addEventListener('click'"));
+assert.ok(app.includes("window.history.pushState"));
+assert.ok(app.includes("window.addEventListener('popstate'"));
 assert.ok(css.includes('body[data-primary-tab="crew"] #messages-container'));
 assert.ok(css.includes('position: relative !important'));
 assert.ok(css.includes('body[data-primary-tab="crew"] > header'));
@@ -46,7 +47,7 @@ assert.ok(ui.includes("window.setPrimaryTab(open ? 'crew' : 'chat'"));
 assert.ok(ui.includes("roleNavList?.addEventListener('click'"));
 assert.ok(ui.includes("if (role) selectRole(role.dataset.roleNavId)"),
   'tap Role => select existing Role Runtime, not New Work');
-assert.ok(ui.includes("case 'new-work': return selectRole(roleId, true)"),
+assert.ok(ui.includes("case 'new-work':") && ui.includes("return selectRole(roleId, true)"),
   'only explicit New Work creates a fresh conversation');
 assert.ok(ui.includes("await window.openCrewConversation(runtime.providerId, runtime.conversationId)"));
 assert.ok(ui.includes("await window.openCrewConversation(latest.provider, latest.id)"),
@@ -62,7 +63,7 @@ assert.ok(ui.includes('if (markup === lastRoleRosterMarkup) return'),
 assert.ok(ui.includes('crewRoleDetailReturnFocus'));
 assert.ok(css.includes('.crew-role-detail-modal.hidden { display: none !important; }'));
 assert.ok(!app.includes('function bindEdgeDrawerGesture()'),
-  'old swipe-to-open behavior must not coexist with bottom navigation');
+  'old swipe-to-open behavior must not coexist with Role-first navigation');
 assert.ok(!app.includes('function bindDrawerCloseGesture()'));
 assert.ok(!html.includes('data-primary-tab="tasks"'));
 

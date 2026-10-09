@@ -9,15 +9,17 @@ const chat = fs.readFileSync(path.join(root, 'public', 'js', 'chat.js'), 'utf8')
 const app = fs.readFileSync(path.join(root, 'public', 'js', 'app.js'), 'utf8');
 const premium = fs.readFileSync(path.join(root, 'public', 'css', 'style-premium.css'), 'utf8');
 
-// Primary navigation is Role-centric: Crew Home, conversation, settings.
-for (const tab of ['chat', 'crew', 'settings']) {
-  assert.ok(html.includes(`data-primary-tab="${tab}"`), tab);
-}
+// Role-first navigation: Crew Home is the root, and conversation is a child.
+assert.ok(html.includes('<body data-primary-tab="crew"'));
+assert.ok(html.includes('id="crew-main-layout"'));
+assert.ok(html.includes('id="crew-open-settings-btn"'));
+assert.ok(html.includes('id="crew-settings-back-btn"'));
+assert.ok(html.includes('id="crew-back-home-btn"'));
 assert.equal(html.includes('data-primary-tab="tasks"'), false);
 assert.equal(html.includes('id="task-center-modal"'), false);
 assert.equal(html.includes('/js/tasks.js'), false);
-assert.ok(html.includes('id="primary-bottom-nav"'));
-assert.ok(html.includes('grid-cols-3'));
+assert.equal(html.includes('id="primary-bottom-nav"'), false);
+assert.equal(html.includes('class="primary-tab'), false);
 assert.ok(app.includes('function setPrimaryTab('));
 assert.ok(app.includes("window.setPrimaryTab = setPrimaryTab"));
 assert.ok(app.includes("chatComposerFooter?.classList.toggle('hidden', primaryTab !== 'chat')"));
@@ -40,13 +42,14 @@ assert.ok(html.includes('id="auth-menu-btn"'));
 assert.equal(html.includes('id="tools-sheet-overlay"'), false);
 assert.equal(html.includes('id="sheet-quick-actions"'), false);
 assert.ok(premium.includes('#tools-menu-dropdown'));
-assert.ok(premium.includes('bottom: var(--crew-primary-nav-height)'));
+assert.ok(!premium.includes('bottom: var(--crew-primary-nav-height)'));
 assert.equal(premium.includes('#task-center-modal'), false);
 
 // Crew is a top-level view, not a modal navigation dead end.
 assert.ok(premium.includes('#drawer,'));
 assert.ok(ui.includes("window.setPrimaryTab(open ? 'crew' : 'chat'"));
-assert.ok(app.includes("setPrimaryTab('crew', { hapticFeedback: false })"));
+assert.ok(app.includes("setPrimaryTab('crew', { hapticFeedback: false, recordHistory: false })"));
+assert.ok(app.includes("window.addEventListener('popstate'"));
 
 // Context is understandable at a glance, but unknown budgets still show token usage rather than a fake percentage.
 assert.ok(html.includes('id="context-progress-track"'));

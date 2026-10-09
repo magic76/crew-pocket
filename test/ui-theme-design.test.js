@@ -22,7 +22,8 @@ assert.ok(html.indexOf('/js/theme.js') < html.indexOf('/vendor/tailwindcss.js'),
 assert.match(html, /data-theme-choice="dark"/);
 assert.match(html, /data-theme-choice="light"/);
 assert.match(html, /data-theme-choice="system"/);
-assert.match(html, /id="primary-bottom-nav"/);
+assert.ok(!html.includes('id="primary-bottom-nav"'));
+assert.ok(html.includes('id="crew-open-settings-btn"'));
 assert.equal(html.includes('<span class="primary-tab-icon">💬</span>'), false);
 assert.ok(ui.includes('data-selected="'));
 assert.ok(html.includes('href="/css/crew-home.css"'));

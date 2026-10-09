@@ -261,7 +261,6 @@ html[data-crew-theme="light"] .role-nav-card[data-selected="true"] {
 /* Specific legacy full-surface overlays win over utility color bridges. */
 html[data-crew-theme="light"] header,
 html[data-crew-theme="light"] #chat-composer-footer,
-html[data-crew-theme="light"] #primary-bottom-nav,
 html[data-crew-theme="light"] #workspace-modal > section,
 html[data-crew-theme="light"] #role-editor-modal > section,
 html[data-crew-theme="light"] #role-memory-modal > section {
