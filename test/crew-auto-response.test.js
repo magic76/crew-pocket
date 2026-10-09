@@ -98,8 +98,8 @@ async function run() {
     ['role-b', { id: 'role-b', name: 'Role B', projectId: null }]
   ]);
 
-  // Existing active conversation: resume it, pass its id into memory/context
-  // assembly, and return the reply inline to the sender tool call.
+  // Existing active conversation: resume its own thread without fetching and
+  // resending full Role memory; return the reply inline to the sender.
   {
     const runtime = new Map([
       ['role-b', {
@@ -133,6 +133,7 @@ async function run() {
         startConversationId = conversationId;
         onAbort(() => {});
         assert.ok(receivedPrompt.includes('hello B'));
+        assert.equal(receivedPrompt.includes('[ROLE role-b]'), false);
         onEvent({ type: 'session_started', conversationId });
         onEvent({ type: 'turn_completed', conversationId, response: 'hello A' });
         return { conversationId };
@@ -186,7 +187,7 @@ async function run() {
     assert.equal(result.reply, 'hello A');
     assert.equal(result.conversationId, 'existing-thread');
     assert.equal(startConversationId, 'existing-thread');
-    assert.equal(contextCalls[0].conversationId, 'existing-thread');
+    assert.equal(contextCalls.length, 0);
     assert.equal(deleteCalled, false);
     assert.deepEqual(sent[0], {
       fromRoleId: 'role-b',
