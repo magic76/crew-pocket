@@ -90,7 +90,12 @@ async function run() {
     });
     assert.equal((await registry.list('teacher')).skills[0].status, 'candidate');
     assert.equal((await registry.match('teacher', 'Gboard first launch')).length, 0);
-    await assert.rejects(() => registry.transition('teacher', skill.id, 'verify'), /Latest evidence is a failure/);
+    await assert.rejects(() => registry.transition('teacher', skill.id, 'verify'), /newer user-attested passed test/);
+    await registry.recordEvidence('teacher', skill.id, {
+      kind: 'commit', outcome: 'informational', reference: 'efgh5678',
+      note: 'A code commit is not new passing test evidence'
+    });
+    await assert.rejects(() => registry.transition('teacher', skill.id, 'verify'), /newer user-attested passed test/);
     await registry.recordEvidence('teacher', skill.id, {
       kind: 'test', outcome: 'passed', reference: 'Android 16 fixed repro',
       note: 'User verified after rebuild'
