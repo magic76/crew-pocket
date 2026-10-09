@@ -728,8 +728,8 @@ function initAppAndListeners() {
       if (data.success) {
         uploadedImagePath = data.filePath;
         console.log('[Upload] Success! Server file path:', uploadedImagePath);
-        return uploadedImagePath;
         if (navigator.vibrate) navigator.vibrate(25);
+        return uploadedImagePath;
       } else {
         alert('圖片上傳失敗：' + (data.error || '未知錯誤'));
       }
