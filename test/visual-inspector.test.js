@@ -124,7 +124,7 @@ assert.equal(elements['visual-inspector-undo'].disabled, true);
   assert.equal(uploadCalls, 1);
   assert.equal(chosenTab, 'chat');
   assert.match(elements['prompt-input'].value, /縮小這個按鈕/);
-  assert.match(elements['prompt-input'].value, /沒有原始碼/);
+  assert.match(elements['prompt-input'].value, /否則只分析/);
   assert.equal(elements['visual-inspector-modal'].classList.contains('hidden'), true);
   assert.equal(elements['prompt-input'].focused, true);
   console.log('visual-inspector: all checks passed');
