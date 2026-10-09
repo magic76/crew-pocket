@@ -236,6 +236,47 @@
         </div>
         
 
+        <section id="dreaming-settings" class="mx-1 mb-3 rounded-2xl border border-slate-700/75 bg-slate-900/70 p-3 space-y-3" aria-label="長期記憶自動整理">
+          <div class="flex items-center justify-between gap-3">
+            <div>
+              <div class="text-xs font-bold text-slate-100">Role Dreaming</div>
+              <p class="mt-1 text-[10px] leading-relaxed text-slate-400">工作快照不額外呼叫模型；閒置時增量整理長期經驗。</p>
+            </div>
+            <label class="flex items-center gap-2 text-[11px] text-slate-300">
+              <input id="dreaming-enabled" type="checkbox" class="accent-emerald-500 w-4 h-4">
+              自動整理
+            </label>
+          </div>
+          <div class="space-y-1">
+            <label for="dreaming-model" class="text-[11px] font-semibold text-slate-300">記憶整理模型（與聊天模型分開）</label>
+            <select id="dreaming-model" class="w-full min-h-11 rounded-xl border border-slate-700 bg-slate-950 px-3 text-xs text-slate-100">
+              <option value="gpt-6-luna">GPT-6 Luna</option>
+              <option value="__custom__">自訂模型 ID…</option>
+            </select>
+            <input id="dreaming-custom-model" type="text" maxlength="120" spellcheck="false" placeholder="例如 gpt-6-luna" class="hidden w-full min-h-11 rounded-xl border border-slate-700 bg-slate-950 px-3 text-xs text-slate-100 font-mono">
+            <p class="text-[10px] text-slate-500">從 Codex 現有模型中選擇；新模型也能直接輸入 ID。</p>
+          </div>
+          <div class="grid grid-cols-3 gap-2">
+            <label class="flex flex-col gap-1 text-[10px] text-slate-400">推理強度
+              <select id="dreaming-effort" class="min-h-10 rounded-lg border border-slate-700 bg-slate-950 px-2 text-xs text-slate-100">
+                <option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option>
+              </select>
+            </label>
+            <label class="flex flex-col gap-1 text-[10px] text-slate-400">閒置分鐘
+              <select id="dreaming-idle" class="min-h-10 rounded-lg border border-slate-700 bg-slate-950 px-2 text-xs text-slate-100">
+                <option value="5">5</option><option value="15">15</option><option value="30">30</option><option value="60">60</option>
+              </select>
+            </label>
+            <label class="flex flex-col gap-1 text-[10px] text-slate-400">每日上限
+              <select id="dreaming-limit" class="min-h-10 rounded-lg border border-slate-700 bg-slate-950 px-2 text-xs text-slate-100">
+                <option value="0">停用</option><option value="1">1 次</option><option value="2">2 次</option><option value="3">3 次</option><option value="4">4 次</option>
+              </select>
+            </label>
+          </div>
+          <p id="dreaming-status" role="status" class="text-[10px] text-slate-400">讀取設定中…</p>
+          <button id="dreaming-save" type="button" class="w-full min-h-10 rounded-xl bg-slate-800 text-xs font-semibold text-slate-100 hover:bg-slate-700 disabled:opacity-50">儲存 Dreaming 設定</button>
+        </section>
+
         <div class="px-2 pt-1 pb-0.5 text-[10px] font-bold tracking-wider text-slate-500">系統與工作區</div>
 
         <button id="crew-home-btn" type="button" class="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-xs text-slate-200 hover:bg-slate-800/90 hover:text-slate-100 transition text-left group" title="小隊狀態與 Remote Console">
@@ -1709,5 +1750,6 @@
   <script src="/js/live.js"></script>
   <script src="/js/auth.js"></script>
   <script src="/js/app.js"></script>
+  <script src="/js/dreaming-settings.js"></script>
 </body>
 </html>
