@@ -1808,7 +1808,8 @@ async function handleChat(req, res) {
 
   // Every Role can discover the Crew tool. The guide is intentionally tiny:
   // discovery + plain-text messaging only, never implicit context transfer.
-  const crewToolGuide = (!conversation_id || contextSnapshot?.crewToolGuideVersion !== 1)
+  const crewToolGuide = (!conversation_id || contextSnapshot?.crewToolGuideVersion !== 1 ||
+    (contextSnapshot?.identityFingerprint && contextSnapshot.identityFingerprint !== currentIdentityFingerprint))
     ? buildCrewToolGuide(role)
     : '';
   const crewInboxText = formatCrewInbox(pendingCrewMessages);
@@ -1898,12 +1899,17 @@ async function handleChat(req, res) {
           last_input_tokens: lastContextStats.last_input_tokens,
           last_cached_input_tokens: lastContextStats.last_cached_input_tokens,
           last_cache_write_input_tokens: lastContextStats.last_cache_write_input_tokens,
+          last_uncached_input_tokens: lastContextStats.last_uncached_input_tokens,
           last_cache_read_rate: lastContextStats.last_cache_read_rate,
           turn_input_tokens: lastContextStats.turn_input_tokens,
           turn_cached_input_tokens: lastContextStats.turn_cached_input_tokens,
+          turn_uncached_input_tokens: lastContextStats.turn_uncached_input_tokens,
+          turn_cache_write_input_tokens: lastContextStats.turn_cache_write_input_tokens,
           turn_cache_read_rate: lastContextStats.turn_cache_read_rate,
           total_input_tokens: lastContextStats.total_input_tokens,
           total_cached_input_tokens: lastContextStats.total_cached_input_tokens,
+          total_uncached_input_tokens: lastContextStats.total_uncached_input_tokens,
+          total_cache_write_input_tokens: lastContextStats.total_cache_write_input_tokens,
           total_cache_read_rate: lastContextStats.total_cache_read_rate
         } : null,
         ...getToolMetrics()
