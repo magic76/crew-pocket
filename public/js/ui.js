@@ -979,7 +979,8 @@ function renderRoleNavigation() {
       '" data-selected="' + selected + '">' +
       '<button type="button" data-role-nav-id="' + escapeHtml(role.id) +
         '" aria-label="進入 ' + escapeHtml(role.name) + ' 的目前對話">' +
-        '<span class="crew-role-avatar">' + escapeHtml(project?.icon || '🧠') +
+        '<span class="crew-role-avatar" data-state="' + escapeHtml(state) + '">' +
+          (window.CrewRoomVisual?.portraitMarkup(role) || escapeHtml(project?.icon || '🧠')) +
           '<span class="crew-role-dot" data-state="' + escapeHtml(state) +
           '" aria-hidden="true"></span></span>' +
         '<span class="crew-role-name">' + escapeHtml(role.name) + '</span>' +
