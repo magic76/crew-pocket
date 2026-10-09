@@ -48,6 +48,7 @@
   <link rel="stylesheet" href="/css/design-system.css">
   <link rel="stylesheet" href="/css/mission-graph.css">
   <link rel="stylesheet" href="/css/memory-xray.css">
+  <link rel="stylesheet" href="/css/role-dna.css">
   <link rel="stylesheet" href="/css/living-ui.css">
   <link rel="stylesheet" href="/css/theme-light.css">
   <link rel="stylesheet" href="/css/crew-home.css">
@@ -220,6 +221,20 @@
           <button id="confirm-role-delete-btn" type="button" class="min-h-11 rounded-xl bg-rose-600 text-xs font-bold text-white active:scale-[0.99]">刪除 Role</button>
         </div>
       </div>
+    </section>
+  </div>
+
+  <div id="role-dna-modal" class="fixed inset-0 z-[80] hidden items-end justify-center bg-black/75 p-2 opacity-0 transition-opacity duration-150 sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-labelledby="role-dna-title">
+    <section class="role-dna-sheet">
+      <header class="role-dna-heading">
+        <div><div class="role-dna-kicker">ROLE DNA</div><h2 id="role-dna-title">技能 DNA</h2><p id="role-dna-subtitle">候選技能來自 Dreaming，驗證與啟用由你控制。</p></div>
+        <button id="role-dna-close" type="button" aria-label="關閉技能管理">✕</button>
+      </header>
+      <div class="role-dna-toolbar">
+        <span id="role-dna-summary" role="status">正在讀取技能…</span>
+        <button id="role-dna-refresh" type="button">重新整理</button>
+      </div>
+      <div id="role-dna-list" class="role-dna-list" aria-live="polite"></div>
     </section>
   </div>
 
@@ -578,6 +593,7 @@
           <button type="button" data-crew-role-detail-action="new-work"><span aria-hidden="true">＋</span><span>建立新工作<small>開啟新的 Conversation</small></span><span aria-hidden="true">›</span></button>
           <button type="button" data-crew-role-detail-action="history"><span aria-hidden="true">◷</span><span>工作紀錄<small>查看過去的 Conversation</small></span><span aria-hidden="true">›</span></button>
           <button type="button" data-crew-role-detail-action="memory"><span aria-hidden="true">◇</span><span>長期記憶<small>Memory X-Ray · Time Machine</small></span><span aria-hidden="true">›</span></button>
+          <button type="button" data-crew-role-detail-action="skills"><span aria-hidden="true">✧</span><span>技能 DNA<small>候選技能 · 驗證證據 · 啟用管理</small></span><span aria-hidden="true">›</span></button>
           <button type="button" data-crew-role-detail-action="collaboration"><span aria-hidden="true">↗</span><span>協作紀錄<small>檢查此 Role 的交接訊息</small></span><span aria-hidden="true">›</span></button>
           <button type="button" data-crew-role-detail-action="settings"><span aria-hidden="true">⚙</span><span>角色設定<small>身份、專案與工作目錄</small></span><span aria-hidden="true">›</span></button>
         </div>
@@ -1822,6 +1838,7 @@
   <script src="/js/i18n.js"></script>
   <script src="/js/ui.js"></script>
   <script src="/js/memory-xray.js"></script>
+  <script src="/js/role-dna.js"></script>
   <script src="/js/cockpit-model.js"></script>
   <script src="/js/cockpit.js"></script>
   <script src="/js/mission-graph.js"></script>
