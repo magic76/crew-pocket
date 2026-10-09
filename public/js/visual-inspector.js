@@ -8,7 +8,7 @@
     image: null, shapes: [], draft: null, tool: 'pan', pointerId: null,
     objectUrl: null, busy: false, origin: '截圖', loadVersion: 0,
     zoom: 1, fitWidth: 0, pointers: new Map(), pan: null, pinchDistance: 0,
-    sharedImagePath: null, sharedImageUrl: null
+    sharedImagePath: null, sharedImageUrl: null, pinchMidpoint: null
   };
   let elements = null;
 
@@ -138,6 +138,7 @@
       state.pointerId = null;
       state.pan = null;
       state.pinchDistance = distanceBetweenPointers();
+      state.pinchMidpoint = pointerMidpoint();
       render();
       return;
     }
@@ -163,10 +164,16 @@
     state.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
     if (state.pointers.size >= 2) {
       const distance = distanceBetweenPointers();
+      const midpoint = pointerMidpoint();
+      if (state.pinchMidpoint && midpoint) {
+        elements.stage.scrollLeft += state.pinchMidpoint.x - midpoint.x;
+        elements.stage.scrollTop += state.pinchMidpoint.y - midpoint.y;
+      }
       if (state.pinchDistance > 0 && distance > 0) {
-        applyZoom(state.zoom * distance / state.pinchDistance, pointerMidpoint());
+        applyZoom(state.zoom * distance / state.pinchDistance, midpoint);
       }
       state.pinchDistance = distance;
+      state.pinchMidpoint = midpoint;
       return;
     }
     if (state.tool === 'pan' && state.pan?.id === event.pointerId) {
@@ -197,6 +204,7 @@
     state.draft = null;
     state.pointerId = null;
     state.pinchDistance = 0;
+    state.pinchMidpoint = null;
     state.pan = null;
     // After releasing a pinch, the remaining finger can continue panning,
     // but never accidentally draw a new annotation.
@@ -221,6 +229,7 @@
     state.pointers.clear();
     state.pan = null;
     state.pinchDistance = 0;
+    state.pinchMidpoint = null;
     state.sharedImagePath = null;
     state.sharedImageUrl = null;
     state.zoom = 1;
@@ -324,10 +333,13 @@
           );
       if (!path) throw new Error('圖片儲存失敗');
       const userNote = elements.note.value.trim();
+      const inferredRequest = state.shapes.length
+        ? '請分析我標註的位置，協助定位問題或提出修改建議。'
+        : '請先分析這張截圖，協助我確認畫面與可能的問題。';
       const request = [
         '【跨 App 畫面標註】',
         '來源：' + state.origin,
-        '使用者需求：' + (userNote || '請先描述圈選區域及可能的問題。'),
+        '使用者需求：' + (userNote || inferredRequest),
         '請先根據標註畫面分析。如果目前 Role 的 Workspace 確實包含此 App 的原始碼，才嘗試定位檔案並提出修改；否則只分析或提供操作建議，不得聲稱已修改第三方 App。'
       ].join('\n');
       if (typeof window.setPrimaryTab === 'function') {
