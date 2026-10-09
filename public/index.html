@@ -53,6 +53,7 @@
   <link rel="stylesheet" href="/css/crew-home.css">
   <link rel="stylesheet" href="/css/crew-room.css">
   <link rel="stylesheet" href="/css/crew-office.css">
+  <link rel="stylesheet" href="/css/crew-world.css">
   <link rel="stylesheet" href="/css/visual-inspector.css">
 </head>
 <body data-primary-tab="crew" class="bg-slate-950 text-slate-100 flex flex-col h-[100dvh] w-full max-w-full overflow-hidden">
@@ -1886,6 +1887,9 @@
   <script src="/js/crew-room.js"></script>
   <script src="/js/crew-office-model.js"></script>
   <script src="/js/crew-office.js"></script>
+  <script src="/js/crew-world-model.js"></script>
+  <script src="/js/crew-world-canvas.js"></script>
+  <script src="/js/crew-world.js"></script>
   <script src="/js/ui.js"></script>
   <script src="/js/memory-xray.js"></script>
   <script src="/js/cockpit-model.js"></script>
@@ -1905,6 +1909,6 @@
   <script src="/js/app.js"></script>
   <script src="/js/dreaming-settings.js"></script>
   <script src="/js/visual-inspector.js"></script>
-  <script>window.CrewRoomVisual?.init(window, document); window.CrewOffice?.init(window, document);</script>
+  <script>window.CrewRoomVisual?.init(window, document); (window.CrewWorld?.init(window, document) || window.CrewOffice?.init(window, document));</script>
 </body>
 </html>

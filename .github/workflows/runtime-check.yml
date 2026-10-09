@@ -97,6 +97,8 @@ jobs:
           node test/crew-room.test.js
           node --check test/crew-office.test.js
           node test/crew-office.test.js
+          node --check test/crew-world.test.js
+          node test/crew-world.test.js
           node test/crew-role-messaging.test.js
           node test/role-runtime.test.js
           node test/role-message-queue.test.js
