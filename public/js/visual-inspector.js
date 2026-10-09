@@ -5,8 +5,10 @@
 
   const MAX_SIDE = 2400;
   const state = {
-    image: null, shapes: [], draft: null, tool: 'rect', pointerId: null,
-    objectUrl: null, busy: false, origin: '截圖', loadVersion: 0
+    image: null, shapes: [], draft: null, tool: 'pan', pointerId: null,
+    objectUrl: null, busy: false, origin: '截圖', loadVersion: 0,
+    zoom: 1, fitWidth: 0, pointers: new Map(), pan: null, pinchDistance: 0,
+    sharedImagePath: null
   };
   let elements = null;
 
@@ -72,7 +74,7 @@
   }
 
   function selectTool(name) {
-    if (!['rect', 'pen', 'arrow'].includes(name)) return;
+    if (!['pan', 'rect', 'pen', 'arrow'].includes(name)) return;
     state.tool = name;
     if (!elements) return;
     for (const button of elements.tools.querySelectorAll('[data-visual-tool]')) {
@@ -80,21 +82,99 @@
     }
   }
 
+  // The screenshot is a document first and an annotation surface second.
+  // Manually pan at all zoom levels: drawing and navigation cannot steal each
+  // other's gestures, including long screenshots on Android WebView.
+  function fitToWidth() {
+    if (!state.image || !elements) return;
+    state.fitWidth = Math.max(1, Math.min(elements.canvas.width,
+      elements.stage.clientWidth || elements.stage.getBoundingClientRect().width || 360));
+    applyZoom(state.zoom);
+  }
+
+  function applyZoom(next, anchor = null) {
+    if (!state.image || !elements) return;
+    const stage = elements.stage;
+    const canvas = elements.canvas;
+    const zoom = Math.max(1, Math.min(4, next));
+    const beforeWidth = canvas.getBoundingClientRect().width || state.fitWidth || canvas.width;
+    const beforeHeight = beforeWidth * canvas.height / canvas.width;
+    const rect = stage.getBoundingClientRect();
+    const offsetX = anchor ? anchor.x - rect.left : (stage.clientWidth || rect.width) / 2;
+    const offsetY = anchor ? anchor.y - rect.top : (stage.clientHeight || rect.height) / 2;
+    const imageX = (stage.scrollLeft + offsetX) / beforeWidth;
+    const imageY = (stage.scrollTop + offsetY) / beforeHeight;
+    state.zoom = zoom;
+    const afterWidth = Math.round(state.fitWidth * zoom);
+    canvas.style.width = afterWidth + 'px';
+    canvas.style.height = 'auto';
+    stage.scrollLeft = Math.max(0, imageX * afterWidth - offsetX);
+    stage.scrollTop = Math.max(0, imageY * afterWidth * canvas.height / canvas.width - offsetY);
+    elements.zoomLabel.textContent = Math.round(zoom * 100) + '%';
+    elements.zoomOut.disabled = zoom <= 1;
+    elements.zoomIn.disabled = zoom >= 4;
+  }
+
+  function distanceBetweenPointers() {
+    const pair = [...state.pointers.values()];
+    if (pair.length < 2) return 0;
+    return Math.hypot(pair[0].x - pair[1].x, pair[0].y - pair[1].y);
+  }
+
+  function pointerMidpoint() {
+    const pair = [...state.pointers.values()];
+    if (pair.length < 2) return null;
+    return { x: (pair[0].x + pair[1].x) / 2, y: (pair[0].y + pair[1].y) / 2 };
+  }
+
   function onPointerDown(event) {
-    if (!state.image || state.busy || state.pointerId !== null) return;
+    if (!state.image || state.busy) return;
     event.preventDefault();
+    state.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    elements.canvas.setPointerCapture?.(event.pointerId);
+
+    if (state.pointers.size === 2) {
+      state.draft = null; // second finger turns drawing into a navigation gesture
+      state.pointerId = null;
+      state.pan = null;
+      state.pinchDistance = distanceBetweenPointers();
+      render();
+      return;
+    }
+    if (state.pointers.size > 2) return;
+    if (state.tool === 'pan') {
+      state.pan = {
+        id: event.pointerId, x: event.clientX, y: event.clientY,
+        left: elements.stage.scrollLeft, top: elements.stage.scrollTop
+      };
+      return;
+    }
     state.pointerId = event.pointerId;
     const p = pointOnCanvas(event, elements.canvas);
     state.draft = state.tool === 'pen'
       ? { type: 'pen', points: [p] }
       : { type: state.tool, start: p, end: p };
-    elements.canvas.setPointerCapture?.(event.pointerId);
     render();
   }
 
   function onPointerMove(event) {
-    if (event.pointerId !== state.pointerId || !state.draft) return;
+    if (!state.pointers.has(event.pointerId)) return;
     event.preventDefault();
+    state.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    if (state.pointers.size >= 2) {
+      const distance = distanceBetweenPointers();
+      if (state.pinchDistance > 0 && distance > 0) {
+        applyZoom(state.zoom * distance / state.pinchDistance, pointerMidpoint());
+      }
+      state.pinchDistance = distance;
+      return;
+    }
+    if (state.tool === 'pan' && state.pan?.id === event.pointerId) {
+      elements.stage.scrollLeft = state.pan.left + state.pan.x - event.clientX;
+      elements.stage.scrollTop = state.pan.top + state.pan.y - event.clientY;
+      return;
+    }
+    if (event.pointerId !== state.pointerId || !state.draft) return;
     const p = pointOnCanvas(event, elements.canvas);
     if (state.draft.type === 'pen') state.draft.points.push(p);
     else state.draft.end = p;
@@ -102,16 +182,31 @@
   }
 
   function finishPointer(event, cancelled) {
-    if (event.pointerId !== state.pointerId) return;
-    if (!cancelled && state.draft) {
+    if (!state.pointers.has(event.pointerId)) return;
+    state.pointers.delete(event.pointerId);
+    if (!cancelled && event.pointerId === state.pointerId && state.draft) {
       const shape = state.draft;
       const distance = shape.type === 'pen'
-        ? shape.points.length
+        ? Math.hypot(
+          shape.points.at(-1).x - shape.points[0].x,
+          shape.points.at(-1).y - shape.points[0].y
+        )
         : Math.hypot(shape.end.x - shape.start.x, shape.end.y - shape.start.y);
       if (distance > 3) state.shapes.push(shape);
     }
     state.draft = null;
     state.pointerId = null;
+    state.pinchDistance = 0;
+    state.pan = null;
+    // After releasing a pinch, the remaining finger can continue panning,
+    // but never accidentally draw a new annotation.
+    if (state.tool === 'pan' && state.pointers.size === 1) {
+      const [id, point] = [...state.pointers.entries()][0];
+      state.pan = {
+        id, x: point.x, y: point.y,
+        left: elements.stage.scrollLeft, top: elements.stage.scrollTop
+      };
+    }
     render();
   }
 
@@ -123,6 +218,11 @@
     state.shapes = [];
     state.draft = null;
     state.pointerId = null;
+    state.pointers.clear();
+    state.pan = null;
+    state.pinchDistance = 0;
+    state.sharedImagePath = null;
+    state.zoom = 1;
     if (state.objectUrl) URL.revokeObjectURL(state.objectUrl);
     state.objectUrl = null;
   }
@@ -135,7 +235,10 @@
     const version = state.loadVersion;
     state.origin = origin || '截圖';
     state.objectUrl = objectUrl || null;
+    elements.modal.dataset.entry = state.origin.startsWith('Android') ? 'shared' : 'picker';
     elements.note.value = '';
+    elements.noteDetails.open = false;
+    elements.zoomLabel.textContent = '100%';
     elements.modal.classList.remove('hidden');
     setStatus('正在載入畫面…');
     const image = new Image();
@@ -150,9 +253,14 @@
       elements.canvas.height = Math.max(1, Math.round(image.naturalHeight * ratio));
       state.image = image;
       state.shapes = [];
-      selectTool('rect');
+      state.zoom = 1;
+      selectTool('pan');
+      fitToWidth();
       render();
-      setStatus('圈選畫面後描述需求。圖片只會在你按下「附加到 Role」後送入對話。');
+      // A long image starts at the top, not centered halfway down the capture.
+      elements.stage.scrollTop = 0;
+      elements.stage.scrollLeft = 0;
+      setStatus('上下滑動檢視畫面；需要圈選時再選工具。');
     };
     image.onerror = function () {
       if (state.loadVersion === version) setStatus('圖片無法載入，請重新選擇截圖。', true);
@@ -168,7 +276,9 @@
       if (resolved.origin !== window.location.origin ||
           resolved.pathname !== '/api/image' ||
           !resolved.searchParams.has('path')) return false;
-      return openImage(resolved.href, 'Android 其他 App 分享截圖', null);
+      const opened = openImage(resolved.href, 'Android 其他 App 分享截圖', null);
+      if (opened) state.sharedImagePath = resolved.searchParams.get('path');
+      return opened;
     } catch (_) { return false; }
   }
 
@@ -198,8 +308,16 @@
     elements.attach.disabled = true;
     setStatus('正在儲存標註圖片…');
     try {
-      const imageData = elements.canvas.toDataURL('image/jpeg', 0.88);
-      const path = await window.processAndUploadImageBase64(imageData, 'visual-inspector.jpg');
+      // Shared images are already held in Crew Runtime. Without markings,
+      // reuse the existing attachment instead of re-encoding and uploading.
+      const path = state.sharedImagePath && !state.shapes.length &&
+        typeof window.attachExistingImagePath === 'function'
+        ? window.attachExistingImagePath(
+            state.sharedImagePath, elements.canvas.toDataURL('image/jpeg', 0.42)
+          )
+        : await window.processAndUploadImageBase64(
+            elements.canvas.toDataURL('image/jpeg', 0.88), 'visual-inspector.jpg'
+          );
       if (!path) throw new Error('圖片儲存失敗');
       const userNote = elements.note.value.trim();
       const request = [
@@ -233,6 +351,11 @@
     elements = {
       modal,
       canvas: document.getElementById('visual-inspector-canvas'),
+      stage: document.getElementById('visual-inspector-stage'),
+      noteDetails: document.getElementById('visual-inspector-note-details'),
+      zoomOut: document.getElementById('visual-inspector-zoom-out'),
+      zoomIn: document.getElementById('visual-inspector-zoom-in'),
+      zoomLabel: document.getElementById('visual-inspector-zoom-label'),
       tools: document.getElementById('visual-inspector-tools'),
       note: document.getElementById('visual-inspector-note'),
       status: document.getElementById('visual-inspector-status'),
@@ -243,6 +366,14 @@
     elements.canvas.addEventListener('pointermove', onPointerMove);
     elements.canvas.addEventListener('pointerup', event => finishPointer(event, false));
     elements.canvas.addEventListener('pointercancel', event => finishPointer(event, true));
+    elements.zoomOut.addEventListener('click', () => applyZoom(state.zoom / 1.5));
+    elements.zoomIn.addEventListener('click', () => applyZoom(state.zoom * 1.5));
+    document.getElementById('visual-inspector-fit').addEventListener('click', () => {
+      state.zoom = 1; fitToWidth(); elements.stage.scrollTop = 0; elements.stage.scrollLeft = 0;
+    });
+    window.addEventListener('resize', () => {
+      if (state.image && !elements.modal.classList.contains('hidden')) fitToWidth();
+    });
     elements.tools.addEventListener('click', event => {
       const button = event.target.closest('[data-visual-tool]');
       if (button) selectTool(button.dataset.visualTool);
