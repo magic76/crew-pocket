@@ -49,6 +49,13 @@
         '<div id="crew-world-activity" class="crew-world-activity" role="status" aria-live="polite">' +
           tr(win,'等待真正的角色活動', 'Waiting for real Role activity') +
         '</div>' +
+        '<div class="crew-world-actions" role="group" aria-label="' +
+          tr(win,'辦公室操作','Office actions') + '">' +
+          '<button type="button" data-world-action="collaboration">' +
+            tr(win,'查看協作紀錄','Collaboration log') + '</button>' +
+          '<button type="button" data-world-action="attention">' +
+            tr(win,'查看待處理事項','Attention items') + '</button>' +
+        '</div>' +
         '<div id="crew-world-quick" class="crew-world-quick" role="group" aria-label="' +
           tr(win,'快速切換角色','Quick access Roles') + '"></div>' +
         '<p class="crew-world-disclaimer">' +
@@ -294,6 +301,18 @@
       e.preventDefault();bounds();request();
     });
     host.addEventListener('click',e=>{
+      const action=e.target.closest?.('[data-world-action]');
+      if(action) {
+        if(action.dataset.worldAction==='collaboration') {
+          const role=world.room?.roles.find(r=>r.selected)||world.room?.roles[0];
+          if(role)win.openCrewCollaboration?.(role.id);
+        } else if(action.dataset.worldAction==='attention') {
+          doc.getElementById('crew-attention-panel')?.scrollIntoView?.({
+            block:'start',behavior:prefersReduced()?'auto':'smooth'
+          });
+        }
+        return;
+      }
       const tool=e.target.closest?.('[data-world-tool]');
       if(tool){
         const type=tool.dataset.worldTool;
