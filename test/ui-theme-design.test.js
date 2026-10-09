@@ -33,6 +33,14 @@ assert.match(css, /--cp-text:/);
 assert.match(css, /prefers-reduced-motion: reduce/);
 assert.match(lightCss, /data-crew-theme="light"/);
 assert.match(lightCss, /bg-slate-950\/95/);
+// AI replies have their own dark-mode foregrounds; check the light-only
+// bridge covers both regular/streaming Markdown and long-form result views.
+assert.match(lightCss, /#messages-container \.assistant-article :is\(\.msg-content, \.visual-answer-content\) \{\s*color: var\(--cp-text\) !important;/);
+assert.match(lightCss, /#messages-container \.assistant-article :is\(\.msg-content, \.visual-answer-content\) :is\(h1, h2, h3, h4, strong\) \{\s*color: var\(--cp-text\) !important;/);
+assert.match(lightCss, /#messages-container \.assistant-article \.msg-content tr:nth-child\(even\) \{\s*background: var\(--cp-surface-2\);/);
+assert.match(lightCss, /\.visual-answer-panel\[data-section-kind="summary"\]/);
+assert.match(lightCss, /#messages-container \.assistant-article \.msg-content pre \{\s*background: #172338 !important;\s*color: #e2e8f0 !important;/);
+assert.match(lightCss, /\.msg-content a:is\(\[href\*="maps.google.com"\], \[href\*="google.com\/maps"\]\)/);
 assert.equal(premium.includes('starfield-drift'), false, 'continuous background effect removed');
 assert.equal(premium.includes('scanner-sweep-premium'), false, 'rainbow scanners removed');
 
