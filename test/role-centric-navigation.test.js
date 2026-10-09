@@ -10,9 +10,9 @@ const app = fs.readFileSync(path.join(root, 'public', 'js', 'app.js'), 'utf8');
 
 // Role is the primary visible identity, not a secondary conversation setting.
 assert.ok(html.includes('id="role-nav-list"'));
-assert.ok(html.includes('CREW ROOM'));
+assert.ok(html.includes('YOUR AI CREW'));
 assert.ok(html.includes('id="drawer-new-role-btn"'));
-assert.ok(html.includes('id="drawer-new-work-btn"'));
+assert.ok(html.includes('id="crew-role-detail-modal"'));
 assert.ok(html.includes('id="crew-room-summary"'));
 assert.equal(html.includes('id="conversation-workspaces"'), false);
 
@@ -29,7 +29,7 @@ assert.equal(app.includes("workspaceSelectorBtn.addEventListener('click', () => 
 
 // Each Role owns its own secondary actions.
 for (const action of ['new-work', 'history', 'memory', 'settings']) {
-  assert.ok(ui.includes(`data-role-action="${action}"`), action);
+  assert.ok(html.includes(`data-crew-role-detail-action="${action}"`), action);
 }
 assert.ok(html.includes('id="role-editor-modal"'));
 assert.ok(html.includes('id="role-danger-zone"'));
@@ -42,6 +42,8 @@ assert.ok(ui.includes("method: 'DELETE'"));
 assert.ok(ui.includes("currentRoleId = DEFAULT_ROLE_ID"));
 assert.ok(ui.includes("await selectRole(DEFAULT_ROLE_ID, true)"));
 assert.ok(ui.includes('window.RoleMemoryXRay?.open({ id: role.id, name: role.name })'));
+assert.ok(ui.includes('openCrewRoleDetail(menu.dataset.roleMenuBtn)'));
+assert.ok(html.includes('id="crew-back-home-btn"'));
 assert.ok(html.includes('id="memory-xray-search"'));
 assert.ok(fs.readFileSync(path.join(root, 'public', 'js', 'memory-xray.js'), 'utf8').includes('/api/role-memory-inspect?role_id='));
 assert.ok(ui.includes("label: 'WORKING'"));

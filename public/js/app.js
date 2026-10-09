@@ -80,184 +80,7 @@ window.addEventListener('offline', () => {
 
 updateNetworkUI(navigator.onLine);
 
-// Open the conversation drawer with a deliberate swipe from the left side.
-// Keep the gesture narrowly scoped so it cannot steal range
-// sliders, typing, Live controls, or the drawer's own swipe-to-delete rows.
-function bindEdgeDrawerGesture() {
-  if (!drawer || !drawerOverlay) return;
-
-  const DRAWER_GESTURE_END_PX = 120;
-  const OPEN_DISTANCE_PX = 200;
-  const INTERACTIVE_TARGETS = [
-    'input', 'textarea', 'select', 'button', 'a', '[contenteditable="true"]',
-    '[data-drawer-swipe-ignore]', '#live-inline-card', '[role="dialog"]'
-  ].join(', ');
-  let gesture = null;
-
-  const resetDrawerPreview = () => {
-    drawer.style.transition = 'transform 180ms ease-out';
-    drawer.style.transform = '';
-    drawerOverlay.style.transition = 'opacity 180ms ease-out';
-    drawerOverlay.style.opacity = '';
-    window.setTimeout(() => {
-      if (drawer.classList.contains('-translate-x-full')) drawer.style.transition = '';
-      if (drawerOverlay.classList.contains('opacity-0')) drawerOverlay.style.transition = '';
-    }, 190);
-  };
-  const clearGesture = ({ resetPreview = false } = {}) => {
-    if (resetPreview && gesture?.previewing) resetDrawerPreview();
-    gesture = null;
-  };
-  const findTouch = (touches, identifier) => Array.from(touches).find(touch => touch.identifier === identifier);
-  const openDrawerFromSwipe = () => {
-    drawer.classList.remove('-translate-x-full');
-    drawerOverlay.classList.remove('opacity-0', 'pointer-events-none');
-    drawer.style.transition = 'none';
-    drawer.style.transform = 'translateX(0px)';
-    drawerOverlay.style.transition = 'none';
-    drawerOverlay.style.opacity = '1';
-    if (typeof haptic === 'function') haptic('light');
-    if (typeof loadConversations === 'function') loadConversations();
-    requestAnimationFrame(() => {
-      drawer.style.transition = '';
-      drawer.style.transform = '';
-      drawerOverlay.style.transition = '';
-      drawerOverlay.style.opacity = '';
-    });
-  };
-
-  document.addEventListener('touchstart', event => {
-    if (!drawer.classList.contains('-translate-x-full')) return;
-    if (event.touches.length !== 1) return;
-    const touch = event.touches[0];
-    if (touch.clientX > DRAWER_GESTURE_END_PX) return;
-    if (event.target instanceof Element && event.target.closest(INTERACTIVE_TARGETS)) return;
-
-    gesture = {
-      touchId: touch.identifier,
-      startX: touch.clientX,
-      startY: touch.clientY,
-      decided: false,
-      previewing: false
-    };
-  }, { passive: true });
-
-  document.addEventListener('touchmove', event => {
-    if (!gesture || gesture.decided) return;
-    const touch = findTouch(event.touches, gesture.touchId);
-    if (!touch) return;
-
-    const deltaX = touch.clientX - gesture.startX;
-    const deltaY = touch.clientY - gesture.startY;
-    if (Math.abs(deltaX) < 12 && Math.abs(deltaY) < 12) return;
-
-    // A scroll or a leftward gesture is never a drawer request.
-    if (deltaX <= 0 || Math.abs(deltaY) >= Math.abs(deltaX)) {
-      gesture.decided = true;
-      return;
-    }
-
-    event.preventDefault();
-    const drawerWidth = drawer.getBoundingClientRect().width || 288;
-    // The full 200px gesture maps to the drawer's full width. This avoids a
-    // final snap when the threshold is reached on narrow or wide screens.
-    const revealedPx = Math.min(drawerWidth, drawerWidth * (deltaX / OPEN_DISTANCE_PX));
-    drawer.style.transition = 'none';
-    drawer.style.transform = `translateX(${-drawerWidth + revealedPx}px)`;
-    drawerOverlay.style.transition = 'none';
-    drawerOverlay.style.opacity = String(Math.min(1, revealedPx / drawerWidth));
-    gesture.previewing = true;
-
-    if (deltaX >= OPEN_DISTANCE_PX) {
-      gesture.decided = true;
-      openDrawerFromSwipe();
-      clearGesture();
-    }
-  }, { passive: false });
-
-  document.addEventListener('touchend', event => {
-    if (gesture && findTouch(event.changedTouches, gesture.touchId)) clearGesture({ resetPreview: true });
-  }, { passive: true });
-  document.addEventListener('touchcancel', () => clearGesture({ resetPreview: true }), { passive: true });
-}
-
-// Conversation rows own their left-swipe delete gesture. Everywhere else in
-// the open drawer (header, search padding, and list whitespace) can close it.
-function bindDrawerCloseGesture() {
-  if (!drawer || !drawerOverlay) return;
-
-  const CLOSE_DISTANCE_PX = 96;
-  const BLOCKED_TARGETS = 'input, textarea, select, button, a, [contenteditable="true"], .swipe-item-content';
-  let gesture = null;
-  const findTouch = (touches, identifier) => Array.from(touches).find(touch => touch.identifier === identifier);
-  const resetPreview = () => {
-    drawer.style.transition = 'transform 180ms ease-out';
-    drawer.style.transform = '';
-    drawerOverlay.style.transition = 'opacity 180ms ease-out';
-    drawerOverlay.style.opacity = '';
-    window.setTimeout(() => {
-      if (!drawer.classList.contains('-translate-x-full')) drawer.style.transition = '';
-      if (!drawerOverlay.classList.contains('opacity-0')) drawerOverlay.style.transition = '';
-    }, 190);
-  };
-  const clearGesture = ({ reset = false } = {}) => {
-    if (reset && gesture?.previewing) resetPreview();
-    gesture = null;
-  };
-  const closeDrawerFromSwipe = () => {
-    drawer.classList.add('-translate-x-full');
-    drawerOverlay.classList.add('opacity-0', 'pointer-events-none');
-    drawer.style.transition = 'none';
-    drawer.style.transform = 'translateX(-100%)';
-    drawerOverlay.style.transition = 'none';
-    drawerOverlay.style.opacity = '0';
-    if (typeof haptic === 'function') haptic('light');
-    requestAnimationFrame(() => {
-      drawer.style.transition = '';
-      drawer.style.transform = '';
-      drawerOverlay.style.transition = '';
-      drawerOverlay.style.opacity = '';
-    });
-  };
-
-  drawer.addEventListener('touchstart', event => {
-    if (drawer.classList.contains('-translate-x-full') || event.touches.length !== 1) return;
-    if (event.target instanceof Element && event.target.closest(BLOCKED_TARGETS)) return;
-    const touch = event.touches[0];
-    gesture = { touchId: touch.identifier, startX: touch.clientX, startY: touch.clientY, decided: false, previewing: false };
-  }, { passive: true });
-
-  drawer.addEventListener('touchmove', event => {
-    if (!gesture || gesture.decided) return;
-    const touch = findTouch(event.touches, gesture.touchId);
-    if (!touch) return;
-    const deltaX = touch.clientX - gesture.startX;
-    const deltaY = touch.clientY - gesture.startY;
-    if (Math.abs(deltaX) < 12 && Math.abs(deltaY) < 12) return;
-    if (deltaX >= 0 || Math.abs(deltaY) >= Math.abs(deltaX)) {
-      gesture.decided = true;
-      return;
-    }
-
-    event.preventDefault();
-    const progress = Math.min(1, -deltaX / CLOSE_DISTANCE_PX);
-    drawer.style.transition = 'none';
-    drawer.style.transform = `translateX(${-progress * 100}%)`;
-    drawerOverlay.style.transition = 'none';
-    drawerOverlay.style.opacity = String(1 - progress);
-    gesture.previewing = true;
-    if (-deltaX >= CLOSE_DISTANCE_PX) {
-      gesture.decided = true;
-      closeDrawerFromSwipe();
-      clearGesture();
-    }
-  }, { passive: false });
-
-  drawer.addEventListener('touchend', event => {
-    if (gesture && findTouch(event.changedTouches, gesture.touchId)) clearGesture({ reset: true });
-  }, { passive: true });
-  drawer.addEventListener('touchcancel', () => clearGesture({ reset: true }), { passive: true });
-}
+// Crew Home is a primary page. Legacy swipe-open/close Drawer gestures are removed.
 
 // 4. Bind Global UI Listeners
 function initAppAndListeners() {
@@ -273,9 +96,7 @@ function initAppAndListeners() {
     }, 220);
   }
 
-  // Role view is now reached from the persistent bottom navigation.
-  if (closeDrawerBtn) closeDrawerBtn.addEventListener('click', () => toggleDrawer(false));
-  if (drawerOverlay) drawerOverlay.addEventListener('click', () => toggleDrawer(false));
+  // Crew Home is the primary landing page. No overlay/drawer close gesture.
   const drawerNewWorkBtn = document.getElementById('drawer-new-work-btn');
   const openWorkHistoryBtn = document.getElementById('open-work-history-btn');
   const backToRoleNavBtn = document.getElementById('back-to-role-nav-btn');
@@ -330,21 +151,25 @@ function initAppAndListeners() {
 
   const primaryTabButtons = [...document.querySelectorAll('[data-primary-tab]')];
   const chatComposerFooter = document.getElementById('chat-composer-footer');
-  let primaryTab = 'chat';
+  const crewBackHomeBtn = document.getElementById('crew-back-home-btn');
+  let primaryTab = 'crew';
+  let lastCrewRefresh = 0;
 
   const updatePrimaryChromeMetrics = () => {
     const header = document.querySelector('header');
     if (header) {
-      document.documentElement.style.setProperty('--crew-header-height', `${Math.max(1, Math.round(header.getBoundingClientRect().height))}px`);
+      document.documentElement.style.setProperty('--crew-header-height',
+        `${Math.max(0, Math.round(header.getBoundingClientRect().height))}px`);
     }
     const nav = document.getElementById('primary-bottom-nav');
     if (nav) {
-      document.documentElement.style.setProperty('--crew-primary-nav-height', `${Math.max(1, Math.round(nav.getBoundingClientRect().height))}px`);
+      document.documentElement.style.setProperty('--crew-primary-nav-height',
+        `${Math.max(1, Math.round(nav.getBoundingClientRect().height))}px`);
     }
   };
 
   function syncPrimaryTabChrome(tab) {
-    primaryTab = ['chat', 'crew', 'settings'].includes(tab) ? tab : 'chat';
+    primaryTab = ['crew', 'chat', 'settings'].includes(tab) ? tab : 'crew';
     document.body.dataset.primaryTab = primaryTab;
     primaryTabButtons.forEach(button => {
       const active = button.dataset.primaryTab === primaryTab;
@@ -352,31 +177,46 @@ function initAppAndListeners() {
       if (active) button.setAttribute('aria-current', 'page');
       else button.removeAttribute('aria-current');
     });
+    // Role selection is a page transition; do not unmount the active chat.
+    drawer?.classList.toggle('hidden', primaryTab !== 'crew');
     chatComposerFooter?.classList.toggle('hidden', primaryTab !== 'chat');
     updatePrimaryChromeMetrics();
   }
 
+  function refreshCrewHome({ force = false } = {}) {
+    const now = Date.now();
+    if (!force && now - lastCrewRefresh < 2000) return;
+    lastCrewRefresh = now;
+    Promise.all([
+      typeof loadWorkspaces === 'function' ? loadWorkspaces().catch(() => null) : Promise.resolve(),
+      typeof loadCrewStatus === 'function' ? loadCrewStatus({ force: true }).catch(() => null) : Promise.resolve(),
+      typeof loadConversations === 'function' ? loadConversations({ force: true }).catch(() => []) : Promise.resolve()
+    ]).then(() => window.renderRoleNavigation?.()).catch(() => {});
+  }
+
   function setPrimaryTab(tab, { hapticFeedback = true } = {}) {
-    const target = ['chat', 'crew', 'settings'].includes(tab) ? tab : 'chat';
+    const target = ['crew', 'chat', 'settings'].includes(tab) ? tab : 'crew';
+    const switchingToCrew = target === 'crew' && primaryTab !== 'crew';
     syncPrimaryTabChrome(target);
     if (hapticFeedback && typeof window.haptic === 'function') window.haptic('light');
-
-    if (target === 'crew') toggleDrawer(true);
-    else if (drawer && !drawer.classList.contains('-translate-x-full')) toggleDrawer(false);
-
+    if (target === 'crew') {
+      window.showRoleNavigationView?.();
+      refreshCrewHome({ force: switchingToCrew });
+    }
     setSettingsViewOpen(target === 'settings');
-
   }
 
   window.setPrimaryTab = setPrimaryTab;
   window.getPrimaryTab = () => primaryTab;
   window.syncPrimaryTabChrome = syncPrimaryTabChrome;
+  window.refreshCrewHome = refreshCrewHome;
 
   primaryTabButtons.forEach(button => {
     button.addEventListener('click', () => setPrimaryTab(button.dataset.primaryTab));
   });
+  crewBackHomeBtn?.addEventListener('click', () => setPrimaryTab('crew'));
   window.addEventListener('resize', updatePrimaryChromeMetrics);
-  syncPrimaryTabChrome('chat');
+  setPrimaryTab('crew', { hapticFeedback: false });
   window.setTimeout(updatePrimaryChromeMetrics, 0);
 
   // 📦 Browser Extension Export listeners
@@ -482,7 +322,7 @@ function initAppAndListeners() {
     // before showing another z-50 modal, then wait one frame for mobile
     // compositors to settle instead of flashing between the two surfaces.
     if (toolsMenuDropdown) toolsMenuDropdown.classList.add('hidden');
-    if (drawer && !drawer.classList.contains('-translate-x-full')) toggleDrawer(false);
+    if (window.getPrimaryTab?.() === 'crew') window.setPrimaryTab?.('chat', { hapticFeedback: false });
     window.requestAnimationFrame(() => toggleFilesModal(true));
   };
   if (filesBtn) filesBtn.addEventListener('click', openFilesExplorer);

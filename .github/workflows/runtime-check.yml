@@ -140,4 +140,6 @@ jobs:
           node --check public/js/cockpit.js
           node --check test/crew-cockpit.test.js
           node test/crew-cockpit.test.js
+          node --check test/crew-home-navigation.test.js
+          node test/crew-home-navigation.test.js
           for file in public/js/*.js; do node --check "$file"; done
