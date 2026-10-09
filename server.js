@@ -2067,7 +2067,8 @@ async function handleChat(req, res) {
     await provider.startTurn({
       conversationId: conversation_id,
       model: effectiveModel || model,
-      effort,
+      // Keep effort stable on resumed threads unless the user changed it.
+      effort: effort || savedSettings?.effort || undefined,
       workspace,
       executionMode: executionPolicy?.mode || routedExecutionMode || null,
       executionPolicy,
