@@ -873,6 +873,24 @@
           </div>
         </section>
 
+        <section id="codex-cache-section" class="hidden rounded-2xl border border-slate-800 bg-slate-950/70 p-3">
+          <div class="flex items-start justify-between gap-2">
+            <div>
+              <h3 class="text-[11px] font-bold text-slate-200">Codex Prompt Cache</h3>
+              <p id="codex-cache-scope" class="mt-0.5 text-[10px] text-slate-500">Latest model call</p>
+            </div>
+            <span id="codex-cache-rate" class="font-mono text-sm font-bold text-emerald-300">—</span>
+          </div>
+          <div class="mt-3 grid grid-cols-2 gap-2 text-[10px]">
+            <div><div class="text-slate-500">Input</div><div id="codex-cache-input" class="font-mono font-semibold text-slate-200">—</div></div>
+            <div><div class="text-slate-500">Cached read</div><div id="codex-cache-read" class="font-mono font-semibold text-emerald-300">—</div></div>
+            <div><div class="text-slate-500">Not cached</div><div id="codex-cache-uncached" class="font-mono font-semibold text-slate-200">—</div></div>
+            <div><div class="text-slate-500">Cache write</div><div id="codex-cache-write" class="font-mono font-semibold text-slate-200">—</div></div>
+          </div>
+          <div id="codex-cache-thread" class="mt-2 border-t border-slate-800 pt-2 text-[10px] text-slate-500">Thread total: —</div>
+          <p class="mt-1 text-[9px] leading-relaxed text-slate-600">比例是已讀取快取的 Input Tokens，不是 Context 使用率。Codex 版本若未回報快取數據則顯示 —。</p>
+        </section>
+
         <section>
           <div class="mb-2 flex items-center justify-between">
             <h3 class="text-[11px] font-bold text-slate-300">Breakdown <span class="font-normal text-slate-600">· estimated</span></h3>
@@ -1019,7 +1037,7 @@
       </div>
 
       <div class="px-3 py-2.5 border-b border-slate-800 bg-slate-950/40 flex items-center justify-between gap-3">
-        <div class="min-w-0"><div class="text-[11px] font-bold text-slate-300">⚡ Codex Session 預熱</div><div class="text-[10px] text-slate-500">減少首次 Codex 回覆等待，閒置後自動關閉</div></div>
+        <div class="min-w-0"><div class="text-[11px] font-bold text-slate-300">⚡ 保持 Codex Runtime 常駐</div><div class="text-[10px] text-slate-500">減少啟動等待，不會預先建立模型 Prompt Cache</div></div>
         <label class="relative inline-flex items-center cursor-pointer shrink-0"><input id="codex-warmup-toggle" type="checkbox" class="sr-only peer" onchange="toggleCodexWarmup(this.checked)"><span class="w-10 h-5 bg-slate-700 rounded-full peer-checked:bg-emerald-600 transition"></span><span class="absolute left-0.5 top-0.5 w-4 h-4 bg-white rounded-full transition peer-checked:translate-x-5"></span></label>
       </div>
 
