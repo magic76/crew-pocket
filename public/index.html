@@ -1816,32 +1816,43 @@
   </div>
 
   <!-- Universal Visual Inspector: annotates screenshots shared from any Android app. -->
-  <div id="visual-inspector-modal" class="visual-inspector hidden" role="dialog" aria-modal="true" aria-label="跨 App 畫面標註">
+  <!-- Android Quick Share: preview first, annotate only when requested. -->
+  <div id="visual-inspector-modal" class="visual-inspector hidden" role="dialog" aria-modal="true" aria-label="快速分享截圖">
     <div class="visual-inspector__heading">
       <div>
-        <div class="visual-inspector__title">圈選畫面</div>
-        <div class="visual-inspector__subtitle">任何 App 截圖 · 選取後交給目前 Role</div>
+        <div class="visual-inspector__title">快速分享畫面</div>
+        <div class="visual-inspector__subtitle">先查看截圖，想圈選再使用標註工具</div>
       </div>
-      <button id="visual-inspector-close" type="button" class="visual-inspector__button" aria-label="取消畫面標註">取消</button>
+      <button id="visual-inspector-close" type="button" class="visual-inspector__button" aria-label="取消快速分享">取消</button>
     </div>
-    <div class="visual-inspector__stage">
-      <canvas id="visual-inspector-canvas" aria-label="畫面標註區，可用手指框選或畫線"></canvas>
+    <div id="visual-inspector-stage" class="visual-inspector__stage" aria-label="可上下左右滑動的截圖預覽">
+      <canvas id="visual-inspector-canvas" aria-label="截圖預覽：單指滑動，雙指縮放；標註模式單指畫線"></canvas>
     </div>
-    <div id="visual-inspector-tools" class="visual-inspector__tools" role="toolbar" aria-label="標註工具">
-      <button type="button" class="visual-inspector__button" data-visual-tool="rect" aria-pressed="true">框選</button>
+    <div class="visual-inspector__zoom" role="group" aria-label="圖片縮放">
+      <button id="visual-inspector-fit" type="button" class="visual-inspector__button">適應寬度</button>
+      <button id="visual-inspector-zoom-out" type="button" class="visual-inspector__button" aria-label="縮小圖片">－</button>
+      <span id="visual-inspector-zoom-label" aria-live="polite">100%</span>
+      <button id="visual-inspector-zoom-in" type="button" class="visual-inspector__button" aria-label="放大圖片">＋</button>
+    </div>
+    <div id="visual-inspector-tools" class="visual-inspector__tools" role="toolbar" aria-label="瀏覽與標註工具">
+      <button type="button" class="visual-inspector__button" data-visual-tool="pan" aria-pressed="true">滑動</button>
+      <button type="button" class="visual-inspector__button" data-visual-tool="rect" aria-pressed="false">框選</button>
       <button type="button" class="visual-inspector__button" data-visual-tool="pen" aria-pressed="false">畫筆</button>
       <button type="button" class="visual-inspector__button" data-visual-tool="arrow" aria-pressed="false">箭頭</button>
       <button id="visual-inspector-undo" type="button" class="visual-inspector__button">撤銷</button>
-      <button id="visual-inspector-clear" type="button" class="visual-inspector__button">清除標註</button>
+      <button id="visual-inspector-clear" type="button" class="visual-inspector__button">清除</button>
     </div>
-    <textarea id="visual-inspector-note" class="visual-inspector__note" maxlength="2000" placeholder="例如：這個按鈕太小、首次切換中文鍵盤失敗；請先定位原因。"></textarea>
+    <details id="visual-inspector-note-details" class="visual-inspector__details">
+      <summary>補充需求（選填）</summary>
+      <textarea id="visual-inspector-note" class="visual-inspector__note" maxlength="2000" placeholder="例如：圈選的按鈕太小，請找出相關程式碼。"></textarea>
+    </details>
     <p id="visual-inspector-status" class="visual-inspector__status" role="status" aria-live="polite"></p>
-    <p class="visual-inspector__subtitle">畫面可能含有私人資訊，請確認再附加。只送到目前的 Role 輸入框，不會自動發送。</p>
     <div class="visual-inspector__actions">
-      <button type="button" class="visual-inspector__button" onclick="document.getElementById('visual-inspector-file').click()">重選截圖</button>
-      <button id="visual-inspector-attach" type="button" class="visual-inspector__button visual-inspector__submit">附加到 Role</button>
+      <button type="button" class="visual-inspector__button visual-inspector__reselect" onclick="document.getElementById('visual-inspector-file').click()">重選截圖</button>
+      <button id="visual-inspector-attach" type="button" class="visual-inspector__button visual-inspector__submit">交給目前 Role</button>
     </div>
-    <input type="file" id="visual-inspector-file" accept="image/*" class="hidden" aria-label="選擇其他 App 的截圖">
+    <p class="visual-inspector__privacy">僅附加到對話輸入框，不會自動發送。傳送前請確認畫面沒有私人資訊。</p>
+    <input type="file" id="visual-inspector-file" accept="image/*" class="hidden" aria-label="選擇截圖">
   </div>
 
   <!-- IMAGE LIGHTBOX MODAL -->
