@@ -51,6 +51,7 @@
   <link rel="stylesheet" href="/css/living-ui.css">
   <link rel="stylesheet" href="/css/theme-light.css">
   <link rel="stylesheet" href="/css/crew-home.css">
+  <link rel="stylesheet" href="/css/visual-inspector.css">
 </head>
 <body data-primary-tab="crew" class="bg-slate-950 text-slate-100 flex flex-col h-[100dvh] w-full max-w-full overflow-hidden">
 
@@ -766,6 +767,12 @@
               <button type="button" id="attach-opt-gallery" class="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-xs text-slate-200 hover:bg-slate-800 hover:text-indigo-300 transition text-left group cursor-pointer">
                 <div class="w-6 h-6 rounded-lg bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center text-xs shrink-0">🖼️</div>
                 <span class="font-medium text-slate-200 group-hover:text-indigo-300">附加相簿圖片</span>
+              </button>
+
+              <!-- Cross-app screenshot annotation, also available via Android Share sheet -->
+              <button type="button" id="attach-opt-visual" class="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-xs text-slate-200 hover:bg-slate-800 hover:text-orange-300 transition text-left cursor-pointer">
+                <span class="w-6 h-6 rounded-lg bg-orange-500/20 border border-orange-500/30 flex items-center justify-center shrink-0">▣</span>
+                <span class="font-medium">圈選其他 App 畫面</span>
               </button>
 
               <!-- 3. Local Files Explorer -->
@@ -1808,6 +1815,35 @@
     </div>
   </div>
 
+  <!-- Universal Visual Inspector: annotates screenshots shared from any Android app. -->
+  <div id="visual-inspector-modal" class="visual-inspector hidden" role="dialog" aria-modal="true" aria-label="跨 App 畫面標註">
+    <div class="visual-inspector__heading">
+      <div>
+        <div class="visual-inspector__title">圈選畫面</div>
+        <div class="visual-inspector__subtitle">任何 App 截圖 · 選取後交給目前 Role</div>
+      </div>
+      <button id="visual-inspector-close" type="button" class="visual-inspector__button" aria-label="取消畫面標註">取消</button>
+    </div>
+    <div class="visual-inspector__stage">
+      <canvas id="visual-inspector-canvas" aria-label="畫面標註區，可用手指框選或畫線"></canvas>
+    </div>
+    <div id="visual-inspector-tools" class="visual-inspector__tools" role="toolbar" aria-label="標註工具">
+      <button type="button" class="visual-inspector__button" data-visual-tool="rect" aria-pressed="true">框選</button>
+      <button type="button" class="visual-inspector__button" data-visual-tool="pen" aria-pressed="false">畫筆</button>
+      <button type="button" class="visual-inspector__button" data-visual-tool="arrow" aria-pressed="false">箭頭</button>
+      <button id="visual-inspector-undo" type="button" class="visual-inspector__button">撤銷</button>
+      <button id="visual-inspector-clear" type="button" class="visual-inspector__button">清除標註</button>
+    </div>
+    <textarea id="visual-inspector-note" class="visual-inspector__note" maxlength="2000" placeholder="例如：這個按鈕太小、首次切換中文鍵盤失敗；請先定位原因。"></textarea>
+    <p id="visual-inspector-status" class="visual-inspector__status" role="status" aria-live="polite"></p>
+    <p class="visual-inspector__subtitle">畫面可能含有私人資訊，請確認再附加。只送到目前的 Role 輸入框，不會自動發送。</p>
+    <div class="visual-inspector__actions">
+      <button type="button" class="visual-inspector__button" onclick="document.getElementById('visual-inspector-file').click()">重選截圖</button>
+      <button id="visual-inspector-attach" type="button" class="visual-inspector__button visual-inspector__submit">附加到 Role</button>
+    </div>
+    <input type="file" id="visual-inspector-file" accept="image/*" class="hidden" aria-label="選擇其他 App 的截圖">
+  </div>
+
   <!-- IMAGE LIGHTBOX MODAL -->
   <div id="lightbox" class="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4 opacity-0 pointer-events-none transition-opacity duration-200">
     <button id="close-lightbox-btn" class="absolute top-4 right-4 p-2 text-white bg-slate-800/80 rounded-full">
@@ -1838,5 +1874,6 @@
   <script src="/js/auth.js"></script>
   <script src="/js/app.js"></script>
   <script src="/js/dreaming-settings.js"></script>
+  <script src="/js/visual-inspector.js"></script>
 </body>
 </html>
