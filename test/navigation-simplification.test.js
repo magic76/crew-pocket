@@ -58,10 +58,13 @@ assert.ok(chat.includes("const hasBudget = Number.isFinite(maxTokens) && maxToke
 assert.ok(chat.includes("textEl.textContent = percent === null"));
 assert.ok(chat.includes("progressTrack.classList.toggle('hidden', percent === null)"));
 
-// Role cards surface one work summary only.
-assert.ok(ui.includes("const title = status?.currentWork?.title || status?.conversationTitle || latest?.title || ''"));
-assert.ok(ui.includes("hasWork ? escapeHtml(title) : '尚無工作'"));
-assert.equal(ui.includes("'尚未開始工作'"), false);
+// Role cards surface one truthful summary: current work must not be
+// inferred from the most recent historical Conversation title.
+assert.ok(ui.includes("const currentTitle = status?.currentWork?.title || status?.conversationTitle || ''"));
+assert.ok(ui.includes("const latestTitle = latest?.title || ''"));
+assert.ok(ui.includes("'正在處理 · ' + (currentTitle || '目前對話')"));
+assert.ok(ui.includes("'最近對話 · ' + latestTitle"));
+assert.ok(ui.includes("state === 'new' ? '尚未開始工作'"));
 assert.ok(ui.includes('unreadReplyCount'));
 
 console.log('navigation-simplification tests: ok');
