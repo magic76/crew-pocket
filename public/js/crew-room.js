@@ -1,5 +1,5 @@
-/* Crew Room portraits + evidence-only handoff animation.
- * Presentation only: no Role, Context, Memory or queue mutations. */
+/* Crew Room: stable Role portraits and evidence-only collaboration activity.
+ * No simulated office, queue changes, memory sharing or inferred success. */
 (function (root, factory) {
   'use strict';
   const api = factory();
@@ -80,20 +80,107 @@
     return { seenIds: currentIds, arrivals };
   }
 
+  const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[char]));
+
+  // The room endpoint returns saved *message metadata*, not delivery results.
+  // Only display actual records between currently known Role identities.
+  function activityRows(events, roles, limit = 5) {
+    const names = new Map((Array.isArray(roles) ? roles : [])
+      .filter(role => role && typeof role.id === 'string')
+      .map(role => [role.id, String(role.name || 'Role')]));
+    const seen = new Set();
+    return (Array.isArray(events) ? events : [])
+      .filter(event => {
+        if (!event || typeof event.id !== 'string' || !event.id || seen.has(event.id) ||
+            event.fromRoleId === event.toRoleId ||
+            !names.has(event.fromRoleId) || !names.has(event.toRoleId) ||
+            !Number.isFinite(event.createdAt) || event.createdAt <= 0 ||
+            event.createdAt > Date.now() + 5000) return false;
+        seen.add(event.id);
+        return true;
+      })
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .slice(0, Math.max(0, Math.min(8, limit)))
+      .map(event => ({
+        id: event.id,
+        fromRoleId: event.fromRoleId,
+        toRoleId: event.toRoleId,
+        fromName: names.get(event.fromRoleId),
+        toName: names.get(event.toRoleId),
+        kind: event.kind === 'reply' ? 'reply' : 'handoff',
+        createdAt: event.createdAt
+      }));
+  }
+
+  function activityMarkup(entries, locale = 'zh-TW', emptyMessage = '') {
+    if (!entries.length) return '<p class="crew-activity-empty">' +
+      escapeHtml(emptyMessage || '目前沒有角色間的協作紀錄') + '</p>';
+    const english = String(locale).toLowerCase().startsWith('en');
+    const formatter = new Intl.DateTimeFormat(english ? 'en-US' : 'zh-TW', {
+      month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit'
+    });
+    return entries.map(entry => {
+      const description = entry.kind === 'reply'
+        ? (english ? 'Reply recorded' : '已記錄回覆')
+        : (english ? 'Handoff recorded' : '已記錄交接');
+      const timestamp = formatter.format(new Date(entry.createdAt));
+      return '<button type="button" class="crew-activity-row" data-crew-activity-role="' +
+        escapeHtml(entry.toRoleId) + '" aria-label="' +
+        escapeHtml(entry.fromName + ' → ' + entry.toName + ' · ' + description) + '">' +
+        '<span class="crew-activity-symbol" aria-hidden="true">' +
+          (entry.kind === 'reply' ? '↩' : '↗') + '</span>' +
+        '<span class="crew-activity-main">' +
+          '<span class="crew-activity-route"><strong>' + escapeHtml(entry.fromName) +
+          '</strong><span aria-hidden="true"> → </span><strong>' +
+            escapeHtml(entry.toName) + '</strong></span>' +
+          '<span class="crew-activity-kind">' + description + '</span>' +
+        '</span>' +
+        '<time class="crew-activity-time" datetime="' +
+          new Date(entry.createdAt).toISOString() + '">' + escapeHtml(timestamp) + '</time>' +
+        '<span class="crew-activity-chevron" aria-hidden="true">›</span>' +
+      '</button>';
+    }).join('');
+  }
+
   function init(win, doc) {
     if (!win || !doc || typeof win.fetch !== 'function') return;
-    const stage = doc.getElementById('crew-room-roster-stage');
     const roster = doc.getElementById('role-nav-list');
-    const flights = doc.getElementById('crew-room-handoffs');
-    if (!stage || !roster || !flights) return;
+    const activity = doc.getElementById('crew-activity-list');
+    if (!roster || !activity) return;
 
     let seenIds = null;
+    let cachedEvents = null;
+    let lastMarkup = null;
     let previouslyVerified = false;
     let previousStates = new Map();
     let pendingTimer = null;
     let lastRequestAt = 0;
     let inFlight = false;
-    const isVisible = () => !doc.hidden && doc.body?.dataset?.primaryTab === 'crew';
+    const visible = () => !doc.hidden && doc.body?.dataset?.primaryTab === 'crew';
+    const locale = () => win.getCrewLocale?.() || 'zh-TW';
+    const roles = () => win.getCrewCockpitSnapshot?.()?.roles || [];
+
+    function showActivity(error = false) {
+      if (!visible()) return;
+      const entries = activityRows(cachedEvents, roles());
+      const blank = error ? '暫時無法取得協作紀錄'
+        : cachedEvents === null ? '正在載入協作紀錄…'
+        : !roles().length ? '等待小隊成員資料同步…'
+        : '目前沒有角色間的協作紀錄';
+      const markup = activityMarkup(error ? [] : entries, locale(), blank);
+      if (markup !== lastMarkup) {
+        const focusedRole = doc.activeElement?.dataset?.crewActivityRole;
+        activity.innerHTML = markup;
+        lastMarkup = markup;
+        if (focusedRole) {
+          [...activity.querySelectorAll('[data-crew-activity-role]')]
+            .find(node => node.dataset.crewActivityRole === focusedRole)
+            ?.focus?.({ preventScroll: true });
+        }
+      }
+    }
 
     function reflectWorkTransitions() {
       const snapshot = win.getCrewCockpitSnapshot?.();
@@ -102,108 +189,93 @@
         previousStates.clear();
         return;
       }
-      const roles = Array.isArray(snapshot.roles) ? snapshot.roles : [];
-      const states = new Map(roles.map(role => [
+      const next = new Map((snapshot.roles || []).map(role => [
         String(role.id), String(role.status?.state || 'unknown')
       ]));
-      if (previouslyVerified && isVisible()) {
-        const cards = [...roster.querySelectorAll('[data-role-card-id]')];
-        for (const card of cards) {
-          const id = card.dataset.roleCardId;
-          if (previousStates.get(id) !== 'working' ||
-              !['idle', 'waiting'].includes(states.get(id))) continue;
-          // "No longer busy", never falsely claim that a task succeeded.
+      if (previouslyVerified && visible() &&
+          !win.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches) {
+        for (const card of roster.querySelectorAll('[data-role-card-id]')) {
+          if (previousStates.get(card.dataset.roleCardId) !== 'working' ||
+              !['idle', 'waiting'].includes(next.get(card.dataset.roleCardId))) continue;
+          // Stopping work is not proof of task success.
           card.classList.add('crew-work-settled');
-          win.setTimeout(() => card.classList.remove('crew-work-settled'), 1000);
+          win.setTimeout(() => card.classList.remove('crew-work-settled'), 950);
         }
       }
-      previousStates = states;
+      previousStates = next;
       previouslyVerified = true;
     }
 
-    function fly(event) {
-      if (!isVisible() || stage.closest('#crew-room-switchyard')?.dataset?.view === 'office' ||
-          win.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
-      const cards = [...roster.querySelectorAll('[data-role-card-id]')];
-      const from = cards.find(card => card.dataset.roleCardId === event.fromRoleId);
-      const to = cards.find(card => card.dataset.roleCardId === event.toRoleId);
-      if (!from || !to) return;
-      const area = stage.getBoundingClientRect();
-      const a = from.getBoundingClientRect();
-      const b = to.getBoundingClientRect();
-      const sx = a.left + a.width / 2 - area.left;
-      const sy = a.top + Math.min(39, a.height / 3) - area.top;
-      const tx = b.left + b.width / 2 - area.left;
-      const ty = b.top + Math.min(39, b.height / 3) - area.top;
-      if (![sx, sy, tx, ty].every(Number.isFinite)) return;
-      const envelope = doc.createElement('span');
-      envelope.className = 'crew-room-envelope';
-      envelope.setAttribute('aria-hidden', 'true');
-      envelope.textContent = '✉';
-      envelope.style.left = sx + 'px';
-      envelope.style.top = sy + 'px';
-      envelope.style.setProperty('--crew-fly-x', (tx - sx) + 'px');
-      envelope.style.setProperty('--crew-fly-y', (ty - sy) + 'px');
-      envelope.style.setProperty('--crew-mid-x', ((tx - sx) / 2) + 'px');
-      envelope.style.setProperty('--crew-mid-y', ((ty - sy) / 2 - 22) + 'px');
-      flights.appendChild(envelope);
-      const cleanup = () => envelope.remove();
-      envelope.addEventListener('animationend', cleanup, { once: true });
-      win.setTimeout(cleanup, 1500);
-      to.classList.add('crew-handoff-arrived');
-      win.setTimeout(() => to.classList.remove('crew-handoff-arrived'), 1100);
+    function emphasizeNewHandoffs(arrivals) {
+      if (!visible() || win.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches) return;
+      for (const event of arrivals) {
+        const card = [...roster.querySelectorAll('[data-role-card-id]')]
+          .find(node => node.dataset.roleCardId === event.toRoleId);
+        if (!card) continue;
+        card.classList.add('crew-handoff-arrived');
+        win.setTimeout(() => card.classList.remove('crew-handoff-arrived'), 950);
+      }
     }
 
     async function synchronize() {
       pendingTimer = null;
-      if (!isVisible() || inFlight) return;
+      if (!visible() || inFlight) return;
       inFlight = true;
       lastRequestAt = Date.now();
       try {
         const response = await win.fetch('/api/crew-room-events', { cache: 'no-store' });
-        if (!response.ok) return;
+        if (!response.ok) throw new Error('Crew activity unavailable');
         const data = await response.json();
-        if (!data.success || !Array.isArray(data.events)) return;
+        if (!data.success || !Array.isArray(data.events)) throw new Error('Invalid crew activity');
         const next = planNewEvents(data.events, seenIds);
         seenIds = next.seenIds;
-        if (isVisible()) next.arrivals.forEach(event => {
-          // Share only already-verified, saved message metadata. A separate
-          // scene chooses whether/how to animate; no duplicate polling.
-          win.dispatchEvent(new win.CustomEvent('crew:handoff-observed', {
-            detail: {
-              id: event.id, fromRoleId: event.fromRoleId,
-              toRoleId: event.toRoleId, createdAt: event.createdAt
-            }
-          }));
-          fly(event);
-        });
+        cachedEvents = data.events;
+        if (visible()) {
+          showActivity();
+          emphasizeNewHandoffs(next.arrivals);
+        }
       } catch (_) {
-        // Runtime unavailable: no speculative delivery animation.
+        if (visible()) showActivity(true);
       } finally {
         inFlight = false;
       }
     }
 
     function schedule() {
-      if (!isVisible() || pendingTimer !== null) return;
-      pendingTimer = win.setTimeout(synchronize, Math.max(120, 2500 - (Date.now() - lastRequestAt)));
+      if (!visible() || pendingTimer !== null) return;
+      pendingTimer = win.setTimeout(synchronize,
+        Math.max(120, 2500 - (Date.now() - lastRequestAt)));
     }
 
-    win.addEventListener('crew:status-updated', () => {
-      reflectWorkTransitions();
-      schedule();
+    activity.addEventListener('click', event => {
+      const row = event.target.closest?.('[data-crew-activity-role]');
+      if (!row) return;
+      // Open the receiver's existing scoped collaboration history; never send
+      // sender context or share a project/workspace through this interaction.
+      const roleId = row.dataset.crewActivityRole;
+      if (roles().some(role => role.id === roleId)) {
+        win.openCrewCollaboration?.(roleId);
+      }
     });
-    win.addEventListener('crew:roster-updated', () => {
+    const onUpdate = () => {
       reflectWorkTransitions();
+      showActivity();
       schedule();
-    });
+    };
+    win.addEventListener('crew:status-updated', onUpdate);
+    win.addEventListener('crew:roster-updated', onUpdate);
+    doc.addEventListener('crew:localechange', () => showActivity());
     doc.addEventListener('visibilitychange', () => {
       if (doc.hidden) seenIds = null;
-      else schedule();
+      else { showActivity(); schedule(); }
     });
-    // Initial state is a baseline, not a stream of fake historical handoffs.
+    if (win.MutationObserver) new win.MutationObserver(() => {
+      if (visible()) { seenIds = null; showActivity(); schedule(); }
+      else seenIds = null;
+    }).observe(doc.body, { attributes: true, attributeFilter: ['data-primary-tab'] });
     schedule();
+    return { synchronize, showActivity };
   }
 
-  return { portraitMarkup, planNewEvents, init };
+  return { portraitMarkup, planNewEvents, activityRows, activityMarkup, init };
 });
