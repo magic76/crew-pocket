@@ -55,3 +55,21 @@ test('unknown baseline / reset / partial metrics do not invent turn totals', () 
   assert.equal(withTurnCacheUsage(current, { total_input_tokens: 200, total_cached_input_tokens: 50 }).turn_cache_read_rate, undefined);
   assert.equal(withTurnCacheUsage(current, { total_input_tokens: 20 }).turn_cache_read_rate, undefined);
 });
+
+const { summarize } = require('../scripts/report-codex-cache');
+
+test('cache benchmark only aggregates complete comparable turn samples', () => {
+  const summary = summarize([
+    { provider: 'codex', elapsed_ms: 1000, turn_timing: { to_first_text_ms: 400 }, context_stats: { turn_input_tokens: 1000, turn_cached_input_tokens: 800 } },
+    { provider: 'codex', elapsed_ms: 2000, turn_timing: { to_first_text_ms: 600 }, context_stats: { turn_input_tokens: 2000, turn_cached_input_tokens: 1500 } },
+    { provider: 'codex', elapsed_ms: 900, context_stats: { last_input_tokens: 500 } },
+    { provider: 'antigravity', context_stats: { turn_input_tokens: 999, turn_cached_input_tokens: 999 } }
+  ]);
+  assert.equal(summary.turnsSeen, 3);
+  assert.equal(summary.turnsMeasured, 2);
+  assert.equal(summary.inputTokens, 3000);
+  assert.equal(summary.cachedInputTokens, 2300);
+  assert.equal(summary.uncachedInputTokens, 700);
+  assert.equal(summary.meanTurnMs, 1500);
+  assert.equal(summary.meanFirstTextMs, 500);
+});
