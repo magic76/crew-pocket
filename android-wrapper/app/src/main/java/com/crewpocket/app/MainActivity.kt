@@ -374,8 +374,8 @@ class MainActivity : Activity() {
 
     private fun uploadSharedImage(uri: Uri): String {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
-            ?: throw IllegalArgumentException("無法讀取分享圖片")
+        val probe = contentResolver.openInputStream(uri) ?: throw IllegalArgumentException("無法讀取分享圖片")
+        probe.use { BitmapFactory.decodeStream(it, null, bounds) }
         if (bounds.outWidth !in 1..16000 || bounds.outHeight !in 1..16000) {
             throw IllegalArgumentException("分享圖片尺寸無效")
         }
