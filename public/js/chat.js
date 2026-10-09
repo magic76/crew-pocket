@@ -629,6 +629,15 @@ function buildExecutionResultBodyHtml(content, tools = [], thinking = '', turnRe
     ? (executionResultState(turnResult) === 'completed' ? buildEmptyTurnFallbackHtml() : '<p class="text-slate-400 text-xs">沒有可顯示的完整回覆。</p>')
     : formatMessageContent(content);
 
+  // Living UI uses only trusted turn_result fields. Keep the historical HTML
+  // fallback for standalone embed/tests that load chat.js without living-ui.js.
+  if (window.CrewLivingUI?.render) {
+    return window.CrewLivingUI.render({
+      turnResult, responseHtml, changedFilesHtml, checksHtml, executionHtml,
+      summaryBits, structuredCommit, toolRows: groupedTools.length
+    });
+  }
+
   return `
     <section class="execution-result-section execution-result-response">
       <div class="msg-content min-w-0">${responseHtml}</div>

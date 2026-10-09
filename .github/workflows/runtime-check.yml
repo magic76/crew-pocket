@@ -112,6 +112,9 @@ jobs:
           node --check test/execution-result-ui.test.js
           node test/runtime-orchestrator.test.js
           node test/execution-result-ui.test.js
+          node --check public/js/living-ui.js
+          node --check test/living-ui.test.js
+          node test/living-ui.test.js
           node -e "const i=require('./lib/execution-intent'); const x=i.normalizeExecutionIntent({summary:'x',expected_files:5,estimated_tools:14,needs_build:true,needs_dependency_change:false,destructive:false,broad_refactor:false,confidence:.8}); const p={mode:'SURGICAL_EDIT',allowWrite:true,maxFilesChanged:3,hardToolExecutions:12,allowBuild:false,allowDependencyChanges:false}; const c=i.policyConflicts(x,p); if(!c.includes('file_scope')||!c.includes('tool_budget')||!c.includes('build_not_allowed')) process.exit(1); const base={provider:'codex',model:'gpt-6-luna',executionPolicy:p,explicitExecutionMode:null,continuation:false}; if(i.shouldCreateExecutionIntent({...base,prompt:'修一下這個按鈕'})) process.exit(1); if(!i.shouldCreateExecutionIntent({...base,prompt:'refactor the entire project'})) process.exit(1)"
           CREW_UPLOADS_DIR=/tmp/crew-pocket-ci node -e "const p=require('./lib/providers/codex'); const c=require('./lib/config'); const m=require('./lib/model-runtime'); if(typeof p.steerActiveTurn!=='function'||typeof p.warmup!=='function'||typeof p.stopWarmup!=='function'||typeof p.getWarmupStatus!=='function') process.exit(1); if(c.cleanUserContent('<ADDITIONAL_METADATA>runtime only</ADDITIONAL_METADATA>').trim()!=='') process.exit(1); if(!m.isLunaModel('gpt-5.6-luna')||!m.isLunaModel('gpt-6-luna')||m.isLunaModel('gpt-5.6-terra')) process.exit(1); if(m.getDefaultModel('codex')!=='gpt-5.6-terra'||c.AVAILABLE_MODELS.find(x=>x.provider==='codex'&&x.isDefault)?.id!==m.getDefaultModel('codex')) process.exit(1)"
           node --check lib/providers/antigravity.js
