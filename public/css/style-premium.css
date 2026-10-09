@@ -692,3 +692,22 @@ body.ai-streaming #send-btn {
   min-height: 34px;
   line-height: 1.35;
 }
+
+/* Dialogs cover app chrome; nested confirmations retain their higher layer. */
+body > [id$="-modal"] { z-index: 70; }
+#context-compact-preview-modal,
+#role-editor-modal,
+#role-memory-modal { z-index: 80; }
+#role-delete-modal { z-index: 90; }
+#lightbox { z-index: 80; }
+#context-modal,
+#context-compact-preview-modal {
+  padding-bottom: max(.5rem, var(--crew-safe-bottom));
+}
+#context-modal > section,
+#context-compact-preview-modal > section { min-height: 0; }
+#context-modal > section > .overflow-y-auto,
+#context-compact-preview-modal > section > .overflow-y-auto {
+  min-height: 0;
+  overscroll-behavior: contain;
+}

@@ -1048,3 +1048,29 @@ footer {
 
 .execution-result-body > details > summary::after { content: '›'; margin-left: auto; }
 .execution-result-body > details[open] > summary::after { transform: rotate(90deg); }
+
+/* Bounded live progress sits below the current operation, without extra cards. */
+.live-progress-peek { margin: 0 0 8px; color: #94a3b8; font-size: 11px; line-height: 1.5; }
+.live-progress-peek[hidden] { display: none; }
+.live-current-note { overflow-wrap: anywhere; margin-bottom: 3px; }
+.live-progress-wait { color: #a5b4fc; font-variant-numeric: tabular-nums; }
+.live-recent-progress { list-style: none; padding: 0 !important; margin: 4px 0 0 !important; }
+.live-recent-progress li { display: flex; gap: 6px; margin: 2px 0; min-width: 0; }
+.live-recent-progress li > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.live-recent-progress .is-done > span:first-child { color: #34d399; }
+.live-recent-progress .is-failed { color: #fda4af; }
+
+/* Read the outcome first; inspect evidence only when needed. */
+.execution-result-body > .execution-result-response:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
+.execution-result-body > .execution-result-response .msg-content { font-size: 14px; line-height: 1.75; }
+.execution-result-body > .execution-result-hero { padding: 8px 0; margin-top: 10px; border-top: 1px solid #263449; border-bottom: 0; }
+.execution-result-body > details.execution-result-section { border-top: 1px solid #263449; padding-top: 4px; }
+.execution-result-body .execution-step-row { align-items: start; font-size: 11px; line-height: 1.5; padding: 4px 0; }
+.execution-result-body .execution-step-text { white-space: normal; overflow-wrap: anywhere; }
+.live-execution-details .execution-summary-main { flex-wrap: wrap; column-gap: 6px; row-gap: 3px; }
+.live-execution-details .status-text { flex: 1 0 100%; min-width: 0; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+.live-stage { border: 1px solid #4f46e5; border-radius: 5px; padding: 1px 6px; font-size: 10px; color: #c7d2fe; }
+.live-execution-details[data-phase="waiting"] .live-stage { border-color: #854d0e; color: #fde68a; }
+.live-recent-label { margin-top: 6px; font-size: 10px; color: #64748b; }
+
+.execution-result-body > details.execution-result-section > summary { min-height: 44px; font-size: 12px; color: #94a3b8; }

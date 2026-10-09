@@ -18,9 +18,19 @@ async function runScenario(scenario) {
       const tool = { tool_id: 'a', tool_name: 'commandExecution', tool_info: { parameters: { command: 'node --check fixture.js' } } };
       event('tool', { ...tool, state: 'running' });
       event('chunk', { delta: '# 摘要\n已完成回饋修正。' });
+      if (scenario === 'progress') {
+        event('tool', { ...tool, state: 'completed' });
+        for (const [id, code] of [['b', 1], ['c', 0]]) {
+          event('tool', { tool_id: id, tool_name: 'commandExecution', state: 'completed', tool_info: { parameters: { command: `check-${id}` }, exitCode: code } });
+        }
+        const pending = { tool_id: 'd', tool_name: 'commandExecution', state: 'running', tool_info: { parameters: { command: 'sleep 10', description: '等待檢查訊號' } } };
+        event('tool', pending);
+        event('tool', pending); // Repeated polling must not create another row.
+      }
       setTimeout(() => {
         if (scenario === 'abort') return;
         if (scenario === 'network') { controller.error(new TypeError('connection lost')); return; }
+        if (scenario === 'progress') event('tool', { tool_id: 'd', tool_name: 'commandExecution', state: 'completed' });
         event('tool', { ...tool, state: 'completed' });
         if (scenario !== 'eof') event('done', { status: scenario === 'interrupted' ? 'interrupted' : 'completed', response: '# 摘要\n已完成回饋修正。', turn_result: { kind: 'execution', status: scenario === 'interrupted' ? 'interrupted' : 'completed', duration_ms: 1234 } });
         controller.close();
@@ -36,6 +46,15 @@ async function runScenario(scenario) {
     const task = w.sendMessage('請檢查回饋');
     await delay(10);
     if (scenario !== 'http') {
+      assert.ok(w.messagesContainer.querySelector('.live-progress-peek'));
+      assert.equal(w.messagesContainer.querySelector('.live-stage').textContent, '工具執行', 'a chunk cannot hide a running operation');
+      if (scenario === 'progress') {
+        const peek = w.messagesContainer.querySelector('.live-progress-peek');
+        assert.equal(peek.querySelectorAll('li').length, 2);
+        assert.match(peek.textContent, /操作未完成 · 執行指令 · check-b/);
+        assert.match(peek.textContent, /操作完成 · 執行指令 · check-c/);
+        assert.match(peek.textContent, /AI 說明：等待檢查訊號/);
+      }
       const status = w.messagesContainer.querySelector('.live-status');
       assert.equal(status.querySelector('.live-progress-list').children.length, 0, 'closed progress does not rebuild hidden rows');
       status.open = true;
@@ -66,14 +85,16 @@ async function runScenario(scenario) {
     } else {
       const card = w.messagesContainer.querySelector('.execution-result-card');
       assert.ok(card, text);
-      assert.equal(card.open, false);
+      assert.equal(card.open, true, "latest completed result stays expanded");
       assert.equal(card.querySelector('.execution-result-peek').textContent, '已完成回饋修正。');
       card.open = true;
       assert.match(card.querySelector('.execution-result-body').textContent, /已完成回饋修正/);
       assert.equal(card.querySelector('.execution-result-body details').open, false);
     }
+    assert.equal(w.messagesContainer.querySelector('.live-stage'), null);
+    assert.equal(w.messagesContainer.querySelector('.live-progress-peek'), null, 'live hints are removed on every terminal path');
     assert.equal(w.getActiveRoleStream('role-a'), null);
     console.log(`DOM stream: ${scenario} passed`);
   } finally { dom.window.close(); }
 }
-(async () => { for (const scenario of ['completed', 'eof', 'interrupted', 'abort', 'network', 'http', 'background']) await runScenario(scenario); })().catch(error => { console.error(error); process.exitCode = 1; });
+(async () => { for (const scenario of ['progress', 'completed', 'eof', 'interrupted', 'abort', 'network', 'http', 'background']) await runScenario(scenario); })().catch(error => { console.error(error); process.exitCode = 1; });

@@ -292,6 +292,44 @@ function toolProgressState(tool) {
   return 'running';
 }
 
+function getLiveExecutionStatus(tools, phase, now, lastEventAt, reportedTool = null) {
+  const running = tools.filter(tool => toolProgressState(tool) === 'running');
+  const active = running[running.length - 1];
+  const detail = active ? getPassiveToolProgress(active).text : '';
+  if (now - lastEventAt >= 8000) {
+    return { stage: '等待更新', text: active ? detail : '尚未收到新的串流事件', waiting: true };
+  }
+  if (active) return { stage: '工具執行', text: `${detail}${running.length > 1 ? ` · ${running.length} 項進行中` : ''}`, waiting: false };
+  if (phase === 'writing') return { stage: '回覆輸出', text: '正在輸出回覆內容', waiting: false };
+  if (phase === 'analysis') return { stage: '分析中', text: '正在分析下一步', waiting: false };
+  if (phase === 'tool' && tools.length) {
+    const latest = reportedTool || tools[tools.length - 1];
+    return { stage: '工具回報', text: `${toolProgressState(latest) === 'failed' ? '操作未完成' : '操作完成'} · ${getPassiveToolProgress(latest).text}`, waiting: false };
+  }
+  return { stage: '準備中', text: '等待 Provider 開始回覆', waiting: false };
+}
+
+function buildLiveProgressPeekHtml(tools, activity, now, lastEventAt, note = '') {
+  const running = [...tools].reverse().find(tool => toolProgressState(tool) === 'running');
+  const runningActivity = running && activity.get(getToolGroupKey(running));
+  const idleSeconds = Math.max(0, Math.floor((now - lastEventAt) / 1000));
+  const operationSeconds = runningActivity ? Math.max(0, Math.floor((now - runningActivity.startedAt) / 1000)) : 0;
+  const wait = running && operationSeconds >= 3
+    ? `目前操作已執行 ${operationSeconds} 秒${idleSeconds >= 8 ? ' · 等待工具更新' : ''}`
+    : idleSeconds >= 8 ? `等待下一個串流事件 · ${idleSeconds} 秒` : '';
+  const recent = tools.map(tool => ({ tool, activity: activity.get(getToolGroupKey(tool)) }))
+    .filter(entry => entry.activity?.finishedAt !== undefined && toolProgressState(entry.tool) !== 'running')
+    .sort((a, b) => a.activity.finishedAt - b.activity.finishedAt)
+    .slice(-2);
+  return `${running && note ? `<div class="live-current-note">AI 說明：${escapeHtml(note)}</div>` : ''}
+    ${wait ? `<div class="live-progress-wait">${escapeHtml(wait)}</div>` : ''}
+    ${recent.length ? `<div class="live-recent-label">最近工具回報</div><ul class="live-recent-progress" aria-label="最近進展">${recent.map(({ tool }) => {
+      const done = toolProgressState(tool) === 'done';
+      const label = getPassiveToolProgress(tool).text;
+      return `<li class="${done ? 'is-done' : 'is-failed'}"><span aria-hidden="true">${done ? '✓' : '!'}</span><span>${done ? '操作完成' : '操作未完成'} · ${escapeHtml(label)}</span></li>`;
+    }).join('')}</ul>` : ''}`;
+}
+
 // Progress UI is deliberately passive: it never sends prompts, requests, or extra
 // tool calls. It only translates SSE events that the current turn already emits.
 
@@ -553,9 +591,6 @@ function buildExecutionResultBodyHtml(content, tools = [], thinking = '', turnRe
   const summaryBits = [];
   if (turnResult?.execution_mode) summaryBits.push(executionModeLabel(turnResult.execution_mode));
   if (Number(turnResult?.executions) > 0) summaryBits.push(`${Number(turnResult.executions)} 次操作`);
-  const resultState = executionResultState(turnResult);
-  const resultStatusText = { completed: '已完成', failed: '未完成', interrupted: '已中斷', unknown: '終態未確認' }[resultState];
-  const resultStatusClass = resultState === 'completed' ? '' : resultState === 'unknown' ? 'is-unknown' : 'is-failed';
 
   const changedFilesHtml = changedFiles.length ? `
     <section class="execution-result-section">
@@ -595,24 +630,22 @@ function buildExecutionResultBodyHtml(content, tools = [], thinking = '', turnRe
     : formatMessageContent(content);
 
   return `
-    <header class="execution-result-hero">
-      <span class="execution-result-hero-status ${resultStatusClass}"><span aria-hidden="true">${resultState === 'completed' ? '✓' : resultState === 'unknown' ? '•' : '!'}</span>${resultStatusText}</span>
+    <section class="execution-result-section execution-result-response">
+      <div class="msg-content min-w-0">${responseHtml}</div>
+    </section>
+    ${summaryBits.length || structuredCommit ? `<header class="execution-result-hero" aria-label="執行資料">
       <span class="execution-result-hero-meta">
         ${summaryBits.map(bit => `<span>${escapeHtml(bit)}</span>`).join('')}
         ${structuredCommit ? `<span class="execution-result-commit" title="Commit">${escapeHtml(String(structuredCommit).slice(0, 12))}</span>` : ''}
       </span>
-    </header>
+    </header>` : ''}
     ${changedFilesHtml}
     ${checksHtml}
     ${executionHtml}
-    <section class="execution-result-section execution-result-response">
-      <div class="execution-result-section-title execution-result-section-heading">工作說明</div>
-      <div class="msg-content min-w-0">${responseHtml}</div>
-    </section>
   `;
 }
 
-function buildExecutionResultCardHtml(content, tools = [], thinking = '', turnResult = null, { lazy = false } = {}) {
+function buildExecutionResultCardHtml(content, tools = [], thinking = '', turnResult = null, { lazy = false, open = false } = {}) {
   const state = executionResultState(turnResult);
   const failed = state === 'failed' || state === 'interrupted';
   const duration = formatExecutionDuration(turnResult?.duration_ms);
@@ -626,7 +659,7 @@ function buildExecutionResultCardHtml(content, tools = [], thinking = '', turnRe
   const preview = executionResultPreviewText(content).slice(0, 220);
 
   return `
-    <details class="execution-result-card ${lazy ? 'lazy-result-card' : ''}" data-result-kind="execution">
+    <details class="execution-result-card ${lazy ? 'lazy-result-card' : ''}" data-result-kind="execution" ${open ? 'open' : ''}>
       <summary class="execution-result-summary">
         <span class="execution-result-summary-main">
           <span class="execution-result-status ${failed ? 'is-failed' : state === 'completed' ? 'is-complete' : 'is-unknown'}">${failed ? '!' : state === 'completed' ? '✓' : '•'}</span>
@@ -1588,7 +1621,8 @@ function appendMessage(role, content, timestamp, tools = [], thinking = '', isBt
     `;
   } else if (shouldCollapseExecution) {
     bodyHtml = buildExecutionResultCardHtml(content, tools, thinking, turnResult, {
-      lazy: Boolean(renderOptions.lazyTools)
+      lazy: Boolean(renderOptions.lazyTools) && !renderOptions.expandResult,
+      open: Boolean(renderOptions.expandResult)
     });
   } else {
     const isBlankContent = !content || !String(content).trim();
@@ -1916,6 +1950,7 @@ function renderHistoryMessages(messages, convId, renderVersion, options = {}) {
     userTurnIndex: message.role === 'user' ? nextUserTurn++ : null,
     absoluteIndex: startIndex + index
   }));
+  const latestAssistantIndex = messages.findLastIndex(message => message.role === 'assistant');
   let index = 0;
 
   return new Promise(resolve => {
@@ -1938,6 +1973,7 @@ function renderHistoryMessages(messages, convId, renderVersion, options = {}) {
         const isBtw = message.role === 'assistant' && absoluteIndex > 0 && /^\s*\/btw\b/i.test(messages[absoluteIndex - 1].content || '');
         appendMessage(message.role, message.content, message.timestamp, message.tools || [], message.thinking || '', isBtw, {
           lazyTools: message.role === 'assistant',
+          expandResult: absoluteIndex === latestAssistantIndex,
           historyExecutionFallback: message.role === 'assistant',
           turnResult: message.turn_result || null,
           deferScroll: true,
@@ -3199,6 +3235,12 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
   let isWritingPhase = false;
   let receivedContextStats = false;
   const startTs = performance.now();
+  let lastProgressEventAt = startTs;
+  let livePhase = 'preparing';
+  let lastReportedTool = null;
+  let currentOperationNote = '';
+  const toolActivity = new Map();
+  let lastPeekHtml = '';
 
   const assistantMsgDiv = document.createElement('div');
   assistantMsgDiv.className = 'w-full max-w-2xl mx-auto justify-start min-w-0';
@@ -3207,7 +3249,7 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
     ? 'btw-card bg-gradient-to-b from-slate-900 via-slate-900 to-teal-950/40 border border-teal-500/50 text-slate-200 rounded-2xl p-3 sm:p-3.5 text-xs sm:text-sm shadow-lg shadow-teal-950/30 w-full min-w-0 prose'
     : 'assistant-article bg-slate-900 text-slate-200 w-full min-w-0 prose';
 
-  const statusInitText = isBtwQuery ? '正在處理補充問題…' : '正在理解你的需求…';
+  const statusInitText = isBtwQuery ? '正在送出補充問題…' : '正在送出請求…';
 
   assistantMsgDiv.innerHTML = `
     <div class="${bubbleClass}">
@@ -3216,7 +3258,7 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
         <summary class="execution-summary">
           <span class="execution-summary-main min-w-0">
             <span class="activity-dot inline-block w-2 h-2 rounded-full ${isBtwQuery ? 'bg-teal-400' : 'bg-indigo-400'} animate-pulse shrink-0"></span>
-            <span class="status-text truncate">${statusInitText}</span>
+            <span class="live-stage">準備中</span><span class="status-text">${statusInitText}</span>
           </span>
           <span class="execution-summary-side">
             <span class="live-timer">0s</span>
@@ -3227,6 +3269,7 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
           <div class="live-progress-list"></div>
         </div>
       </details>
+      <div class="live-progress-peek" hidden></div>
 
       <div class="btw-content msg-content min-w-0"><span class="inline-block w-2 h-4 ${isBtwQuery ? 'bg-teal-400' : 'bg-indigo-400'} animate-pulse"></span></div>
       <div class="response-time mt-2 border-t border-slate-800 pt-1.5 text-right text-[10px] text-slate-500 font-mono select-none"></div>
@@ -3236,9 +3279,11 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
   const contentElem = assistantMsgDiv.querySelector('.msg-content');
   const liveStatusElem = assistantMsgDiv.querySelector('.live-status');
   const statusTextElem = assistantMsgDiv.querySelector('.status-text');
+  const liveStageElem = assistantMsgDiv.querySelector('.live-stage');
   const liveTimerElem = assistantMsgDiv.querySelector('.live-timer');
   const responseTimeElem = assistantMsgDiv.querySelector('.response-time');
   const liveProgressListElem = assistantMsgDiv.querySelector('.live-progress-list');
+  const liveProgressPeekElem = assistantMsgDiv.querySelector('.live-progress-peek');
   const isStreamVisible = () => assistantMsgDiv.isConnected
     && currentStreamRoleId() === streamRoleId
     && currentProvider === streamProvider
@@ -3249,6 +3294,8 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
   function finalizeTurn(doneData = null) {
     if (turnFinalized) return;
     turnFinalized = true;
+    if (liveProgressPeekElem) liveProgressPeekElem.remove();
+    liveStageElem?.remove();
 
     if (renderTimer) {
       clearTimeout(renderTimer);
@@ -3332,7 +3379,7 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
           liveTools,
           '',
           structuredTurnResult,
-          { lazy: false }
+          { lazy: false, open: true }
         );
         const card = article.querySelector('.execution-result-card');
         if (keepReading && card) {
@@ -3417,6 +3464,25 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
   const progressEntries = new Map();
   const progressOrder = [];
 
+  function renderLiveState() {
+    if (turnFinalized) return;
+    const state = getLiveExecutionStatus(liveTools, livePhase, performance.now(), lastProgressEventAt, lastReportedTool);
+    if (liveStageElem && liveStageElem.textContent !== state.stage) liveStageElem.textContent = state.stage;
+    if (statusTextElem.textContent !== state.text) statusTextElem.textContent = state.text;
+    liveStatusElem.dataset.phase = state.waiting ? 'waiting' : livePhase;
+    stickyExecution?.update(`${state.stage} · ${state.text}`, performance.now() - startTs);
+  }
+
+  function renderProgressPeek() {
+    if (turnFinalized || !liveProgressPeekElem) return;
+    const html = buildLiveProgressPeekHtml(liveTools, toolActivity, performance.now(), lastProgressEventAt, currentOperationNote);
+    if (html !== lastPeekHtml) {
+      lastPeekHtml = html;
+      liveProgressPeekElem.innerHTML = html;
+      liveProgressPeekElem.hidden = !html.trim();
+    }
+  }
+
   function renderProgressTimeline() {
     if (!liveProgressListElem || !liveStatusElem.open) return;
     const entries = progressOrder
@@ -3470,6 +3536,8 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
     const elapsedSec = elapsedMs / 1000;
     if (liveTimerElem) liveTimerElem.textContent = `${Math.floor(elapsedSec)}s`;
     stickyExecution?.update(null, elapsedMs);
+    renderLiveState();
+    renderProgressPeek();
   }, 1000);
 
   let accumulatedText = '';
@@ -3525,6 +3593,7 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
           if (!rawData) continue;
           try {
             const data = JSON.parse(rawData);
+            lastProgressEventAt = performance.now();
             if (currentEvent === 'init' && data.conversation_id) {
               streamConversationId = data.conversation_id;
               updateActiveRoleStream(streamRoleId, { conversationId: data.conversation_id });
@@ -3543,8 +3612,8 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
             } else if (currentEvent === 'thought') {
               hadThinking = true;
               isWritingPhase = false;
-              const runningTool = [...liveTools].reverse().find(tool => toolProgressState(tool) === 'running');
-              statusTextElem.textContent = runningTool ? `正在${getPassiveToolProgress(runningTool).text}…` : '正在分析下一步…';
+              livePhase = 'analysis';
+              renderLiveState();
               upsertProgress('phase:analysis', {
                 icon: '🧠',
                 text: '分析需求與可行方案',
@@ -3562,9 +3631,17 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
               isWritingPhase = false;
               const mergedTool = mergeToolEventIntoMap(liveToolMap, liveTools, data);
               const progressTool = mergedTool || data;
+              lastReportedTool = progressTool;
               const progress = getPassiveToolProgress(progressTool);
               const progressState = toolProgressState(progressTool);
               const progressKey = getToolGroupKey(progressTool, liveTools.length);
+              const now = performance.now();
+              const previousActivity = toolActivity.get(progressKey);
+              toolActivity.set(progressKey, {
+                startedAt: !previousActivity || (progressState === 'running' && previousActivity.state !== 'running') ? now : previousActivity.startedAt,
+                ...(progressState !== 'running' ? { finishedAt: previousActivity?.state === progressState ? previousActivity.finishedAt : now } : {}),
+                state: progressState
+              });
               markProgressDone('phase:analysis');
 
               upsertProgress(progressKey, {
@@ -3575,17 +3652,16 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
 
               const activeTool = [...liveTools].reverse().find(tool => toolProgressState(tool) === 'running');
               const activeProgress = activeTool ? getPassiveToolProgress(activeTool) : progress;
-              const activeState = activeTool ? 'running' : progressState;
-              const activePrefix = activeState === 'running'
-                ? '正在'
-                : activeState === 'failed'
-                ? '失敗：'
-                : '已完成：';
-              statusTextElem.textContent = activeState === 'running'
-                ? `${activePrefix}${activeProgress.text}…`
-                : `${activePrefix}${activeProgress.text}`;
+              const args = activeTool ? getToolGroupingArgs(activeTool) : {};
+              // Only quote public reply text or explicit tool descriptions, never reasoning events.
+              const explicitNote = args.description || args.explanation || args.justification;
+              currentOperationNote = activeTool
+                ? compactProgressText(executionResultPreviewText(explicitNote || accumulatedText), 90)
+                : '';
+              renderProgressPeek();
+              livePhase = 'tool';
               stickyExecution?.enable(activeProgress.text);
-              stickyExecution?.update(activeProgress.text, performance.now() - startTs);
+              renderLiveState();
             } else if (currentEvent === 'chunk' && (data.accumulated !== undefined || data.delta !== undefined)) {
               if (!isWritingPhase) {
                 isWritingPhase = true;
@@ -3595,9 +3671,9 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
                   text: '整理並輸出回覆',
                   state: 'running'
                 });
-                statusTextElem.textContent = '正在回覆…';
-                stickyExecution?.update('整理並輸出回覆', performance.now() - startTs);
+                livePhase = 'writing';
               }
+              renderLiveState();
               // New servers send only the delta to avoid repeatedly
               // serializing the full response. Keep accepting accumulated for
               // older cached pages or an external compatible server.
