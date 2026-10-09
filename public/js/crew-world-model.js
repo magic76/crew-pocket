@@ -134,13 +134,15 @@
       if (!state.verified) { this.pending = []; this.ambientClock = 0; }
       return this;
     }
-    acceptHandoff(event, now = Date.now()) {
+    acceptHandoff(event, now = Date.now(), options = {}) {
       const proof = this.officeModel?.planHandoff(event, this.room, now);
       if (!proof || this.activeEvents.has(proof.id)) return false;
       this.activeEvents.add(proof.id);
       if (this.activeEvents.size > 100) this.activeEvents.delete(this.activeEvents.values().next().value);
       this.log.unshift({ id: proof.id, from: proof.from.name, to: proof.to.name, at: now });
       this.log.length = Math.min(this.log.length, 5);
+      // Reduced motion retains the proof but never starts travel animation.
+      if (options.motion === false) return true;
       this.pending.push({ fromId: proof.from.id, toId: proof.to.id, id: proof.id });
       this.pending.length = Math.min(this.pending.length, MAX_EVENTS);
       // Real handoffs outrank visual idle routines, never the reverse.
@@ -186,7 +188,7 @@
       this.ambientClock += seconds;
       if (this.ambientClock >= 32) {
         this.ambientClock = 0;
-        this.maybeStroll();
+        if (this.allowAmbient !== false) this.maybeStroll();
       }
       let changing = false;
       for (const actor of this.actors.values()) {
