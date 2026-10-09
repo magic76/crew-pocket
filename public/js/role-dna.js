@@ -34,9 +34,9 @@
     const isCandidate = skill.status === 'candidate';
     const isVerified = skill.status === 'verified';
     const isRetired = skill.status === 'retired';
-    const proofs = evidence.filter(item =>
+    const lastFailure = evidence.findLastIndex(item => item.outcome === 'failed');
+    const proofs = evidence.slice(lastFailure + 1).filter(item =>
       ['test', 'ci'].includes(item.kind) && item.outcome === 'passed').length;
-    const hasBlockingFailure = evidence.at(-1)?.outcome === 'failed';
     return '<article class="role-dna-card" data-skill-id="' + esc(skill.id) + '">' +
       '<div class="role-dna-row"><strong>' + esc(skill.title) + '</strong>' +
         '<span class="role-dna-badge" data-state="' + esc(skill.status) + '">' +
@@ -75,7 +75,7 @@
         '</div></details>' : '') +
       '<div class="role-dna-actions">' +
         (isCandidate ? '<button type="button" data-skill-action="verify" ' +
-          (proofs && !hasBlockingFailure ? '' : 'disabled ') + '>確認已測試（' + proofs + '）</button>' : '') +
+          (proofs ? '' : 'disabled ') + '>確認已測試（' + proofs + '）</button>' : '') +
         (isVerified ? '<button type="button" data-skill-action="activate">啟用技能</button>' : '') +
         (!isRetired ? '<button type="button" data-skill-action="retire">停用</button>' : '') +
       '</div>' +
