@@ -1,0 +1,34 @@
+name: Visual Inspector P0
+
+on:
+  push:
+    branches:
+      - feat/universal-visual-inspector-p0
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "public/js/visual-inspector.js"
+      - "public/js/app.js"
+      - "public/index.html"
+      - "public/css/visual-inspector.css"
+      - "android-wrapper/**"
+      - "test/visual-inspector.test.js"
+      - ".github/workflows/visual-inspector.yml"
+
+jobs:
+  visual-inspector:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Verify syntax and Visual Inspector
+        run: |
+          node --check public/js/visual-inspector.js
+          node --check public/js/app.js
+          node --check test/visual-inspector.test.js
+          node test/visual-inspector.test.js
+          node test/role-first-navigation.test.js
+          node test/visual-answer-inline.test.js
