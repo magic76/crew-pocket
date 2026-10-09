@@ -33,6 +33,10 @@ assert.ok(ui.includes("window.getCrewHistoryRoleId = () => historyRoleId"));
 assert.ok(chat.includes('const historyRoleId = window.getCrewHistoryRoleId?.()'));
 assert.ok(chat.includes('window.renderCrewHistoryFromCache'));
 assert.ok(chat.includes('window.closeCrewHistory?.()'));
+assert.ok(chat.includes('roleId: conv.roleId || DEFAULT_ROLE_ID'),
+  'opening history must restore the owning Role before persisting a Conversation ID');
+assert.ok(chat.includes('window.openCrewConversation(conversationProvider, conv.id)'),
+  'a history row should use the same reliable conversation navigation as Role cards');
 assert.ok(graph.includes('root.open = false'));
 assert.ok(graph.includes('controller?.abort()'));
 assert.ok(graph.includes('window.closeCrewCollaboration?.()'));

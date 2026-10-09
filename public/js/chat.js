@@ -2492,16 +2492,24 @@ function renderConversationItems(conversations) {
     contentEl.addEventListener('click', () => {
       if (longPressTriggered || Date.now() < suppressClickUntil) return;
       if (!isDeleted && Math.abs(currentDiffX) < 10) {
+        // Browsing another Role's history does not activate it. Selecting a
+        // specific Conversation does, before writing the provider's active ID.
+        // applyConversationSettings otherwise defaults a missing roleId to General.
         window.applyConversationSettings({
           provider: conversationProvider,
+          roleId: conv.roleId || DEFAULT_ROLE_ID,
+          workspace: conv.workspace,
           model: conv.model,
           effort: conv.effort,
           loadingModel: !conv.model
         });
-        loadConversationHistory(conv.id).then(result => {
+        const open = typeof window.openCrewConversation === 'function'
+          ? window.openCrewConversation(conversationProvider, conv.id)
+          : loadConversationHistory(conv.id);
+        Promise.resolve(open).then(result => {
           // A Live voice guard returns false. Keep the sheet in that case.
           if (result !== false) window.closeCrewHistory?.();
-        }).catch(() => {});
+        }).catch(error => console.warn('[Role History] Open failed:', error));
       }
     });
 
