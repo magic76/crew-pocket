@@ -95,6 +95,9 @@ jobs:
           node test/crew-roster-grid.test.js
           node --check test/crew-room.test.js
           node test/crew-room.test.js
+          node --check public/js/crew-cinematic.js
+          node --check test/crew-cinematic.test.js
+          node test/crew-cinematic.test.js
           node test/crew-role-messaging.test.js
           node test/role-runtime.test.js
           node test/role-message-queue.test.js
