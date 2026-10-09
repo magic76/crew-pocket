@@ -2182,8 +2182,11 @@ async function loadConversationHistory(convId, { preserveComposer = false } = {}
 let conversationListRequest = null;
 
 function isConversationDrawerVisible() {
-  const drawerElement = document.getElementById('drawer');
-  return !drawerElement || !drawerElement.classList.contains('-translate-x-full');
+  // Crew Home is no longer a Drawer. Scan provider histories only while the
+  // roster or the explicit history sheet is visible (or when force is requested).
+  return document.body?.dataset?.primaryTab === 'crew' ||
+    Boolean(document.getElementById('role-history-modal') &&
+      !document.getElementById('role-history-modal').classList.contains('hidden'));
 }
 
 async function loadConversations({ force = false } = {}) {
@@ -2252,13 +2255,18 @@ function conversationWorkspaceLabel(workspace) {
   return String(workspace).split('/').filter(Boolean).pop() || '未指定';
 }
 
+window.renderCrewHistoryFromCache = function() {
+  renderConversationItems(cachedConversations);
+};
+
 function renderConversationItems(conversations) {
   if (!convList) return;
   convList.innerHTML = '';
 
-  const activeRoleId = typeof window.getCurrentRoleId === 'function'
+  const historyRoleId = window.getCrewHistoryRoleId?.();
+  const activeRoleId = historyRoleId || (typeof window.getCurrentRoleId === 'function'
     ? window.getCurrentRoleId()
-    : DEFAULT_ROLE_ID;
+    : DEFAULT_ROLE_ID);
   const filtered = getRoleConversations(activeRoleId, conversations);
 
   if (filtered.length === 0) {
@@ -2490,7 +2498,10 @@ function renderConversationItems(conversations) {
           effort: conv.effort,
           loadingModel: !conv.model
         });
-        loadConversationHistory(conv.id);
+        loadConversationHistory(conv.id).then(result => {
+          // A Live voice guard returns false. Keep the sheet in that case.
+          if (result !== false) window.closeCrewHistory?.();
+        }).catch(() => {});
       }
     });
 

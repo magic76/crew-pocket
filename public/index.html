@@ -502,6 +502,47 @@
           <div id="role-nav-list" class="crew-role-grid">
             <div class="crew-roster-loading">載入小隊成員中…</div>
           </div>
+          <button id="crew-collaboration-open" type="button" class="crew-collaboration-launch">
+            <span class="crew-collaboration-icon" aria-hidden="true">↗</span>
+            <span><strong>團隊協作紀錄</strong><small>查看目前角色的交接與回覆</small></span>
+            <span aria-hidden="true">›</span>
+          </button>
+          <p class="crew-home-footnote">每個 Role 都有自己的對話、工作狀態與長期記憶。</p>
+        </div>
+      </section>
+
+    </section>
+
+
+    <!-- History is a real Role-scoped sheet, not a hidden child page of Crew Home. -->
+    <div id="role-history-modal" class="crew-record-modal fixed inset-0 z-[80] hidden items-end justify-center bg-black/75 p-2 opacity-0 transition-opacity duration-150 sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-labelledby="role-history-title">
+      <section id="role-history-view" class="crew-record-sheet flex w-full max-w-lg flex-col overflow-hidden rounded-3xl border shadow-2xl">
+        <div class="crew-record-header">
+          <div class="min-w-0 flex-1">
+            <div class="crew-record-kicker">WORK HISTORY</div>
+            <h2 id="role-history-title">工作紀錄</h2>
+            <p>這個角色過去的 Conversation，依最近更新排序。</p>
+          </div>
+          <button id="back-to-role-nav-btn" type="button" aria-label="關閉工作紀錄">✕</button>
+        </div>
+        <div id="conv-list" class="crew-record-body flex-1 min-h-0 overflow-y-auto p-3 space-y-1" role="region" aria-label="工作紀錄清單">
+          <div class="crew-record-loading">載入工作紀錄中…</div>
+        </div>
+      </section>
+    </div>
+
+    <!-- Collaboration uses the same sheet pattern as Role Memory, with real message evidence. -->
+    <div id="role-collaboration-modal" class="crew-record-modal fixed inset-0 z-[80] hidden items-end justify-center bg-black/75 p-2 opacity-0 transition-opacity duration-150 sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-labelledby="role-collaboration-title">
+      <section class="crew-record-sheet flex w-full max-w-lg flex-col overflow-hidden rounded-3xl border shadow-2xl">
+        <div class="crew-record-header">
+          <div class="min-w-0 flex-1">
+            <div class="crew-record-kicker">ROLE HANDOFFS</div>
+            <h2 id="role-collaboration-title">協作紀錄</h2>
+            <p>只顯示已保存的角色交接與回覆，非任務進度。</p>
+          </div>
+          <button id="close-role-collaboration-btn" type="button" aria-label="關閉協作紀錄">✕</button>
+        </div>
+        <div class="crew-record-body" role="region" aria-label="角色協作紀錄">
           <details id="mission-graph" aria-label="團隊協作紀錄">
             <summary>
               <span class="mission-summary-copy">
@@ -514,22 +555,9 @@
               <div class="mission-empty">展開後讀取該 Role 的最近交接紀錄。</div>
             </div>
           </details>
-          <p class="crew-home-footnote">每個 Role 都有自己的對話、工作狀態與長期記憶。</p>
         </div>
       </section>
-      <section id="role-history-view" class="hidden min-h-0 flex-1 flex-col">
-        <div class="p-3 border-b border-slate-800 flex items-center gap-2">
-          <button id="back-to-role-nav-btn" type="button" class="min-h-9 min-w-9 rounded-lg border border-slate-700 bg-slate-800/70 text-slate-300 active:scale-95" aria-label="返回 Roles">←</button>
-          <div class="min-w-0 flex-1">
-            <h2 id="role-history-title" class="truncate text-sm font-bold text-slate-100">工作紀錄</h2>
-            <div class="text-[10px] text-slate-500">Conversation 是工作歷史，不是長期身份</div>
-          </div>
-        </div>
-        <div id="conv-list" class="flex-1 overflow-y-auto p-2 space-y-1">
-          <div class="p-4 text-center text-xs text-slate-500">載入工作紀錄中...</div>
-        </div>
-      </section>
-    </section>
+    </div>
 
     <!-- Role details stay separate from the roster grid so menus never resize other cards. -->
     <div id="crew-role-detail-modal" class="crew-role-detail-modal hidden" role="dialog" aria-modal="true" aria-labelledby="crew-role-detail-name">

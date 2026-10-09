@@ -198,6 +198,7 @@
     }
     const role = event.target.closest('[data-mission-open-role]');
     if (role && typeof window.openCrewCockpitRole === 'function') {
+      window.closeCrewCollaboration?.();
       window.openCrewCockpitRole(role.dataset.missionOpenRole);
     }
   });
@@ -220,7 +221,13 @@
       lastFetched = 0;
       root.open = true;
       load({ force: true });
-      root.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+    },
+    close() {
+      // No background refresh and no stale response may render after closing.
+      root.open = false;
+      revision++;
+      controller?.abort();
+      inspectedRoleId = null;
     }
   };
 })();

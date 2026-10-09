@@ -169,7 +169,7 @@ body[data-primary-tab="crew"] #chat-composer-footer { display: none !important; 
   margin-top: 8px; color: var(--cp-muted);
 }
 .crew-role-attention {
-  position: absolute; top: 10px; right: 43px;
+  position: absolute; top: 18px; right: 61px;
   display: inline-flex; align-items: center;
   border: 1px solid var(--cp-border);
   background: var(--cp-surface-2);
@@ -178,13 +178,21 @@ body[data-primary-tab="crew"] #chat-composer-footer { display: none !important; 
   font-variant-numeric: tabular-nums;
 }
 #role-nav-list .role-nav-card > [data-role-menu-btn] {
-  position: absolute; right: 6px; top: 7px;
-  width: 40px; height: 40px;
+  position: absolute; right: 7px; top: 7px; z-index: 2;
+  width: 48px; height: 48px;
   display: grid; place-items: center;
-  background: transparent; border-radius: 10px;
-  font-size: 20px; color: var(--cp-muted);
+  background: var(--cp-accent-soft);
+  border: 1px solid var(--cp-accent);
+  box-shadow: 0 1px 7px rgba(0,0,0,.12);
+  border-radius: 13px;
+  font-size: 27px; font-weight: 900; line-height: 1;
+  color: var(--cp-accent-strong);
+  touch-action: manipulation;
 }
-#role-nav-list .role-nav-card > [data-role-menu-btn]:active { background: var(--cp-surface-2); }
+#role-nav-list .role-nav-card > [data-role-menu-btn] > span { transform: translateY(-5px); }
+#role-nav-list .role-nav-card > [data-role-menu-btn]:active {
+  background: var(--cp-surface-2); transform: scale(.96);
+}
 .crew-home-footnote {
   font-size: 11px; line-height: 1.6;
   color: var(--cp-muted); padding: 12px 5px 25px;
@@ -281,4 +289,97 @@ body[data-primary-tab="crew"] #chat-composer-footer { display: none !important; 
 body[data-primary-tab="crew"] #crew-back-home-btn { display: none; }
 @media (max-width: 360px) {
   .crew-back-home-btn { width: 32px; }
+}
+
+
+/* Dedicated Role records drawer: identical bottom-sheet interaction to Memory. */
+.crew-record-modal > .crew-record-sheet {
+  background: var(--cp-surface) !important;
+  border: 1px solid var(--cp-border) !important;
+  color: var(--cp-text) !important;
+  max-height: min(84dvh, 850px);
+  min-height: min(56dvh, 480px);
+}
+.crew-record-header {
+  flex: none; display: flex; align-items: start; gap: 13px;
+  padding: 15px 16px 13px;
+  border-bottom: 1px solid var(--cp-border) !important;
+  background: var(--cp-surface) !important;
+}
+.crew-record-kicker {
+  color: var(--cp-accent-strong);
+  font-weight: 750; letter-spacing: .13em; font-size: 10px;
+}
+.crew-record-header h2 { color: var(--cp-text) !important; font-size: 16px; font-weight: 750; margin-top: 5px; overflow-wrap: anywhere; }
+.crew-record-header p { color: var(--cp-muted); font-size: 11px; line-height: 1.5; margin-top: 5px; }
+.crew-record-header button {
+  flex: none; width: 42px; height: 42px;
+  border: 1px solid var(--cp-border);
+  background: var(--cp-surface-2); color: var(--cp-text-secondary);
+  border-radius: 12px; font-size: 17px; font-weight: 700;
+}
+.crew-record-body {
+  flex: 1; min-height: 0;
+  overflow: auto; overscroll-behavior: contain;
+  background: var(--cp-surface) !important; color: var(--cp-text-secondary) !important;
+  scrollbar-width: none;
+}
+.crew-record-body::-webkit-scrollbar { display: none; }
+.crew-record-loading { text-align: center; font-size: 12px; color: var(--cp-muted); padding: 22px 8px; }
+#role-history-modal #conv-list .sticky {
+  background: var(--cp-surface-2) !important;
+  color: var(--cp-muted) !important;
+  border-color: var(--cp-border) !important;
+}
+#role-history-modal #conv-list .swipe-item-content {
+  background: var(--cp-surface-2) !important;
+  color: var(--cp-text-secondary) !important;
+  border-color: var(--cp-border) !important;
+  min-height: 56px;
+}
+#role-history-modal #conv-list .swipe-item-content.bg-indigo-950 {
+  background: var(--cp-accent-soft) !important;
+  border-color: var(--cp-accent) !important;
+  color: var(--cp-text) !important;
+}
+#role-collaboration-modal .crew-record-body { padding: 11px 13px 16px; }
+#role-collaboration-modal #mission-graph {
+  margin: 0; background: transparent;
+  border: 0; border-radius: 0; overflow: visible;
+}
+#role-collaboration-modal #mission-graph > summary { display: none; }
+#role-collaboration-modal #mission-graph-body {
+  border: 0; padding: 0;
+}
+.crew-collaboration-launch {
+  display: flex; align-items: center; gap: 11px;
+  width: calc(100% - 10px); margin: 14px 5px 0;
+  padding: 12px; min-height: 64px;
+  background: var(--cp-surface);
+  color: var(--cp-text);
+  border: 1px solid var(--cp-border);
+  border-radius: 15px;
+  text-align: left;
+}
+.crew-collaboration-icon {
+  display: grid; place-items: center;
+  flex: none; width: 37px; height: 37px;
+  background: var(--cp-accent-soft);
+  color: var(--cp-accent-strong); border-radius: 11px;
+  font-size: 21px;
+}
+.crew-collaboration-launch > span:nth-child(2) { flex: 1; min-width: 0; display: grid; gap: 3px; }
+.crew-collaboration-launch strong { font-size: 13px; font-weight: 700; }
+.crew-collaboration-launch small { color: var(--cp-muted); font-size: 11px; }
+.crew-collaboration-launch > span:last-child { color: var(--cp-muted); font-size: 22px; }
+@media (min-width: 680px) {
+  .crew-record-modal .crew-record-sheet { max-width: 860px; min-height: min(65vh,600px); }
+}
+@media (max-width: 350px) {
+  #role-nav-list .role-nav-card > [data-role-menu-btn] { width: 46px; height: 46px; }
+  .crew-role-attention { top: 59px; right: 13px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #role-nav-list .role-nav-card > [data-role-menu-btn] { transition: none !important; }
+  .crew-record-modal { transition: none !important; }
 }

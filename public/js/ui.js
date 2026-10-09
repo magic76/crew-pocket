@@ -436,23 +436,81 @@ function showLightbox(src) {
 function showRoleNavigationView() {
   roleNavView?.classList.remove('hidden');
   roleNavView?.classList.add('flex');
-  roleHistoryView?.classList.add('hidden');
-  roleHistoryView?.classList.remove('flex');
   renderRoleNavigation();
 }
 
-function showRoleHistoryView() {
-  const role = roleMeta() || roleMeta(DEFAULT_ROLE_ID);
-  if (roleHistoryTitle) roleHistoryTitle.textContent = role ? `${role.name} · 工作紀錄` : '工作紀錄';
-  roleNavView?.classList.add('hidden');
-  roleNavView?.classList.remove('flex');
-  roleHistoryView?.classList.remove('hidden');
-  roleHistoryView?.classList.add('flex');
-  if (typeof loadConversations === 'function') loadConversations({ force: true });
-}
+const roleHistoryModal = document.getElementById('role-history-modal');
+const roleCollaborationModal = document.getElementById('role-collaboration-modal');
+const roleCollaborationTitle = document.getElementById('role-collaboration-title');
+let historyRoleId = null;
+let historyReturnFocus = null;
+let collaborationReturnFocus = null;
 
+// Listing another Role's history must not silently switch the active conversation.
+window.getCrewHistoryRoleId = () => historyRoleId;
+function showRoleHistoryView(roleId = currentRoleId || DEFAULT_ROLE_ID) {
+  const role = roleMeta(roleId);
+  if (!role || !roleHistoryModal) return;
+  historyRoleId = role.id;
+  historyReturnFocus = document.activeElement;
+  if (roleHistoryTitle) roleHistoryTitle.textContent = role.name + ' · 工作紀錄';
+  if (convList) convList.innerHTML = '<div class="crew-record-loading">正在讀取此角色的工作紀錄…</div>';
+  toggleRoleModal(roleHistoryModal, true);
+  window.renderCrewHistoryFromCache?.();
+  // force refresh even when the crew home itself did not need refreshing.
+  if (typeof loadConversations === 'function') {
+    loadConversations({ force: true }).catch(() => {
+      if (convList && historyRoleId === role.id) {
+        convList.innerHTML = '<div class="crew-record-loading">工作紀錄讀取失敗，請重試。</div>';
+      }
+    });
+  }
+  document.getElementById('back-to-role-nav-btn')?.focus({ preventScroll: true });
+}
+function closeCrewHistory() {
+  if (!roleHistoryModal || roleHistoryModal.classList.contains('hidden')) return;
+  toggleRoleModal(roleHistoryModal, false);
+  historyRoleId = null;
+  const focus = historyReturnFocus;
+  historyReturnFocus = null;
+  focus?.focus?.({ preventScroll: true });
+}
+function openCrewCollaboration(roleId = currentRoleId || DEFAULT_ROLE_ID) {
+  const role = roleMeta(roleId);
+  if (!role || !roleCollaborationModal) return;
+  collaborationReturnFocus = document.activeElement;
+  if (roleCollaborationTitle) roleCollaborationTitle.textContent = role.name + ' · 協作紀錄';
+  toggleRoleModal(roleCollaborationModal, true);
+  window.CrewMissionGraph?.inspectRole(role.id);
+  document.getElementById('close-role-collaboration-btn')?.focus({ preventScroll: true });
+}
+function closeCrewCollaboration() {
+  if (!roleCollaborationModal || roleCollaborationModal.classList.contains('hidden')) return;
+  window.CrewMissionGraph?.close?.();
+  toggleRoleModal(roleCollaborationModal, false);
+  const focus = collaborationReturnFocus;
+  collaborationReturnFocus = null;
+  focus?.focus?.({ preventScroll: true });
+}
+document.getElementById('back-to-role-nav-btn')?.addEventListener('click', closeCrewHistory);
+document.getElementById('close-role-collaboration-btn')?.addEventListener('click', closeCrewCollaboration);
+document.getElementById('crew-collaboration-open')?.addEventListener('click', () => openCrewCollaboration());
+roleHistoryModal?.addEventListener('click', event => {
+  if (event.target === roleHistoryModal) closeCrewHistory();
+});
+roleCollaborationModal?.addEventListener('click', event => {
+  if (event.target === roleCollaborationModal) closeCrewCollaboration();
+});
+document.addEventListener('keydown', event => {
+  if (event.key !== 'Escape') return;
+  if (!roleHistoryModal?.classList.contains('hidden')) closeCrewHistory();
+  if (!roleCollaborationModal?.classList.contains('hidden')) closeCrewCollaboration();
+});
 window.showRoleNavigationView = showRoleNavigationView;
 window.showRoleHistoryView = showRoleHistoryView;
+window.closeCrewHistory = closeCrewHistory;
+window.openCrewCollaboration = openCrewCollaboration;
+window.closeCrewCollaboration = closeCrewCollaboration;
 
 // Compatibility boundary for existing Role navigation call sites. This is now
 // a primary page transition; there is no Drawer overlay or swipe gesture.
@@ -932,7 +990,7 @@ function renderRoleNavigation() {
       (attention ? '<span class="crew-role-attention" aria-label="' + attention + ' 則待處理">' +
         attention + '</span>' : '') +
       '<button type="button" data-role-menu-btn="' + escapeHtml(role.id) +
-        '" aria-label="管理 ' + escapeHtml(role.name) + '" title="角色管理">⋯</button>' +
+        '" aria-label="管理 ' + escapeHtml(role.name) + '" title="角色管理"><span aria-hidden="true">⋯</span></button>' +
     '</article>';
   }).join('') : '<div class="crew-roster-loading">尚未建立 AI 角色。點擊右上角＋新增。</div>';
 
@@ -1001,18 +1059,10 @@ crewRoleDetailModal?.addEventListener('click', async event => {
   if (!role) return;
   switch (action.dataset.crewRoleDetailAction) {
     case 'new-work': return selectRole(roleId, true);
-    case 'history':
-      activateRoleIdentity(role);
-      showRoleHistoryView();
-      if (typeof loadConversations === 'function') await loadConversations({ force: true });
-      return;
+    case 'history': return showRoleHistoryView(roleId);
     case 'memory': return openRoleMemory(roleId);
     case 'settings': return openRoleEditor(roleId);
-    case 'collaboration':
-      showRoleNavigationView();
-      document.getElementById('mission-graph')?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
-      window.CrewMissionGraph?.inspectRole(roleId);
-      return;
+    case 'collaboration': return openCrewCollaboration(roleId);
   }
 });
 document.addEventListener('keydown', event => {
@@ -1067,18 +1117,27 @@ window.addEventListener('crew:streaming-state', () => {
   loadCrewStatus({ force: true }).catch(() => {});
 });
 
+const roleModalCloseTimers = new WeakMap();
 function toggleRoleModal(modal, open) {
   if (!modal) return;
+  const pendingClose = roleModalCloseTimers.get(modal);
+  if (pendingClose) window.clearTimeout(pendingClose);
+  roleModalCloseTimers.delete(modal);
   if (open) {
     modal.classList.remove('hidden');
     modal.classList.add('flex');
-    requestAnimationFrame(() => modal.classList.remove('opacity-0'));
+    requestAnimationFrame(() => {
+      if (!modal.classList.contains('hidden') && !roleModalCloseTimers.has(modal)) {
+        modal.classList.remove('opacity-0');
+      }
+    });
   } else {
     modal.classList.add('opacity-0');
-    window.setTimeout(() => {
+    roleModalCloseTimers.set(modal, window.setTimeout(() => {
+      roleModalCloseTimers.delete(modal);
       modal.classList.add('hidden');
       modal.classList.remove('flex');
-    }, 150);
+    }, 150));
   }
 }
 
