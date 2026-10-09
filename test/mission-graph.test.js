@@ -148,7 +148,7 @@ async function run() {
   assert.equal(visited, 'role-b');
   currentLocale = 'en';
   listeners['doc:crew:localechange']();
-  assert.match(body.innerHTML, /recent message/);
+  assert.match(body.innerHTML, /Message event timeline/);
   dialog.open = false;
   dialog.listeners.toggle();
   assert.equal(fetches, 1, 'collapsing the graph does not poll');
