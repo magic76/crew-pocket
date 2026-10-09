@@ -1,5 +1,5 @@
 /* Universal Visual Inspector P0: works with screenshots from any app.
- * No Accessibility, silent capture, or automatic AI submission. */
+ * No Accessibility or silent capture; sending always requires an explicit user action. */
 (function () {
   'use strict';
 
@@ -8,7 +8,8 @@
     image: null, shapes: [], draft: null, tool: 'pan', pointerId: null,
     objectUrl: null, busy: false, origin: '截圖', loadVersion: 0,
     zoom: 1, fitWidth: 0, pointers: new Map(), pan: null, pinchDistance: 0,
-    sharedImagePath: null, sharedImageUrl: null, pinchMidpoint: null
+    sharedImagePath: null, sharedImageUrl: null, pinchMidpoint: null,
+    attachment: null, pending: null, roles: []
   };
   let elements = null;
 
@@ -64,7 +65,7 @@
     ctx.drawImage(state.image, 0, 0, canvas.width, canvas.height);
     for (const shape of state.shapes) drawShape(ctx, shape, canvas.width);
     drawShape(ctx, state.draft, canvas.width);
-    undo.disabled = !state.shapes.length || state.busy;
+    undo.disabled = !state.shapes.length || state.busy || Boolean(state.pending);
   }
 
   function setStatus(message, error) {
@@ -128,7 +129,7 @@
   }
 
   function onPointerDown(event) {
-    if (!state.image || state.busy) return;
+    if (!state.image || state.busy || state.pending) return;
     event.preventDefault();
     state.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
     elements.canvas.setPointerCapture?.(event.pointerId);
@@ -230,6 +231,8 @@
     state.pan = null;
     state.pinchDistance = 0;
     state.pinchMidpoint = null;
+    state.attachment = null;
+    state.pending = null;
     state.sharedImagePath = null;
     state.sharedImageUrl = null;
     state.zoom = 1;
@@ -250,6 +253,8 @@
     elements.noteDetails.open = false;
     elements.zoomLabel.textContent = '100%';
     elements.modal.classList.remove('hidden');
+    setSending(false);
+    void loadRoles(version);
     setStatus('正在載入畫面…');
     const image = new Image();
     image.onload = function () {
@@ -309,55 +314,144 @@
     return openImage(url, '相簿／檔案截圖', url);
   }
 
-  async function attach() {
-    if (!elements || !state.image || state.busy) return;
-    if (typeof window.processAndUploadImageBase64 !== 'function') {
-      setStatus('圖片附件尚未準備好，請重新開啟 Crew Pocket。', true);
-      return;
-    }
-    if (typeof uploadedImagePath !== 'undefined' && uploadedImagePath &&
-        !window.confirm('目前已有圖片附件，確定要用這張畫面標註取代嗎？')) return;
-    state.busy = true;
+  async function loadRoles(version) {
+    elements.send.disabled = true;
     elements.attach.disabled = true;
+    const current = window.getCurrentRoleId?.() || 'role-general';
+    elements.role.replaceChildren();
+    try {
+      const response = await fetch('/api/roles', { cache: 'no-store' });
+      const data = await response.json();
+      if (!response.ok || !data.success || !Array.isArray(data.roles)) throw new Error(data.error || '無法讀取 Role 清單');
+      if (version !== state.loadVersion) return;
+      state.roles = data.roles;
+      for (const role of state.roles) {
+        const option = document.createElement('option');
+        option.value = role.id; option.textContent = role.name;
+        elements.role.appendChild(option);
+      }
+      // Do not silently route a missing current Role to a different recipient.
+      elements.role.value = state.roles.some(role => role.id === current) ? current : '';
+      setSending(false);
+    } catch (error) {
+      if (version === state.loadVersion) setStatus(error.message + '；請重新開啟快速分享。', true);
+    }
+  }
+
+  function requestText() {
+    const inferred = state.shapes.length
+      ? '請分析我標註的位置，協助定位問題或提出修改建議。'
+      : '請先分析這張截圖，協助我確認畫面與可能的問題。';
+    return [ '【跨 App 畫面標註】', '來源：' + state.origin,
+      '使用者需求：' + (elements.note.value.trim() || inferred),
+      '標註：' + (state.shapes.length ? '已將框選／畫筆／箭頭合成到附件，請優先分析標註區域。' : '無'),
+      '請先根據標註畫面分析。如果目前 Role 的 Workspace 確實包含此 App 的原始碼，才嘗試定位檔案並提出修改；否則只分析或提供操作建議，不得聲稱已修改第三方 App。'
+    ].join('\n');
+  }
+
+  // Upload without touching the currently viewed Role's composer/attachment.
+  async function imagePath() {
+    if (state.sharedImagePath && !state.shapes.length) return state.sharedImagePath;
+    const signature = JSON.stringify(state.shapes);
+    if (state.attachment?.signature === signature) return state.attachment.path;
+    const response = await fetch('/api/upload', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ imageBase64: elements.canvas.toDataURL('image/jpeg', 0.88), filename: 'visual-inspector.jpg' })
+    });
+    const data = await response.json();
+    if (!response.ok || !data.success || !data.filePath) throw new Error(data.error || '圖片儲存失敗');
+    state.attachment = { signature, path: data.filePath };
+    return data.filePath;
+  }
+
+  function setSending(busy) {
+    state.busy = busy;
+    const frozen = busy || Boolean(state.pending);
+    const roleReady = Boolean(elements.role.value);
+    elements.send.disabled = busy || !roleReady;
+    elements.attach.disabled = frozen || !roleReady;
+    elements.role.disabled = frozen;
+    elements.note.disabled = frozen;
+    elements.send.textContent = busy ? '發送中…' : state.pending ? '確認／重試發送' : '立即發送';
+    for (const button of elements.modal.querySelectorAll('button')) {
+      if (button !== elements.send && button !== elements.attach) button.disabled = frozen;
+    }
+    elements.picker.disabled = frozen;
+    render();
+  }
+
+  async function sendNow() {
+    if (!elements || !state.image || state.busy || !elements.role.value) return;
+    setSending(true);
+    setStatus('正在提交給 Role…');
+    let timer;
+    try {
+      if (!state.pending) {
+        const path = await imagePath();
+        state.pending = { request_id: window.crypto.randomUUID(), role_id: elements.role.value,
+          prompt: requestText(), image_path: path };
+      }
+      const controller = new AbortController();
+      timer = setTimeout(() => controller.abort(), 20000);
+      const response = await fetch('/api/role-submit', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(state.pending), signal: controller.signal
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success || !data.submission) {
+        // A definitive rejection means it is safe to edit and resubmit.
+        if (response.status >= 400 && response.status < 500) state.pending = null;
+        throw new Error(data.error || '提交未確認');
+      }
+      if (data.submission.status === 'unknown') throw new Error(data.submission.error || '先前執行狀態未知，請查看目標對話');
+      if (['failed', 'cancelled'].includes(data.submission.status)) {
+        state.pending = null;
+        throw new Error(data.submission.error || '先前提交執行失敗，請重試');
+      }
+      const roleName = state.roles.find(role => role.id === state.pending.role_id)?.name || state.pending.role_id;
+      setSending(false);
+      close();
+      if (typeof window.showToast === 'function') window.showToast('已送給 ' + roleName);
+      else {
+        const toast = document.createElement('div');
+        toast.className = 'visual-inspector-toast'; toast.setAttribute('role', 'status');
+        toast.textContent = '已送給 ' + roleName;
+        document.body.appendChild(toast); setTimeout(() => toast.remove(), 4000);
+      }
+    } catch (error) {
+      setStatus('發送失敗：' + (error.name === 'AbortError' ? '連線逾時' : error.message) +
+        (state.pending ? '。提交狀態未確認；重試會確認同一項需求，不會重複提交。' : ''), true);
+    } finally {
+      clearTimeout(timer);
+      setSending(false);
+    }
+  }
+
+  async function attach() {
+    if (!elements || !state.image || state.busy || state.pending || !elements.role.value) return;
+    setSending(true);
     setStatus('正在儲存標註圖片…');
     try {
-      // Shared images are already held in Crew Runtime. Without markings,
-      // reuse the existing attachment instead of re-encoding and uploading.
-      const path = state.sharedImagePath && !state.shapes.length &&
-        typeof window.attachExistingImagePath === 'function'
-        ? window.attachExistingImagePath(
-            state.sharedImagePath, state.sharedImageUrl
-          )
-        : await window.processAndUploadImageBase64(
-            elements.canvas.toDataURL('image/jpeg', 0.88), 'visual-inspector.jpg'
-          );
-      if (!path) throw new Error('圖片儲存失敗');
-      const userNote = elements.note.value.trim();
-      const inferredRequest = state.shapes.length
-        ? '請分析我標註的位置，協助定位問題或提出修改建議。'
-        : '請先分析這張截圖，協助我確認畫面與可能的問題。';
-      const request = [
-        '【跨 App 畫面標註】',
-        '來源：' + state.origin,
-        '使用者需求：' + (userNote || inferredRequest),
-        '請先根據標註畫面分析。如果目前 Role 的 Workspace 確實包含此 App 的原始碼，才嘗試定位檔案並提出修改；否則只分析或提供操作建議，不得聲稱已修改第三方 App。'
-      ].join('\n');
-      if (typeof window.setPrimaryTab === 'function') {
-        window.setPrimaryTab('chat', { hapticFeedback: false });
+      const target = elements.role.value;
+      const path = await imagePath();
+      const request = requestText();
+      if (target !== window.getCurrentRoleId?.()) {
+        if (!window.openCrewCockpitRole) throw new Error('Role 切換尚未準備好');
+        await window.openCrewCockpitRole(target);
+        if (window.getCurrentRoleId?.() !== target) throw new Error('Role 切換失敗');
       }
+      if (typeof uploadedImagePath !== 'undefined' && uploadedImagePath &&
+          !window.confirm('目前已有圖片附件，確定要取代嗎？')) return;
+      if (!window.attachExistingImagePath) throw new Error('圖片附件尚未準備好');
+      window.attachExistingImagePath(path, state.sharedImagePath === path ? state.sharedImageUrl : '/api/image?path=' + encodeURIComponent(path));
+      window.setPrimaryTab?.('chat', { hapticFeedback: false });
       const composer = document.getElementById('prompt-input');
       if (!composer) throw new Error('找不到對話輸入框');
       composer.value = (composer.value.trim() ? composer.value.trim() + '\n\n' : '') + request;
       composer.dispatchEvent(new Event('input', { bubbles: true }));
-      state.busy = false;
-      close();
-      composer.focus();
-    } catch (error) {
-      setStatus('附加失敗：' + error.message, true);
-    } finally {
-      state.busy = false;
-      elements.attach.disabled = false;
-    }
+      setSending(false); close(); composer.focus();
+    } catch (error) { setStatus('附加失敗：' + error.message, true); }
+    finally { setSending(false); }
   }
 
   function init() {
@@ -376,7 +470,10 @@
       note: document.getElementById('visual-inspector-note'),
       status: document.getElementById('visual-inspector-status'),
       undo: document.getElementById('visual-inspector-undo'),
-      attach: document.getElementById('visual-inspector-attach')
+      attach: document.getElementById('visual-inspector-attach'),
+      send: document.getElementById('visual-inspector-send'),
+      role: document.getElementById('visual-inspector-role'),
+      picker: document.getElementById('visual-inspector-file')
     };
     elements.canvas.addEventListener('pointerdown', onPointerDown);
     elements.canvas.addEventListener('pointermove', onPointerMove);
@@ -400,6 +497,8 @@
     });
     document.getElementById('visual-inspector-close').addEventListener('click', close);
     elements.attach.addEventListener('click', attach);
+    elements.send.addEventListener('click', sendNow);
+    elements.role.addEventListener('change', () => setSending(false));
     const picker = document.getElementById('visual-inspector-file');
     picker.addEventListener('change', () => {
       if (picker.files?.[0]) openFromFile(picker.files[0]);

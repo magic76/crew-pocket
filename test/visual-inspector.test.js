@@ -16,7 +16,7 @@ for (const id of ['visual-inspector-modal', 'visual-inspector-canvas',
   'visual-inspector-stage', 'visual-inspector-note', 'visual-inspector-note-details',
   'visual-inspector-zoom-out', 'visual-inspector-zoom-in', 'visual-inspector-fit',
   'visual-inspector-zoom-label', 'visual-inspector-file', 'attach-opt-visual',
-  'visual-inspector-attach']) {
+  'visual-inspector-role', 'visual-inspector-send', 'visual-inspector-attach']) {
   assert.ok(html.includes('id="' + id + '"'), 'missing visual UI: ' + id);
 }
 assert.match(html, /data-visual-tool="pan" aria-pressed="true"/);
@@ -58,6 +58,9 @@ class Element {
   dispatchEvent() {}
   setAttribute(name, value) { this.attrs[name] = value; }
   focus() { this.focused = true; }
+  replaceChildren() { this.children = []; this.value = ''; }
+  appendChild(child) { (this.children ||= []).push(child); return child; }
+  remove() { this.removed = true; }
   querySelectorAll() { return []; }
 }
 
@@ -66,7 +69,7 @@ const ids = ['visual-inspector-modal', 'visual-inspector-canvas', 'visual-inspec
   'visual-inspector-zoom-out', 'visual-inspector-zoom-in', 'visual-inspector-fit',
   'visual-inspector-zoom-label', 'visual-inspector-status', 'visual-inspector-undo',
   'visual-inspector-attach', 'visual-inspector-close', 'visual-inspector-clear',
-  'visual-inspector-file', 'prompt-input'];
+  'visual-inspector-file', 'visual-inspector-role', 'visual-inspector-send', 'prompt-input'];
 const elements = Object.fromEntries(ids.map(id => [id, new Element()]));
 const rectangles = [];
 const ctx = {
@@ -86,7 +89,8 @@ canvas.toDataURL = () => 'data:image/jpeg;base64,YWJj';
 const document = {
   readyState: 'complete',
   getElementById: id => elements[id] || null,
-  addEventListener() {}
+  addEventListener() {},
+  createElement: () => new Element(), body: new Element()
 };
 class Screenshot {
   set src(value) {
@@ -99,13 +103,18 @@ class Screenshot {
 let chosenTab = null;
 let uploadCalls = 0;
 let reuseCalls = 0;
+let currentRole = 'role-general';
 const window = {
   location: { origin: 'http://127.0.0.1:8000' },
   addEventListener() {},
+  crypto: require('node:crypto').webcrypto,
+  getCurrentRoleId: () => currentRole,
+  openCrewCockpitRole: async id => { currentRole = id; },
+  showToast: text => { window.lastToast = text; },
   setPrimaryTab: tab => { chosenTab = tab; },
   attachExistingImagePath: (imagePath, imageUrl) => {
-    assert.equal(imagePath, '/tmp/shared.jpg');
-    assert.match(imageUrl, /^http:\/\/127\.0\.0\.1:8000\/api\/image\?/);
+    assert.ok(['/tmp/shared.jpg', '/tmp/visual-inspector.jpg'].includes(imagePath));
+    assert.match(imageUrl, /api\/image\?/);
     reuseCalls++;
     return imagePath;
   },
@@ -116,7 +125,22 @@ const window = {
     return '/tmp/visual-inspector.jpg';
   }
 };
-const runtime = { window, document, URL, Image: Screenshot,
+let submitted = []; let submitError = null; let responsePromise = null;
+const fetch = async (url, options = {}) => {
+  if (url === '/api/roles') return { ok: true, json: async () => ({ success: true, roles: [
+    { id: 'role-general', name: 'General' }, { id: 'role-teacher', name: 'Teacher Dev' }
+  ] }) };
+  if (url === '/api/upload') {
+    uploadCalls++; return { ok: true, json: async () => ({ success: true, filePath: '/tmp/visual-inspector.jpg' }) };
+  }
+  assert.equal(url, '/api/role-submit');
+  const body = JSON.parse(options.body); submitted.push(body);
+  if (responsePromise) await responsePromise;
+  if (submitError) throw submitError;
+  return { ok: true, status: 202, json: async () => ({ success: true, submission: { status: 'queued' } }) };
+};
+const flush = () => new Promise(resolve => setImmediate(resolve));
+const runtime = { window, document, URL, Image: Screenshot, fetch, setTimeout, clearTimeout, AbortController,
   Event: class { constructor(type) { this.type = type; } },
   module: { exports: {} } };
 vm.runInNewContext(source, runtime, { filename: 'visual-inspector.js' });
@@ -160,8 +184,9 @@ assert.equal(stage.scrollTop, 0, 'fit restores top of long capture');
 
 elements['visual-inspector-note'].value = '幫我分析這個頁面';
 (async () => {
+  await flush();
   await elements['visual-inspector-attach'].dispatch('click');
-  assert.equal(reuseCalls, 1, 'shared but unannotated screenshot must NOT re-upload');
+  assert.equal(reuseCalls, 1, elements['visual-inspector-status'].textContent);
   assert.equal(uploadCalls, 0);
   assert.equal(chosenTab, 'chat');
   assert.match(elements['prompt-input'].value, /幫我分析這個頁面/);
@@ -188,10 +213,54 @@ elements['visual-inspector-note'].value = '幫我分析這個頁面';
   gesture('pointerdown', 11, 20, 10);
   gesture('pointermove', 11, 150, 75);
   gesture('pointerup', 11, 150, 75);
+  await flush();
   await elements['visual-inspector-attach'].dispatch('click');
   assert.match(elements['prompt-input'].value, /請分析我標註的位置/);
-  assert.equal(reuseCalls, 1, 'annotated screenshot cannot reuse original bytes');
+  assert.equal(reuseCalls, 2, 'annotated attachment uses the newly uploaded bytes');
   assert.equal(uploadCalls, 1);
   assert.equal(elements['visual-inspector-modal'].classList.contains('hidden'), true);
+  // Direct submission stays on the viewed Role, with no composer mutation.
+  visual.openFromSharedScreen(sharedUrl); await flush();
+  assert.equal(elements['visual-inspector-role'].value, 'role-general');
+  elements['visual-inspector-role'].value = 'role-teacher';
+  const previousComposer = elements['prompt-input'].value;
+  chosenTab = null;
+  const uploadsBefore = uploadCalls;
+  let release; responsePromise = new Promise(resolve => { release = resolve; });
+  const sending = elements['visual-inspector-send'].dispatch('click');
+  await flush();
+  await elements['visual-inspector-send'].dispatch('click');
+  assert.equal(submitted.length, 1, 'double tap cannot create two submissions');
+  assert.equal(elements['visual-inspector-send'].disabled, true);
+  assert.equal(elements['visual-inspector-modal'].classList.contains('hidden'), false);
+  release(); await sending; responsePromise = null;
+  assert.equal(submitted[0].role_id, 'role-teacher');
+  assert.equal(submitted[0].image_path, '/tmp/shared.jpg');
+  assert.match(submitted[0].prompt, /來源：Android/);
+  assert.equal(uploadCalls, uploadsBefore, 'unmarked shared screenshot does not upload again');
+  assert.equal(chosenTab, null, 'direct send must not navigate');
+  assert.equal(elements['prompt-input'].value, previousComposer);
+  assert.equal(window.lastToast, '已送給 Teacher Dev');
+  assert.equal(elements['visual-inspector-modal'].classList.contains('hidden'), true);
+
+  visual.openFromSharedScreen(sharedUrl); await flush();
+  elements['visual-inspector-note'].value = 'keep this request';
+  submitError = new Error('network timeout');
+  await elements['visual-inspector-send'].dispatch('click');
+  const failedBody = submitted.at(-1);
+  assert.equal(elements['visual-inspector-modal'].classList.contains('hidden'), false);
+  assert.equal(elements['visual-inspector-note'].value, 'keep this request');
+  assert.match(elements['visual-inspector-status'].textContent, /未確認/);
+  assert.equal(elements['visual-inspector-send'].disabled, false);
+  assert.equal(elements['visual-inspector-note'].disabled, true, 'uncertain retry freezes the original payload');
+  submitError = null;
+  await elements['visual-inspector-send'].dispatch('click');
+  assert.deepEqual(submitted.at(-1), failedBody, 'timeout retry uses the same id and exact payload');
+  assert.equal(elements['visual-inspector-modal'].classList.contains('hidden'), true);
+  visual.openFromSharedScreen(sharedUrl); await flush();
+  elements['visual-inspector-role'].value = 'role-teacher';
+  await elements['visual-inspector-attach'].dispatch('click');
+  assert.equal(currentRole, 'role-teacher', 'later send selects its intended recipient through existing Role navigation');
+  assert.equal(chosenTab, 'chat');
   console.log('visual-inspector quick-share: all checks passed');
 })().catch(error => { console.error(error); process.exitCode = 1; });

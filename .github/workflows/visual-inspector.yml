@@ -30,5 +30,8 @@ jobs:
           node --check public/js/app.js
           node --check test/visual-inspector.test.js
           node test/visual-inspector.test.js
+          node --check lib/role-submit.js
+          node test/role-submit.test.js
+          node test/role-submit-chat.test.js
           node test/role-first-navigation.test.js
           node test/visual-answer-inline.test.js

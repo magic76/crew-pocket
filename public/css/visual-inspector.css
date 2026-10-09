@@ -148,3 +148,10 @@
   .visual-inspector__details summary { padding: 5px 11px; }
   .visual-inspector__button { min-height: 36px; padding: 5px 9px; }
 }
+
+.visual-inspector__role-label { flex: none; display: flex; gap: 8px; align-items: center; font-size: 12px; }
+.visual-inspector__role { flex: 1; min-width: 0; min-height: 40px; border-radius: 8px; padding: 6px 10px;
+  background: var(--cp-surface, #1e293b); color: var(--cp-text, #f8fafc); border: 1px solid var(--cp-border, #475569); }
+.visual-inspector__button:disabled { opacity: .5; }
+
+.visual-inspector-toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); z-index: 100000; padding: 12px 18px; border-radius: 12px; background: #0f766e; color: white; font-size: 14px; }

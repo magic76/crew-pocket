@@ -1842,6 +1842,9 @@
       <button id="visual-inspector-undo" type="button" class="visual-inspector__button">撤銷</button>
       <button id="visual-inspector-clear" type="button" class="visual-inspector__button">清除</button>
     </div>
+    <label class="visual-inspector__role-label" for="visual-inspector-role">交給 Role
+      <select id="visual-inspector-role" class="visual-inspector__role" aria-label="選擇接收截圖的 Role"></select>
+    </label>
     <details id="visual-inspector-note-details" class="visual-inspector__details">
       <summary>補充需求（選填）</summary>
       <textarea id="visual-inspector-note" class="visual-inspector__note" maxlength="2000" placeholder="例如：圈選的按鈕太小，請找出相關程式碼。"></textarea>
@@ -1849,9 +1852,10 @@
     <p id="visual-inspector-status" class="visual-inspector__status" role="status" aria-live="polite"></p>
     <div class="visual-inspector__actions">
       <button type="button" class="visual-inspector__button visual-inspector__reselect" onclick="document.getElementById('visual-inspector-file').click()">重選截圖</button>
-      <button id="visual-inspector-attach" type="button" class="visual-inspector__button visual-inspector__submit">交給目前 Role</button>
+      <button id="visual-inspector-attach" type="button" class="visual-inspector__button">稍後發送</button>
+      <button id="visual-inspector-send" type="button" class="visual-inspector__button visual-inspector__submit">立即發送</button>
     </div>
-    <p class="visual-inspector__privacy">僅附加到對話輸入框，不會自動發送。傳送前請確認畫面沒有私人資訊。</p>
+    <p class="visual-inspector__privacy">立即發送會提交給所選 Role；稍後發送則附加到輸入框。請確認畫面沒有私人資訊。</p>
     <input type="file" id="visual-inspector-file" accept="image/*" class="hidden" aria-label="選擇截圖">
   </div>
 

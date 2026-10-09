@@ -2642,7 +2642,7 @@ async function hydrateRoleMessageQueue(roleId = currentStreamRoleId(), { force =
     .then(async response => {
       const data = await response.json();
       if (!response.ok || !data.success) throw new Error(data.error || '無法讀取 Role queue');
-      const messages = Array.isArray(data.messages) ? data.messages : [];
+      const messages = Array.isArray(data.messages) ? data.messages.filter(item => item.source !== 'quick-share') : [];
       queuedMessagesByRole.set(key, messages);
       hydratedRoleQueues.add(key);
       return messages;
