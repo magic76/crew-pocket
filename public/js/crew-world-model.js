@@ -182,7 +182,7 @@
     tick(dt) {
       if (!this.room?.verified) return false;
       this.startNext();
-      const seconds = Math.max(0, Math.min(Number(dt) || 0, .06));
+      const seconds = Math.max(0, Math.min(Number(dt) || 0, .12));
       this.ambientClock += seconds;
       if (this.ambientClock >= 32) {
         this.ambientClock = 0;
