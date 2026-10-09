@@ -759,6 +759,19 @@ function initAppAndListeners() {
     }
   }
 
+  // A screenshot arriving from Android Share has already been uploaded to
+  // localhost. Reuse it directly when there are no annotations.
+  window.attachExistingImagePath = (imagePath, imageUrl) => {
+    if (!imagePath || !imageUrl || !String(imageUrl).startsWith(window.location.origin + '/api/image?')) {
+      return null;
+    }
+    uploadedImagePath = imagePath;
+    if (previewThumb) previewThumb.src = imageUrl;
+    if (previewFilename) previewFilename.textContent = 'shared-screen.jpg';
+    if (previewFilesize) previewFilesize.textContent = '來自 Android 快速分享 · 未重新上傳';
+    if (imagePreviewContainer) imagePreviewContainer.classList.remove('hidden');
+    return uploadedImagePath;
+  };
   window.processAndUploadImageBase64 = processAndUploadImageBase64;
   window.handleImageSelection = handleImageSelection;
 
