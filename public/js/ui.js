@@ -53,6 +53,7 @@ let availableRoles = [];
 let crewStatusByRole = new Map();
 let crewStatusRequest = null;
 let crewStatusUpdatedAt = 0;
+let crewStatusVerified = false;
 
 // Coalesce boot/model/effort/new-chat prewarm requests into one provider call.
 window.requestProviderPrewarm = function(delay = 250) {
@@ -782,7 +783,7 @@ function crewStatusMeta(status) {
 
 async function loadCrewStatus({ force = false } = {}) {
   const freshEnough = Date.now() - crewStatusUpdatedAt < 1200;
-  if (!force && freshEnough) return crewStatusByRole;
+  if (!force && freshEnough && crewStatusVerified) return crewStatusByRole;
   if (crewStatusRequest) return crewStatusRequest;
 
   crewStatusRequest = fetch('/api/crew-status', { cache: 'no-store' })
@@ -791,12 +792,17 @@ async function loadCrewStatus({ force = false } = {}) {
       if (!response.ok || !data.success) throw new Error(data.error || '無法讀取 Crew 狀態');
       crewStatusByRole = new Map((data.roles || []).map(status => [status.roleId, status]));
       crewStatusUpdatedAt = Number(data.generatedAt) || Date.now();
+      crewStatusVerified = true;
       updateWorkspaceUI();
       renderRoleNavigation();
+      window.dispatchEvent(new CustomEvent('crew:status-updated'));
       return crewStatusByRole;
     })
     .catch(error => {
       console.warn('[Crew Status] Failed:', error.message);
+      crewStatusVerified = false;
+      renderRoleNavigation();
+      window.dispatchEvent(new CustomEvent('crew:status-updated'));
       return crewStatusByRole;
     })
     .finally(() => {
@@ -894,21 +900,23 @@ function renderRoleNavigation() {
     return;
   }
 
-  const statuses = roles.map(role => crewStatusForRole(role.id)).filter(Boolean);
+  const statuses = crewStatusVerified ? roles.map(role => crewStatusForRole(role.id)).filter(Boolean) : [];
   const workingCount = statuses.filter(status => status.state === 'working').length;
   const attentionCount = statuses.reduce((sum, status) => sum + Number(status.attentionCount || 0), 0);
   if (crewRoomSummary) {
-    crewRoomSummary.innerHTML = [
+    crewRoomSummary.innerHTML = crewStatusVerified ? [
       `<span class="inline-flex items-center gap-1 text-emerald-300"><span class="h-1.5 w-1.5 rounded-full bg-emerald-400"></span>${workingCount} 工作中</span>`,
       attentionCount ? `<span class="inline-flex items-center gap-1 text-amber-300"><span class="h-1.5 w-1.5 rounded-full bg-amber-400"></span>${attentionCount} 需要注意</span>` : ''
-    ].filter(Boolean).join('');
+    ].filter(Boolean).join('') : '<span>Runtime 尚未同步 · 狀態未知</span>';
   }
 
+  const expandedMenus = new Set([...roleNavList.querySelectorAll('[data-role-menu-panel]:not(.hidden)')]
+    .map(panel => panel.dataset.roleMenuPanel));
   roleNavList.innerHTML = roles.map(role => {
     const selected = role.id === (currentRoleId || DEFAULT_ROLE_ID);
     const project = projectMeta(role.projectId);
     const latest = roleLatestConversation(role.id);
-    const status = crewStatusForRole(role.id);
+    const status = crewStatusVerified ? crewStatusForRole(role.id) : null;
     const meta = status
       ? crewStatusMeta(status)
       : {
@@ -956,6 +964,12 @@ function renderRoleNavigation() {
     </div>`;
   }).join('');
 
+  roleNavList.querySelectorAll('[data-role-menu-panel]').forEach(panel => {
+    const expanded = expandedMenus.has(panel.dataset.roleMenuPanel);
+    panel.classList.toggle('hidden', !expanded);
+    panel.classList.toggle('grid', expanded);
+  });
+
   roleNavList.querySelectorAll('[data-role-nav-id]').forEach(button => {
     button.addEventListener('click', () => selectRole(button.dataset.roleNavId));
   });
@@ -990,9 +1004,30 @@ function renderRoleNavigation() {
       if (action === 'settings') return openRoleEditor(roleId);
     });
   });
+  window.dispatchEvent(new CustomEvent('crew:roster-updated'));
 }
 
 window.renderRoleNavigation = renderRoleNavigation;
+
+window.getCrewCockpitSnapshot = () => ({
+  verified: crewStatusVerified,
+  updatedAt: crewStatusVerified ? crewStatusUpdatedAt : 0,
+  activeRoleId: currentRoleId || DEFAULT_ROLE_ID,
+  roles: availableRoles.map(role => {
+    const project = projectMeta(role.projectId);
+    const latest = roleLatestConversation(role.id);
+    return {
+      id: role.id,
+      name: role.name,
+      project: roleProjectLabel(role),
+      icon: project?.icon || '🧠',
+      latestTitle: latest?.title || '',
+      latestUpdatedAt: latest?.updatedAt || 0,
+      status: crewStatusVerified ? crewStatusForRole(role.id) : null
+    };
+  })
+});
+window.openCrewCockpitRole = (roleId, newWork = false) => selectRole(roleId, newWork);
 
 const crewStatusEvents = new EventSource('/api/crew-status/events');
 crewStatusEvents.addEventListener('crew-status', () => {
@@ -1268,6 +1303,7 @@ function activateRoleIdentity(role) {
   if (!role) return null;
   currentRoleId = role.id;
   localStorage.setItem('crew_current_role', currentRoleId);
+  window.dispatchEvent(new CustomEvent('crew:role-selected'));
 
   const project = projectMeta(role.projectId);
   if (project?.workspace) {

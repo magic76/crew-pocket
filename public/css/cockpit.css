@@ -1,0 +1,196 @@
+/* Crew Cockpit — focus/command modes, rendered from verified Runtime state. */
+#role-nav-view { min-height: 0; }
+#role-nav-view > .border-b { flex: none; }
+#cockpit-scroll { scroll-behavior: smooth; }
+.cockpit-switch {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--cp-border);
+  background: var(--cp-bg);
+}
+.cockpit-mode-buttons {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  width: min(200px, 55%);
+  gap: 4px;
+  padding: 4px;
+  background: var(--cp-surface-2);
+  border: 1px solid var(--cp-border);
+  border-radius: 12px;
+}
+.cockpit-mode-buttons button {
+  min-height: 37px;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--cp-muted);
+  border-radius: 9px;
+  transition: background-color 170ms ease, color 170ms ease;
+}
+.cockpit-mode-buttons button.is-active {
+  background: var(--cp-surface);
+  color: var(--cp-accent-strong);
+  box-shadow: 0 2px 8px rgba(0,0,0,.08);
+}
+.cockpit-sync { display: inline-flex; align-items: center; min-width: 0; gap: 3px; }
+#cockpit-status-line { color: var(--cp-muted); font-size: 10px; }
+#cockpit-status-line[data-verified="false"] { color: var(--cp-warning); }
+#cockpit-refresh-btn {
+  width: 38px; height: 38px; flex: none; border-radius: 10px;
+  font-size: 21px; color: var(--cp-text-secondary);
+}
+#cockpit-refresh-btn:active { background: var(--cp-surface-2); }
+#role-nav-view[data-cockpit-mode="focus"] #cockpit-command-panel,
+#role-nav-view[data-cockpit-mode="command"] #cockpit-focus-panel { display: none; }
+.cockpit-content { animation: cockpit-enter .20s ease-out both; }
+@keyframes cockpit-enter {
+  from { opacity: .5; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.cockpit-eyebrow {
+  color: var(--cp-muted); letter-spacing: .025em; font-size: 11px;
+  font-weight: 650;
+}
+.cockpit-focus-hero, .cockpit-section, .cockpit-stat {
+  border: 1px solid var(--cp-border);
+  background: var(--cp-surface);
+  border-radius: 16px;
+}
+.cockpit-focus-hero { padding: 15px; }
+.cockpit-focus-top { display: flex; align-items: center; gap: 11px; min-width: 0; }
+.cockpit-focus-avatar {
+  flex: none; display: grid; place-items: center;
+  width: 46px; height: 46px; border-radius: 14px;
+  background: var(--cp-accent-soft);
+  color: var(--cp-accent-strong); font-size: 24px;
+}
+.cockpit-focus-identity { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.cockpit-focus-identity h3 {
+  color: var(--cp-text); font-size: 16px; font-weight: 730;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin: 0;
+}
+.cockpit-focus-identity > span { color: var(--cp-muted); font-size: 11px; }
+.cockpit-focus-work {
+  margin-top: 15px; padding: 12px;
+  background: var(--cp-surface-2); border-radius: 11px;
+}
+.cockpit-focus-work p {
+  color: var(--cp-text-secondary); font-size: 13px; line-height: 1.55;
+  font-weight: 500; overflow-wrap: anywhere; margin: 6px 0 0;
+}
+.cockpit-focus-alert { color: var(--cp-warning); font-size: 12px; margin: 10px 0 0; }
+.cockpit-focus-actions { display: flex; gap: 8px; margin-top: 12px; }
+.cockpit-action {
+  min-height: 40px; padding: 7px 13px;
+  border: 1px solid var(--cp-border);
+  border-radius: 10px;
+  background: var(--cp-surface-2); color: var(--cp-text-secondary);
+  font-size: 12px; font-weight: 650;
+  white-space: nowrap; transition: background 150ms ease, border-color 150ms ease;
+}
+.cockpit-action:active { background: var(--cp-accent-soft); border-color: var(--cp-accent); }
+.cockpit-focus-actions .cockpit-action:first-child {
+  color: var(--cp-accent-strong); border-color: var(--cp-accent);
+  background: var(--cp-accent-soft);
+}
+.cockpit-state {
+  display: inline-flex; align-items: center; gap: 5px; flex: none;
+  color: var(--cp-muted); font-size: 11px; font-weight: 650;
+  white-space: nowrap;
+}
+.cockpit-state-dot { width: 7px; height: 7px; border-radius: 99px; background: var(--cp-muted); }
+.cockpit-state[data-state="working"] { color: var(--cp-success); }
+.cockpit-state[data-state="working"] .cockpit-state-dot { background: var(--cp-success); animation: cockpit-breathe 2s ease-in-out infinite; }
+.cockpit-state[data-state="waiting"] { color: var(--cp-warning); }
+.cockpit-state[data-state="waiting"] .cockpit-state-dot { background: var(--cp-warning); }
+.cockpit-state[data-state="new"] { color: var(--cp-accent-strong); }
+.cockpit-state[data-state="new"] .cockpit-state-dot { background: var(--cp-accent); }
+@keyframes cockpit-breathe { 50% { opacity: .4; } }
+.cockpit-stats {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px;
+}
+.cockpit-stat {
+  display: flex; flex-direction: column; justify-content: center; min-height: 78px;
+  padding: 12px; gap: 5px;
+}
+.cockpit-stat span { color: var(--cp-muted); font-size: 11px; white-space: nowrap; }
+.cockpit-stat strong { color: var(--cp-text); font-size: 24px; line-height: 1; font-variant-numeric: tabular-nums; }
+.cockpit-stat[data-kind="working"] strong { color: var(--cp-success); }
+.cockpit-stat[data-kind="waiting"] strong,
+.cockpit-stat[data-kind="attention"] strong { color: var(--cp-warning); }
+.cockpit-section { margin-top: 11px; overflow: hidden; }
+.cockpit-section-head {
+  display: flex; align-items: baseline; gap: 9px;
+  padding: 12px 13px; border-bottom: 1px solid var(--cp-border);
+}
+.cockpit-section-head h3 { color: var(--cp-text); font-weight: 730; font-size: 13px; margin: 0; }
+.cockpit-section-head span { color: var(--cp-muted); font-size: 10px; }
+.cockpit-section-body { display: flex; flex-direction: column; }
+.cockpit-row {
+  display: flex; align-items: center; gap: 10px; min-width: 0;
+  padding: 10px 13px;
+}
+.cockpit-row + .cockpit-row { border-top: 1px solid var(--cp-border); }
+.cockpit-row-main { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 4px; }
+.cockpit-row-main strong {
+  color: var(--cp-text); font-size: 12px;
+  font-weight: 680; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.cockpit-row-main span {
+  color: var(--cp-muted); font-size: 11px; line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.cockpit-row .cockpit-action { min-width: 54px; }
+.cockpit-empty {
+  color: var(--cp-muted); font-size: 12px; line-height: 1.6;
+  padding: 14px; background: var(--cp-surface);
+}
+.cockpit-unavailable {
+  border: 1px solid var(--cp-border);
+  border-radius: 12px;
+  color: var(--cp-warning);
+}
+.cockpit-roster-heading {
+  display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between;
+  gap: 3px 9px; padding: 16px 12px 2px;
+}
+.cockpit-roster-heading span:first-child {
+  color: var(--cp-text); font-size: 13px; font-weight: 730;
+}
+.cockpit-roster-heading span:last-child {
+  color: var(--cp-muted); font-size: 10px;
+}
+/* Focus hides instrumentation, not roles: other agents remain one tap away. */
+#role-nav-view[data-cockpit-mode="focus"] .role-nav-card [data-role-nav-id] {
+  min-height: 102px !important;
+  padding: 12px 6px !important;
+}
+#role-nav-view[data-cockpit-mode="focus"] .role-nav-card [data-role-nav-id] > span:first-child {
+  height: 36px !important; width: 36px !important; font-size: 17px !important;
+}
+#role-nav-view[data-cockpit-mode="focus"] .role-nav-card .crew-role-task,
+#role-nav-view[data-cockpit-mode="focus"] .role-nav-card [data-role-nav-id] > span:last-child {
+  display: none !important;
+}
+#role-nav-view[data-cockpit-mode="focus"] .role-nav-card [data-role-nav-id] > span:nth-child(2) {
+  margin-top: 7px;
+}
+@media (max-width: 360px) {
+  .cockpit-sync { width: 100%; justify-content: flex-end; }
+  .cockpit-mode-buttons { width: 100%; }
+  .cockpit-focus-top { flex-wrap: wrap; }
+  .cockpit-stats { gap: 5px; }
+  .cockpit-stat { padding: 9px; }
+  .cockpit-stat span { font-size: 10px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #cockpit-scroll { scroll-behavior: auto; }
+  .cockpit-content, .cockpit-state-dot, .cockpit-mode-buttons button, .cockpit-action {
+    animation: none !important; transition: none !important;
+  }
+}

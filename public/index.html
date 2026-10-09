@@ -46,6 +46,7 @@
   <link rel="stylesheet" href="/css/style-premium.css">
   <link rel="stylesheet" href="/css/visual-answer.css">
   <link rel="stylesheet" href="/css/design-system.css">
+  <link rel="stylesheet" href="/css/cockpit.css">
   <link rel="stylesheet" href="/css/theme-light.css">
 </head>
 <body class="bg-slate-950 text-slate-100 flex flex-col h-[100dvh] w-full max-w-full overflow-hidden">
@@ -473,8 +474,26 @@
           </div>
         </div>
 
-        <div id="role-nav-list" class="grid flex-1 auto-rows-max grid-cols-2 content-start gap-2 overflow-y-auto p-2.5">
-          <div class="p-4 text-center text-xs text-slate-500">載入 Crew 中...</div>
+        <div id="cockpit-switch" class="cockpit-switch" role="group" aria-label="小隊檢視方式">
+          <div class="cockpit-mode-buttons">
+            <button type="button" data-cockpit-mode="focus" aria-pressed="false">安靜</button>
+            <button type="button" data-cockpit-mode="command" aria-pressed="true">指揮</button>
+          </div>
+          <div class="cockpit-sync">
+            <span id="cockpit-status-line" role="status" aria-live="polite">Runtime 尚未同步</span>
+            <button id="cockpit-refresh-btn" type="button" title="重新同步小隊狀態" aria-label="重新同步小隊狀態">↻</button>
+          </div>
+        </div>
+
+        <div id="cockpit-scroll" class="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+          <div id="cockpit-focus-panel" class="cockpit-content px-3 pt-3" aria-label="目前 Role"></div>
+          <div id="cockpit-command-panel" class="cockpit-content px-3 pt-3" aria-label="小隊即時工作台"></div>
+          <div class="cockpit-roster-heading">
+            <span>小隊成員</span><span>點擊角色繼續其目前工作</span>
+          </div>
+          <div id="role-nav-list" class="grid auto-rows-max grid-cols-2 content-start gap-2 p-2.5">
+            <div class="p-4 text-center text-xs text-slate-500">載入 Crew 中...</div>
+          </div>
         </div>
 
         <div class="border-t border-slate-800 bg-slate-950/70 p-2.5">
@@ -1740,6 +1759,8 @@
   <!-- Modular Scripts (Cache-busted v7.9) -->
   <script src="/js/i18n.js"></script>
   <script src="/js/ui.js"></script>
+  <script src="/js/cockpit-model.js"></script>
+  <script src="/js/cockpit.js"></script>
   <script src="/js/model-settings.js"></script>
   <script src="/js/tools.js"></script>
   <script src="/js/storage.js"></script>
