@@ -92,6 +92,19 @@ assert.equal(world.acceptHandoff(urgent), true);
 assert.equal(stroller.mode, 'seated', 'real handoff interrupts decorative strolling');
 assert.equal(stroller.queue.length, 0);
 
+// Accessibility: reduced motion keeps evidence, but does not move characters.
+const reduced = new engine.World(projector);
+reduced.reconcile(projected);
+reduced.allowAmbient = false;
+reduced.ambientClock = 31.99;
+reduced.tick(.03);
+assert.equal([...reduced.actors.values()].filter(a => a.mode === 'ambient').length, 0);
+assert.equal(reduced.acceptHandoff({...event,id:'reduced-motion'},Date.now(),{
+  motion:false
+}),true);
+assert.equal(reduced.pending.length,0, 'reduced motion cannot schedule walking');
+assert.equal(reduced.log.length,1, 'stored evidence stays visible without animation');
+
 const before = world.actors.get('role-0');
 world.reconcile(projector.project({...snapshot, verified:false}));
 assert.equal(world.room.verified, false);
