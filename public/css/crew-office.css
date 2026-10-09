@@ -291,6 +291,28 @@ button.crew-office-board { cursor: pointer; }
   color:#4b6070; background:rgba(255,248,233,.65);
   border:2px dashed #bd9f79;border-radius:12px;font-size:12px;
 }
+/* Role-specific desk movement is tied to verified working state only. */
+.crew-office-seat[data-state="working"] .crew-office-prop[data-kind="teacher"] {
+  animation: crew-office-read 1.4s steps(2, end) infinite alternate;
+}
+.crew-office-seat[data-state="working"] .crew-office-prop[data-kind="story"] {
+  animation: crew-office-write .9s steps(2, end) infinite alternate;
+}
+.crew-office-seat[data-state="working"] .crew-office-prop[data-kind="fortune"] {
+  animation: crew-office-research 2s steps(3, end) infinite alternate;
+}
+.crew-office-actor.crew-office-settled .crew-role-sprite {
+  animation: crew-finish-stretch .95s ease-out !important;
+}
+@keyframes crew-office-read {
+  from { transform: rotate(-4deg); } to { transform: rotate(4deg); }
+}
+@keyframes crew-office-write {
+  from { transform: translate(-1px,1px); } to { transform: translate(3px,-2px); }
+}
+@keyframes crew-office-research {
+  from { transform: scale(.9); opacity:.8; } to { transform: scale(1.15); opacity:1; }
+}
 @keyframes crew-office-idle {
   0%, 72%, 100% { transform: translateX(0); }
   80%, 86% { transform: translateX(-3px); }
@@ -324,5 +346,7 @@ button.crew-office-board { cursor: pointer; }
 @media (prefers-reduced-motion: reduce) {
   .crew-office-display, .crew-office-actor .crew-role-sprite,
   .crew-office-actor .crew-pixel-hand,
-  .crew-office-seat.has-handoff { animation:none !important; }
+  .crew-office-seat.has-handoff,
+  .crew-office-seat[data-state="working"] .crew-office-prop,
+  .crew-office-actor.crew-office-settled .crew-role-sprite { animation:none !important; }
 }
