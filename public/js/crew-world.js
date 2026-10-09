@@ -121,6 +121,7 @@
       if (newStamp === stamp && !force) return;
       stamp = newStamp;
       world.reconcile(projected);
+      world.allowAmbient = !prefersReduced();
       bounds();
       status.textContent = !projected.verified
         ? tr(win,'Runtime 尚未同步','Runtime not synced')
@@ -312,7 +313,7 @@
     function onHandoff(e) {
       if(!active())return;
       refresh();
-      if(world.acceptHandoff(e.detail)) {
+      if(world.acceptHandoff(e.detail, Date.now(), {motion:!prefersReduced()})) {
         const last=world.log[0];
         activity.textContent=last.from+' → '+last.to+' · '+
           tr(win,'真實交接已記錄','Recorded handoff');
