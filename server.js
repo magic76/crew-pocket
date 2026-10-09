@@ -43,7 +43,7 @@ const { listWorkspaces, resolveWorkspace, createWorkspace } = require('./lib/wor
 const { listCrewMembers, saveCrewMember } = require('./lib/crew-members');
 const { DEFAULT_ROLE_ID, roleIdForProject, listRoles, getRole, saveRole } = require('./lib/roles');
 const { deleteRoleLifecycle } = require('./lib/role-delete');
-const { listCrewRoles, sendCrewMessage, getCrewInbox, getCrewMessageActivity, markCrewMessagesDelivered } = require('./lib/crew-messages');
+const { listCrewRoles, sendCrewMessage, getCrewInbox, getCrewMessageActivity, getCrewRoomEvents, markCrewMessagesDelivered } = require('./lib/crew-messages');
 const { createCrewAutoResponder } = require('./lib/crew-auto-response');
 const { getRoleRuntime, listRoleRuntimes, activateRoleConversation, prepareNewRoleConversation, clearRoleConversation, clearRoleConversationByConversation } = require('./lib/role-runtime');
 const { buildCrewStatus } = require('./lib/crew-status');
@@ -1110,6 +1110,18 @@ async function handleCrewStatus(res) {
   } catch (error) {
     res.writeHead(500, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
     res.end(JSON.stringify({ success: false, roles: [], error: error.message || 'Crew status unavailable' }));
+  }
+}
+
+async function handleCrewRoomEvents(res) {
+  try {
+    // Only message IDs and Role endpoints, never sender content or context.
+    const events = await getCrewRoomEvents({ limit: 24 });
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+    res.end(JSON.stringify({ success: true, events }));
+  } catch (_) {
+    res.writeHead(500, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+    res.end(JSON.stringify({ success: false, error: 'Crew Room events unavailable' }));
   }
 }
 
@@ -2930,6 +2942,8 @@ const server = http.createServer(async (req, res) => {
     return handleRoles(req, res, parsedUrl);
   } else if (pathname === '/api/crew-status' && req.method === 'GET') {
     return handleCrewStatus(res);
+  } else if (pathname === '/api/crew-room-events' && req.method === 'GET') {
+    return handleCrewRoomEvents(res);
   } else if (pathname === '/api/mission-graph' && req.method === 'GET') {
     return handleMissionGraph(parsedUrl, res);
   } else if (pathname === '/api/crew-status/events' && req.method === 'GET') {
