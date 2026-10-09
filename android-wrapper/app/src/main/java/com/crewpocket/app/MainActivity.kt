@@ -11,6 +11,8 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.graphics.Color
+import android.graphics.BitmapFactory
+import android.util.Base64
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -37,6 +39,7 @@ import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import org.json.JSONObject
+import java.io.ByteArrayOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.concurrent.Executors
@@ -70,6 +73,12 @@ class MainActivity : Activity() {
     private var filePathCallback: ValueCallback<Array<Uri>>? = null
     private val webSessionId = System.currentTimeMillis()
     private var legacyPwaCleanupPending = false
+    private var pendingSharedImageUri: Uri? = null
+    private var pendingSharedImageUrl: String? = null
+    private var sharedImportRunning = false
+    private var sharedDeliveryRunning = false
+    private var sharedDeliveryAttempts = 0
+    private val sharedImportExecutor = Executors.newSingleThreadExecutor()
     private var pendingConversationProvider: String? = null
     private var pendingConversationId: String? = null
     private var pendingTaskId: String? = null
@@ -85,6 +94,7 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         captureConversationIntent(intent)
+        captureSharedImageIntent(intent)
         buildUi()
         wirelessDebugController = WirelessDebugController(this)
         runtimeHealthMonitor = RuntimeHealthMonitor(
@@ -114,7 +124,9 @@ class MainActivity : Activity() {
         super.onNewIntent(intent)
         setIntent(intent)
         captureConversationIntent(intent)
+        captureSharedImageIntent(intent)
         dispatchPendingConversation()
+        dispatchPendingSharedImage()
     }
 
     override fun onStart() {
@@ -138,6 +150,7 @@ class MainActivity : Activity() {
         unregisterReceiver(runtimeReloadReceiver)
         runtimeHealthMonitor.close()
         wirelessDebugController.close()
+        sharedImportExecutor.shutdownNow()
         webView.destroy()
         super.onDestroy()
     }
@@ -290,7 +303,10 @@ class MainActivity : Activity() {
                         .apply()
                 }
 
-                if (isCrewPage) dispatchPendingConversation()
+                if (isCrewPage) {
+                    dispatchPendingConversation()
+                    dispatchPendingSharedImage()
+                }
             }
         }
         webView.addJavascriptInterface(NativeWebBridge(), "CrewPocket")
@@ -339,6 +355,127 @@ class MainActivity : Activity() {
         // legacy localhost service worker after the first page has loaded.
         webView.clearCache(true)
         legacyPwaCleanupPending = true
+    }
+
+    // User-initiated Sharesheet entry for screenshots from any Android app.
+    @Suppress("DEPRECATION")
+    private fun captureSharedImageIntent(source: Intent?) {
+        if (source?.action != Intent.ACTION_SEND || !source.type.orEmpty().startsWith("image/")) return
+        val incoming = (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            source.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+        } else {
+            source.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)
+        }) ?: source.clipData?.getItemAt(0)?.uri
+        if (incoming?.scheme != "content") return
+        pendingSharedImageUri = incoming
+        pendingSharedImageUrl = null
+        sharedDeliveryAttempts = 0
+    }
+
+    private fun uploadSharedImage(uri: Uri): String {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
+            ?: throw IllegalArgumentException("無法讀取分享圖片")
+        if (bounds.outWidth !in 1..16000 || bounds.outHeight !in 1..16000) {
+            throw IllegalArgumentException("分享圖片尺寸無效")
+        }
+        var sample = 1
+        while (maxOf(bounds.outWidth, bounds.outHeight) / sample > 2400) sample *= 2
+        val bitmap = contentResolver.openInputStream(uri)?.use {
+            BitmapFactory.decodeStream(it, null, BitmapFactory.Options().apply { inSampleSize = sample })
+        } ?: throw IllegalArgumentException("無法解碼分享圖片")
+        val output = ByteArrayOutputStream()
+        try {
+            if (!bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 88, output)) {
+                throw IllegalArgumentException("分享圖片壓縮失敗")
+            }
+        } finally {
+            bitmap.recycle()
+        }
+        val bytes = output.toByteArray()
+        if (bytes.isEmpty() || bytes.size > 8 * 1024 * 1024) {
+            throw IllegalArgumentException("分享圖片超過 8 MB")
+        }
+        val payload = JSONObject()
+            .put("imageBase64", "data:image/jpeg;base64," + Base64.encodeToString(bytes, Base64.NO_WRAP))
+            .put("filename", "shared-screen.jpg")
+            .toString()
+        val connection = URL(SERVER_URL + "api/upload").openConnection() as HttpURLConnection
+        try {
+            connection.requestMethod = "POST"
+            connection.connectTimeout = 15000
+            connection.readTimeout = 15000
+            connection.doOutput = true
+            connection.setRequestProperty("Content-Type", "application/json; charset=utf-8")
+            connection.outputStream.use { it.write(payload.toByteArray(Charsets.UTF_8)) }
+            if (connection.responseCode !in 200..299) {
+                throw IllegalStateException("Crew Runtime 匯入失敗：" + connection.responseCode)
+            }
+            val result = JSONObject(connection.inputStream.bufferedReader().use { it.readText() })
+            val url = result.optString("url")
+            if (!result.optBoolean("success") || !url.startsWith("/api/image?path=")) {
+                throw IllegalStateException("圖片上傳結果無效")
+            }
+            return url
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+    private fun dispatchPendingSharedImage() {
+        val uri = pendingSharedImageUri ?: return
+        if (!::webView.isInitialized || !pageLoaded.get() ||
+            !webView.url.orEmpty().startsWith(SERVER_URL)) return
+        if (pendingSharedImageUrl == null) {
+            if (sharedImportRunning) return
+            sharedImportRunning = true
+            sharedImportExecutor.execute {
+                val result = runCatching { uploadSharedImage(uri) }
+                runOnUiThread {
+                    sharedImportRunning = false
+                    if (uri != pendingSharedImageUri) {
+                        dispatchPendingSharedImage()
+                        return@runOnUiThread
+                    }
+                    if (result.isFailure) {
+                        Toast.makeText(this, "無法匯入分享截圖：" +
+                            (result.exceptionOrNull()?.message ?: "未知錯誤"), Toast.LENGTH_LONG).show()
+                        pendingSharedImageUri = null
+                        return@runOnUiThread
+                    }
+                    pendingSharedImageUrl = result.getOrThrow()
+                    dispatchPendingSharedImage()
+                }
+            }
+            return
+        }
+        if (sharedDeliveryRunning) return
+        val imageUrl = pendingSharedImageUrl ?: return
+        sharedDeliveryRunning = true
+        val script = "(() => { const v = window.CrewVisualInspector; " +
+            "return v && typeof v.openFromSharedScreen === 'function' && " +
+            "v.openFromSharedScreen(" + JSONObject.quote(imageUrl) + ") ? 'started' : 'not-ready'; })();"
+        webView.evaluateJavascript(script) { outcome ->
+            sharedDeliveryRunning = false
+            if (uri != pendingSharedImageUri) {
+                dispatchPendingSharedImage()
+                return@evaluateJavascript
+            }
+            if (outcome == "\"started\"") {
+                pendingSharedImageUri = null
+                pendingSharedImageUrl = null
+                sharedDeliveryAttempts = 0
+            } else if (++sharedDeliveryAttempts < 12) {
+                Handler(Looper.getMainLooper()).postDelayed(
+                    { dispatchPendingSharedImage() }, 250L
+                )
+            } else {
+                Toast.makeText(this, "畫面編輯器無法開啟，請從附件選單挑選截圖。",
+                    Toast.LENGTH_LONG).show()
+                pendingSharedImageUri = null
+                pendingSharedImageUrl = null
+            }
+        }
     }
 
     private fun captureConversationIntent(source: Intent?) {
