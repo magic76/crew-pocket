@@ -40,7 +40,7 @@ for (const clean of [cleanCrewUserContent, cleanUserContent]) {
   assert.equal(clean(wrapped), plain, 'new marked internal metadata must disappear');
   assert.equal(clean(marked), plain, 'explicit USER_REQUEST must be authoritative');
   assert.equal(clean(legacyLiveMemo), plain, 'legacy Live memo context is not a user message');
-  assert.equal(clean(legacy + legacyLiveMemo), plain, 'stacked intent and Live memo prefixes are removed');
+  assert.equal(clean(legacy.slice(0, -plain.length) + legacyLiveMemo), plain, 'stacked intent and Live memo prefixes are removed');
   assert.equal(clean(userJson), userJson, 'user-authored discussion and JSON must be kept');
   assert.equal(clean('{ "summary": "Build AAB", "approvedMode": "BUILD" }'),
     '{ "summary": "Build AAB", "approvedMode": "BUILD" }');
