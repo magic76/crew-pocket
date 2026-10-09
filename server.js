@@ -1796,7 +1796,10 @@ async function handleChat(req, res) {
           const memoryLines = changedMemories.map((hit, index) =>
             `${index + 1}. ${formatMemoryEvidence(hit.record || {})}`
           );
-          finalPrompt = `<ADDITIONAL_METADATA>\n[Updated Long-Term Memory]\n${memoryLines.join('\n')}\n</ADDITIONAL_METADATA>\n${finalPrompt}`;
+          const memoryLabel = refreshAfterCompaction
+            ? '[Refreshed Long-Term Memory]'
+            : '[Updated Long-Term Memory]';
+          finalPrompt = `<ADDITIONAL_METADATA>\n${memoryLabel}\n${memoryLines.join('\n')}\n</ADDITIONAL_METADATA>\n${finalPrompt}`;
         }
         nextMemorySignatures = signatures;
         memoryRefreshConsumed = true;
