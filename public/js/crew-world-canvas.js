@@ -108,7 +108,7 @@
     rect(ctx, 360, map.height-31, 112, 31, '#517b79');
     rect(ctx, 416, map.height-31, 5, 26, '#beddd5');
   }
-  function desk(ctx, seat, state, language, time) {
+  function desk(ctx, seat, state, language, time, reduced) {
     const en = language === 'en';
     const x = seat.x*W - 63, y = seat.y*W - 12;
     const working = state?.busy === true;
@@ -118,7 +118,7 @@
     panel(ctx, x+43, y-22, 47, 37, working ? '#285e61' : '#364d5b','#657e88');
     if (working) {
       rect(ctx, x+50, y-14, 30, 4, '#8de6bb');
-      rect(ctx, x+50, y-5, 20 + Math.round((Math.sin(time*7)+1)*4), 4, '#70c6c2');
+      rect(ctx, x+50, y-5, 20 + (reduced ? 4 : Math.round((Math.sin(time*7)+1)*4)), 4, '#70c6c2');
     } else {
       rect(ctx, x+50, y-14, 22, 4, '#8fa8aa');
       rect(ctx, x+50, y-5, 13, 4, '#708b90');
@@ -204,7 +204,7 @@
     room(ctx,world.map,world.room||{verified:false},language);
     // Furniture and characters share world coordinates; movement survives re-render.
     for(const seat of world.map.seats)
-      desk(ctx,seat,world.actors.get(seat.roleId)?.role,language,time);
+      desk(ctx,seat,world.actors.get(seat.roleId)?.role,language,time,reduced);
     const actors=[...world.actors.values()].sort((a,b)=>a.pos.y-b.pos.y);
     for(const a of actors) actor(ctx,a,time,reduced,language);
     ctx.setTransform(dpr,0,0,dpr,0,0);
