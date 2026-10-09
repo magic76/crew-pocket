@@ -233,6 +233,20 @@
         if (visible()) {
           showActivity();
           emphasizeNewHandoffs(next.arrivals);
+          // Cosmetic consumers only receive fresh, saved handoff metadata.
+          // No message bodies, memory, fabricated steps or provider changes.
+          if (win.getCrewCockpitSnapshot?.()?.verified === true) {
+            for (const event of next.arrivals) {
+              win.dispatchEvent?.(new win.CustomEvent('crew:handoff-observed', {
+                detail: {
+                  id: event.id,
+                  fromRoleId: event.fromRoleId,
+                  toRoleId: event.toRoleId,
+                  createdAt: event.createdAt
+                }
+              }));
+            }
+          }
         }
       } catch (_) {
         if (visible()) showActivity(true);
