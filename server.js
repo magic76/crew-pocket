@@ -47,6 +47,7 @@ const { listCrewRoles, sendCrewMessage, getCrewInbox, getCrewMessageActivity, ma
 const { createCrewAutoResponder } = require('./lib/crew-auto-response');
 const { getRoleRuntime, listRoleRuntimes, activateRoleConversation, prepareNewRoleConversation, clearRoleConversation, clearRoleConversationByConversation } = require('./lib/role-runtime');
 const { buildCrewStatus } = require('./lib/crew-status');
+const { makeMissionGraph, MAX_GRAPH_EVENTS } = require('./lib/mission-graph');
 const { listProjects, getProject } = require('./lib/projects');
 const { listRoleQueuedMessages, enqueueRoleMessage, removeRoleQueuedMessage, clearRoleMessageQueue } = require('./lib/role-message-queue');
 const { defaultMemoryProvider } = require('./lib/memory');
@@ -1109,6 +1110,30 @@ async function handleCrewStatus(res) {
   } catch (error) {
     res.writeHead(500, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
     res.end(JSON.stringify({ success: false, roles: [], error: error.message || 'Crew status unavailable' }));
+  }
+}
+
+async function handleMissionGraph(parsedUrl, res) {
+  try {
+    const roleId = String(parsedUrl?.query?.role_id || '').trim();
+    // Scope graph evidence to one existing Role. Never expose another Role's
+    // conversation transcript, private context, memory, or project workspace.
+    if (!/^[A-Za-z0-9._-]{1,160}$/.test(roleId)) {
+      res.writeHead(400, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+      return res.end(JSON.stringify({ success: false, error: 'Invalid role id' }));
+    }
+    const role = await getRole(roleId);
+    if (!role) {
+      res.writeHead(404, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+      return res.end(JSON.stringify({ success: false, error: 'Role not found' }));
+    }
+    const activity = await getCrewMessageActivity(role.id, { limit: MAX_GRAPH_EVENTS });
+    const graph = makeMissionGraph({ focusRole: role, activity });
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+    return res.end(JSON.stringify({ success: true, ...graph }));
+  } catch (error) {
+    res.writeHead(500, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+    return res.end(JSON.stringify({ success: false, error: 'Mission graph unavailable' }));
   }
 }
 
@@ -2825,6 +2850,8 @@ const server = http.createServer(async (req, res) => {
     return handleRoles(req, res, parsedUrl);
   } else if (pathname === '/api/crew-status' && req.method === 'GET') {
     return handleCrewStatus(res);
+  } else if (pathname === '/api/mission-graph' && req.method === 'GET') {
+    return handleMissionGraph(parsedUrl, res);
   } else if (pathname === '/api/crew-status/events' && req.method === 'GET') {
     return handleCrewStatusEvents(req, res);
   } else if (pathname === '/api/role-queue' && ['GET', 'POST'].includes(req.method)) {

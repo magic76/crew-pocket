@@ -42,6 +42,9 @@ jobs:
           node --check lib/roles.js
           node --check lib/role-delete.js
           node --check lib/crew-messages.js
+          node --check lib/mission-graph.js
+          node --check test/mission-graph.test.js
+          node test/mission-graph.test.js
           node --check lib/role-runtime.js
           node --check lib/role-message-queue.js
           node --check lib/crew-status.js
