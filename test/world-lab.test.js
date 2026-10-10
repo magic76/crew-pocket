@@ -31,12 +31,27 @@ assert.match(engine,/prefers-reduced-motion/);
 assert.match(engine,/webglcontextlost/);
 assert.match(engine,/不會啟動真實任務/);
 assert.match(engine,/不會發送 Role 訊息/);
-for(const src of [kit,engine,html]){
-  assert.doesNotMatch(src,/https?:\/\/|fetch\s*\(|XMLHttpRequest|localStorage|sessionStorage|WebSocket|\/api\/|\/api\/chat/);
+for(const src of [kit,html]){
+  assert.doesNotMatch(src,/https?:\/\/|fetch\s*\(|XMLHttpRequest|localStorage|sessionStorage|WebSocket|\/api\//);
 }
+assert.match(engine,/fetch\('\/api\/crew-status'/);
+assert.doesNotMatch(engine,/fetch\('\/api\/(chat|role-submit|role-runtime|memories)'/);
+assert.doesNotMatch(engine,/method\s*:\s*['\"](?:POST|PUT|PATCH|DELETE)/);
+assert.match(engine,/crew-world-open-role/);
+assert.match(kit,/makeLiveRoles/);
+assert.match(kit,/LIVE_COLORS/);
 assert.match(css,/touch-action:none/);
 assert.match(css,/safe-area-inset-bottom/);
 assert.match(css,/prefers-reduced-motion/);
 const main=read('public/index.html');
-assert.doesNotMatch(main,/world-lab|\/js\/world-lab/);
+assert.match(main,/id="crew-world-open-btn"/);
+assert.match(main,/id="crew-world-modal"/);
+assert.match(main,/\/js\/crew-world-launcher.js/);
+assert.doesNotMatch(main,/<script src="\/js\/world-lab.js"/);
+const launcher=read('public/js/crew-world-launcher.js');
+execFileSync(process.execPath,['--check',path.join(root,'public/js/crew-world-launcher.js')]);
+assert.match(launcher,/event.origin!==location.origin/);
+assert.match(launcher,/event.source!==frame.contentWindow/);
+assert.match(launcher,/frame.src='about:blank'/);
+assert.match(launcher,/getCrewCockpitSnapshot/);
 console.log('world-lab isolated 3D demo tests: ok');
