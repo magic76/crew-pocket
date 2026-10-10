@@ -55,6 +55,10 @@ const { createRoleSubmitter, runChatInBackground } = require('../lib/role-submit
     assert.equal(sent.model, 'teacher-model'); assert.equal(sent.effort, 'high'); assert.equal(sent.workspace, '/teacher');
     assert.equal(sent.context, undefined); assert.equal(sent.image_path, payload.image_path); assert.equal(sent.prompt, payload.prompt);
     assert.equal((await store.list()).length, 0);
+    const completedReceipt=(await store.readReceipts())[payload.request_id];
+    assert.equal(completedReceipt.replyText,'done',
+      'completed assistant response must be retrievable using the same request id');
+    assert.equal(completedReceipt.replyTruncated,false);
     const restartedStore = new RoleMessageQueueStore({ storagePath });
     const restarted = createRoleSubmitter({ ...deps, store: restartedStore });
     assert.equal((await restarted.submit(payload)).status, 'completed');
