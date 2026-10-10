@@ -84,6 +84,43 @@
       rail.position.z-=Math.sin(rotation)*edge;
     }
   }
+  // Every Role uses the same body rig with distinct, lightweight identity props.
+  function profession(role) {
+    const text=(String(role.name||'')+' '+String(role.projectId||'')).toLowerCase();
+    if(/teacher|老師|教學/.test(text))return 'teacher';
+    if(/story|故事|創作/.test(text))return 'story';
+    if(/fortune|占星|命理|星盤/.test(text))return 'fortune';
+    if(/helper|助理|助手/.test(text))return 'helper';
+    if(/pocket|developer|程式|開發/.test(text))return 'developer';
+    return 'general';
+  }
+  function accessory(body,role,kind) {
+    const prop=new T.Group();prop.position.set(0,.79,.58);body.add(prop);
+    if(kind==='developer'){
+      box(prop,'#263950',.69,.07,.43,0,-.08,.04);
+      box(prop,role.accent,.69,.53,.06,0,.19,-.15);
+    }else if(kind==='teacher'){
+      const a=box(prop,'#fff3d9',.43,.07,.52,-.22,.05,0);
+      const b=box(prop,'#fff3d9',.43,.07,.52,.22,.05,0);
+      a.rotation.z=.17;b.rotation.z=-.17;
+      box(prop,role.color,.08,.10,.53,0,.00,0);
+    }else if(kind==='story'){
+      box(prop,'#fff4dc',.66,.06,.50,0,.02,0);
+      const brush=cylinder(prop,'#71513b',.03,.03,.73,.31,.32,.15,7);
+      brush.rotation.z=.55;
+      sphere(prop,role.color,.10,.13,.61,.15);
+    }else if(kind==='fortune'){
+      part(prop,new T.OctahedronGeometry(.35),role.accent,0,.28,-.05);
+      cylinder(prop,'#ae9cd1',.36,.32,.11,0,-.08,0,9);
+    }else if(kind==='helper'){
+      box(prop,'#344657',.54,.40,.12,-.09,.10,.04);
+      sphere(prop,'#abefe2',.18,.32,.30,.04);
+    }else{
+      box(prop,'#e3ecf5',.54,.68,.10,0,.18,0);
+      box(prop,role.color,.29,.07,.12,0,.45,.04);
+    }
+    return prop;
+  }
   function character(scene,role,index) {
     const root=new T.Group();root.position.set(role.x,.43,role.z);scene.add(root);
     const body=new T.Group();root.add(body);
@@ -93,6 +130,7 @@
     plinth.material.emissiveIntensity=.16;
     const ring=part(root,new T.TorusGeometry(.77,.08,6,24),role.accent,0,.025,0);
     ring.rotation.x=-Math.PI/2;
+    const kind=profession(role);
     cylinder(body,role.coat,.38,.43,.72,0,.72,0,10);
     box(body,role.color,.61,.10,.12,0,.96,.27); // strong shoulder band
     box(body,role.accent,.18,.45,.03,0,.76,.38);
@@ -117,20 +155,32 @@
     if(index===1)for(const side of [-1,1]){
       sphere(body,role.hair,.29,side*.48,1.59,-.1,.8,1.45,.85);
     }
-    if(index===0)sphere(body,role.hair,.23,.07,2.24,-.05,.8,1.1,1);
+    if(kind==='teacher'){
+      for(const side of [-1,1])sphere(body,role.hair,.28,side*.48,1.56,-.11,.82,1.38,.85);
+    }else if(kind==='story'){
+      sphere(body,role.hair,.24,-.20,2.23,.0,1.2,.65,.85);
+    }else if(kind==='fortune'){
+      const crown=cylinder(body,role.color,.34,.47,.20,0,2.22,0,8);
+      crown.rotation.z=.05;
+    }else if(kind==='helper'){
+      sphere(body,role.accent,.23,.15,2.19,-.15);
+    }else{
+      sphere(body,role.hair,.22,.07,2.25,-.05,.80,1.10,1.0);
+    }
     for(const side of [-1,1]){
       sphere(body,'#fffaf4',.105,side*.19,1.68,.455,.84,1.1,.35);
       sphere(body,'#293147',.058,side*.19,1.68,.485,.86,1,.57);
       sphere(body,'#ed9f9e',.11,side*.35,1.52,.389,1,.45,.37);
     }
     sphere(body,'#b27567',.042,0,1.53,.492,1,.48,.42);
-    if(index===2){
+    if(kind==='story'){
       for(const side of [-1,1]){
         const frame=part(body,new T.TorusGeometry(.126,.019,5,12),'#433c4b',side*.19,1.675,.49);
         frame.scale.y=.81;
       }
       box(body,'#433c4b',.15,.022,.03,0,1.68,.49);
     }
+    const prop=accessory(body,role,kind);
     root.traverse(mesh=>{if(mesh.isMesh)mesh.userData.roleId=role.id;});
     return {role,root,body,arms,legs,mode:'idle',expires:0};
   }
