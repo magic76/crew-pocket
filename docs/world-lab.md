@@ -7,7 +7,7 @@ The normal conversation, Role selection, and Runtime remain intact.
 
 1. Open AI 小隊 → 探索 3D 小隊世界.
 2. Drag to pan, pinch or use +/- to zoom, tap 3D characters or Role labels.
-3. 聚焦人物 centers the character. 示範工作 and 示範交接 only play synthetic animations.
+3. Tap 跟他說話 to compose an instruction right on the map. The existing idempotent Role submitter queues it in that Role's current conversation, not a new one.\n4. 頭上狀態名牌 shows verified state and current conversation title (only if working).
 4. 前往對話 returns to the selected Role's existing scoped conversation.
 5. Close with ✕ or the back arrow. The iframe unloads WebGL; chat and Live are not stopped.
 
@@ -44,3 +44,29 @@ virtual office never becomes the default Crew Room.
 Validate Android portrait/landscape, 3–6 Roles, horizontal Role chip scrolling,
 touch pinch/pan, character selection, close/reopen, stale Runtime status and
 returning to an existing conversation. Device-level visual tests are still needed.
+
+## In-map communication and verified handoffs (P1/P2)
+
+- Live Role mode shows 聚焦人物 / 跟他說話 / 前往對話. Standalone
+  offline demo keeps synthetic work/handoff buttons and cannot send messages.
+- The composer calls the existing POST /api/role-submit only after the user
+  explicitly taps 送出訊息. A strong random request_id is reused for retries
+  so an uncertain network response does not duplicate the action.
+- Runtime owns the selected Role's provider, project/workspace and existing
+  conversation. The visualizer cannot supply or override those fields.
+- A queue receipt means accepted/queued, not completed. For the full streaming
+  reply, tap 查看完整對話 to return to the native Role conversation UI.
+- Head labels use real working/waiting/idle/new state. Only a *working* Role
+  may show its current conversation title; waiting shows an attention count.
+  No tool step, task outcome or completion is invented.
+- GET /api/crew-room-events returns saved metadata without message content.
+  Initial load is a baseline and never animates historical messages. Only fresh
+  new handoffs/replies between currently displayed Roles animate across hub
+  bridges. A saved event does not assert delivery or task success.
+- All label and chat names are set with textContent, not untrusted innerHTML.
+  Closing the 3D view unloads the iframe, stopping polling and animations.
+
+Check typing in Chinese Gboard, retaining text on network failures, tap target
+switching, low-power Android devices, zoomed-out head label visibility, and
+quiet/no-handoff startup. The map currently does not mirror the full live chat
+transcript; that remains in the normal Role conversation UI.
