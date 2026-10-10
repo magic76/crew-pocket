@@ -134,4 +134,23 @@ assert.doesNotMatch(composer,/\/api\/(?:chat|role-queue|memories)|localStorage|s
 assert.match(kit,/function accessory/);
 assert.match(kit,/function profession/);
 
+
+assert.match(html,/id="world-chat-history"/);
+assert.match(html,/id="world-chat-read-state"/);
+assert.match(composer,/visualViewport/);
+assert.match(composer,/frameElement\.getBoundingClientRect/);
+assert.match(composer,/world-chat-keyboard-overlap/);
+assert.match(composer,/\/api\/world-chat-history/);
+assert.match(composer,/readableMessages/);
+assert.match(css,/world-chat-keyboard-overlap/);
+assert.match(css,/world-chat-history/);
+assert.match(read('server.js'),/handleWorldChatHistory/);
+const projected = chat.readableMessages({
+  success:true,roleId:'teacher',
+  messages:[{role:'assistant',text:'Teacher reply'}, {role:'user',text:'Should not appear'}]
+},'teacher');
+assert.deepEqual(projected,['Teacher reply']);
+assert.throws(()=>chat.readableMessages({success:true,roleId:'pocket',messages:[]},'teacher'),
+  /驗證/);
+
 console.log('world-lab isolated 3D demo tests: ok');
