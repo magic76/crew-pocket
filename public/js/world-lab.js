@@ -380,7 +380,7 @@
   const fingers=new Map();
   let pinch=0,tap=null;
   listen(stage,'pointerdown',event=>{
-    if(event.target.closest?.('.world-label'))return;
+    if(event.target.closest?.('.world-label, .world-district-pin'))return;
     stage.setPointerCapture?.(event.pointerId);
     fingers.set(event.pointerId,{x:event.clientX,y:event.clientY});
     if(fingers.size===1)tap={x:event.clientX,y:event.clientY,at:performance.now(),moved:false};
