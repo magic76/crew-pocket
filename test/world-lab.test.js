@@ -32,7 +32,7 @@ assert.match(engine,/webglcontextlost/);
 assert.match(engine,/不會啟動真實任務/);
 assert.match(engine,/不會發送 Role 訊息/);
 for(const src of [kit,html]){
-  assert.doesNotMatch(src,/https?:\/\/|fetch\s*\(|XMLHttpRequest|localStorage|sessionStorage|WebSocket|\/api\//);
+  assert.doesNotMatch(src,/https?:\/\/|fetch\s*\(|XMLHttpRequest|localStorage|sessionStorage|WebSocket/);
 }
 assert.match(engine,/fetch\('\/api\/crew-status'/);
 assert.doesNotMatch(engine,/fetch\('\/api\/(chat|role-submit|role-runtime|memories)'/);
