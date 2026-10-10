@@ -18,7 +18,9 @@ async function run() {
   assert.match(page, /id="role-nav-list" class="crew-role-grid"/);
   assert.match(page, /id="crew-activity-panel"/);
   assert.match(page, /id="crew-activity-list"/);
-  assert.doesNotMatch(page, /crew-room-switchyard|crew-room-view-switch|crew-world|crew-office/);
+  assert.doesNotMatch(page, /crew-room-switchyard|crew-room-view-switch|crew-office/);
+  assert.match(page, /id="crew-world-open-btn"/);
+  assert.match(page, /id="crew-world-modal"/);
   assert.doesNotMatch(css, /crew-room-envelope|crew-handoff-fly|crew-room-roster-stage/);
   assert.ok(page.indexOf('/js/crew-room.js') < page.indexOf('/js/ui.js'));
   assert.match(page, /CrewRoomVisual\?\.init\(window, document\)/);
