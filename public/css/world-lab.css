@@ -113,3 +113,32 @@
 .world-chat-sheet.keyboard-open #world-chat-message{min-height:50px;max-height:84px}
 .world-chat-sheet.keyboard-open .world-chat-help{display:none}
 @media(max-width:540px){.world-chat-sheet{left:8px;right:8px;bottom:calc(7px + var(--world-chat-keyboard-overlap,0px))}}
+
+
+/* City overview: one label per project district, with up to three agents each. */
+#world-districts{position:absolute;inset:0;pointer-events:none;overflow:hidden;z-index:2}
+.world-district-pin{
+  position:absolute;transform:translate(-50%,-50%);pointer-events:auto;
+  min-width:94px;max-width:150px;padding:6px 9px;
+  background:#e8f5ffe9;color:#123951;border:1px solid #b1eff6;
+  border-radius:11px;text-align:center;box-shadow:0 4px 16px #09172b88;
+  backdrop-filter:blur(6px);font-size:10px;
+}
+.world-district-pin b{display:block;font-size:11px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.world-district-pin small{display:block;font-size:9px;color:#487489;padding-top:2px}
+.world-district-pin:focus-visible{outline:3px solid #47daeb;outline-offset:2px}
+.world-label{z-index:3}
+@media(max-width:540px){
+ .world-district-pin{max-width:110px;min-width:76px;padding:4px 6px}
+ .world-district-pin b{font-size:10px}
+ .world-district-pin small{font-size:8px}
+}
+
+.world-district-pin[data-state="working"]{background:#d6ffefed;border-color:#75e8b6;color:#16523b}
+.world-district-pin[data-state="working"] small{color:#286c51}
+.world-district-pin[data-state="waiting"]{background:#fff0d4ed;border-color:#ffc071;color:#6c471c}
+.world-district-pin[data-state="waiting"] small{color:#906220}
+.world-district-pin[data-state="unknown"]{background:#edf0f5e9;border-color:#afbbd4;color:#46546c}
+
+/* Keep individually clickable agent badges above broader district overview pins. */
+#world-labels{z-index:3}

@@ -29,7 +29,7 @@ async function tick(){await new Promise(resolve=>setImmediate(resolve));}
   const doc={activeElement:null,body:{dataset:{primaryTab:'crew'},classList:{
     set:new Set(),add(k){this.set.add(k);},remove(k){this.set.delete(k);}
   }},events:new Map()};
-  const ids=['crew-world-open-btn','crew-world-modal','crew-world-close-btn',
+  const ids=['crew-world-open-btn','crew-home-dashboard-btn','crew-world-dashboard-btn','crew-world-map-btn','crew-world-modal','crew-world-close-btn',
     'crew-world-chat-panel','crew-world-chat-messages-slot','crew-world-chat-composer-slot',
     'messages-container','chat-composer-footer','crew-world-chat-hide','crew-world-chat-expand',
     'world-chat-open','crew-world-chat-role-name','crew-back-home-btn','world-stage'];
@@ -56,6 +56,9 @@ async function tick(){await new Promise(resolve=>setImmediate(resolve));}
   vm.runInNewContext(file,{window:win,document:doc,console});
   nodes['crew-world-open-btn'].click();
   assert.equal(nodes['crew-world-modal'].hidden,false);
+  assert.equal(nodes['crew-world-open-btn']['aria-pressed'],'true');
+  assert.equal(nodes['crew-home-dashboard-btn']['aria-pressed'],'false');
+  assert.equal(nodes['crew-world-map-btn']['aria-pressed'],'true');
   await tick();
   assert.equal(mountCount,1);
   win.CrewWorldHost.onSelectedRole('pocket','Pocket');
@@ -75,7 +78,9 @@ async function tick(){await new Promise(resolve=>setImmediate(resolve));}
   nodes['world-chat-open'].click();
   await tick();await tick();
   assert.deepEqual(roleNavigations,['pocket','teacher']);
-  nodes['crew-world-close-btn'].click();
+  nodes['crew-world-dashboard-btn'].click();
+  assert.equal(nodes['crew-world-open-btn']['aria-pressed'],'false');
+  assert.equal(nodes['crew-home-dashboard-btn']['aria-pressed'],'true');
   assert.equal(disposeCount,1,'closing world must dispose one WebGL instance');
   assert.strictEqual(nodes['messages-container'].parentNode,originalMessages);
   assert.strictEqual(nodes['chat-composer-footer'].parentNode,originalComposer);

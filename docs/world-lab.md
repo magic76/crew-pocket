@@ -1,12 +1,12 @@
 # Crew World: one WebView, one Chat runtime
 
-Crew World is an optional 3D mode of the existing Crew Pocket Web app.
+Crew World is the Map view of Crew Pocket's home screen, paired with Dashboard.
 It lives **inside public/index.html**, not an iframe. The regular Role roster
 and the original Chat tab stay available.
 
 ## Mobile usage
 
-1. Open **AI 小隊 → 探索 3D 小隊世界**.
+1. Open **AI 小隊 → 地圖** using the Dashboard / 地圖 segmented toggle.
 2. Drag to pan, pinch to zoom; tap a Role and select **開啟聊天**.
 3. The world shows a bottom sheet holding the **original messages-container
    and chat-composer-footer DOM nodes**. It uses the existing Role conversation,
@@ -14,7 +14,7 @@ and the original Chat tab stay available.
 4. Select **收合** to see the world again; the active Role keeps working.
    **展開** opens a near-full-screen chat sheet on the world.
 5. Select **前往對話** to return to the normal full Chat view.
-6. Close the world with ✕ or ←. Chat nodes are returned to their original
+6. Switch back with **Dashboard**, ✕ or ←. Chat nodes are returned to their original
    positions; Role and stream state is not restarted or cloned.
 
 Android IME positioning uses the **single** window.visualViewport, and only
@@ -33,7 +33,7 @@ This separate page is now **visual-only** and has no second Chat implementation.
   `window.mountCrewWorldScene`. Does not submit messages or read private
   chat content. The host is notified of the clicked Role directly.
 - `public/js/world-lab-kit.js`: fixed low-poly character rigs with distinct
-  profession accessories and palettes (max six on the 3D preview).
+  profession accessories and procedural colors. Up to 36 agents (three per district) are drawn.
 - `public/js/world-lab-events.js`: baseline-only saved Role handoff events.
   Handoff animations are illustrative and never imply successful delivery.
 - `public/css/world-lab.css`: the world-only styles; no global body/button
@@ -71,3 +71,38 @@ On-device checks still required: Android portrait/landscape, Gboard Chinese,
 visualViewport keyboard shrink, streaming while the world panel is collapsed,
 role switching during another Role's active work, attachments, tap/pinch,
 open/close memory stability and WebGL recovery.
+
+## Dashboard / Map and city growth (Oct 2026)
+
+- **Dashboard** and **地圖** are equal, accessible view modes on the
+  Crew Home. Neither mode creates a new Conversation. Both share the same
+  Role identity and runtime.
+- The old Dashboard card that launched a separate "3D experiment" is removed.
+  Both modes expose equivalent toggle controls; switching to Dashboard cleans
+  up the Three.js scene while leaving any active Role request undisturbed.
+- The former rendering cutoff was 6 Roles. Now **up to 36** are rendered.
+  A Project forms contiguous districts of at most 3 Role avatars each.
+  For 16 Roles from one Project the map has **six** island neighborhoods,
+  not 16 far-flung islands. Several Projects form separate districts.
+- District positions use a compact ring town: the first six neighborhoods
+  form an inner ring, subsequent neighborhoods form outer rings. Island/
+  bridge geometry is built **once per district**, not once per person.
+  Each Role is individually selectable and retains its own Role/Conversation,
+  color and status; proximity does not share project context or memory.
+- At overview zoom the map shows labeled Project neighborhoods and busy/
+  selected Role badges. Zooming in reveals individual badges; the horizontal
+  Role chip rail offers direct navigation to every rendered agent.
+- Project pins show verified busy/waiting/idle counts. They are navigational
+  only: no tool calls, new messages, or completion claims.
+- Camera framing accounts for the city extent. Zoom and focused district
+  views remain available on phone.
+- At >36 Roles, the map labels its visible/total count rather than silently
+  hiding extra characters. **Dashboard** still provides the full Role roster;
+  a later world-virtualization phase can lift the cap without overloading
+  low-memory Android devices.
+- When Role membership changes while the map is already open, re-enter Map
+  to refresh the district layout. Existing status refresh continues meanwhile.
+
+Regression contract covers 7/16/36 characters, multi-Project grouping,
+uniqueness of Role selection points, dynamically scaled town extent and the
+Dashboard/Map toggle. Android WebView GPU and gesture testing remains required.

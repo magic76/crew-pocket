@@ -34,10 +34,21 @@
     try { liveRows=await loadStatus(); } catch (_) { /* Keep standalone art preview available. */ }
     if(disposed)return;
     const roles=liveRows?.length?kit.makeLiveRoles(liveRows):kit.roles;
+    const originalCount=liveRows?.length||roles.length;
+    const districtMap=new Map();
+    for(const role of roles){
+      const key=role.districtId||role.id;
+      if(!districtMap.has(key))districtMap.set(key,[]);
+      districtMap.get(key).push(role);
+    }
+    const districts=[...districtMap.values()];
     const isLive=Boolean(liveRows?.length);
     let synced=isLive;
     const pill=stage.closest('.world-app')?.querySelector('.world-demo-pill');
-    if(pill)pill.textContent=isLive?'真實 Role · '+roles.length+' 位':'示範場景 · 非即時';
+    const statusSummary=()=>originalCount>roles.length
+      ?'地圖 '+roles.length+'/'+originalCount+' 位 · '+districts.length+' 區'
+      :'地圖 '+roles.length+' 位 · '+districts.length+' 區';
+    if(pill)pill.textContent=isLive?statusSummary():'示範場景 · 非即時';
   const reduced=window.matchMedia?.('(prefers-reduced-motion: reduce)').matches||false;
   let renderer;
   try{renderer=new T.WebGLRenderer({antialias:true,alpha:true,powerPreference:'low-power'});}
@@ -60,9 +71,27 @@
   sunlight.shadow.bias=-.0005;
   scene.add(sunlight,new T.HemisphereLight(0xc5e6ff,0x4f527d,1.12));
   const actors=kit.create(scene,roles), hub={x:0,z:-.8};
+  const worldExtent=kit.mapExtent?.(roles)||15;
   const view=new T.Vector3(0,.7,-1.8),direction=new T.Vector3(16,21,25).normalize();
   let width=1,height=1,zoom=1,selected=0,focus=null;
   const labelsHost=document.getElementById('world-labels');
+  const districtsHost=document.getElementById('world-districts');
+  const districtPins=districts.map((members,districtIndex)=>{
+    const marker=document.createElement('button');
+    marker.type='button';marker.className='world-district-pin';
+    const name=String(members[0].projectId||'General').slice(0,24);
+    const label=document.createElement('b');label.textContent=name;
+    const count=document.createElement('small');
+    count.textContent=members.length+' 位 Role'+(districtIndex?' · '+(districtIndex+1)+' 區':'');
+    marker.append(label,count);
+    marker.title=name+'：'+members.map(role=>role.name).join('、');
+    listen(marker,'click',()=>{
+      const member=members[0];
+      panTo(member.islandX,member.islandZ,width<700?2.35:1.85);
+    });
+    districtsHost?.appendChild(marker);
+    return {marker,role:members[0],members,count};
+  });
   const rosterHost=document.getElementById('world-roster');
   const liveStates={working:'工作中',waiting:'待處理',idle:'待命',new:'新角色',unknown:'未知'};
   const status=a=>{
@@ -91,7 +120,7 @@
     const detail=document.createElement('span');detail.className='world-label-detail';
     const speech=document.createElement('span');speech.className='world-speech-bubble';
     speech.hidden=true;
-    button.append(speech,title,state,detail);listen(button,'click',()=>select(index));
+    button.append(speech,title,state,detail);listen(button,'click',()=>select(index,true));
     listen(speech,'click',event=>{
       event.preventDefault();event.stopPropagation();
       hideSpeech(index,true);
@@ -119,6 +148,13 @@
   document.getElementById('world-handoff').hidden=isLive;
   if(actionRow)actionRow.style.gridTemplateColumns='repeat(3,minmax(0,1fr))';
   function updateInfo(){
+    for(const pin of districtPins){
+      const working=pin.members.filter(r=>r.state==='working').length;
+      const waiting=pin.members.filter(r=>r.state==='waiting').length;
+      pin.marker.dataset.state=!synced?'unknown':working?'working':waiting?'waiting':'idle';
+      pin.count.textContent=pin.members.length+' 位 · '+
+        (!synced?'狀態未同步':working?working+' 工作中':waiting?waiting+' 待處理':'待命');
+    }
     const actor=actors[selected],role=actor.role;
     document.getElementById('world-role-name').textContent=role.name;
     document.getElementById('world-role-state').textContent=status(actor);
@@ -139,7 +175,8 @@
   }
   function cameraSync(){
     const aspect=width/Math.max(1,height);
-    const vertical=Math.max(14.8,24.5/aspect)/zoom;
+    const span=Math.max(24.5,worldExtent*2.15);
+    const vertical=Math.max(14.8,span/aspect)/zoom;
     camera.left=-vertical*aspect/2;
     camera.right=vertical*aspect/2;
     camera.top=vertical/2;
@@ -159,10 +196,11 @@
   function select(index,center=false){
     if(index<0||index>=actors.length)return;
     selected=index;updateInfo();
+    if(center)roster[index]?.scrollIntoView?.({inline:'center',block:'nearest'});
     window.CrewWorldHost?.onSelectedRole?.(roles[index].id,roles[index].name);
     if(center){
       const role=roles[index];
-      panTo(role.islandX,role.islandZ,width<700?2.4:1.72);
+      panTo(role.islandX,role.islandZ,width<700?2.65:2.0);
     }
   }
   const toast=document.getElementById('world-toast');
@@ -222,7 +260,7 @@
           ?Math.max(0,Math.min(999,item.attentionCount)):0;
       }
       synced=true;
-      if(pill)pill.textContent=next.length===roles.length?'真實 Role · '+roles.length+' 位':'Role 已變更 · 重新開啟更新';
+      if(pill)pill.textContent=next.length===originalCount?statusSummary():'角色名單已改變 · 重新進入地圖更新';
     }catch(_){
       if(disposed)return;
       synced=false;
@@ -337,7 +375,7 @@
     panTo(0,-1.8,1);notify('返回全景');
   });
   function setZoom(value){
-    zoom=T.MathUtils.clamp(value,.65,3.5);cameraSync();
+    zoom=T.MathUtils.clamp(value,.65,4.5);cameraSync();
   }
   listen(document.getElementById('world-zoom-in'),'click',()=>setZoom(zoom*1.2));
   listen(document.getElementById('world-zoom-out'),'click',()=>setZoom(zoom/1.2));
@@ -349,7 +387,7 @@
   const fingers=new Map();
   let pinch=0,tap=null;
   listen(stage,'pointerdown',event=>{
-    if(event.target.closest?.('.world-label'))return;
+    if(event.target.closest?.('.world-label, .world-district-pin'))return;
     stage.setPointerCapture?.(event.pointerId);
     fingers.set(event.pointerId,{x:event.clientX,y:event.clientY});
     if(fingers.size===1)tap={x:event.clientX,y:event.clientY,at:performance.now(),moved:false};
@@ -444,7 +482,7 @@
         actor.root.position.set(point.x,.43,point.z);
         if(Math.hypot(dx,dz)>.001)actor.root.rotation.y=Math.atan2(dx,dz);
       }
-      if(moving&&!reduced){
+      if(moving&&!reduced&&!recorded){
         const progress=T.MathUtils.clamp(1-(actor.expires-now)/8000,0,1);
         const route=progress<.5?progress*2:(1-progress)*2;
         const ease=route*route*(3-2*route);
@@ -466,13 +504,34 @@
         mesh.rotation.x=reduced?0:moving?Math.sin(phase)*side*.45:0;
       });
     });
-    labels.forEach(({button},index)=>{
+    // Overview favors project districts; only selected and active Role labels
+    // remain visible until zoomed in, preventing unreadable overlaps on phones.
+    const overview=roles.length>=10&&zoom<1.65;
+    const placements=labels.map(({button,speech},index)=>{
       const projected=actors[index].root.position.clone().add(new T.Vector3(0,3.3,0)).project(camera);
       const x=(projected.x+1)/2*width,y=(-projected.y+1)/2*height;
-      button.style.display=projected.z<-1||projected.z>1||x<12||x>width-12||
-        y<100||y>height-115?'none':'';
-      button.style.left=x+'px';button.style.top=y+'px';
-    });
+      const priority=index===selected?0:!speech.hidden?1:
+        roles[index].state==='working'?2:roles[index].state==='waiting'?3:4;
+      return {button,index,x,y,priority,depth:projected.z};
+    }).sort((a,b)=>a.priority-b.priority);
+    const occupied=[];
+    for(const item of placements){
+      const {button,index,x,y,depth,priority}=item;
+      const out=depth<-1||depth>1||x<12||x>width-12||y<100||y>height-115;
+      const lowPriority=overview&&priority>=4;
+      const collides=occupied.some(point=>Math.abs(point.x-x)<112&&Math.abs(point.y-y)<50);
+      const visible=!out&&!lowPriority&&!collides;
+      button.style.display=visible?'':'none';
+      if(visible){occupied.push({x,y});button.style.left=x+'px';button.style.top=y+'px';}
+    }
+    for(const pin of districtPins){
+      const pos=new T.Vector3(pin.role.islandX,2.9,pin.role.islandZ).project(camera);
+      const x=(pos.x+1)/2*width,y=(-pos.y+1)/2*height;
+      const visible=zoom<1.75&&roles.length>=6&&pos.z>=-1&&pos.z<=1&&
+        x>35&&x<width-35&&y>115&&y<height-120;
+      pin.marker.style.display=visible?'':'none';
+      if(visible){pin.marker.style.left=x+'px';pin.marker.style.top=y+'px';}
+    }
     renderer.render(scene,camera);
   }
   updateInfo();
@@ -492,6 +551,8 @@
     renderer.dispose();renderer.forceContextLoss?.();
     renderer.domElement.remove();
     labelsHost.replaceChildren();rosterHost.replaceChildren();
+    districtsHost?.replaceChildren();
+    kit.releaseMaterials?.();
   };
   }
   void start().catch(()=>{if(!disposed)fail('無法建立 3D 世界，請重新開啟頁面。');});

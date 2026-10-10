@@ -39,8 +39,8 @@
     const x=role.islandX,z=role.islandZ;
     const sides=['#638ba7','#a17f9c','#9a866e'];
     const tops=['#91cbd0','#e6b0c6','#d2bf8e'];
-    cylinder(scene,sides[index],3.64,3.05,1.15,x,-.55,z,10);
-    cylinder(scene,tops[index],3.54,3.58,.30,x,.16,z,10);
+    cylinder(scene,sides[index%sides.length],3.64,3.05,1.15,x,-.55,z,10);
+    cylinder(scene,tops[index%tops.length],3.54,3.58,.30,x,.16,z,10);
     cylinder(scene,'#f9efdb',3.34,3.34,.05,x,.335,z,10);
     for(let i=0;i<8;i++){
       const angle=Math.PI*2*i/8;
@@ -186,8 +186,16 @@
   }
   function create(scene, roleDefs=roles) {
     const hub=[0,-.8];
-    roleDefs.forEach(role=>bridge(scene,[role.islandX,role.islandZ],hub));
-    roleDefs.forEach((role,i)=>island(scene,role,i));
+    // A neighborhood is a project district (up to 3 Roles), not one island
+    // per Role. Preserve all individual characters/click targets/conversations.
+    const groups=new Map();
+    for(const role of roleDefs){
+      const districtId=role.districtId||role.id;
+      if(!groups.has(districtId))groups.set(districtId,role);
+    }
+    const districts=[...groups.values()];
+    districts.forEach(role=>bridge(scene,[role.islandX,role.islandZ],hub));
+    districts.forEach((role,i)=>island(scene,role,i));
     cylinder(scene,'#d4b6df',1.05,1.2,.65,0,-.14,-.8,10);
     cylinder(scene,'#7bcadf',.86,.9,.15,0,.28,-.8,12);
     sphere(scene,'#a7e5ee',.55,0,1,-.8,1,1.1,1);
@@ -218,36 +226,77 @@
     if(/pocket/i.test(text))return 0;
     return fallback%LIVE_COLORS.length;
   }
+  const MAX_WORLD_ROLES=36;
+  const MEMBERS_PER_DISTRICT=3;
+  function districtPosition(index,count){
+    // Compact three-ring town: 6 inner districts, 12 middle, up to 18 outer.
+    // Avoid overlapping 7.3-unit island footprints as the town grows.
+    const ring=index<6?0:index<18?1:2;
+    const offset=ring===0?0:ring===1?6:18;
+    const capacity=[6,12,18][ring];
+    const size=Math.min(capacity,count-offset);
+    const ordinal=index-offset;
+    const angle=(Math.PI*2*(ordinal+.25*(ring%2)))/Math.max(size,1)-Math.PI/2;
+    const radius=count===1?6:[11.5,22.5,33.5][ring];
+    return {x:Math.cos(angle)*radius,z:Math.sin(angle)*radius};
+  }
   function makeLiveRoles(input) {
     if(!Array.isArray(input))return [];
-    const known=new Set();
-    const members=input.filter(r=>{
-      if(!r||typeof r.roleId!=='string'||!r.roleId.trim()||known.has(r.roleId))return false;
-      known.add(r.roleId);return true;
-    }).slice(0,6);
-    const n=members.length;
+    const seen=new Set();
+    const members=input.filter(role=>{
+      if(!role||typeof role.roleId!=='string'||!role.roleId.trim()||seen.has(role.roleId))return false;
+      seen.add(role.roleId);return true;
+    }).slice(0,MAX_WORLD_ROLES);
+    if(!members.length)return [];
+    const buckets=new Map();
+    for(const member of members){
+      const key=String(member.projectId||'general').trim()||'general';
+      if(!buckets.has(key))buckets.set(key,[]);
+      buckets.get(key).push(member);
+    }
+    const districts=[];
+    for(const [key,items] of buckets){
+      for(let start=0;start<items.length;start+=MEMBERS_PER_DISTRICT){
+        districts.push({key,id:key+'#'+Math.floor(start/MEMBERS_PER_DISTRICT),
+          members:items.slice(start,start+MEMBERS_PER_DISTRICT)});
+      }
+    }
+    // Map from immutable ID to project district and individual standing spot.
+    const positions=new Map();
+    districts.forEach((district,districtIndex)=>{
+      const pos=districtPosition(districtIndex,districts.length);
+      district.members.forEach((member,slot)=>{
+        const spacing=district.members.length;
+        const offset=spacing===1?0:spacing===2?(slot===0?-1.3:1.3):(slot-1)*1.8;
+        positions.set(member.roleId,{districtId:district.id,
+          districtIndex,districtSize:spacing,islandX:pos.x,islandZ:pos.z,
+          x:pos.x+offset,z:pos.z+1.65});
+      });
+    });
     const assigned=new Set();
-    const radius=n<=3?8.2:n<=4?9.6:11.3;
     return members.map((value,index)=>{
-      let paletteIndex=liveIndex(value,index);
-      while(assigned.has(paletteIndex))paletteIndex=(paletteIndex+1)%LIVE_COLORS.length;
-      assigned.add(paletteIndex);
-      const style=LIVE_COLORS[paletteIndex];
-      const angle=n===1?0:2*Math.PI*index/n;
-      const x=n===1?0:n===2?(index===0?-6.2:6.2):
-        n===3?[-6.1,6.1,0][index]:Math.cos(angle)*radius;
-      const z=n===1?0:n===2?0:n===3?[1.6,1.6,-6.9][index]:
-        Math.sin(angle)*radius;
+      let style;
+      if(index<LIVE_COLORS.length){
+        let paletteIndex=liveIndex(value,index);
+        while(assigned.has(paletteIndex))paletteIndex=(paletteIndex+1)%LIVE_COLORS.length;
+        assigned.add(paletteIndex);
+        style=LIVE_COLORS[paletteIndex];
+      }else{
+        // Beyond six, procedural hues keep each visible identity distinct.
+        const hue=Math.round((index*137.508+17)%360);
+        style={color:'hsl('+hue+',81%,55%)',coat:'hsl('+hue+',62%,37%)',
+          accent:'hsl('+hue+',94%,80%)',hair:'#303449',skin:'#e7b795'};
+      }
       const name=String(value.roleName||'Role').slice(0,80);
+      const position=positions.get(value.roleId);
       return {
-        ...style,id:value.roleId,name,
+        ...style,...position,id:value.roleId,name,
         short:name.length>13?name.slice(0,12)+'…':name,
         initial:Array.from(name)[0]||'R',
-        description:'Role 小隊成員 · 3D 視覺化（僅顯示狀態，不共享 Context）',
-        projectId:String(value.projectId||''),
-        islandX:x,islandZ:z,x:x-.55,z:z+.9,live:true,
+        description:'Role 小隊成員 · '+(String(value.projectId||'General').slice(0,60))+
+          ' 區域（每位 Role 的 Context 獨立）',
+        projectId:String(value.projectId||''),live:true,
         state:['working','waiting','idle','new'].includes(value.state)?value.state:'unknown',
-        // Only verified busy work may show the active conversation title; no task-step inference.
         workTitle:value.state==='working'&&typeof value.currentWork?.title==='string'
           ?value.currentWork.title.slice(0,75):'',
         attention:Number.isSafeInteger(value.attentionCount)
@@ -255,6 +304,11 @@
       };
     });
   }
+  function mapExtent(roleDefs){
+    const islands=[...new Map(roleDefs.map(r=>[r.districtId||r.id,r])).values()];
+    return Math.max(10,...islands.map(r=>Math.hypot(r.islandX,r.islandZ)+4));
+  }
 
-  root.WorldLabKit={roles,create,makeLiveRoles};
+  function releaseMaterials(){cache.clear();}
+  root.WorldLabKit={roles,create,makeLiveRoles,mapExtent,releaseMaterials,MAX_WORLD_ROLES,MEMBERS_PER_DISTRICT};
 })(window);
