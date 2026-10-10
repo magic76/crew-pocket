@@ -108,6 +108,34 @@ open/close memory stability and WebGL recovery.
 - When Role membership changes while the map is already open, re-enter Map
   to refresh the district layout. Existing status refresh continues meanwhile.
 
+## Natural bridge network (Oct 2026)
+
+The first prototype made **every** neighborhood send one long bridge directly
+to the Hub. With a full inner/outer island ring, the roads visually piled up
+near the center and looked like crossing spokes rather than a plausible town.
+
+- WorldLabKit now plans a **shore-to-shore neighborhood road network** before
+  building Three.js meshes. Bridges terminate at each island's coastline; they
+  do not pass through the decorative buildings or underneath the center of
+  another island.
+- Uses a deterministic, minimal connecting tree over actual project islands
+  and the Hub. Routes prefer nearby islands; for more than three neighborhoods,
+  the central Hub has a **single bridge entrance** instead of many spokes.
+- Candidate roads are rejected if they cross an existing bridge or run through
+  the interior of an unrelated island. Every district still has a route to Hub
+  when the map has its generated 1–36 Agent layout.
+- Nearest-neighbor bridges create short linked island paths with readable
+  junctions on land rather than long waterborne intersections.
+- Works with one, two or three agent demo maps too; zero extra provider calls,
+  new task actions, Context coupling, or runtime state.
+- `node test/world-road-network.test.js` checks crossing, connectivity,
+  obstruction and the hub entrance for 1–36 same-project and mixed-project
+  examples.
+
+**Note:** The bridges are decorative geometry. Recorded handoff motions still
+use the original Hub trajectories; this change does not imply real navigation
+or task delivery. Android 3D visual smoke testing is still required.
+
 Regression contract covers 7/16/36 characters, multi-Project grouping,
 uniqueness of Role selection points, dynamically scaled town extent and the
 Dashboard/Map toggle. Android WebView GPU and gesture testing remains required.
