@@ -59,6 +59,7 @@
     const title=document.createElement('b');title.textContent=role.short;
     const state=document.createElement('small');state.textContent='示範 · 待命';
     button.append(title,state);button.addEventListener('click',()=>select(index));
+    button.style.setProperty('--world-role-color',role.color);
     labelsHost.appendChild(button);return{button,state};
   });
   const roster=roles.map((role,index)=>{
@@ -263,7 +264,8 @@
         actor.root.position.set(actor.role.x,.43,actor.role.z);
         actor.root.rotation.y=0;updateInfo();
       }
-      const moving=actor.mode==='handoff',working=actor.mode==='working';
+      const moving=actor.mode==='handoff';
+      const working=actor.mode==='working'||(isLive&&synced&&actor.mode==='idle'&&actor.role.state==='working');
       if(moving&&!reduced){
         const progress=T.MathUtils.clamp(1-(actor.expires-now)/8000,0,1);
         const route=progress<.5?progress*2:(1-progress)*2;
