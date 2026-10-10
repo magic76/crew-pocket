@@ -44,7 +44,7 @@
     const readState=doc.getElementById('world-chat-read-state');
     if(!sheet||!openButton||!form||!message||!sendButton||!status||!history||!readState)return null;
     const info=doc.getElementById('world-info');
-    const drafts=new Map(), pendingByRole=new Map(), localTurns=new Map();
+    const drafts=new Map(), pendingByRole=new Map(), localTurns=new Map(), lastReplies=new Map();
     let targetId=null,lastFocus=null,inflight=false,reading=false,readTimer=null,visit=0;
     let lastRendered=null;
     function addBubble(text,kind){
@@ -69,8 +69,14 @@
         empty.textContent='這位角色目前沒有可顯示的 AI 回覆。';
         history.appendChild(empty);
       }
-      for(const text of texts)addBubble(text,'assistant');
+      // Show the latest reply *after* the local user instruction when the
+      // assistant content changed since that instruction was accepted.
+      const baseline=readState.dataset.replyBaseline||'';
+      const newer=Boolean(local&&texts.length&&texts.at(-1)!==baseline);
+      const previous=newer?texts.slice(0,-1):texts;
+      for(const text of previous)addBubble(text,'assistant');
       if(local)addBubble(local,'user');
+      if(newer)addBubble(texts.at(-1),'assistant');
       lastRendered=fingerprint;
       if(stick||local)history.scrollTop=history.scrollHeight;
     }
@@ -110,15 +116,9 @@
         if(!response.ok||data.success!==true)throw new Error(data.error||'暫時無法讀取回覆');
         const texts=readableMessages(data,id);
         if(sheet.hidden||visit!==token||targetId!==id)return;
-        if(localTurns.has(id)&&texts.length){
-          // Do not claim any historical reply answered a newly submitted prompt.
-          // Remove the provisional user bubble only after a changed assistant reply.
-          const latest=texts[texts.length-1];
-          const baseline=readState.dataset.replyBaseline||'';
-          if(baseline&&latest!==baseline){localTurns.delete(id);}
-        }
+        lastReplies.set(id,texts);
         renderMessages(texts);
-        readState.dataset.replyBaseline=readState.dataset.replyBaseline||texts.at(-1)||'';
+        if(!localTurns.has(id))readState.dataset.replyBaseline=texts.at(-1)||'';
         readState.textContent=data.busy?'AI 正在回應，持續更新最近回覆…':
           texts.length?'已同步這個 Role 的最近 AI 回覆':'等待 Role 的第一則回覆…';
       }catch(error){
@@ -194,10 +194,11 @@
           '已記錄，請確認執行狀態';
         status.dataset.kind='success';
         status.textContent=target.name+'：'+queueState+'（不代表任務完成）';
+        readState.dataset.replyBaseline=(lastReplies.get(targetId)||[]).at(-1)||'';
         localTurns.set(targetId,command.prompt);
         drafts.delete(targetId);pendingByRole.delete(targetId);
         message.value='';
-        renderMessages([]);
+        renderMessages(lastReplies.get(targetId)||[]);
         void refreshReplies();
       }catch(error){
         status.dataset.kind='error';
