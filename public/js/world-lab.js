@@ -112,7 +112,7 @@
     const duration=reduced?760:planner.paperFlightDuration(from,to);
     const plane=kit.createPaperPlane(scene,kind);
     plane.root.scale.setScalar(Math.max(.80,Math.min(1.55,worldExtent/22)));
-    const flight={from,to,startedAt:now,duration,plane,kind};
+    const flight={from,to,startedAt:now,duration,plane,kind,recipient};
     activePlanes.push(flight);
     // Digital messages can fly over water. Existing bridges glow faintly
     // as a secondary background effect; no Role ever leaves its island.
@@ -143,6 +143,7 @@
       if(elapsed>=flight.duration){
         activePlanes.splice(i,1);
         kit.disposePaperPlane?.(scene,flight.plane);
+        if(flight.recipient)flight.recipient.reactionUntil=now+(reduced?550:1350);
         showArrivalCue(flight,now);
         continue;
       }
@@ -709,15 +710,23 @@
       // Agents are never physically moved away from their home island.
       // Sending a digital message is represented by bridge illumination,
       // not an avatar sprinting across water or through buildings.
+      const reaction=now<actor.reactionUntil;
+      const idle=actor.role.state==='idle'&&!working&&!signaling&&!reaction;
+      // Quiet idle gestures are ambient only; they never claim tool progress.
+      // Verified Runtime work gets a distinct ring and purposeful desk motion.
       const phase=elapsed*(signaling?6:working?8:2)+index;
+      const idleGesture=idle&&Math.sin(elapsed*.67+index*1.71)>.89;
       actor.body.position.y=reduced?0:signaling?Math.sin(phase)*.024:
-        working?Math.sin(phase)*.022:Math.sin(phase)*.035;
+        working?Math.sin(phase)*.024:Math.sin(phase)*.022;
       actor.body.rotation.z=reduced?0:Math.sin(phase*.6)*.025;
-      actor.arms[0].rotation.x=reduced?0:signaling?Math.sin(phase)*.24:
-        working?Math.sin(phase)*.3:0;
-      actor.arms[1].rotation.x=reduced?0:signaling?-.25:
-        working?-Math.sin(phase+1)*.27:0;
+      actor.arms[0].rotation.x=reduced?0:reaction?-.86:
+        signaling?Math.sin(phase)*.24:working?Math.sin(phase)*.34:
+        idleGesture?-.36:0;
+      actor.arms[1].rotation.x=reduced?0:reaction?Math.sin(phase*1.2)*.27:
+        signaling?-.25:working?-Math.sin(phase+1)*.27:
+        idleGesture?-.16:0;
       actor.legs.forEach(({mesh})=>{mesh.rotation.x=0;});
+      actor.workHalo.material.opacity=working?(reduced?.32:.22+Math.sin(elapsed*3+index)*.08):0;
     });
     if(visitor){
       const projected=visitor.root.position.clone().add(new T.Vector3(0,3.6,0)).project(camera);
