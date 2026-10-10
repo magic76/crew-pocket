@@ -54,7 +54,7 @@ const six=sampleWindow.WorldLabKit.makeLiveRoles([
 ]);
 assert.equal(six.length,6,'world caps the rendered 3D characters at six');
 assert.equal(new Set(six.map(r=>r.color)).size,6,'every displayed Role must have a distinct color');
-assert.deepEqual(six.map(r=>r.id),['one','two','three','four','five','six']);
+assert.deepEqual(Array.from(six,r=>r.id),['one','two','three','four','five','six']);
 assert.equal(six[4].state,'unknown','untrusted statuses cannot masquerade as work');
 assert.equal(sampleWindow.WorldLabKit.makeLiveRoles([]).length,0);
 
