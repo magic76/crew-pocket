@@ -153,4 +153,9 @@ assert.deepEqual(projected,['Teacher reply']);
 assert.throws(()=>chat.readableMessages({success:true,roleId:'pocket',messages:[]},'teacher'),
   /驗證/);
 
+assert.match(composer,/world-chat-result/);
+assert.match(composer,/submittedByRole/);
+assert.match(composer,/data\.requestId!==submission\.requestId/);
+assert.match(composer,/if\(confirmedReply\)addBubble\(confirmedReply,'assistant'\)/);
+assert.match(read('server.js'),/handleWorldChatResult/);
 console.log('world-lab isolated 3D demo tests: ok');
