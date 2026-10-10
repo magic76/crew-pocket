@@ -47,7 +47,7 @@ const { listCrewRoles, sendCrewMessage, getCrewInbox, getCrewMessageActivity, ge
 const { createCrewAutoResponder } = require('./lib/crew-auto-response');
 const { getRoleRuntime, listRoleRuntimes, activateRoleConversation, prepareNewRoleConversation, clearRoleConversation, clearRoleConversationByConversation } = require('./lib/role-runtime');
 const { buildCrewStatus } = require('./lib/crew-status');
-const { createWorldChatHistory } = require('./lib/world-chat-history');
+const { createWorldChatHistory, createWorldChatResult } = require('./lib/world-chat-history');
 const { makeMissionGraph, MAX_GRAPH_EVENTS } = require('./lib/mission-graph');
 const { listProjects, getProject } = require('./lib/projects');
 const { defaultRoleMessageQueueStore, listRoleQueuedMessages, enqueueRoleMessage, removeRoleQueuedMessage, clearRoleMessageQueue } = require('./lib/role-message-queue');
@@ -1271,6 +1271,21 @@ async function handleCrewStatus(res) {
 const readWorldChatHistory = createWorldChatHistory({
   getRole,getRoleRuntime,getConversationSettings,getProvider
 });
+const readWorldChatResult = createWorldChatResult({
+  getRole,readReceipts:() => defaultRoleMessageQueueStore.readReceipts()
+});
+async function handleWorldChatResult(parsedUrl,res) {
+  try {
+    const result=await readWorldChatResult(
+      String(parsedUrl.query.role_id||''),String(parsedUrl.query.request_id||''));
+    res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});
+    res.end(JSON.stringify({success:true,...result}));
+  }catch(error){
+    res.writeHead(error.statusCode||500,{'Content-Type':'application/json','Cache-Control':'no-store'});
+    res.end(JSON.stringify({success:false,error:error.statusCode?'無法查詢這筆 Role 訊息':'訊息狀態暫時無法讀取'}));
+  }
+}
+
 async function handleWorldChatHistory(parsedUrl,res) {
   try {
     const result=await readWorldChatHistory(String(parsedUrl.query.role_id||''));
@@ -3128,6 +3143,8 @@ const server = http.createServer(async (req, res) => {
     return handleRoles(req, res, parsedUrl);
   } else if (pathname === '/api/crew-status' && req.method === 'GET') {
     return handleCrewStatus(res);
+  } else if (pathname === '/api/world-chat-result' && req.method === 'GET') {
+    return handleWorldChatResult(parsedUrl,res);
   } else if (pathname === '/api/world-chat-history' && req.method === 'GET') {
     return handleWorldChatHistory(parsedUrl,res);
   } else if (pathname === '/api/crew-room-events' && req.method === 'GET') {
