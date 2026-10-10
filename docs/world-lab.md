@@ -1,40 +1,46 @@
-# Crew World 3D Lab (isolated experiment)
+# Crew World 3D — opt-in Role visualization
 
-This is a visual prototype only. It does **not** replace the Crew Room, connect
-to live Role status, send messages, modify Memory, or run any tool. All labels
-are explicitly **示範** and every action is synthetic.
+Crew World is an opt-in visual mode, not a replacement for the Role-centric Crew Room.
+The normal conversation, Role selection, and Runtime remain intact.
 
-## How to try on Android
+## Android steps
 
-1. Checkout this PR branch on the device and let the existing Crew Runtime
-   serve the updated static files (usual no-store static assets).
-2. Open **http://127.0.0.1:8000/world-lab.html** in the phone browser. Use a
-   separate browser tab rather than navigating away from an active Crew Pocket
-   conversation or Live session.
-3. Drag to pan, pinch or use +/- to zoom, tap a character or role label, select
-   聚焦人物, 示範工作 or 示範交接. 世界全景 resets the camera.
+1. Open AI 小隊 → 探索 3D 小隊世界.
+2. Drag to pan, pinch or use +/- to zoom, tap 3D characters or Role labels.
+3. 聚焦人物 centers the character. 示範工作 and 示範交接 only play synthetic animations.
+4. 前往對話 returns to the selected Role's existing scoped conversation.
+5. Close with ✕ or the back arrow. The iframe unloads WebGL; chat and Live are not stopped.
 
-Three.js r148 is pinned locally in public/vendor, with its original MIT
-license. No CDN, no GLB download, and no API Key is required. The three
-character variants share one procedural body rig, animation logic and camera
-rules, while colors, hair and accessories vary deterministically.
+Standalone URL: http://127.0.0.1:8000/world-lab.html
 
-## Constraints and next iteration
+## Reality boundary
 
-- This tests the Q-chibi low-poly art direction and touch controls, *not*
-  final high-poly production assets.
-- Real Role, job and handoff evidence may be added in a subsequent iteration
-  after approval. Never project a synthetic demo state as actual Runtime work.
-- The rendering loop pauses scene updates when hidden, caps pixel ratio, and
-  supports reduced motion. In case of WebGL unavailability the page reports
-  an error instead of affecting the host chat UI.
-- Nothing is wired to the main navigation or app shell yet. This is deliberate
-  to avoid the previous office-world UI regressions.
-- Run: node test/world-lab.test.js
+- The scene makes read-only GET /api/crew-status requests; no Runtime writes.
+- Up to six actual Role identities with distinguishable saturated palettes. Labels use
+  textContent, never inject names into HTML.
+- Verified working/waiting/idle/new states originate from the server's actual
+  Role status. When refresh fails, the scene marks statuses as unknown.
+- Demonstration movements remain explicitly labeled 示範. No synthetic
+  handoff becomes a real delivered message or implies successful work.
+- If initial Runtime metadata is unavailable, it falls back to three explicitly
+  labeled demo Roles.
+- With more than six Roles, the 3D visual shows the first six. The original
+  Crew Room remains the authoritative full list. Reopen to refresh membership.
+- The parent validates same origin, iframe source and known Role ID before
+  navigating to the existing conversation. No cross-Role context or memory sharing.
+- No message bodies, memories, workspaces or credentials are projected into 3D.
 
-## Visual acceptance
+## Rendering and acceptance
 
-Try portrait and landscape orientations, zoom/pan, camera focus, work motion,
-handoff trip, and switching characters while motions are active. If this
-visual direction passes, mount an opt-in entry in the Crew page while preserving
-current Role-centric navigation.
+- Local pinned Three.js r148 under public/vendor, MIT license; no CDN or GLB download.
+- Low-poly procedural meshes, shared character proportions, strong color accents,
+  optional motion and capped rendering pixel ratio.
+- The map pauses visible updates when hidden; the modal unloads on close.
+- This validates the visual direction, not a production rigging pipeline.
+
+Run node test/world-lab.test.js. Crew Runtime tests verify that the old
+virtual office never becomes the default Crew Room.
+
+Validate Android portrait/landscape, 3–6 Roles, horizontal Role chip scrolling,
+touch pinch/pan, character selection, close/reopen, stale Runtime status and
+returning to an existing conversation. Device-level visual tests are still needed.
