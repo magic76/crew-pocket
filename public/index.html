@@ -1769,7 +1769,7 @@
   <!-- Same-document Three.js stage + portals for the ORIGINAL chat DOM.
        There is only one messages-container, one composer, and one Chat Runtime. -->
   <section id="crew-world-modal" class="crew-world-modal" role="dialog" aria-modal="true" aria-label="Crew World 3D 小隊世界" hidden>
-  <main id="world-app" class="world-app">
+  <div id="world-app" class="world-app">
     <div id="world-stage" aria-label="可縮放、平移的 3D Crew World 場景">
       <div id="world-labels" aria-label="Crew Role 對話回覆"></div>
       <div id="world-loading" role="status">正在建立 3D 世界…</div>
@@ -1804,7 +1804,7 @@
     </footer>
     <div id="world-toast" class="world-toast" role="status" aria-live="polite"></div>
     <noscript>此 Demo 需要啟用 JavaScript。</noscript>
-  </main>
+  </div>
  
     <button id="crew-world-close-btn" class="crew-world-close" type="button" aria-label="關閉 3D 世界，返回小隊">✕</button>
     <section id="crew-world-chat-panel" class="crew-world-chat-panel" aria-label="現有 Role 對話" hidden>
