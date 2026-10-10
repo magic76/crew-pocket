@@ -188,9 +188,12 @@
     const hub=[0,-.8];
     // A neighborhood is a project district (up to 3 Roles), not one island
     // per Role. Preserve all individual characters/click targets/conversations.
-    const districts=[...new Map(roleDefs.map(role=>[
-      role.districtId||role.id,role
-    ])).values()];
+    const groups=new Map();
+    for(const role of roleDefs){
+      const districtId=role.districtId||role.id;
+      if(!groups.has(districtId))groups.set(districtId,role);
+    }
+    const districts=[...groups.values()];
     districts.forEach(role=>bridge(scene,[role.islandX,role.islandZ],hub));
     districts.forEach((role,i)=>island(scene,role,i));
     cylinder(scene,'#d4b6df',1.05,1.2,.65,0,-.14,-.8,10);
