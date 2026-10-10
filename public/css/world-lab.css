@@ -139,3 +139,6 @@
 .world-district-pin[data-state="waiting"]{background:#fff0d4ed;border-color:#ffc071;color:#6c471c}
 .world-district-pin[data-state="waiting"] small{color:#906220}
 .world-district-pin[data-state="unknown"]{background:#edf0f5e9;border-color:#afbbd4;color:#46546c}
+
+/* Keep individually clickable agent badges above broader district overview pins. */
+#world-labels{z-index:3}
