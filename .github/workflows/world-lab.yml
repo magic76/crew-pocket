@@ -9,6 +9,9 @@ on:
       - "public/vendor/three.min.js"
       - "public/vendor/THREE-LICENSE.txt"
       - "test/world-lab.test.js"
+      - "test/crew-context-usage.test.js"
+      - "public/css/crew-context-usage.css"
+      - "public/js/crew-context-usage.js"
       - "test/crew-world-portal.test.js"
       - "public/index.html"
       - "public/js/crew-world-launcher.js"
@@ -31,6 +34,7 @@ jobs:
       - name: Check standalone 3D demo and syntax
         run: |
           node test/world-lab.test.js
+          node test/crew-context-usage.test.js
           node test/crew-world-portal.test.js
           node test/world-chat-history.test.js
           node test/role-submit.test.js
