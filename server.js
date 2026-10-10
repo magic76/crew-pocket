@@ -1823,6 +1823,7 @@ const roleSubmitter = createRoleSubmitter({
   getRoleRuntime, activateRoleConversation, clearRoleConversation,
   isRoleReserved: roleId => crewAutoResponder.activeRoles.has(roleId) || activeChatRoles.has(roleId),
   async validateImage(imagePath) {
+    if (!imagePath) return; // Text-only Role submissions must never realpath('')
     const real = await fsPromises.realpath(imagePath);
     const roots = await Promise.all([UPLOADS_DIR, LEGACY_UPLOADS_DIR, PREVIOUS_UPLOADS_DIR]
       .map(root => fsPromises.realpath(root).catch(() => null)));
