@@ -109,7 +109,7 @@ assert.match(engine,/fetch\('\/api\/crew-room-events'/);
 assert.match(engine,/planner\.observe/);
 assert.match(engine,/observed-handoff/);
 assert.match(engine,/headStatus/);
-assert.match(engine,/world-chat-open/);
+assert.match(html,/id="world-chat-open"/);
 assert.match(html,/id="world-chat-sheet"/);
 assert.match(html,/id="world-chat-message"/);
 assert.match(html,/id="world-chat-submit"/);
