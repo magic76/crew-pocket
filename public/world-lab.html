@@ -29,24 +29,9 @@
         <button type="button" id="world-focus">聚焦人物</button>
         <button type="button" id="world-work">示範工作</button>
         <button type="button" id="world-handoff">示範交接</button>
-        <button type="button" id="world-chat-open" hidden>跟他說話</button>
+        <button type="button" id="world-chat-open" hidden>在 Crew Pocket 中聊天</button>
         <button type="button" id="world-open-role" hidden>前往對話</button>
       </div>
-    </section>
-    <section id="world-chat-sheet" class="world-chat-sheet" role="dialog" aria-modal="true" aria-labelledby="world-chat-title" hidden>
-      <div class="world-chat-header">
-        <div><span class="world-caption">DIRECT ROLE MESSAGE</span><h2 id="world-chat-title">跟 Role 說話</h2></div>
-        <button type="button" id="world-chat-close" aria-label="關閉傳話面板">✕</button>
-      </div>
-      <p class="world-chat-help">這裡同步顯示這位 Role 的最近對話。直接輸入即可在同一個 Conversation 指派下一項任務。</p>
-      <div id="world-chat-history" class="world-chat-history" role="log" aria-live="polite" aria-label="這位角色的最近對話"></div>
-      <div id="world-chat-read-state" class="world-chat-read-state" role="status">尚未同步對話</div>
-      <form id="world-chat-form">
-        <label for="world-chat-message">訊息</label>
-        <textarea id="world-chat-message" rows="3" maxlength="5000" placeholder="告訴這位 Role 下一件事…" required></textarea>
-        <div id="world-chat-feedback" role="status" aria-live="polite"></div>
-        <div class="world-chat-buttons"><button type="button" id="world-chat-conversation">查看完整對話</button><button id="world-chat-submit" type="submit">送出訊息</button></div>
-      </form>
     </section>
     <footer class="world-bottom">
       <div class="world-roster" id="world-roster" aria-label="切換示範角色"></div>
@@ -62,7 +47,6 @@
   <script src="/vendor/three.min.js"></script>
   <script src="/js/world-lab-kit.js"></script>
   <script src="/js/world-lab-events.js"></script>
-  <script src="/js/world-lab-chat.js"></script>
   <script src="/js/world-lab.js"></script>
 </body>
 </html>

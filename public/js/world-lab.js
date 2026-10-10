@@ -1,9 +1,24 @@
 /* Crew World 3D visual prototype: sample-only states, zero Runtime writes. */
 (() => {
   'use strict';
+  function mountWorld(){
+  let disposed=false,teardown=null,raf=0;
+  const cleanups=[];
+  function listen(target,event,handler,options){
+    if(!target)return;
+    target.addEventListener(event,handler,options);
+    cleanups.push(()=>target.removeEventListener(event,handler,options));
+  }
+  function trackedInterval(handler,delay){
+    const handle=setInterval(handler,delay);cleanups.push(()=>clearInterval(handle));return handle;
+  }
+  function trackedTimeout(handler,delay){
+    const handle=setTimeout(handler,delay);cleanups.push(()=>clearTimeout(handle));return handle;
+  }
   const stage=document.getElementById('world-stage');
   const loading=document.getElementById('world-loading');
-  if(!stage)return;
+  if(loading){loading.textContent='正在建立 3D 世界…';loading.hidden=false;}
+  if(!stage)return ()=>{};
   const fail=msg=>{if(loading)loading.textContent=msg;};
   if(!window.THREE || !window.WorldLabKit){fail('缺少本地 3D 資源，請更新 Crew Runtime。');return;}
   const T=window.THREE, kit=window.WorldLabKit, planner=window.WorldLabEvents;
@@ -17,10 +32,11 @@
   async function start() {
     let liveRows=null;
     try { liveRows=await loadStatus(); } catch (_) { /* Keep standalone art preview available. */ }
+    if(disposed)return;
     const roles=liveRows?.length?kit.makeLiveRoles(liveRows):kit.roles;
     const isLive=Boolean(liveRows?.length);
     let synced=isLive;
-    const pill=document.querySelector('.world-demo-pill');
+    const pill=stage.closest('.world-app')?.querySelector('.world-demo-pill');
     if(pill)pill.textContent=isLive?'真實 Role · '+roles.length+' 位':'示範場景 · 非即時';
   const reduced=window.matchMedia?.('(prefers-reduced-motion: reduce)').matches||false;
   let renderer;
@@ -32,7 +48,7 @@
   renderer.outputEncoding=T.sRGBEncoding;
   renderer.toneMapping=T.ACESFilmicToneMapping;
   renderer.toneMappingExposure=1.08;
-  stage.prepend(renderer.domElement);loading?.remove();
+  stage.prepend(renderer.domElement);if(loading)loading.hidden=true;
   const scene=new T.Scene();
   const camera=new T.OrthographicCamera(-8,8,8,-8,.1,150);
   const sunlight=new T.DirectionalLight(0xffffff,1.65);
@@ -75,8 +91,8 @@
     const detail=document.createElement('span');detail.className='world-label-detail';
     const speech=document.createElement('span');speech.className='world-speech-bubble';
     speech.hidden=true;
-    button.append(speech,title,state,detail);button.addEventListener('click',()=>select(index));
-    speech.addEventListener('click',event=>{
+    button.append(speech,title,state,detail);listen(button,'click',()=>select(index));
+    listen(speech,'click',event=>{
       event.preventDefault();event.stopPropagation();
       hideSpeech(index,true);
     });
@@ -87,20 +103,20 @@
     const button=document.createElement('button');button.type='button';
     const dot=document.createElement('span');dot.style.background=role.color;
     button.append(dot,document.createTextNode(role.short));
-    button.addEventListener('click',()=>select(index,true));
+    listen(button,'click',()=>select(index,true));
     rosterHost.appendChild(button);return button;
   });
   const portrait=document.getElementById('world-portrait');
   let chat=null;
   const openRole=document.getElementById('world-open-role');
-  if(openRole)openRole.hidden=!isLive;
+  if(openRole)openRole.hidden=!isLive||!window.CrewWorldHost;
+  const inlineChat=document.getElementById('world-chat-open');
+  if(inlineChat)inlineChat.hidden=!isLive||!window.CrewWorldHost;
   const actionRow=document.querySelector('.world-action-row');
   // Real usage emphasizes talking and opening conversations; demo controls
   // remain available only in offline art-preview mode.
-  if(isLive){
-    document.getElementById('world-work').hidden=true;
-    document.getElementById('world-handoff').hidden=true;
-  }
+  document.getElementById('world-work').hidden=isLive;
+  document.getElementById('world-handoff').hidden=isLive;
   if(actionRow)actionRow.style.gridTemplateColumns='repeat(3,minmax(0,1fr))';
   function updateInfo(){
     const actor=actors[selected],role=actor.role;
@@ -143,6 +159,7 @@
   function select(index,center=false){
     if(index<0||index>=actors.length)return;
     selected=index;updateInfo();
+    window.CrewWorldHost?.onSelectedRole?.(roles[index].id,roles[index].name);
     if(center){
       const role=roles[index];
       panTo(role.islandX,role.islandZ,width<700?2.4:1.72);
@@ -153,40 +170,39 @@
   function notify(message){
     toast.textContent=message;toast.classList.add('visible');
     clearTimeout(toastTimer);
-    toastTimer=setTimeout(()=>toast.classList.remove('visible'),2400);
+    toastTimer=trackedTimeout(()=>toast.classList.remove('visible'),2400);
   }
-  document.getElementById('world-focus').addEventListener('click',()=>{
+  listen(document.getElementById('world-focus'),'click',()=>{
     select(selected,true);notify('已聚焦 '+roles[selected].short);
   });
-  document.getElementById('world-work').addEventListener('click',()=>{
+  listen(document.getElementById('world-work'),'click',()=>{
     const a=actors[selected];a.mode='working';a.expires=performance.now()+6500;
     a.root.position.set(a.role.x,.43,a.role.z);a.root.rotation.y=0;
     updateInfo();notify('僅播放工作動畫，不會啟動真實任務');
   });
-  document.getElementById('world-handoff').addEventListener('click',()=>{
+  listen(document.getElementById('world-handoff'),'click',()=>{
     const a=actors[selected];a.mode='handoff';a.expires=performance.now()+8000;
     updateInfo();notify('僅播放交接動畫，不會發送 Role 訊息');
   });
   function openConversation(roleId){
-    if(window.parent!==window){
+    if(window.CrewWorldHost){
+      window.CrewWorldHost.openFullChat(roleId);
+    }else if(window.parent!==window){
       window.parent.postMessage({type:'crew-world-open-role',roleId},location.origin);
     }else{
       notify('請返回小隊頁查看 '+(roles.find(role=>role.id===roleId)?.name||'Role')+' 的完整對話');
     }
   }
-  chat=window.WorldLabChat?.mount({
-    getSelected:()=>isLive?roles[selected]:null,
-    openConversation,
-    fetcher:window.fetch.bind(window),
-    cryptoProvider:window.crypto,
-    document
-  })||null;
-  openRole?.addEventListener('click',()=>{
+  // The shared main Chat is owned by CrewWorldHost; standalone scene is visual-only.
+  listen(openRole,'click',()=>{
     if(!isLive)return;
     openConversation(roles[selected].id);
   });
   const back=document.getElementById('world-back');
-  back?.addEventListener('click',event=>{
+  listen(back,'click',event=>{
+    if(window.CrewWorldHost){
+      event.preventDefault();window.CrewWorldHost.close();return;
+    }
     if(window.parent===window)return;
     event.preventDefault();
     window.parent.postMessage({type:'crew-world-close'},location.origin);
@@ -195,6 +211,7 @@
     if(!isLive||document.hidden)return;
     try{
       const next=await loadStatus();
+      if(disposed)return;
       const byId=new Map(next.map(item=>[item.roleId,item]));
       for(const actor of actors){
         const item=byId.get(actor.role.id);
@@ -207,6 +224,7 @@
       synced=true;
       if(pill)pill.textContent=next.length===roles.length?'真實 Role · '+roles.length+' 位':'Role 已變更 · 重新開啟更新';
     }catch(_){
+      if(disposed)return;
       synced=false;
       for(const actor of actors){actor.role.state='unknown';actor.role.workTitle='';actor.role.attention=0;}
       if(pill)pill.textContent='Runtime 未同步';
@@ -238,7 +256,7 @@
           });
           if(!response.ok)return;
           const data=await response.json();
-          if(data.success!==true||data.roleId!==role.id)return;
+          if(disposed||data.success!==true||data.roleId!==role.id)return;
           const entry=labels[index];
           const text=typeof data.message?.text==='string'?data.message.text.trim():'';
           if(!text){entry.speech.textContent='';entry.speech.hidden=true;return;}
@@ -259,7 +277,7 @@
           entry.button.setAttribute('aria-label',role.name+' · '+head.state+' · 最新回覆：'+entry.speech.textContent);
           const oldTimer=speechTimers.get(role.id);
           if(oldTimer)clearTimeout(oldTimer);
-          speechTimers.set(role.id,setTimeout(()=>hideSpeech(index),remaining));
+          speechTimers.set(role.id,trackedTimeout(()=>hideSpeech(index),remaining));
         }catch(_){/* Keep the last verified bubble when one Role is temporarily unavailable. */}
       }));
     }finally{speechRequest=false;}
@@ -276,6 +294,7 @@
       if(!response.ok)throw new Error('No Room event metadata');
       const data=await response.json();
       if(data.success!==true||!Array.isArray(data.events))throw new Error('Room events invalid');
+      if(disposed)return;
       const result=planner.observe(data.events,seenEvents,roles.map(role=>role.id),Date.now());
       seenEvents=result.seenIds;
       for(const event of result.arrivals){
@@ -306,30 +325,30 @@
     // First fetch is a baseline only; subsequent newly saved events trigger motion.
     void observeHandoffs();
     void refreshSpeechBubbles();
-    setInterval(()=>{if(!document.hidden)void synchronize();},7000);
-    setInterval(()=>{if(!document.hidden)void observeHandoffs();},3200);
-    setInterval(()=>{if(!document.hidden)void refreshSpeechBubbles();},9000);
-    document.addEventListener('visibilitychange',()=>{
+    trackedInterval(()=>{if(!disposed&&!document.hidden)void synchronize();},7000);
+    trackedInterval(()=>{if(!disposed&&!document.hidden)void observeHandoffs();},3200);
+    trackedInterval(()=>{if(!disposed&&!document.hidden)void refreshSpeechBubbles();},9000);
+    listen(document,'visibilitychange',()=>{
       if(document.hidden){seenEvents=null;pendingTransitions.length=0;}
       else{void synchronize();void observeHandoffs();void refreshSpeechBubbles();}
     });
   }
-  document.getElementById('world-reset').addEventListener('click',()=>{
+  listen(document.getElementById('world-reset'),'click',()=>{
     panTo(0,-1.8,1);notify('返回全景');
   });
   function setZoom(value){
     zoom=T.MathUtils.clamp(value,.65,3.5);cameraSync();
   }
-  document.getElementById('world-zoom-in').addEventListener('click',()=>setZoom(zoom*1.2));
-  document.getElementById('world-zoom-out').addEventListener('click',()=>setZoom(zoom/1.2));
-  stage.addEventListener('wheel',event=>{
+  listen(document.getElementById('world-zoom-in'),'click',()=>setZoom(zoom*1.2));
+  listen(document.getElementById('world-zoom-out'),'click',()=>setZoom(zoom/1.2));
+  listen(stage,'wheel',event=>{
     event.preventDefault();focus=null;setZoom(zoom*(event.deltaY<0?1.1:.9));
   },{passive:false});
 
   // Pointer map supports single-finger drag, pinch zoom, and raycast tap.
   const fingers=new Map();
   let pinch=0,tap=null;
-  stage.addEventListener('pointerdown',event=>{
+  listen(stage,'pointerdown',event=>{
     if(event.target.closest?.('.world-label'))return;
     stage.setPointerCapture?.(event.pointerId);
     fingers.set(event.pointerId,{x:event.clientX,y:event.clientY});
@@ -337,7 +356,7 @@
     else{tap=null;pinch=0;}
     focus=null;
   });
-  stage.addEventListener('pointermove',event=>{
+  listen(stage,'pointermove',event=>{
     const last=fingers.get(event.pointerId);
     if(!last)return;
     const dx=event.clientX-last.x,dy=event.clientY-last.y;
@@ -381,18 +400,19 @@
     if(fingers.size<2)pinch=0;
     if(!fingers.size){tap=null;stage.classList.remove('dragging');}
   }
-  stage.addEventListener('pointerup',pointerEnd);
-  stage.addEventListener('pointercancel',pointerEnd);
-  stage.addEventListener('lostpointercapture',pointerEnd);
-  window.addEventListener('resize',resize);
-  if(window.ResizeObserver)new ResizeObserver(resize).observe(stage);
-  stage.addEventListener('webglcontextlost',event=>{
+  listen(stage,'pointerup',pointerEnd);
+  listen(stage,'pointercancel',pointerEnd);
+  listen(stage,'lostpointercapture',pointerEnd);
+  listen(window,'resize',resize);
+  if(window.ResizeObserver){const observer=new ResizeObserver(resize);observer.observe(stage);cleanups.push(()=>observer.disconnect());}
+  listen(stage,'webglcontextlost',event=>{
     event.preventDefault();fail('3D 繪圖環境中斷，請重新開啟頁面。');
   });
 
   let elapsed=0,last=performance.now();
   function frame(now){
-    requestAnimationFrame(frame);
+    if(disposed)return;
+    raf=requestAnimationFrame(frame);
     const delta=Math.min((now-last)/1000,.06);last=now;
     if(document.hidden)return;
     elapsed+=delta;
@@ -455,7 +475,31 @@
     });
     renderer.render(scene,camera);
   }
-  updateInfo();resize();frame(performance.now());
+  updateInfo();
+  window.CrewWorldHost?.onSelectedRole?.(roles[selected].id,roles[selected].name);
+  resize();frame(performance.now());
+  teardown=()=>{
+    clearTimeout(toastTimer);
+    for(const timer of speechTimers.values())clearTimeout(timer);
+    cancelAnimationFrame(raf);
+    for(const cleanup of cleanups.splice(0).reverse())cleanup();
+    scene.traverse(object=>{
+      object.geometry?.dispose?.();
+      if(Array.isArray(object.material))object.material.forEach(m=>m?.dispose?.());
+      else object.material?.dispose?.();
+    });
+    renderer.renderLists?.dispose?.();
+    renderer.dispose();renderer.forceContextLoss?.();
+    renderer.domElement.remove();
+    labelsHost.replaceChildren();rosterHost.replaceChildren();
+  };
   }
-  start().catch(()=>fail('無法建立 3D 世界，請重新開啟頁面。'));
+  void start().catch(()=>{if(!disposed)fail('無法建立 3D 世界，請重新開啟頁面。');});
+  return ()=>{
+    disposed=true;teardown?.();teardown=null;
+    for(const cleanup of cleanups.splice(0).reverse())cleanup();
+  };
+  }
+  window.mountCrewWorldScene=mountWorld;
+  if(document.body?.firstElementChild?.id==='world-app')mountWorld();
 })();

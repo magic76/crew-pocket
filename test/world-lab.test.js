@@ -9,10 +9,10 @@ const html=read('public/world-lab.html');
 const kit=read('public/js/world-lab-kit.js');
 const engine=read('public/js/world-lab.js');
 const css=read('public/css/world-lab.css');
-for(const name of ['world-lab-kit.js','world-lab-events.js','world-lab-chat.js','world-lab.js']){
+for(const name of ['world-lab-kit.js','world-lab-events.js','world-lab.js']){
   execFileSync(process.execPath,['--check',path.join(root,'public/js',name)]);
 }
-const sequence=['/vendor/three.min.js','/js/world-lab-kit.js','/js/world-lab-events.js','/js/world-lab-chat.js','/js/world-lab.js'];
+const sequence=['/vendor/three.min.js','/js/world-lab-kit.js','/js/world-lab-events.js','/js/world-lab.js'];
 assert.ok(sequence.every((file,index)=>html.indexOf(file)>-1&&
   (!index||html.indexOf(file)>html.indexOf(sequence[index-1]))));
 assert.ok(fs.statSync(path.join(root,'public/vendor/three.min.js')).size>500000);
@@ -79,15 +79,36 @@ assert.match(main,/id="crew-world-open-btn"/);
 assert.match(main,/id="crew-world-modal"/);
 assert.match(main,/\/js\/crew-world-launcher.js/);
 assert.doesNotMatch(main,/<script src="\/js\/world-lab.js"/);
+assert.doesNotMatch(main,/<script src="\/vendor\/three.min.js"/);
+assert.match(main,/id="world-stage"/);
+assert.match(main,/id="crew-world-chat-messages-slot"/);
+assert.match(main,/id="crew-world-chat-composer-slot"/);
+assert.doesNotMatch(main,/<iframe|id="crew-world-frame"/i);
+assert.equal((main.match(/id="messages-container"/g)||[]).length,1,
+  'one original Chat message container');
+assert.equal((main.match(/id="chat-composer-footer"/g)||[]).length,1,
+  'one original Chat composer');
+assert.doesNotMatch(main,/<script src="\/js\/world-lab-chat.js"/);
 const launcher=read('public/js/crew-world-launcher.js');
 execFileSync(process.execPath,['--check',path.join(root,'public/js/crew-world-launcher.js')]);
-assert.match(launcher,/event.origin!==location.origin/);
-assert.match(launcher,/event.source!==frame.contentWindow/);
-assert.match(launcher,/frame.src='about:blank'/);
+assert.match(launcher,/ensureScene/);
+assert.match(launcher,/loadScript\('\/vendor\/three.min.js'\)/);
+assert.match(launcher,/loadScript\('\/js\/world-lab.js'\)/);
+assert.match(launcher,/window\.openCrewCockpitRole/);
+assert.match(launcher,/messagesSlot\.appendChild\(messages\)/);
+assert.match(launcher,/composerSlot\.appendChild\(composer\)/);
+assert.match(launcher,/restoreMessages\.replaceWith\(messages\)/);
+assert.match(launcher,/restoreComposer\.replaceWith\(composer\)/);
+assert.doesNotMatch(launcher,/postMessage|frame\.src|\/api\/role-submit|\/api\/world-chat-result/);
 assert.match(launcher,/getCrewCockpitSnapshot/);
+assert.match(engine,/mountCrewWorldScene/);
+assert.match(engine,/renderer\.dispose\(\)/);
+assert.match(engine,/renderer\.forceContextLoss/);
+assert.match(engine,/cancelAnimationFrame/);
+assert.match(engine,/observer\.disconnect/);
 
 const events=require('../public/js/world-lab-events.js');
-const chat=require('../public/js/world-lab-chat.js');
+
 const now=Date.now(), allowed=['a','b'];
 const old={id:'old',fromRoleId:'a',toRoleId:'b',createdAt:now-10000};
 const fresh={id:'fresh',fromRoleId:'a',toRoleId:'b',kind:'handoff',createdAt:now-1200};
@@ -110,54 +131,13 @@ assert.match(engine,/planner\.observe/);
 assert.match(engine,/observed-handoff/);
 assert.match(engine,/headStatus/);
 assert.match(html,/id="world-chat-open"/);
-assert.match(html,/id="world-chat-sheet"/);
-assert.match(html,/id="world-chat-message"/);
-assert.match(html,/id="world-chat-submit"/);
-assert.match(css,/world-label-detail/);
-assert.match(css,/world-chat-sheet/);
-assert.deepEqual(chat.payload('pocket-role','  Review the PR ','world_'+ 'a'.repeat(32)),{
-  role_id:'pocket-role',request_id:'world_'+ 'a'.repeat(32),
-  prompt:'Review the PR',image_path:''
-});
-assert.throws(()=>chat.payload('role/other','hello','world_'+ 'a'.repeat(32)));
-assert.throws(()=>chat.payload('pocket','  ','world_'+ 'a'.repeat(32)));
-assert.throws(()=>chat.payload('pocket','x'.repeat(5001),'world_'+ 'a'.repeat(32)));
-const entropy={getRandomValues(a){a.fill(12);return a;}};
-assert.equal(chat.requestId(entropy),'world_'+'0c'.repeat(16));
-assert.throws(()=>chat.requestId(null),/安全/);
-const composer=read('public/js/world-lab-chat.js');
-assert.match(composer,/fetcher\('\/api\/role-submit'/);
-assert.match(composer,/method:'POST'/);
-assert.match(composer,/requestId:|request_id:id/);
-assert.match(composer,/pending&&pending\.role_id===targetId/);
-assert.doesNotMatch(composer,/\/api\/(?:chat|role-queue|memories)|localStorage|sessionStorage|WebSocket/);
+assert.doesNotMatch(html,/id="world-chat-sheet"|id="world-chat-submit"/);
 assert.match(kit,/function accessory/);
 assert.match(kit,/function profession/);
 
 
-assert.match(html,/id="world-chat-history"/);
-assert.match(html,/id="world-chat-read-state"/);
-assert.match(composer,/visualViewport/);
-assert.match(composer,/frameElement\.getBoundingClientRect/);
-assert.match(composer,/world-chat-keyboard-overlap/);
-assert.match(composer,/\/api\/world-chat-history/);
-assert.match(composer,/readableMessages/);
-assert.match(css,/world-chat-keyboard-overlap/);
-assert.match(css,/world-chat-history/);
-assert.match(read('server.js'),/handleWorldChatHistory/);
-const projected = chat.readableMessages({
-  success:true,roleId:'teacher',
-  messages:[{role:'assistant',text:'Teacher reply'}, {role:'user',text:'Prior task'}]
-},'teacher');
-assert.deepEqual(projected,[
-  {role:'assistant',text:'Teacher reply'}, {role:'user',text:'Prior task'}
-]);
-assert.throws(()=>chat.readableMessages({success:true,roleId:'pocket',messages:[]},'teacher'),
-  /驗證/);
-
-assert.match(composer,/world-chat-result/);
-assert.match(composer,/submittedByRole/);
-assert.match(composer,/data\.requestId!==submission\.requestId/);
-assert.match(composer,/if\(confirmedReply&&!replyInHistory\)/);
-assert.match(read('server.js'),/handleWorldChatResult/);
+assert.doesNotMatch(html,/\/js\/world-lab-chat.js/);
+assert.doesNotMatch(main,/\/js\/world-lab-chat.js/);
+assert.match(launcher,/window\.openCrewCockpitRole/);
+assert.match(engine,/CrewWorldHost\.openFullChat/);
 console.log('world-lab isolated 3D demo tests: ok');
