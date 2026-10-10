@@ -10,6 +10,7 @@ on:
       - "public/vendor/THREE-LICENSE.txt"
       - "test/world-lab.test.js"
       - "test/world-chat-history.test.js"
+      - "test/world-chat-ui.test.js"
       - "test/role-submit.test.js"
       - "lib/world-chat-history.js"
       - "lib/role-submit.js"
@@ -28,4 +29,5 @@ jobs:
         run: |
           node test/world-lab.test.js
           node test/world-chat-history.test.js
+          node test/world-chat-ui.test.js
           node test/role-submit.test.js
