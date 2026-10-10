@@ -87,7 +87,7 @@ function tick(){return new Promise(resolve=>setImmediate(resolve));}
   await tick();await tick();
   let bubbles=nodes['world-chat-history'].children;
   assert.equal(bubbles.at(-1).className,'world-chat-bubble user',
-    'queued request shows user's own message, not an old assistant reply');
+    "queued request shows user input, not an old assistant reply");
   assert.equal(bubbles.at(-1).children[1].textContent,'修好這個問題');
   completed=true;
   await ui.refreshResult();
