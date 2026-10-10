@@ -132,22 +132,38 @@ near the center and looked like crossing spokes rather than a plausible town.
   obstruction and the hub entrance for 1–36 same-project and mixed-project
   examples.
 
-**Behavior after the road-bound motion fix:** Every Role stands on their own
-island while sending digital messages. No avatar walks, hovers, or cuts over water.
-On a newly saved inter-Role handoff/reply, the actual built bridges on the
-shortest path between the two project districts illuminate **in sequence**.
-This is only a *visualization of the message record*, not confirmation the
-recipient has processed it. Same-district messages use an on-island sender
-gesture only, since no bridge is needed. If the road graph has no path, no
-fake route or teleport is rendered.
+## Paper-airplane messaging (Oct 2026)
 
-The standalone demo handoff button uses the same bridge-light effect but
-does not send a message. Active work animates small desk-side movements,
-not imaginary trips through town. Reduced-motion users see a brief static
-bridge highlight; all lights and timers are cleared on close.
+For newly observed, **saved Role-to-Role message metadata**, the primary
+visualization is now a folded low-poly paper airplane from the **sender's
+actual avatar** to the **intended recipient**. Agents do not physically walk,
+cross water or leave their project island to send a digital message.
 
-`node test/world-message-motion.test.js` verifies all routes for 1–36 Roles,
-same-district/no-path behavior, bridge order and no free-moving character.
+- **Handoff/outgoing**: pale blue paper plane; **reply**: pale green.
+  A small fading trail follows the plane and a subtle landing-target halo
+  draws attention to the recipient's position. These effects communicate
+  **the existence and direction of a saved message event only**, never read
+  status, delivery confirmation, task completion, or processing success.
+- **Cross-island**: short airborne arc (roughly 0.8–1.65 seconds, depending
+  on map distance), independent of paths/bridges. **Same-island**: brief,
+  lower local arc between the specific two Role avatars.
+- Old road deck lighting remains only as a **very faint optional secondary**
+  highlight. No route is fabricated if bridges do not connect.
+- At most **three** simultaneous planes, with a bounded queue of up to six
+  pending observed events. The initial observation remains a history baseline
+  with no replay. Old or unauthorized events still cannot trigger animation.
+- **Reduced motion**: plane is briefly shown at the arc midpoint without
+  spatial travel, trail or pulsing destination halo.
+- Three.js plane/trail/ring GPU resources are explicitly disposed when each
+  effect ends and when the map closes; no new remote assets, API calls,
+  message submits or shared Role Context have been introduced.
+- The standalone preview's "示範交接" launches the same airplane effect but
+  never posts an actual message.
+
+`node test/world-message-motion.test.js` retains the bridge-routing and
+grounded-Avatar regression contracts.
+`node test/world-paper-plane.test.js` checks start/end points, arc height,
+same-island behavior, 1–36 Roles, distinct reply color, and geometry cleanup.
 
 Android 3D visual smoke testing is still required.
 

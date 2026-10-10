@@ -59,11 +59,15 @@ assert.ok(kitSource.includes('actors.roadVisuals=roadVisuals'));
 assert.ok(kitSource.includes('return light;'));
 assert.ok(kitSource.includes('light.position.set(cx,.375,cz)'),
   'signal exists on bridge surface only');
-assert.ok(sceneSource.includes('playRoadSignal(actor,recipient,now,event.kind)'));
+assert.ok(sceneSource.includes('launchPaperPlane(actor,recipient,now,event.kind)'),
+  'verified message events must launch a plane instead of moving the avatar');
+assert.ok(sceneSource.includes('planner.paperFlightPoint(flight.from,flight.to'),
+  'the paper-plane arc is the primary message animation');
+assert.ok(sceneSource.includes('const MAX_ACTIVE_PLANES=3'));
 assert.ok(sceneSource.includes('roadVisuals.forEach((edge,index)=>'));
 assert.ok(sceneSource.includes('edge.light.material.opacity=opacity'));
 assert.ok(sceneSource.includes('sender.mode=\'handoff\''));
 assert.doesNotMatch(sceneSource,/planner\.trail|T\.MathUtils\.lerp\(actor\.role\.x,hub/);
 assert.doesNotMatch(sceneSource,/actor\.root\.position\.set\(point\.x/);
 assert.ok(sceneSource.includes('actor.legs.forEach(({mesh})=>{mesh.rotation.x=0;})'));
-console.log('Crew World message signals: 1–36 Roles follow actual bridge graph; avatars stay grounded');
+console.log('Crew World message signals: 1–36 Role route options, paper-plane primary effect and grounded avatars passed');

@@ -73,18 +73,84 @@
   const actors=kit.create(scene,roles);
   const roadVisuals=actors.roadVisuals||[];
   const activeRoadSignals=[];
-  function playRoadSignal(sender,recipient,now,kind='handoff'){
-    const origin=sender.role.districtId||sender.role.id;
-    const target=recipient.role.districtId||recipient.role.id;
-    const route=planner?.roadRoute?.(roadVisuals,origin,target)||[];
-    if(!route.length)return false;
-    activeRoadSignals.push({
-      route,startedAt:now,
-      duration:reduced?1500:Math.min(5200,Math.max(2000,route.length*720)),
-      kind
-    });
-    if(activeRoadSignals.length>4)activeRoadSignals.shift();
+  const activePlanes=[];
+  const arrivalFlashes=[];
+  const MAX_ACTIVE_PLANES=3;
+  const MAX_PENDING_MESSAGES=6;
+  function launchPaperPlane(sender,recipient,now,kind='handoff'){
+    if(activePlanes.length>=MAX_ACTIVE_PLANES||!planner?.paperFlightPoint||
+       !kit?.createPaperPlane)return false;
+    const from={x:sender.role.x,y:3.25,z:sender.role.z};
+    const to={x:recipient.role.x,y:3.25,z:recipient.role.z};
+    const duration=reduced?760:planner.paperFlightDuration(from,to);
+    const plane=kit.createPaperPlane(scene,kind);
+    plane.root.scale.setScalar(Math.max(.80,Math.min(1.55,worldExtent/22)));
+    const flight={from,to,startedAt:now,duration,plane,kind};
+    activePlanes.push(flight);
+    // Digital messages can fly over water. Existing bridges glow faintly
+    // as a secondary background effect; no Role ever leaves its island.
+    if(!reduced){
+      const origin=sender.role.districtId||sender.role.id;
+      const target=recipient.role.districtId||recipient.role.id;
+      const route=planner?.roadRoute?.(roadVisuals,origin,target)||[];
+      if(route.length)activeRoadSignals.push({route,startedAt:now,duration});
+    }
     return true;
+  }
+  function showArrivalCue(flight,now){
+    if(reduced)return;
+    const ring=new T.Mesh(new T.TorusGeometry(.67,.065,5,20),
+      new T.MeshBasicMaterial({
+        color:flight.kind==='reply'?'#7af1b1':'#88dbff',
+        transparent:true,opacity:.48,depthWrite:false
+      }));
+    ring.rotation.x=-Math.PI/2;
+    ring.position.set(flight.to.x,.64,flight.to.z);
+    scene.add(ring);
+    arrivalFlashes.push({ring,startedAt:now,duration:460});
+  }
+  function updateFlights(now){
+    for(let i=activePlanes.length-1;i>=0;i--){
+      const flight=activePlanes[i];
+      const elapsed=Math.max(0,now-flight.startedAt);
+      if(elapsed>=flight.duration){
+        activePlanes.splice(i,1);
+        kit.disposePaperPlane?.(scene,flight.plane);
+        showArrivalCue(flight,now);
+        continue;
+      }
+      const t=elapsed/flight.duration;
+      const point=planner.paperFlightPoint(flight.from,flight.to,reduced?.5:t);
+      const next=planner.paperFlightPoint(flight.from,flight.to,Math.min(1,t+.015));
+      const prev=planner.paperFlightPoint(flight.from,flight.to,Math.max(0,t-.015));
+      const dx=next.x-prev.x,dz=next.z-prev.z,dy=next.y-prev.y;
+      const root=flight.plane.root;
+      root.position.set(point.x,point.y,point.z);
+      root.rotation.y=Math.atan2(dx,dz);
+      root.rotation.x=reduced?0:-Math.atan2(dy,Math.hypot(dx,dz));
+      root.rotation.z=reduced?0:Math.sin(Math.PI*t*2)*.13;
+      for(let j=0;j<flight.plane.trails.length;j++){
+        const bead=flight.plane.trails[j];
+        const behind=t-(j+1)*.033;
+        const visible=!reduced&&behind>0;
+        bead.visible=visible;
+        if(!visible)continue;
+        const tail=planner.paperFlightPoint(flight.from,flight.to,behind);
+        bead.position.set(tail.x,tail.y,tail.z);
+        bead.material.opacity=(.23-j*.055)*Math.sin(Math.PI*t);
+      }
+    }
+    for(let i=arrivalFlashes.length-1;i>=0;i--){
+      const cue=arrivalFlashes[i],t=(now-cue.startedAt)/cue.duration;
+      if(t>=1){
+        scene.remove(cue.ring);
+        cue.ring.geometry.dispose();cue.ring.material.dispose();
+        arrivalFlashes.splice(i,1);
+        continue;
+      }
+      cue.ring.scale.setScalar(1+t*.45);
+      cue.ring.material.opacity=.48*(1-t);
+    }
   }
   const worldExtent=kit.mapExtent?.(roles)||15;
   const view=new T.Vector3(0,.7,-1.8),direction=new T.Vector3(16,21,25).normalize();
@@ -113,11 +179,11 @@
     const actual=isLive?(synced?'真實狀態 · '+(liveStates[a.role.state]||'未知'):'狀態未同步 · 未知'):'示範 · 待命';
     return a.mode==='observed-handoff'?actual+' · 已記錄訊息（非送達確認）':
       a.mode==='working'?actual+' · 工作動畫示範':
-      a.mode==='handoff'?actual+' · 道路訊號示範':actual;
+      a.mode==='handoff'?actual+' · 紙飛機訊息示範':actual;
   };
   function headStatus(actor){
     if(actor.mode==='observed-handoff')
-      return {state:actor.handoff?.kind==='reply'?'已記錄回覆':'已記錄訊息',detail:'道路亮燈僅示意 · 非送達確認',tone:'handoff'};
+      return {state:actor.handoff?.kind==='reply'?'已記錄回覆':'已記錄訊息',detail:'紙飛機僅呈現訊息事件 · 非送達確認',tone:'handoff'};
     if(!isLive||!synced)return{state:isLive?'狀態未同步':'示範角色',detail:'',tone:'unknown'};
     const role=actor.role;
     const state=liveStates[role.state]||'未知';
@@ -222,7 +288,6 @@
   let toastTimer;
   function notify(message){
     toast.textContent=message;toast.classList.add('visible');
-    activeRoadSignals.length=0;
     clearTimeout(toastTimer);
     toastTimer=trackedTimeout(()=>toast.classList.remove('visible'),2400);
   }
@@ -240,11 +305,11 @@
     }
     const sender=actors[selected],recipient=actors[(selected+1)%actors.length];
     const now=performance.now();
-    const lit=playRoadSignal(sender,recipient,now,'demo');
-    sender.mode='handoff';sender.expires=now+(reduced?1000:2200);
+    const launched=launchPaperPlane(sender,recipient,now,'demo');
+    if(launched){sender.mode='handoff';sender.expires=now+(reduced?800:1750);}
     updateInfo();
-    notify(lit?'訊息訊號沿現有橋樑亮起 · 不會發送 Role 訊息':
-      '相同工作區交接示意 · 不會發送 Role 訊息');
+    notify(launched?'紙飛機傳訊示範 · 不會真的發送 Role 訊息':
+      '同時飛行數量已達上限 · 不會發送 Role 訊息');
   });
   function openConversation(roleId){
     if(window.CrewWorldHost){
@@ -371,7 +436,7 @@
       const result=planner.observe(data.events,seenEvents,roles.map(role=>role.id),Date.now());
       seenEvents=result.seenIds;
       for(const event of result.arrivals){
-        if(pendingTransitions.length>=3)break;
+        if(pendingTransitions.length>=MAX_PENDING_MESSAGES)pendingTransitions.shift();
         pendingTransitions.push(event);
       }
     }catch(_){
@@ -382,20 +447,21 @@
   }
   function runRecordedHandoff(now){
     if(!pendingTransitions.length||!synced)return;
-    const event=pendingTransitions[0];
-    const actor=actors.find(a=>a.role.id===event.fromRoleId);
-    const recipient=actors.find(a=>a.role.id===event.toRoleId);
-    if(!actor||!recipient){pendingTransitions.shift();return;}
-    if(actor.mode!=='idle')return;
-    pendingTransitions.shift();
-    if(Date.now()-event.createdAt>45000)return;
-    actor.mode='observed-handoff';
-    actor.handoff={start:now,toId:event.toRoleId,kind:event.kind};
-    actor.expires=now+(reduced?1400:2600);
-    // Role stays at its own island. Only the bridge deck receives the
-    // transient signal; this record does not prove delivery or completion.
-    playRoadSignal(actor,recipient,now,event.kind);
-    updateInfo();
+    let changed=false;
+    while(pendingTransitions.length&&activePlanes.length<MAX_ACTIVE_PLANES){
+      const event=pendingTransitions.shift();
+      if(Date.now()-event.createdAt>45000)continue;
+      const actor=actors.find(a=>a.role.id===event.fromRoleId);
+      const recipient=actors.find(a=>a.role.id===event.toRoleId);
+      if(!actor||!recipient)continue;
+      if(!launchPaperPlane(actor,recipient,now,event.kind))continue;
+      actor.mode='observed-handoff';
+      actor.handoff={start:now,toId:event.toRoleId,kind:event.kind};
+      actor.expires=now+(reduced?800:1750);
+      changed=true;
+    }
+    // Visualizes a saved Role message, never read/delivery/task completion.
+    if(changed)updateInfo();
   }
   if(isLive){
     // First fetch is a baseline only; subsequent newly saved events trigger motion.
@@ -500,6 +566,7 @@
       cameraSync();
       if(t===1)focus=null;
     }
+    updateFlights(now);
     if(isLive)runRecordedHandoff(now);
     actors.forEach((actor,index)=>{
       if(now>=actor.expires&&actor.mode!=='idle'){
@@ -522,7 +589,7 @@
         working?-Math.sin(phase+1)*.27:0;
       actor.legs.forEach(({mesh})=>{mesh.rotation.x=0;});
     });
-    // The glow is drawn on existing bridge decks, in route order.
+    // Bridges glow faintly as a background accent to the airborne plane.
     for(let i=activeRoadSignals.length-1;i>=0;i--){
       const signal=activeRoadSignals[i];
       if(now-signal.startedAt>=signal.duration)activeRoadSignals.splice(i,1);
@@ -531,8 +598,8 @@
       let opacity=0;
       for(const signal of activeRoadSignals){
         const level=reduced
-          ?(signal.route.includes(index)?.24:0)
-          :planner?.roadPulse?.(signal.route,index,now-signal.startedAt,signal.duration)||0;
+          ?0
+          :(planner?.roadPulse?.(signal.route,index,now-signal.startedAt,signal.duration)||0)*.12;
         opacity=Math.max(opacity,level);
       }
       if(edge.light)edge.light.material.opacity=opacity;
@@ -574,6 +641,14 @@
   window.CrewWorldHost?.onSelectedRole?.(roles[selected].id,roles[selected].name);
   resize();frame(performance.now());
   teardown=()=>{
+    activeRoadSignals.length=0;
+    for(const flight of activePlanes)kit.disposePaperPlane?.(scene,flight.plane);
+    activePlanes.length=0;
+    for(const cue of arrivalFlashes){
+      scene.remove(cue.ring);
+      cue.ring.geometry.dispose();cue.ring.material.dispose();
+    }
+    arrivalFlashes.length=0;
     clearTimeout(toastTimer);
     for(const timer of speechTimers.values())clearTimeout(timer);
     cancelAnimationFrame(raf);

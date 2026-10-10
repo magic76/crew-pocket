@@ -263,6 +263,58 @@
     root.traverse(mesh=>{if(mesh.isMesh)mesh.userData.roleId=role.id;});
     return {role,root,body,arms,legs,mode:'idle',expires:0};
   }
+  // Folded low-poly paper plane. Tiny per-flight meshes, no image assets,
+  // model downloads or additional renderer. Local forward is +Z.
+  function createPaperPlane(scene,kind='handoff'){
+    const reply=kind==='reply';
+    const paper=reply?'#dafff0':'#e5f5ff';
+    const fold=reply?'#64db9b':'#8cbcff';
+    const root=new T.Group();
+    const surface=new T.BufferGeometry();
+    const wingTriangles=[
+      // Left and right open wings
+      0,.02,.76,  -.51,-.08,-.34,  0,.17,-.24,
+      0,.02,.76,   0,.17,-.24,    .51,-.08,-.34,
+      // Folded tail panels add an origami crease
+      0,.02,.76,   0,.17,-.24,    0,.025,-.61,
+      0,.02,.76,   0,.025,-.61,   0,.17,-.24
+    ];
+    surface.setAttribute('position',new T.Float32BufferAttribute(wingTriangles,3));
+    surface.computeVertexNormals();
+    const wings=new T.Mesh(surface,new T.MeshBasicMaterial({
+      color:paper,side:T.DoubleSide,transparent:true,opacity:.98
+    }));
+    root.add(wings);
+    const stripe=new T.Mesh(new T.BoxGeometry(.045,.025,.48),
+      new T.MeshBasicMaterial({color:fold}));
+    stripe.position.set(0,.15,-.12);
+    root.add(stripe);
+    root.scale.setScalar(.8);
+    scene.add(root);
+    const trails=[];
+    for(let i=0;i<3;i++){
+      const bead=new T.Mesh(
+        new T.SphereGeometry(.085-i*.014,6,4),
+        new T.MeshBasicMaterial({
+          color:fold,transparent:true,opacity:0,depthWrite:false
+        })
+      );
+      scene.add(bead);
+      trails.push(bead);
+    }
+    return {root,trails,kind};
+  }
+  function disposePaperPlane(scene,plane){
+    if(!plane)return;
+    for(const object of [plane.root,...plane.trails]){
+      scene.remove(object);
+      object.traverse(mesh=>{
+        mesh.geometry?.dispose?.();
+        if(Array.isArray(mesh.material))mesh.material.forEach(m=>m?.dispose?.());
+        else mesh.material?.dispose?.();
+      });
+    }
+  }
   function create(scene, roleDefs=roles) {
     const hub=[0,-.8];
     // A neighborhood is a project district (up to 3 Roles), not one island
@@ -393,5 +445,5 @@
   }
 
   function releaseMaterials(){cache.clear();}
-  root.WorldLabKit={roles,create,makeLiveRoles,mapExtent,planRoadNetwork,roadCrosses,segmentDistance,releaseMaterials,MAX_WORLD_ROLES,MEMBERS_PER_DISTRICT};
+  root.WorldLabKit={roles,create,createPaperPlane,disposePaperPlane,makeLiveRoles,mapExtent,planRoadNetwork,roadCrosses,segmentDistance,releaseMaterials,MAX_WORLD_ROLES,MEMBERS_PER_DISTRICT};
 })(window);

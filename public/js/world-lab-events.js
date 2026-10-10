@@ -78,5 +78,25 @@
     });
     return Math.min(.75,opacity*.75);
   }
-  return{observe,roadRoute,roadPulse};
+  // A paper plane is a visual metaphor for a saved Role-to-Role message,
+  // never proof that the receiver has read or processed the message.
+  // It flies independently of the decorative bridge graph.
+  function paperFlightDuration(start,end){
+    const distance=Math.hypot((end?.x||0)-(start?.x||0),(end?.z||0)-(start?.z||0));
+    return Math.round(Math.max(820,Math.min(1650,780+distance*17)));
+  }
+  function paperFlightPoint(start,end,progress){
+    const t=Math.max(0,Math.min(1,Number.isFinite(progress)?progress:0));
+    if(t===0)return{x:start.x,y:start.y,z:start.z};
+    if(t===1)return{x:end.x,y:end.y,z:end.z};
+    const e=t*t*(3-2*t);
+    const distance=Math.hypot(end.x-start.x,end.z-start.z);
+    const rise=Math.max(.65,Math.min(6.2,distance*.19));
+    return {
+      x:start.x+(end.x-start.x)*e,
+      z:start.z+(end.z-start.z)*e,
+      y:start.y+(end.y-start.y)*e+Math.sin(Math.PI*t)*rise
+    };
+  }
+  return{observe,roadRoute,roadPulse,paperFlightDuration,paperFlightPoint};
 });
