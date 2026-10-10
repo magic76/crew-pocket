@@ -94,7 +94,7 @@ assert.match(world,/kit\.disposePaperPlane\?\.\(scene,flight.plane\)/);
 assert.match(world,/paperFlightPoint\(flight.from,flight.to/);
 assert.match(world,/showArrivalCue\(flight,now\)/);
 assert.match(world,/activeRoadSignals\.length=0/);
-assert.match(world,/\.\*\.12/,'bridge glow should be subtle compared with paper planes');
+assert.match(world,/\)\*\.12/,'bridge glow should be subtle compared with paper planes');
 assert.doesNotMatch(world,/playRoadSignal\(/);
 assert.doesNotMatch(world,/planner\.trail\(/);
 assert.match(world,/非送達確認/,'the visual effect must not claim delivery');
