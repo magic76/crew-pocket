@@ -26,6 +26,7 @@ This separate page is now **visual-only** and has no second Chat implementation.
 ## Architecture
 
 - `public/js/crew-world-launcher.js`: manages optional world opening,
+  lazy-loads local Three.js (~600 KB) and world modules only on first access,
   original Chat DOM move/restore with placeholders, Role navigation via
   `window.openCrewCockpitRole`, and the floating sheet.
 - `public/js/world-lab.js`: reusable Three.js scene mount via
