@@ -84,6 +84,20 @@
       box(scene,'#e4d2b2',w-3,.04,1.95,0,.376,z);
       box(scene,'#f7e8d2',w-3,.016,1.38,0,.407,z);
     }
+    // The center street crossing becomes a flat communal square without a
+    // collider: visitors can continue walking through it without clipping.
+    if(cols>1&&rows>1){
+      cylinder(scene,'#d4bfa2',2.2,2.2,.035,0,.415,0,16);
+      const trim=part(scene,new T.TorusGeometry(1.7,.055,4,24),'#f4e7cf',0,.442,0);
+      trim.rotation.x=-Math.PI/2;
+      for(const side of [-1,1]){
+        for(const depth of [-1,1]){
+          const x=side*2.65,z=depth*2.65;
+          cylinder(scene,'#927d69',.08,.10,.48,x,.61,z,7);
+          sphere(scene,'#75a893',.42,x,.95,z);
+        }
+      }
+    }
     for(const lot of lots){
       // All Role avatar slots stand on this connected building frontage.
       box(scene,'#e9deca',9.25,.036,.78,lot.x,.389,lot.z+2.65);
