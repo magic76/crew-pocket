@@ -94,3 +94,24 @@ entire transcript or private tool/thinking traces; those remain in the normal UI
 - Verification: node test/world-lab.test.js, node test/world-chat-history.test.js
   and node test/role-submit.test.js; manual Android keyboard and reply checks
   are still required.
+
+## Reliable answer delivery after completed Role messages
+
+- POST /api/role-submit still returns a durable queued receipt, never an
+  invented success. Once the existing Role worker really finishes, it saves
+  a bounded copy of the provider's final assistant text under that same
+  request_id. Original conversation history remains the source of full detail.
+- The composer now polls GET /api/world-chat-result scoped by both role_id and
+  request_id. It puts the corresponding answer **after** the matching user
+  bubble; provider-history polling supplies only previous replies, never
+  claims to answer the just-submitted task.
+- Any stale result belonging to an earlier request is discarded. Completion
+  and an empty final text are distinguished. Failed/unknown requests never
+  pretend to have succeeded.
+- Replies are bounded to 8,000 characters in persistent queue receipts.
+  The full answer continues to live in its original Role Conversation.
+- The read endpoint checks the Role's current existence and the receipt's
+  Role ownership before returning the text. The map never shares another
+  Role's context or answer.
+- Regression test test/world-chat-ui.test.js simulates the queued-to-finished
+  response and asserts the exact answer bubble appears below the user prompt.
