@@ -54,6 +54,7 @@
   <link rel="stylesheet" href="/css/crew-room.css">
   <link rel="stylesheet" href="/css/crew-cinematic.css">
   <link rel="stylesheet" href="/css/crew-world-launcher.css">
+  <link rel="stylesheet" href="/css/world-lab.css">
   <link rel="stylesheet" href="/css/visual-inspector.css">
 </head>
 <body data-primary-tab="crew" class="bg-slate-950 text-slate-100 flex flex-col h-[100dvh] w-full max-w-full overflow-hidden">
@@ -1765,10 +1766,59 @@
   </div>
 
 
-  <!-- Opt-in isolated 3D world: iframe unloads on close to release GPU. -->
+  <!-- Same-document Three.js stage + portals for the ORIGINAL chat DOM.
+       There is only one messages-container, one composer, and one Chat Runtime. -->
   <section id="crew-world-modal" class="crew-world-modal" role="dialog" aria-modal="true" aria-label="Crew World 3D 小隊世界" hidden>
-    <iframe id="crew-world-frame" title="Crew World 3D 世界"></iframe>
+  <main id="world-app" class="world-app">
+    <div id="world-stage" aria-label="可縮放、平移的 3D Crew World 場景">
+      <div id="world-labels" aria-label="Crew Role 對話回覆"></div>
+      <div id="world-loading" role="status">正在建立 3D 世界…</div>
+    </div>
+    <header class="world-header">
+      <button type="button" id="world-back" class="world-back" aria-label="返回 Crew Pocket 小隊">←</button>
+      <div class="world-brand"><span class="world-kicker">CREW POCKET / EXPERIMENT 01</span><h1>Crew World <span>3D LAB</span></h1></div>
+      <span class="world-demo-pill">獨立示範 · 非即時狀態</span>
+    </header>
+    <div class="world-hint">拖曳移動 · 雙指縮放 · 點人物選擇</div>
+    <section id="world-info" class="world-info" aria-live="polite">
+      <div class="world-info-head">
+        <div class="world-portrait" id="world-portrait">P</div>
+        <div><span class="world-caption">SELECTED AGENT</span><h2 id="world-role-name">Pocket Developer</h2><p id="world-role-state">正在等待示範動作</p></div>
+      </div>
+      <p class="world-description" id="world-role-description">選擇人物，體驗同一套 Low-poly 骨架在不同 Role 上的效果。</p>
+      <div class="world-action-row">
+        <button type="button" id="world-focus">聚焦人物</button>
+        <button type="button" id="world-work">示範工作</button>
+        <button type="button" id="world-handoff">示範交接</button>
+        <button type="button" id="world-chat-open" hidden>開啟聊天</button>
+        <button type="button" id="world-open-role" hidden>前往對話</button>
+      </div>
+    </section>
+    <footer class="world-bottom">
+      <div class="world-roster" id="world-roster" aria-label="切換示範角色"></div>
+      <div class="world-controls">
+        <button type="button" id="world-zoom-out" aria-label="縮小">−</button>
+        <button type="button" id="world-reset">世界全景</button>
+        <button type="button" id="world-zoom-in" aria-label="放大">＋</button>
+      </div>
+    </footer>
+    <div id="world-toast" class="world-toast" role="status" aria-live="polite"></div>
+    <noscript>此 Demo 需要啟用 JavaScript。</noscript>
+  </main>
+ 
     <button id="crew-world-close-btn" class="crew-world-close" type="button" aria-label="關閉 3D 世界，返回小隊">✕</button>
+    <section id="crew-world-chat-panel" class="crew-world-chat-panel" aria-label="現有 Role 對話" hidden>
+      <div class="crew-world-chat-top">
+        <div class="crew-world-chat-identity">
+          <strong id="crew-world-chat-role-name">Role 對話</strong>
+          <small>原本 Chat · 即時串流與工具結果</small>
+        </div>
+        <button id="crew-world-chat-expand" type="button" aria-label="切換全螢幕聊天">展開</button>
+        <button id="crew-world-chat-hide" type="button" aria-label="收合聊天，返回地圖">收合</button>
+      </div>
+      <div id="crew-world-chat-messages-slot" class="crew-world-chat-messages-slot"></div>
+      <div id="crew-world-chat-composer-slot" class="crew-world-chat-composer-slot"></div>
+    </section>
   </section>
 
   <!-- CREW HOME MODAL -->
@@ -1913,6 +1963,10 @@
   <script src="/js/i18n.js"></script>
   <script src="/js/crew-room.js"></script>
   <script src="/js/crew-cinematic.js"></script>
+  <script src="/vendor/three.min.js"></script>
+  <script src="/js/world-lab-kit.js"></script>
+  <script src="/js/world-lab-events.js"></script>
+  <script src="/js/world-lab.js"></script>
   <script src="/js/crew-world-launcher.js"></script>
   <script src="/js/ui.js"></script>
   <script src="/js/memory-xray.js"></script>
