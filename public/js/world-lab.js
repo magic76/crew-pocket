@@ -706,7 +706,7 @@
         actor.root.rotation.y=0;updateInfo();
       }
       const signaling=actor.mode==='handoff'||actor.mode==='observed-handoff';
-      const working=actor.mode==='working'||(isLive&&synced&&actor.mode==='idle'&&actor.role.state==='working');
+      const working=actor.mode==='working'||(isLive&&synced&&actor.role.state==='working');
       // Agents are never physically moved away from their home island.
       // Sending a digital message is represented by bridge illumination,
       // not an avatar sprinting across water or through buildings.
