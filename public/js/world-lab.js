@@ -7,6 +7,21 @@
   const fail=msg=>{if(loading)loading.textContent=msg;};
   if(!window.THREE || !window.WorldLabKit){fail('缺少本地 3D 資源，請更新 Crew Runtime。');return;}
   const T=window.THREE, kit=window.WorldLabKit;
+  async function loadStatus() {
+    const response=await fetch('/api/crew-status',{cache:'no-store',credentials:'same-origin'});
+    if(!response.ok)throw new Error('Crew status request failed');
+    const data=await response.json();
+    if(data.success!==true||!Array.isArray(data.roles))throw new Error('Invalid status response');
+    return data.roles;
+  }
+  async function start() {
+    let liveRows=null;
+    try { liveRows=await loadStatus(); } catch (_) { /* Keep standalone art preview available. */ }
+    const roles=liveRows?.length?kit.makeLiveRoles(liveRows):kit.roles;
+    const isLive=Boolean(liveRows?.length);
+    let synced=isLive;
+    const pill=document.querySelector('.world-demo-pill');
+    if(pill)pill.textContent=isLive?'真實 Role · '+roles.length+' 位':'示範場景 · 非即時';
   const reduced=window.matchMedia?.('(prefers-reduced-motion: reduce)').matches||false;
   let renderer;
   try{renderer=new T.WebGLRenderer({antialias:true,alpha:true,powerPreference:'low-power'});}
@@ -28,12 +43,16 @@
   sunlight.shadow.camera.top=24;sunlight.shadow.camera.bottom=-24;
   sunlight.shadow.bias=-.0005;
   scene.add(sunlight,new T.HemisphereLight(0xc5e6ff,0x4f527d,1.12));
-  const actors=kit.create(scene), roles=kit.roles, hub={x:0,z:-.8};
+  const actors=kit.create(scene,roles), hub={x:0,z:-.8};
   const view=new T.Vector3(0,.7,-1.8),direction=new T.Vector3(16,21,25).normalize();
   let width=1,height=1,zoom=1,selected=0,focus=null;
   const labelsHost=document.getElementById('world-labels');
   const rosterHost=document.getElementById('world-roster');
-  const status=a=>a.mode==='working'?'示範 · 正在工作':a.mode==='handoff'?'示範 · 正在移動交接':'示範 · 待命';
+  const liveStates={working:'工作中',waiting:'待處理',idle:'待命',new:'新角色',unknown:'未知'};
+  const status=a=>{
+    const actual=isLive?(synced?'真實狀態 · '+(liveStates[a.role.state]||'未知'):'狀態未同步 · 未知'):'示範 · 待命';
+    return a.mode==='working'?actual+' · 工作動畫示範':a.mode==='handoff'?actual+' · 交接動畫示範':actual;
+  };
   const labels=roles.map((role,index)=>{
     const button=document.createElement('button');button.type='button';
     button.className='world-label';
@@ -50,6 +69,8 @@
     rosterHost.appendChild(button);return button;
   });
   const portrait=document.getElementById('world-portrait');
+  const openRole=document.getElementById('world-open-role');
+  if(openRole)openRole.hidden=!isLive;
   function updateInfo(){
     const actor=actors[selected],role=actor.role;
     document.getElementById('world-role-name').textContent=role.name;
@@ -108,6 +129,42 @@
     const a=actors[selected];a.mode='handoff';a.expires=performance.now()+8000;
     updateInfo();notify('僅播放交接動畫，不會發送 Role 訊息');
   });
+  openRole?.addEventListener('click',()=>{
+    if(!isLive)return;
+    if(window.parent!==window){
+      window.parent.postMessage({type:'crew-world-open-role',roleId:roles[selected].id},location.origin);
+    }else{
+      notify('請返回小隊頁，選擇 '+roles[selected].name+' 繼續對話');
+    }
+  });
+  const back=document.getElementById('world-back');
+  back?.addEventListener('click',event=>{
+    if(window.parent===window)return;
+    event.preventDefault();
+    window.parent.postMessage({type:'crew-world-close'},location.origin);
+  });
+  async function synchronize(){
+    if(!isLive||document.hidden)return;
+    try{
+      const next=await loadStatus();
+      const byId=new Map(next.map(item=>[item.roleId,item]));
+      for(const actor of actors){
+        const item=byId.get(actor.role.id);
+        actor.role.state=item&&['working','waiting','idle','new'].includes(item.state)?item.state:'unknown';
+      }
+      synced=true;
+      if(pill)pill.textContent=next.length===roles.length?'真實 Role · '+roles.length+' 位':'Role 已變更 · 重新開啟更新';
+    }catch(_){
+      synced=false;
+      for(const actor of actors)actor.role.state='unknown';
+      if(pill)pill.textContent='Runtime 未同步';
+    }
+    updateInfo();
+  }
+  if(isLive){
+    setInterval(()=>{if(!document.hidden)void synchronize();},12000);
+    document.addEventListener('visibilitychange',()=>{if(!document.hidden)void synchronize();});
+  }
   document.getElementById('world-reset').addEventListener('click',()=>{
     panTo(0,-1.8,1);notify('返回全景');
   });
@@ -237,4 +294,6 @@
     renderer.render(scene,camera);
   }
   updateInfo();resize();frame(performance.now());
+  }
+  start().catch(()=>fail('無法建立 3D 世界，請重新開啟頁面。'));
 })();
