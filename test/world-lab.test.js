@@ -104,7 +104,7 @@ assert.match(engine,/cancelAnimationFrame/);
 assert.match(engine,/observer\.disconnect/);
 
 const events=require('../public/js/world-lab-events.js');
-const chat=require('../public/js/world-lab-chat.js');
+
 const now=Date.now(), allowed=['a','b'];
 const old={id:'old',fromRoleId:'a',toRoleId:'b',createdAt:now-10000};
 const fresh={id:'fresh',fromRoleId:'a',toRoleId:'b',kind:'handoff',createdAt:now-1200};
