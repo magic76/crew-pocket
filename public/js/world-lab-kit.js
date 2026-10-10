@@ -4,13 +4,13 @@
   const T = root.THREE;
   const roles = [
     { id:'pocket', short:'Pocket', name:'Pocket Developer', initial:'P',
-      color:'#65c9ed', skin:'#eec39b', hair:'#514056', coat:'#417bc1', accent:'#b9eaff',
+      color:'#2B7BFF', skin:'#f0c49c', hair:'#232941', coat:'#2455D9', accent:'#8DDEFF',
       description:'冷色工作室 · 藍色外套 · 程式開發 Role', x:-5.6,z:2.5, islandX:-6.1,islandZ:1.6 },
     { id:'teacher', short:'Teacher', name:'Teacher Developer', initial:'T',
-      color:'#f8a4c5', skin:'#f1c6aa', hair:'#e7a3bf', coat:'#c46eac', accent:'#ffdaee',
+      color:'#FF4B9C', skin:'#f1c6aa', hair:'#74335D', coat:'#D82880', accent:'#FFD0EE',
       description:'粉色教學區 · 波浪短髮 · 語言教學 Role', x:5.65,z:2.4,islandX:6.1,islandZ:1.6 },
     { id:'story', short:'Story', name:'Story Developer', initial:'S',
-      color:'#f9c978', skin:'#cf9d77', hair:'#423c4b', coat:'#c18d54', accent:'#ffe8bb',
+      color:'#F5A223', skin:'#cf9d77', hair:'#312642', coat:'#B96614', accent:'#FFE19B',
       description:'暖色創作區 · 圓框眼鏡 · 故事設計 Role', x:-.7,z:-6.1,islandX:0,islandZ:-6.9 }
   ];
   const cache = new Map();
@@ -87,12 +87,19 @@
   function character(scene,role,index) {
     const root=new T.Group();root.position.set(role.x,.43,role.z);scene.add(root);
     const body=new T.Group();root.add(body);
-    cylinder(body,role.coat,.34,.42,.72,0,.72,0,10);
+    // Solid accent plinth + matching halo maintain identity when zoomed out.
+    const plinth=cylinder(root,role.color,.61,.68,.11,0,-.06,0,12);
+    plinth.material.emissive=new T.Color(role.color);
+    plinth.material.emissiveIntensity=.16;
+    const ring=part(root,new T.TorusGeometry(.77,.08,6,24),role.accent,0,.025,0);
+    ring.rotation.x=-Math.PI/2;
+    cylinder(body,role.coat,.38,.43,.72,0,.72,0,10);
+    box(body,role.color,.61,.10,.12,0,.96,.27); // strong shoulder band
     box(body,role.accent,.18,.45,.03,0,.76,.38);
     const legs=[];
     for(const side of [-1,1]){
       const leg=cylinder(body,'#39475b',.12,.15,.39,side*.19,.23,0,8);
-      sphere(body,'#293548',.19,side*.19,.09,.14,1.08,.48,1.5);
+      sphere(body,role.color,.19,side*.19,.09,.14,1.08,.48,1.5);
       legs.push({mesh:leg,side});
     }
     const arms=[];
