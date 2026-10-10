@@ -847,6 +847,7 @@ async function loadCrewStatus({ force = false } = {}) {
       updateWorkspaceUI();
       renderRoleNavigation();
       window.dispatchEvent(new CustomEvent('crew:status-updated'));
+      void window.CrewContextUsage?.load().catch(() => {});
       return crewStatusByRole;
     })
     .catch(error => {
@@ -942,7 +943,22 @@ function formatRoleLastActivity(conversation) {
   return new Date(updatedAt).toLocaleDateString('zh-TW', { month: 'numeric', day: 'numeric' });
 }
 
+function roleContextGaugeMarkup(roleId) {
+  const gauge = window.CrewContextUsage?.describe(
+    window.CrewContextUsage?.get(roleId)
+  ) || {known:false,label:'—',detail:'Context 尚無可用資料',percent:0,tone:'unknown'};
+  const percent = gauge.known ? Math.max(0,Math.min(100,Number(gauge.percent)||0)) : 0;
+  const label = escapeHtml(gauge.label);
+  const detail = escapeHtml(gauge.detail);
+  return '<span class="crew-context-gauge" data-tone="'+escapeHtml(gauge.tone)+'" '+
+    'role="img" aria-label="Context 使用量 '+label+'，'+detail+'" title="'+detail+'">'+
+      '<span class="crew-context-gauge-head"><span>Context</span><strong>'+label+'</strong></span>'+
+      '<span class="crew-context-gauge-track" aria-hidden="true"><span class="crew-context-gauge-fill" style="display:block;width:'+percent+'%"></span></span>'+
+      '<span class="crew-context-gauge-sub">'+detail+'</span>'+
+    '</span>';
+}
 let lastRoleRosterMarkup = null;
+window.addEventListener('crew:context-usage-updated',renderRoleNavigation);
 function renderRoleNavigation() {
   if (!roleNavList) return;
   const roles = availableRoles.length ? availableRoles : [];
@@ -1000,6 +1016,7 @@ function renderRoleNavigation() {
         '<span class="crew-role-state" data-state="' + escapeHtml(state) + '">' +
           escapeHtml(stateName(state)) + '</span>' +
         '<span class="crew-role-work">' + escapeHtml(workDescription) + '</span>' +
+        roleContextGaugeMarkup(role.id) +
       '</button>' +
       (attention ? '<span class="crew-role-attention" aria-label="' + attention + ' 則待處理">' +
         attention + '</span>' : '') +
