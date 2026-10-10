@@ -4,6 +4,9 @@
 (() => {
   'use strict';
   const opener=document.getElementById('crew-world-open-btn');
+  const dashboardButton=document.getElementById('crew-home-dashboard-btn');
+  const worldDashboardButton=document.getElementById('crew-world-dashboard-btn');
+  const worldMapButton=document.getElementById('crew-world-map-btn');
   const modal=document.getElementById('crew-world-modal');
   const closeButton=document.getElementById('crew-world-close-btn');
   const panel=document.getElementById('crew-world-chat-panel');
@@ -74,12 +77,24 @@
       document.getElementById('world-stage')?.focus?.({preventScroll:true});
     });
   }
+  function updateHomeView(mode){
+    const dashboard=mode==='dashboard';
+    dashboardButton?.setAttribute('aria-pressed',String(dashboard));
+    opener.setAttribute('aria-pressed',String(!dashboard));
+    dashboardButton?.classList.toggle('is-active',dashboard);
+    opener.classList.toggle('is-active',!dashboard);
+    worldDashboardButton?.setAttribute('aria-pressed',String(dashboard));
+    worldMapButton?.setAttribute('aria-pressed',String(!dashboard));
+    worldDashboardButton?.classList.toggle('is-active',dashboard);
+    worldMapButton?.classList.toggle('is-active',!dashboard);
+  }
   function close(){
     if(modal.hidden)return;
     selectVersion++;openVersion++;
     hideChat();
     stopWorld?.();stopWorld=null;
     modal.hidden=true;
+    updateHomeView('dashboard');
     panel.style.removeProperty('--crew-keyboard-rise');
     panel.style.removeProperty('--crew-visible-height');
     selectedRoleId=null;selectedRoleName='';
@@ -102,6 +117,7 @@
     previousFocus=document.activeElement;
     restoreTab=true;
     modal.hidden=false;
+    updateHomeView('map');
     document.body.classList.add('crew-world-active');
     const loading=document.getElementById('world-loading');
     if(loading){loading.hidden=false;loading.textContent='正在載入 3D 場景…';}
@@ -156,6 +172,9 @@
     updateKeyboard();
   }
   opener.addEventListener('click',open);
+  dashboardButton?.addEventListener('click',()=>updateHomeView('dashboard'));
+  worldDashboardButton?.addEventListener('click',close);
+  worldMapButton?.addEventListener('click',()=>updateHomeView('map'));
   closeButton.addEventListener('click',close);
   hideButton.addEventListener('click',hideChat);
   expandButton.addEventListener('click',toggleExpand);
