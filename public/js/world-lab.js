@@ -205,7 +205,7 @@
         actor.root.rotation.y=0;updateInfo();
       }
       const moving=actor.mode==='handoff',working=actor.mode==='working';
-      if(moving){
+      if(moving&&!reduced){
         const progress=T.MathUtils.clamp(1-(actor.expires-now)/8000,0,1);
         const route=progress<.5?progress*2:(1-progress)*2;
         const ease=route*route*(3-2*route);
