@@ -60,7 +60,8 @@ const roads=kit.planRoadNetwork(sample);
 assert.equal(roads.length,6,'six neighborhoods use six bridges rather than sixteen spokes');
 assert.equal(roads.filter(e=>e.a.id==='hub'||e.b.id==='hub').length,1,
   'town has one natural Central Hub entrance');
-assert.ok(source.includes('roads.forEach(edge=>bridge(scene,edge))'));
+assert.ok(source.includes('roadVisuals=roads.map(edge=>({...edge,light:bridge(scene,edge)}))'),
+  'bridge meshes and visual message pulses share one exact road network');
 assert.ok(source.includes('a.x+ux*a.shore'));
 assert.ok(source.includes('b.x-ux*b.shore'));
 assert.doesNotMatch(source,/districts\.forEach\(role=>bridge\(scene/);

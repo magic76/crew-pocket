@@ -132,9 +132,24 @@ near the center and looked like crossing spokes rather than a plausible town.
   obstruction and the hub entrance for 1–36 same-project and mixed-project
   examples.
 
-**Note:** The bridges are decorative geometry. Recorded handoff motions still
-use the original Hub trajectories; this change does not imply real navigation
-or task delivery. Android 3D visual smoke testing is still required.
+**Behavior after the road-bound motion fix:** Every Role stands on their own
+island while sending digital messages. No avatar walks, hovers, or cuts over water.
+On a newly saved inter-Role handoff/reply, the actual built bridges on the
+shortest path between the two project districts illuminate **in sequence**.
+This is only a *visualization of the message record*, not confirmation the
+recipient has processed it. Same-district messages use an on-island sender
+gesture only, since no bridge is needed. If the road graph has no path, no
+fake route or teleport is rendered.
+
+The standalone demo handoff button uses the same bridge-light effect but
+does not send a message. Active work animates small desk-side movements,
+not imaginary trips through town. Reduced-motion users see a brief static
+bridge highlight; all lights and timers are cleared on close.
+
+`node test/world-message-motion.test.js` verifies all routes for 1–36 Roles,
+same-district/no-path behavior, bridge order and no free-moving character.
+
+Android 3D visual smoke testing is still required.
 
 Regression contract covers 7/16/36 characters, multi-Project grouping,
 uniqueness of Role selection points, dynamically scaled town extent and the

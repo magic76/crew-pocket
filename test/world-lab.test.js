@@ -170,13 +170,17 @@ assert.equal(events.observe([old,fresh],observed.seenIds,allowed,now).arrivals.l
   're-polling must never replay seen saved messages');
 const expired={...fresh,id:'expired',createdAt:now-90000};
 assert.equal(events.observe([expired],baseline.seenIds,allowed,now).arrivals.length,0);
-assert.deepEqual(events.trail({x:-6,z:2},{x:6,z:2},0),{x:-6,z:2});
-assert.deepEqual(events.trail({x:-6,z:2},{x:6,z:2},1),{x:6,z:2});
-assert.deepEqual(events.trail({x:-6,z:2},{x:6,z:2},.5),{x:0,z:-.8},
-  'recorded motion goes via the visible hub');
+assert.equal(events.roadRoute([], 'island-a', 'island-b').length,0,
+  'no glowing road route may be fabricated across open water');
+assert.deepEqual(events.roadRoute([{a:{id:'a'},b:{id:'b'}}],'a','b'),[0],
+  'recorded digital signal uses an existing bridge rather than old hub trajectory');
+assert.equal(events.roadPulse([0],0,500,1000)>.6,true);
 assert.match(engine,/fetch\('\/api\/crew-room-events'/);
 assert.match(engine,/planner\.observe/);
 assert.match(engine,/observed-handoff/);
+assert.match(engine,/playRoadSignal/);
+assert.match(engine,/edge\.light\.material\.opacity=opacity/);
+assert.doesNotMatch(engine,/planner\.trail|root\.position\.set\(point\.x|root\.position\.set\(\s*T\.MathUtils\.lerp/);
 assert.match(engine,/headStatus/);
 assert.match(engine,/worldExtent/);
 assert.match(engine,/districtPins/);
