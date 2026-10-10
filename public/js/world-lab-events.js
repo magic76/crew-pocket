@@ -32,6 +32,9 @@
   }
   function trail(start,end,progress,hub={x:0,z:-.8}){
     const t=Math.max(0,Math.min(1,progress));
+    if(t===0)return{x:start.x,z:start.z};
+    if(t===1)return{x:end.x,z:end.z};
+    if(t===.5)return{x:hub.x,z:hub.z};
     const route=t<=.5?t*2:(t-.5)*2;
     const from=t<=.5?start:hub,to=t<=.5?hub:end;
     const ease=route*route*(3-2*route);
