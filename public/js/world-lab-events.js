@@ -87,6 +87,8 @@
   }
   function paperFlightPoint(start,end,progress){
     const t=Math.max(0,Math.min(1,Number.isFinite(progress)?progress:0));
+    if(t===0)return{x:start.x,y:start.y,z:start.z};
+    if(t===1)return{x:end.x,y:end.y,z:end.z};
     const e=t*t*(3-2*t);
     const distance=Math.hypot(end.x-start.x,end.z-start.z);
     const rise=Math.max(.65,Math.min(6.2,distance*.19));
