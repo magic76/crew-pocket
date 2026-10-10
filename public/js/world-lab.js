@@ -115,10 +115,8 @@
   const actionRow=document.querySelector('.world-action-row');
   // Real usage emphasizes talking and opening conversations; demo controls
   // remain available only in offline art-preview mode.
-  if(isLive){
-    document.getElementById('world-work').hidden=true;
-    document.getElementById('world-handoff').hidden=true;
-  }
+  document.getElementById('world-work').hidden=isLive;
+  document.getElementById('world-handoff').hidden=isLive;
   if(actionRow)actionRow.style.gridTemplateColumns='repeat(3,minmax(0,1fr))';
   function updateInfo(){
     const actor=actors[selected],role=actor.role;
