@@ -246,7 +246,12 @@
         description:'Role 小隊成員 · 3D 視覺化（僅顯示狀態，不共享 Context）',
         projectId:String(value.projectId||''),
         islandX:x,islandZ:z,x:x-.55,z:z+.9,live:true,
-        state:['working','waiting','idle','new'].includes(value.state)?value.state:'unknown'
+        state:['working','waiting','idle','new'].includes(value.state)?value.state:'unknown',
+        // Only verified busy work may show the active conversation title; no task-step inference.
+        workTitle:value.state==='working'&&typeof value.currentWork?.title==='string'
+          ?value.currentWork.title.slice(0,75):'',
+        attention:Number.isSafeInteger(value.attentionCount)
+          ?Math.max(0,Math.min(999,value.attentionCount)):0
       };
     });
   }
