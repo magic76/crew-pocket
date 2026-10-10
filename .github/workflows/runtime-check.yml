@@ -105,6 +105,9 @@ jobs:
           node test/crew-role-messaging.test.js
           node test/role-runtime.test.js
           node test/role-message-queue.test.js
+          node --check public/js/queued-message-delivery.js
+          node --check test/queued-message-delivery.test.js
+          node test/queued-message-delivery.test.js
           node test/role-runtime-kernel-v2.test.js
           node test/role-delete-lifecycle.test.js
           node test/crew-status.test.js

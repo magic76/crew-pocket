@@ -2723,6 +2723,7 @@ async function setPendingQueuedMessage(msg) {
   hydratedRoleQueues.add(roleId);
   renderQueuedMessageCapsule();
   updateSendButtonMode();
+  if (!getActiveRoleStream(roleId)) window.setTimeout(flushQueuedBtwMessage, 0);
   return data.message;
 }
 async function removePendingQueuedMessage(message, roleId = currentStreamRoleId()) {
@@ -2736,6 +2737,8 @@ async function removePendingQueuedMessage(message, roleId = currentStreamRoleId(
   const data = await response.json();
   if (!response.ok || !data.success) throw new Error(data.error || '移除排隊訊息失敗');
   queuedMessagesByRole.set(key, getQueuedMessagesForRole(key).filter(item => item.id !== message.id));
+  queuedDeliveryStatusById.delete(message.id);
+  queuedMessageDelivery.forget(key, message.id);
   renderQueuedMessageCapsule();
   updateSendButtonMode();
   return data.removed || message;
@@ -2749,6 +2752,10 @@ async function clearPendingQueuedMessage(roleId = currentStreamRoleId()) {
   });
   const data = await response.json();
   if (!response.ok || !data.success) throw new Error(data.error || '清除 Role queue 失敗');
+  getQueuedMessagesForRole(key).forEach(message => {
+    queuedDeliveryStatusById.delete(message.id);
+    queuedMessageDelivery.forget(key, message.id);
+  });
   queuedMessagesByRole.set(key, []);
   hydratedRoleQueues.add(key);
   renderQueuedMessageCapsule();
@@ -2767,6 +2774,15 @@ function renderQueuedMessageCapsule() {
   if (!capsule) return;
   const messages = currentConversationQueuedMessages();
   const pendingQueuedMessage = messages[0] || null;
+  const stateLabel = document.getElementById('queued-msg-status');
+  const interruptBtn = document.getElementById('queued-msg-interrupt-btn');
+  const state = pendingQueuedMessage ? queuedDeliveryStatusById.get(pendingQueuedMessage.id) : null;
+  if (stateLabel) stateLabel.textContent = state?.status === 'failed'
+    ? '發送失敗 · 點擊重試'
+    : state?.status === 'waiting' ? '等待上一個任務停止…'
+    : state?.status === 'sending' ? '正在發送…'
+    : '下一則 · 回覆完自動送出';
+  if (interruptBtn) interruptBtn.textContent = state?.status === 'failed' ? '重新發送' : '⚡ 立即插話';
   if (pendingQueuedMessage) {
     if (preview) preview.textContent = `${pendingQueuedMessage.text || '圖片訊息'}${messages.length > 1 ? ` · 另有 ${messages.length - 1} 則` : ''}`;
     capsule.classList.remove('hidden');
@@ -2969,21 +2985,31 @@ async function sendBtwConcurrentSidecard(customText = null, customImgPath = null
   }
 }
 
-async function flushQueuedBtwMessage() {
-  await hydrateRoleMessageQueue(currentStreamRoleId()).catch(() => []);
-  const msgToSend = currentConversationQueuedMessages()[0] || null;
-  if (!msgToSend || isStreaming) return;
-  try {
-    await removePendingQueuedMessage(msgToSend, msgToSend.roleId);
-  } catch (error) {
-    console.warn('[Role Queue] Unable to dequeue message:', error.message);
-    return;
+// Queue records remain durable until /api/chat emits an accepted session init.
+const queuedDeliveryStatusById = new Map();
+const acknowledgedQueuedMessageIds = new Set();
+const stoppingRoleStreams = new Set();
+const queuedMessageDelivery = window.createQueuedMessageDelivery({
+  getScope: () => ({ roleId: currentStreamRoleId(), providerId: currentProvider, conversationId: currentConversationId || null }),
+  list: roleId => getQueuedMessagesForRole(roleId).filter(message => !acknowledgedQueuedMessageIds.has(message.id)),
+  hydrate: roleId => hydrateRoleMessageQueue(roleId, { force: true }),
+  isBusy: roleId => Boolean(getActiveRoleStream(roleId) || stoppingRoleStreams.has(roleId)),
+  deliver: message => sendMessage({
+    text: message.text,
+    imagePath: message.imagePath || null,
+    queuedId: message.id,
+    queuedRoleId: message.roleId,
+    queuedProviderId: message.providerId,
+    queuedConversationId: message.conversationId || null
+  }),
+  onState: (message, status, error) => {
+    queuedDeliveryStatusById.set(message.id, { status, error });
+    renderQueuedMessageCapsule();
   }
-  window.setTimeout(() => sendMessage({
-    text: msgToSend.text,
-    imagePath: msgToSend.imagePath || null,
-    source: msgToSend.source || 'queue'
-  }), 120);
+});
+
+function flushQueuedBtwMessage() {
+  queuedMessageDelivery.kick(currentStreamRoleId());
 }
 function clearQueuedBtwMessages() {
   return clearPendingQueuedMessage().catch(error => {
@@ -3039,9 +3065,7 @@ function setStreamingState(streaming) {
 
 // Stop active generation
 async function stopGeneration() {
-  if (typeof streamingTTS !== 'undefined') {
-    streamingTTS.stop();
-  }
+  if (typeof streamingTTS !== 'undefined') streamingTTS.stop();
 
   const roleId = currentStreamRoleId();
   const activeStream = getActiveRoleStream(roleId);
@@ -3049,12 +3073,12 @@ async function stopGeneration() {
   const targetProvider = activeStream?.provider || currentProvider;
   const targetConversationId = activeStream?.conversationId || currentConversationId || null;
 
+  // Clearing the visible stream is not a server acknowledgement. Prevent
+  // queue draining until the stop request settles; provider locks may outlive it.
+  stoppingRoleStreams.add(roleId);
   if (targetController) {
-    try {
-      targetController.abort();
-    } catch (e) {}
+    try { targetController.abort(); } catch (_) {}
   }
-
   if (activeStream) {
     if (activeStream.controller) clearActiveRoleStream(roleId, activeStream.controller);
     else clearActiveRoleStream(roleId);
@@ -3062,20 +3086,24 @@ async function stopGeneration() {
     syncActiveRoleStreamingState();
   }
 
+  let stopped = false;
   try {
-    await fetch('/api/stop', {
+    const response = await fetch('/api/stop', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        provider: targetProvider,
-        conversation_id: targetConversationId
-      })
+      body: JSON.stringify({ provider: targetProvider, conversation_id: targetConversationId })
     });
-  } catch (e) {}
-
-  if (typeof window.haptic === 'function') {
-    window.haptic('heavy');
+    const result = await response.json().catch(() => ({}));
+    stopped = response.ok && result.success === true;
+    if (!stopped) console.warn('[Role Queue] Stop was not confirmed:', result.error || response.status);
+  } catch (error) {
+    console.warn('[Role Queue] Stop request failed:', error?.message || error);
+  } finally {
+    stoppingRoleStreams.delete(roleId);
+    if (currentStreamRoleId() === roleId) flushQueuedBtwMessage();
   }
+  if (typeof window.haptic === 'function') window.haptic('heavy');
+  return stopped;
 }
 window.stopGeneration = stopGeneration;
 
@@ -3083,6 +3111,27 @@ window.stopGeneration = stopGeneration;
 async function sendMessage(queuedMessage = null) {
   let text = '';
   let imgPath = null;
+  const queuedDelivery = queuedMessage && typeof queuedMessage === 'object' && queuedMessage.queuedId
+    ? queuedMessage : null;
+  let deliveryAccepted = false;
+  let deliveryError = null;
+  let queuedUserBubble = null;
+  let queuedAssistantBubble = null;
+  function acceptQueuedDelivery() {
+    if (!queuedDelivery || deliveryAccepted) return;
+    deliveryAccepted = true;
+    acknowledgedQueuedMessageIds.add(queuedDelivery.queuedId);
+    queuedUserBubble?.classList.remove('hidden');
+    queuedAssistantBubble?.classList.remove('hidden');
+    // Remove only after the server has acknowledged that it started the turn.
+    removePendingQueuedMessage({ id: queuedDelivery.queuedId }, queuedDelivery.queuedRoleId)
+      .then(() => acknowledgedQueuedMessageIds.delete(queuedDelivery.queuedId))
+      .catch(error => {
+        console.warn('[Role Queue] Accepted turn but ack cleanup failed:', error?.message || error);
+        queuedDeliveryStatusById.set(queuedDelivery.queuedId, { status: 'accepted', error: '已送達，等待佇列同步' });
+        renderQueuedMessageCapsule();
+      });
+  }
 
   if (typeof queuedMessage === 'string') {
     text = queuedMessage.trim();
@@ -3290,13 +3339,20 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
   let userDisplay = text;
   if (imgPath) userDisplay = `[Uploaded Image: ${imgPath}]\n${userDisplay}`;
   appendMessage('user', userDisplay, undefined, [], '', isBtwQuery);
+  if (queuedDelivery) {
+    queuedUserBubble = messagesContainer.lastElementChild;
+    queuedUserBubble?.classList.add('hidden');
+  }
 
-  promptInput.value = '';
-  promptInput.style.height = 'auto';
-  uploadedImagePath = null;
-  if (cameraInput) cameraInput.value = '';
-  if (typeof attachInput !== 'undefined' && attachInput) attachInput.value = '';
-  if (imagePreviewContainer) imagePreviewContainer.classList.add('hidden');
+  // A queued send must not erase text the user has started typing meanwhile.
+  if (!queuedMessage) {
+    promptInput.value = '';
+    promptInput.style.height = 'auto';
+    uploadedImagePath = null;
+    if (cameraInput) cameraInput.value = '';
+    if (typeof attachInput !== 'undefined' && attachInput) attachInput.value = '';
+    if (imagePreviewContainer) imagePreviewContainer.classList.add('hidden');
+  }
 
   const liveTools = [];
   const liveToolMap = new Map();
@@ -3344,6 +3400,10 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
       <div class="response-time mt-2 border-t border-slate-800 pt-1.5 text-right text-[10px] text-slate-500 font-mono select-none"></div>
     </div>
   `;
+  if (queuedDelivery) {
+    queuedAssistantBubble = assistantMsgDiv;
+    assistantMsgDiv.classList.add('hidden');
+  }
   messagesContainer.appendChild(assistantMsgDiv);
   const contentElem = assistantMsgDiv.querySelector('.msg-content');
   const liveStatusElem = assistantMsgDiv.querySelector('.live-status');
@@ -3649,6 +3709,7 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
       const detail = await response.json().catch(() => ({}));
       const error = new Error(detail.error || `HTTP ${response.status}`);
       error.httpStatus = response.status;
+      error.code = detail.code || null;
       throw error;
     }
     const reader = response.body.getReader();
@@ -3678,6 +3739,7 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
             if (currentEvent === 'init' && data.conversation_id) {
               streamConversationId = data.conversation_id;
               updateActiveRoleStream(streamRoleId, { conversationId: data.conversation_id });
+              if (queuedDelivery) acceptQueuedDelivery();
               // 🛡️ Only update global currentConversationId if user hasn't switched to another conversation
               if (assistantMsgDiv.isConnected && currentStreamRoleId() === streamRoleId && currentProvider === streamProvider
                 && currentConversationId === activeStreamConvId) {
@@ -3776,6 +3838,13 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
               }
 
             } else if (currentEvent === 'done') {
+              if (queuedDelivery && !deliveryAccepted) {
+                if (!data.error && data.conversation_id && data.status !== 'interrupted') {
+                  acceptQueuedDelivery();
+                } else {
+                  deliveryError = { message: data.error || '請求未被接受', code: data.code || null };
+                }
+              }
               finalizeTurn(data);
             }
           } catch (e) {}
@@ -3784,6 +3853,9 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
     }
     if (!turnFinalized) finalizeTurn({ completionState: 'interrupted' });
   } catch (err) {
+    if (queuedDelivery && !deliveryAccepted) {
+      deliveryError = { message: err.message, code: err.code || null, httpStatus: err.httpStatus || null };
+    }
     if (err.name === 'AbortError') {
       abortedHandled = true;
       stickyExecution?.dispose();
@@ -3817,13 +3889,27 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
   } finally {
     clearInterval(liveTimerInterval);
     clearActiveRoleStream(streamRoleId, streamAbortController);
+    if (queuedDelivery && !deliveryAccepted) {
+      queuedUserBubble?.remove();
+      queuedAssistantBubble?.remove();
+    }
     if (isStreamVisible()) scrollToBottom();
     if (currentStreamRoleId() === streamRoleId) {
       setTimeout(flushQueuedBtwMessage, 0);
     }
   }
+  if (queuedDelivery) {
+    const detail = [deliveryError?.code, deliveryError?.message].filter(Boolean).join(' ');
+    return {
+      accepted: deliveryAccepted,
+      retryable: !deliveryAccepted && (deliveryError?.httpStatus === 409 ||
+        /CONVERSATION_BUSY|Role 正在處理|already has an active|currently busy|conversation busy/i.test(detail)),
+      error: deliveryError?.message || '尚未收到 AI 開始處理的確認'
+    };
+  }
 }
 
+let queueEnqueueInFlight = false;
 function handleSendClick(e) {
   if (e) {
     try {
@@ -3843,20 +3929,37 @@ function handleSendClick(e) {
     const imgPath = uploadedImagePath;
 
     if (rawText || imgPath) {
-      // 📥 User submitted input while streaming -> Queue this message!
-      promptInput.value = '';
-      promptInput.style.height = 'auto';
-      uploadedImagePath = null;
-      if (cameraInput) cameraInput.value = '';
-      if (typeof attachInput !== 'undefined' && attachInput) attachInput.value = '';
-      if (imagePreviewContainer) imagePreviewContainer.classList.add('hidden');
-      if (slashMenu) slashMenu.classList.add('hidden');
-      if (typeof window.haptic === 'function') window.haptic([20, 20]);
-      
-      setPendingQueuedMessage({ text: rawText, imagePath: imgPath }).catch(error => {
-        console.warn('[Role Queue] Enqueue failed:', error.message);
-        if (typeof alert === 'function') alert(`排隊失敗：${error.message}`);
-      });
+      // Preserve the composer until the durable queue write is confirmed.
+      // A second tap while saving cannot enqueue the same text twice.
+      if (queueEnqueueInFlight) return;
+      queueEnqueueInFlight = true;
+      const enqueuedRoleId = currentStreamRoleId();
+      const enqueuedProviderId = currentProvider;
+      const enqueuedConversationId = currentConversationId;
+      setPendingQueuedMessage({ text: rawText, imagePath: imgPath })
+        .then(() => {
+          if (currentStreamRoleId() === enqueuedRoleId &&
+              currentProvider === enqueuedProviderId &&
+              currentConversationId === enqueuedConversationId &&
+              getPromptText() === rawText && uploadedImagePath === imgPath) {
+            promptInput.value = '';
+            promptInput.style.height = 'auto';
+            uploadedImagePath = null;
+            if (cameraInput) cameraInput.value = '';
+            if (typeof attachInput !== 'undefined' && attachInput) attachInput.value = '';
+            if (imagePreviewContainer) imagePreviewContainer.classList.add('hidden');
+          }
+          if (slashMenu) slashMenu.classList.add('hidden');
+          if (typeof window.haptic === 'function') window.haptic([20, 20]);
+        })
+        .catch(error => {
+          console.warn('[Role Queue] Enqueue failed:', error.message);
+          if (typeof alert === 'function') alert(`排隊失敗，內容已保留在輸入框：${error.message}`);
+        })
+        .finally(() => {
+          queueEnqueueInFlight = false;
+          updateSendButtonMode();
+        });
       return;
     }
 
@@ -3939,24 +4042,29 @@ document.addEventListener('DOMContentLoaded', () => {
     queuedCancelBtn.addEventListener('click', async (e) => {
       e.stopPropagation();
       const pendingQueuedMessage = currentConversationQueuedMessages()[0] || null;
-      if (pendingQueuedMessage) await removePendingQueuedMessage(pendingQueuedMessage).catch(() => null);
+      if (pendingQueuedMessage) {
+        await removePendingQueuedMessage(pendingQueuedMessage).catch(() => null);
+        flushQueuedBtwMessage();
+      }
       if (typeof window.haptic === 'function') window.haptic([15, 15]);
     });
   }
 
-  // Click Interrupt & Send Now -> Stop current stream immediately and send queued message
+  // Interrupt is a handoff, never a destructive dequeue. The queued record
+  // remains until /api/chat confirms the next turn was actually accepted.
   if (queuedInterruptBtn) {
     queuedInterruptBtn.addEventListener('click', async (e) => {
       e.stopPropagation();
-      const pendingQueuedMessage = currentConversationQueuedMessages()[0] || null;
-      if (!pendingQueuedMessage) return;
-      const msgToSend = pendingQueuedMessage;
-      await removePendingQueuedMessage(pendingQueuedMessage).catch(() => null);
+      const message = currentConversationQueuedMessages()[0] || null;
+      if (!message) return;
       if (typeof window.haptic === 'function') window.haptic('heavy');
-      await stopGeneration();
-      setTimeout(() => {
-        sendMessage(msgToSend);
-      }, 200);
+      if (queuedMessageDelivery.isFailed(message.id)) queuedMessageDelivery.retry(message.roleId, message.id);
+      if (getActiveRoleStream(message.roleId)) {
+        queuedDeliveryStatusById.set(message.id, { status: 'waiting' });
+        renderQueuedMessageCapsule();
+        await stopGeneration();
+      }
+      flushQueuedBtwMessage();
     });
   }
 });
