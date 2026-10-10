@@ -47,7 +47,7 @@ const { listCrewRoles, sendCrewMessage, getCrewInbox, getCrewMessageActivity, ge
 const { createCrewAutoResponder } = require('./lib/crew-auto-response');
 const { getRoleRuntime, listRoleRuntimes, activateRoleConversation, prepareNewRoleConversation, clearRoleConversation, clearRoleConversationByConversation } = require('./lib/role-runtime');
 const { buildCrewStatus } = require('./lib/crew-status');
-const { createWorldChatHistory, createWorldChatResult } = require('./lib/world-chat-history');
+const { createWorldChatHistory, createWorldChatLatest, createWorldChatResult } = require('./lib/world-chat-history');
 const { makeMissionGraph, MAX_GRAPH_EVENTS } = require('./lib/mission-graph');
 const { listProjects, getProject } = require('./lib/projects');
 const { defaultRoleMessageQueueStore, listRoleQueuedMessages, enqueueRoleMessage, removeRoleQueuedMessage, clearRoleMessageQueue } = require('./lib/role-message-queue');
@@ -1271,6 +1271,7 @@ async function handleCrewStatus(res) {
 const readWorldChatHistory = createWorldChatHistory({
   getRole,getRoleRuntime,getConversationSettings,getProvider
 });
+const readWorldChatLatest = createWorldChatLatest({readWorldChatHistory});
 const readWorldChatResult = createWorldChatResult({
   getRole,readReceipts:() => defaultRoleMessageQueueStore.readReceipts()
 });
@@ -1294,6 +1295,16 @@ async function handleWorldChatHistory(parsedUrl,res) {
   } catch(error) {
     res.writeHead(error.statusCode||500,{'Content-Type':'application/json','Cache-Control':'no-store'});
     res.end(JSON.stringify({success:false,error:error.statusCode?'無法讀取該 Role 的對話':'對話目前無法讀取'}));
+  }
+}
+async function handleWorldChatLatest(parsedUrl,res) {
+  try {
+    const result=await readWorldChatLatest(String(parsedUrl.query.role_id||''));
+    res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});
+    res.end(JSON.stringify({success:true,...result}));
+  } catch(error) {
+    res.writeHead(error.statusCode||500,{'Content-Type':'application/json','Cache-Control':'no-store'});
+    res.end(JSON.stringify({success:false,error:error.statusCode?'無法讀取該 Role 的回覆':'回覆目前無法讀取'}));
   }
 }
 
@@ -3147,6 +3158,8 @@ const server = http.createServer(async (req, res) => {
     return handleWorldChatResult(parsedUrl,res);
   } else if (pathname === '/api/world-chat-history' && req.method === 'GET') {
     return handleWorldChatHistory(parsedUrl,res);
+  } else if (pathname === '/api/world-chat-latest' && req.method === 'GET') {
+    return handleWorldChatLatest(parsedUrl,res);
   } else if (pathname === '/api/crew-room-events' && req.method === 'GET') {
     return handleCrewRoomEvents(res);
   } else if (pathname === '/api/mission-graph' && req.method === 'GET') {

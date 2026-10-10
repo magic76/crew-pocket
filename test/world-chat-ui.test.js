@@ -52,7 +52,7 @@ function tick(){return new Promise(resolve=>setImmediate(resolve));}
     const u=String(url);
     if(u.startsWith('/api/world-chat-history?'))
       return{ok:true,json:async()=>({success:true,roleId:'pocket',busy:!completed,
-        messages:[{role:'assistant',text:'之前的回覆'}]})};
+        messages:[{role:'user',text:'之前的任務'},{role:'assistant',text:'之前的回覆'}]})};
     if(u==='/api/role-submit'){
       const command=JSON.parse(options.body);
       assert.equal(command.role_id,'pocket');
@@ -81,7 +81,9 @@ function tick(){return new Promise(resolve=>setImmediate(resolve));}
   nodes['world-chat-open'].fire('click');
   await tick();await tick();
   assert.equal(nodes['world-chat-sheet'].hidden,false);
-  assert.equal(nodes['world-chat-history'].children.length,1);
+  assert.equal(nodes['world-chat-history'].children.length,2);
+  assert.equal(nodes['world-chat-history'].children[0].className,'world-chat-bubble user');
+  assert.equal(nodes['world-chat-history'].children[0].children[1].textContent,'之前的任務');
   nodes['world-chat-message'].value='修好這個問題';
   nodes['world-chat-form'].fire('submit');
   await tick();await tick();

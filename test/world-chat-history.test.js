@@ -1,6 +1,6 @@
 'use strict';
 const assert=require('node:assert/strict');
-const {projectReplies,createWorldChatHistory,createWorldChatResult}=require('../lib/world-chat-history');
+const {projectReplies,createWorldChatHistory,createWorldChatLatest,createWorldChatResult}=require('../lib/world-chat-history');
 (async()=>{
   assert.deepEqual(projectReplies({messages:[
     {role:'system',content:'private system'},
@@ -9,10 +9,13 @@ const {projectReplies,createWorldChatHistory,createWorldChatResult}=require('../
     {role:'assistant',content:''},
     {role:'tool',content:'secret tool output'},
     {role:'assistant',content:'second answer'}
-  ]}).map(x=>x.text),['visible answer','second answer']);
+  ]}).map(x=>[x.role,x.text]),[
+    ['user','My personal prompt'],['assistant','visible answer'],['assistant','second answer']
+  ]);
   const historyReads=[];
   const providers={codex:{
-    getHistory:async id=>{historyReads.push(id);return{messages:[
+      getHistory:async id=>{historyReads.push(id);return{messages:[
+      {role:'user',content:'Teacher task'},
       {role:'assistant',content:'Only teacher reply'}
     ]};},
     getStatus:()=>({isBusy:true})
@@ -25,8 +28,14 @@ const {projectReplies,createWorldChatHistory,createWorldChatResult}=require('../
     getProvider:()=>providers.codex,
     ...overrides
   });
-  assert.deepEqual((await make()('teacher')).messages.map(m=>m.text),['Only teacher reply']);
-  assert.deepEqual(historyReads,['teacher-session']);
+  assert.deepEqual((await make()('teacher')).messages.map(m=>[m.role,m.text]),[
+    ['user','Teacher task'],['assistant','Only teacher reply']
+  ]);
+  const latest=createWorldChatLatest({readWorldChatHistory:make()});
+  assert.deepEqual(await latest('teacher'),{
+    roleId:'teacher',message:{id:'1',text:'Only teacher reply',timestamp:null},busy:true
+  });
+  assert.deepEqual(historyReads,['teacher-session','teacher-session']);
   assert.equal((await make()('teacher')).busy,true);
   await assert.rejects(()=>make()('../teacher'),{statusCode:400});
   await assert.rejects(()=>make()('missing'),{statusCode:404});
@@ -34,7 +43,7 @@ const {projectReplies,createWorldChatHistory,createWorldChatResult}=require('../
     {statusCode:409},'another role must never read this conversation');
   await assert.rejects(()=>make({getConversationSettings:async()=>null})('teacher'),
     {statusCode:409},'missing ownership must not silently expose conversation');
-  assert.equal(historyReads.length,2,'mismatched role never reaches provider history');
+  assert.equal(historyReads.length,3,'mismatched role never reaches provider history');
   const empty=await make({getRoleRuntime:async()=>null})('teacher');
   assert.deepEqual(empty.messages,[]);assert.equal(empty.conversationId,null);
   const submissions={
@@ -53,5 +62,5 @@ const {projectReplies,createWorldChatHistory,createWorldChatResult}=require('../
   await assert.rejects(()=>readResult('teacher','world_other_000003'),{statusCode:404},
     'never leak a different Role submission');
   await assert.rejects(()=>readResult('teacher','../invalid'),{statusCode:400});
-    console.log('World chat history: Role ownership, bounded assistant-only replies passed');
+    console.log('World chat history: Role ownership and bounded user/assistant history passed');
 })().catch(e=>{console.error(e);process.exitCode=1;});

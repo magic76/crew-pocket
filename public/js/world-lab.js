@@ -73,9 +73,15 @@
     const title=document.createElement('b');title.textContent=role.short;
     const state=document.createElement('small');state.textContent='示範 · 待命';
     const detail=document.createElement('span');detail.className='world-label-detail';
-    button.append(title,state,detail);button.addEventListener('click',()=>select(index));
+    const speech=document.createElement('span');speech.className='world-speech-bubble';
+    speech.hidden=true;
+    button.append(speech,title,state,detail);button.addEventListener('click',()=>select(index));
+    speech.addEventListener('click',event=>{
+      event.preventDefault();event.stopPropagation();
+      hideSpeech(index,true);
+    });
     button.style.setProperty('--world-role-color',role.color);
-    labelsHost.appendChild(button);return{button,state,detail};
+    labelsHost.appendChild(button);return{button,state,detail,speech};
   });
   const roster=roles.map((role,index)=>{
     const button=document.createElement('button');button.type='button';
@@ -109,6 +115,8 @@
       entry.state.textContent=head.state;
       entry.detail.textContent=head.detail;
       entry.button.title=roles[i].name+' · '+head.state+(head.detail?' · '+head.detail:'');
+      entry.button.setAttribute('aria-label',roles[i].name+' · '+head.state+
+        (entry.speech.hidden?'':' · 最新回覆：'+entry.speech.textContent));
     });
     chat?.sync();
     roster.forEach((button,i)=>button.setAttribute('aria-pressed',String(i===selected)));
@@ -205,6 +213,57 @@
     }
     updateInfo();
   }
+  const speechSeen=new Map(),speechDismissed=new Set(),speechTimers=new Map();
+  function hideSpeech(index,dismissed=false){
+    const entry=labels[index],signature=speechSeen.get(roles[index].id);
+    entry.speech.hidden=true;
+    if(dismissed&&signature){
+      speechDismissed.add(signature);
+      if(speechDismissed.size>64)speechDismissed.delete(speechDismissed.values().next().value);
+    }
+    const timer=speechTimers.get(roles[index].id);
+    if(timer){clearTimeout(timer);speechTimers.delete(roles[index].id);}
+    const head=headStatus(actors[index]);
+    entry.button.setAttribute('aria-label',roles[index].name+' · '+head.state);
+  }
+  let speechRequest=false;
+  async function refreshSpeechBubbles(){
+    if(!isLive||document.hidden||speechRequest)return;
+    speechRequest=true;
+    try{
+      await Promise.all(roles.map(async(role,index)=>{
+        try{
+          const response=await fetch('/api/world-chat-latest?role_id='+encodeURIComponent(role.id),{
+            cache:'no-store',credentials:'same-origin'
+          });
+          if(!response.ok)return;
+          const data=await response.json();
+          if(data.success!==true||data.roleId!==role.id)return;
+          const entry=labels[index];
+          const text=typeof data.message?.text==='string'?data.message.text.trim():'';
+          if(!text){entry.speech.textContent='';entry.speech.hidden=true;return;}
+          const signature=role.id+':'+String(data.message.id||'')+':'+
+            String(data.message.timestamp||'')+':'+text.slice(0,1200);
+          const previous=speechSeen.get(role.id);
+          speechSeen.set(role.id,signature);
+          if(previous===signature||speechDismissed.has(signature))return;
+          const receivedAt=Date.parse(data.message.timestamp||'');
+          const age=Number.isFinite(receivedAt)?Math.max(0,Date.now()-receivedAt):0;
+          const remaining=300000-age;
+          if(remaining<=0||(previous===undefined&&!Number.isFinite(receivedAt)))return;
+          const compact=text.replace(/\s+/g,' ');
+          entry.speech.textContent=compact.length>240?compact.slice(0,239)+'…':compact;
+          entry.speech.title=text;
+          entry.speech.hidden=false;
+          const head=headStatus(actors[index]);
+          entry.button.setAttribute('aria-label',role.name+' · '+head.state+' · 最新回覆：'+entry.speech.textContent);
+          const oldTimer=speechTimers.get(role.id);
+          if(oldTimer)clearTimeout(oldTimer);
+          speechTimers.set(role.id,setTimeout(()=>hideSpeech(index),remaining));
+        }catch(_){/* Keep the last verified bubble when one Role is temporarily unavailable. */}
+      }));
+    }finally{speechRequest=false;}
+  }
   // An observed handoff is a saved message record, NOT confirmation of delivery.
   // Initial polling establishes a baseline; no old message is ever replayed.
   let seenEvents=null,eventRequest=false;
@@ -246,11 +305,13 @@
   if(isLive){
     // First fetch is a baseline only; subsequent newly saved events trigger motion.
     void observeHandoffs();
+    void refreshSpeechBubbles();
     setInterval(()=>{if(!document.hidden)void synchronize();},7000);
     setInterval(()=>{if(!document.hidden)void observeHandoffs();},3200);
+    setInterval(()=>{if(!document.hidden)void refreshSpeechBubbles();},9000);
     document.addEventListener('visibilitychange',()=>{
       if(document.hidden){seenEvents=null;pendingTransitions.length=0;}
-      else{void synchronize();void observeHandoffs();}
+      else{void synchronize();void observeHandoffs();void refreshSpeechBubbles();}
     });
   }
   document.getElementById('world-reset').addEventListener('click',()=>{

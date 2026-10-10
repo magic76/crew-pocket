@@ -1,4 +1,4 @@
-/* Crew World direct Role messages + read-only assistant replies.
+/* Crew World direct Role messages + read-only visible conversation history.
  * POST uses the existing idempotent Role queue; GET reads the same owned conversation.
  */
 (function(root,factory){
@@ -26,8 +26,8 @@
     if(!data||data.success!==true||data.roleId!==roleId||!Array.isArray(data.messages)){
       throw new Error('無法驗證這個 Role 的回覆');
     }
-    return data.messages.filter(m=>m?.role==='assistant'&&typeof m.text==='string')
-      .slice(-8).map(m=>m.text.slice(0,6000));
+    return data.messages.filter(m=>['user','assistant'].includes(m?.role)&&typeof m.text==='string')
+      .slice(-16).map(m=>({role:m.role,text:m.text.slice(0,8000)}));
   }
   function mount({getSelected,openConversation,fetcher,cryptoProvider,document:doc,window:win}){
     win=win||doc.defaultView;
@@ -68,15 +68,20 @@
       if(!texts.length&&!local&&!confirmedReply){
         const empty=doc.createElement('p');
         empty.className='world-chat-empty';
-        empty.textContent='這位角色目前沒有可顯示的 AI 回覆。';
+        empty.textContent='目前沒有對話訊息；你可以直接在這裡指派任務。';
         history.appendChild(empty);
       }
       // Never infer the answer to this submission from the latest unrelated
       // provider-history turn. Only the matching receipt can confirm the reply.
-      const previous=confirmedReply&&texts.at(-1)===confirmedReply?texts.slice(0,-1):texts;
-      for(const text of previous)addBubble(text,'assistant');
-      if(local)addBubble(local,'user');
-      if(confirmedReply)addBubble(confirmedReply,'assistant');
+      for(const item of texts)addBubble(item.text,item.role);
+      // Provider history may lag queue completion. Keep the locally submitted
+      // prompt and matching receipt answer visible until they appear in history.
+      const promptInHistory=local&&texts.some(item=>item.role==='user'&&item.text===local);
+      const replyInHistory=confirmedReply&&texts.some(item=>
+        item.role==='assistant'&&item.text===confirmedReply);
+      if(local&&!promptInHistory)addBubble(local,'user');
+      if(confirmedReply&&!replyInHistory)
+        addBubble(confirmedReply,'assistant');
       lastRendered=fingerprint;
       if(stick||local||confirmedReply)history.scrollTop=history.scrollHeight;
     }
@@ -119,7 +124,7 @@
         lastReplies.set(id,texts);
         renderMessages(texts);
         readState.textContent=data.busy?'AI 正在回應，持續更新最近回覆…':
-          texts.length?'已同步這個 Role 的最近 AI 回覆':'等待 Role 的第一則回覆…';
+          texts.length?'已同步這個 Role 的最近對話':'目前沒有對話訊息';
       }catch(error){
         if(visit===token&&targetId===id&&!sheet.hidden)
           readState.textContent='暫時無法同步回覆；'+(error.message||'請稍後再試');

@@ -28,7 +28,9 @@ Standalone URL: http://127.0.0.1:8000/world-lab.html
   Crew Room remains the authoritative full list. Reopen to refresh membership.
 - The parent validates same origin, iframe source and known Role ID before
   navigating to the existing conversation. No cross-Role context or memory sharing.
-- No message bodies, memories, workspaces or credentials are projected into 3D.
+- Conversation bodies, memories, workspaces and credentials are not shown in the
+  3D scene or character labels. The selected Role's visible user/assistant text
+  appears only in its scoped chat panel; memories and tool traces stay hidden.
 
 ## Rendering and acceptance
 
@@ -54,8 +56,9 @@ returning to an existing conversation. Device-level visual tests are still neede
   so an uncertain network response does not duplicate the action.
 - Runtime owns the selected Role's provider, project/workspace and existing
   conversation. The visualizer cannot supply or override those fields.
-- A queue receipt means accepted/queued, not completed. For the full streaming
-  reply, map composer now shows recent assistant replies; tap 查看完整對話 for full context and tool history.
+- A queue receipt means accepted/queued, not completed. The map composer shows
+  recent user messages and assistant replies; tap 查看完整對話 for full context
+  and tool history.
 - Head labels use real working/waiting/idle/new state. Only a *working* Role
   may show its current conversation title; waiting shows an attention count.
   No tool step, task outcome or completion is invented.
@@ -68,8 +71,9 @@ returning to an existing conversation. Device-level visual tests are still neede
 
 Check typing in Chinese Gboard, retaining text on network failures, tap target
 switching, low-power Android devices, zoomed-out head label visibility, and
-quiet/no-handoff startup. The map shows bounded recent assistant answers, not the
-entire transcript or private tool/thinking traces; those remain in the normal UI.
+quiet/no-handoff startup. The map shows bounded recent user and assistant
+messages, not the entire transcript or private tool/thinking traces; those
+remain in the normal UI.
 
 ## 2026-10-10 fixes: text submission, keyboard and replies
 
@@ -77,12 +81,17 @@ entire transcript or private tool/thinking traces; those remain in the normal UI
   is no image. Explicit nonempty image paths still receive root/type checks.
 - Role-scoped read-only GET /api/world-chat-history?role_id=... checks both
   current Role Runtime and persisted conversation ownership before calling
-  provider.getHistory. It only returns bounded assistant-visible text (not
-  tool calls, thinking, or messages belonging to other Roles).
-- The composer shows the most recent assistant replies and refreshes every
+  provider.getHistory. It returns bounded visible user and assistant messages
+  in conversation order (not tool calls, thinking, or messages belonging to
+  other Roles), so the map can be used as a working conversation surface.
+- The composer shows the most recent user messages and assistant replies and refreshes every
   4.5 seconds **only while open and visible**. Closing the viewer unloads it.
   A queue acceptance is not proof that the displayed reply belongs to the
   just-submitted message; the UI does not fabricate that correlation.
+- New assistant replies detected while the 3D map is open appear above that
+  Role's head for five minutes. Replies received within the previous five
+  minutes also appear when opening the map; older history does not. Tapping the
+  bubble dismisses it early.
 - A WebView / iframe visualViewport adapter measures keyboard occlusion and
   shifts the panel above Gboard. The reply log scrolls separately and composer
   buttons stay reachable, including portrait/landscape. Open panel no longer
