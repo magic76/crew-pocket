@@ -21,7 +21,7 @@
   if(!stage)return ()=>{};
   const fail=msg=>{if(loading)loading.textContent=msg;};
   if(!window.THREE || !window.WorldLabKit){fail('缺少本地 3D 資源，請更新 Crew Runtime。');return;}
-  const T=window.THREE, kit=window.WorldLabKit, planner=window.WorldLabEvents;
+  const T=window.THREE, kit=window.WorldLabKit, planner=window.WorldLabEvents, navigation=window.WorldLabNavigation;
   async function loadStatus() {
     const response=await fetch('/api/crew-status',{cache:'no-store',credentials:'same-origin'});
     if(!response.ok)throw new Error('Crew status request failed');
@@ -72,6 +72,33 @@
   scene.add(sunlight,new T.HemisphereLight(0xc5e6ff,0x4f527d,1.12));
   const actors=kit.create(scene,roles);
   const roadVisuals=actors.roadVisuals||[];
+  const islandNodes=[...districts.map(members=>({
+    id:members[0].districtId||members[0].id,
+    x:members[0].islandX,z:members[0].islandZ,shore:3.30
+  }))];
+  const firstIsland=islandNodes[0];
+  const visitor=firstIsland&&navigation&&kit.createPlayer
+    ?kit.createPlayer(scene,{x:firstIsland.x,z:firstIsland.z+navigation.WALK_RING}):null;
+  let visitorDistrict=firstIsland?.id||null;
+  let walking=null,queuedDestination=null,explore=true,followPlayer=false;
+  const exploreToggle=document.getElementById('world-explore-toggle');
+  const hint=stage.closest('.world-app')?.querySelector('.world-hint');
+  function updateExploreUI(){
+    if(exploreToggle){
+      exploreToggle.setAttribute('aria-pressed',String(explore));
+      exploreToggle.textContent=explore?'探索中':'瀏覽中';
+      exploreToggle.disabled=Boolean(walking);
+    }
+    if(hint)hint.textContent=explore
+      ?'點角色走近聊天 · 點島上步道移動 · 拖曳地圖 · 雙指縮放'
+      :'點角色定位 · 拖曳地圖 · 雙指縮放';
+  }
+  updateExploreUI();
+  listen(exploreToggle,'click',()=>{
+    if(walking)return;
+    explore=!explore;
+    followPlayer=false;updateExploreUI();
+  });
   const activeRoadSignals=[];
   const activePlanes=[];
   const arrivalFlashes=[];
@@ -156,6 +183,9 @@
   const view=new T.Vector3(0,.7,-1.8),direction=new T.Vector3(16,21,25).normalize();
   let width=1,height=1,zoom=1,selected=0,focus=null;
   const labelsHost=document.getElementById('world-labels');
+  const visitorLabel=document.createElement('span');
+  visitorLabel.className='world-player-label';visitorLabel.textContent='你';
+  if(visitor)labelsHost?.appendChild(visitorLabel);
   const districtsHost=document.getElementById('world-districts');
   const districtPins=districts.map((members,districtIndex)=>{
     const marker=document.createElement('button');
@@ -274,6 +304,54 @@
     focus={start:performance.now(),fromX:view.x,fromZ:view.z,toX:x,toZ:z,
       fromZoom:zoom,toZoom:newZoom};
   }
+  function startWalk(destination,kind='ground',roleId=null){
+    if(!visitor||!navigation||!destination)return false;
+    if(walking){
+      queuedDestination={destination,kind,roleId};
+      notify('已排入下一個目的地');return false;
+    }
+    const route=navigation.planWalk({
+      roads:roadVisuals,islands:islandNodes,
+      from:{x:visitor.root.position.x,z:visitor.root.position.z},
+      to:{x:destination.x,z:destination.z},
+      fromDistrict:visitorDistrict,toDistrict:destination.districtId
+    });
+    if(!route||route.waypoints.length<1){
+      notify('這裡沒有可行走的道路，請改點其他島嶼');return false;
+    }
+    const sameSpot=route.distance<.22;
+    walking={points:route.waypoints,index:1,kind,roleId,districtId:destination.districtId};
+    focus=null;followPlayer=true;
+    zoom=Math.max(zoom,width<700?1.55:1.85);
+    updateExploreUI();
+    if(sameSpot)finishWalk();
+    return true;
+  }
+  function finishWalk(){
+    if(!walking)return;
+    const completed=walking;
+    visitorDistrict=completed.districtId;
+    walking=null;updateExploreUI();
+    if(queuedDestination){
+      const next=queuedDestination;queuedDestination=null;
+      startWalk(next.destination,next.kind,next.roleId);return;
+    }
+    if(completed.roleId){
+      const role=roles.find(r=>r.id===completed.roleId);
+      if(role&&isLive&&window.CrewWorldHost?.openChat){
+        void window.CrewWorldHost.openChat(role.id);
+      }else if(role){
+        notify('已靠近 '+role.short+' · 示範地圖不會發送訊息');
+      }
+    }
+  }
+  function roleDestination(role){
+    const node=islandNodes.find(n=>n.id===(role.districtId||role.id));
+    if(!node)return null;
+    const dx=role.x-node.x,dz=role.z-node.z,length=Math.hypot(dx,dz)||1;
+    return {districtId:node.id,x:node.x+dx/length*navigation.WALK_RING,
+      z:node.z+dz/length*navigation.WALK_RING};
+  }
   function select(index,center=false){
     if(index<0||index>=actors.length)return;
     selected=index;updateInfo();
@@ -281,7 +359,41 @@
     window.CrewWorldHost?.onSelectedRole?.(roles[index].id,roles[index].name);
     if(center){
       const role=roles[index];
-      panTo(role.islandX,role.islandZ,width<700?2.65:2.0);
+      if(explore&&visitor&&navigation){
+        const destination=roleDestination(role);
+        if(destination)startWalk(destination,'role',role.id);
+      }else panTo(role.islandX,role.islandZ,width<700?2.65:2.0);
+    }
+  }
+  function advanceVisitor(delta,now){
+    if(!walking||!visitor)return;
+    let remaining=Math.min(.06,delta)*11.5;
+    while(remaining>0&&walking&&walking.index<walking.points.length){
+      const target=walking.points[walking.index];
+      const root=visitor.root;
+      const dx=target.x-root.position.x,dz=target.z-root.position.z;
+      const length=Math.hypot(dx,dz);
+      if(length<=.025){walking.index++;continue;}
+      const step=Math.min(length,remaining);
+      root.position.x+=dx/length*step;root.position.z+=dz/length*step;
+      root.rotation.y=Math.atan2(dx,dz);
+      remaining-=step;
+      if(step>=length-.001)walking.index++;
+    }
+    const moving=Boolean(walking);
+    const phase=now*.012;
+    visitor.legs.forEach(({mesh,side})=>{
+      mesh.rotation.x=moving&&!reduced?Math.sin(phase)*side*.56:0;
+    });
+    visitor.arms.forEach((arm,index)=>{
+      arm.rotation.x=moving&&!reduced?Math.sin(phase)*(.36*(index?1:-1)):0;
+    });
+    visitor.body.position.y=moving&&!reduced?Math.abs(Math.sin(phase))*.055:0;
+    if(walking&&walking.index>=walking.points.length)finishWalk();
+    if(followPlayer){
+      view.x=T.MathUtils.lerp(view.x,visitor.root.position.x,.12);
+      view.z=T.MathUtils.lerp(view.z,visitor.root.position.z,.12);
+      cameraSync();
     }
   }
   const toast=document.getElementById('world-toast');
@@ -491,7 +603,7 @@
   const fingers=new Map();
   let pinch=0,tap=null;
   listen(stage,'pointerdown',event=>{
-    if(event.target.closest?.('.world-label, .world-district-pin'))return;
+    if(event.target.closest?.('.world-label, .world-district-pin, .world-player-label'))return;
     stage.setPointerCapture?.(event.pointerId);
     fingers.set(event.pointerId,{x:event.clientX,y:event.clientY});
     if(fingers.size===1)tap={x:event.clientX,y:event.clientY,at:performance.now(),moved:false};
@@ -512,6 +624,7 @@
     if(fingers.size!==1)return;
     if(tap&&Math.hypot(event.clientX-tap.x,event.clientY-tap.y)>6)tap.moved=true;
     if(tap?.moved){
+      followPlayer=false;
       stage.classList.add('dragging');
       const unit=(camera.top-camera.bottom)/height;
       const right=new T.Vector3().setFromMatrixColumn(camera.matrixWorld,0);
@@ -532,8 +645,24 @@
     const hit=hits.find(h=>h.object.userData.roleId);
     if(hit){
       const index=roles.findIndex(r=>r.id===hit.object.userData.roleId);
-      select(index,true);
+      select(index,true);return;
     }
+    if(!explore||!visitor||!navigation)return;
+    // Ground-only tap. Raycasting against the plane merely finds the island;
+    // the navigation planner stays on the visible perimeter walking path.
+    const intersection=ray.ray.intersectPlane(
+      new T.Plane(new T.Vector3(0,1,0),-.37),new T.Vector3());
+    if(!intersection)return;
+    const island=navigation.locateIsland(intersection,islandNodes);
+    if(!island)return; // water / open sky are not walking destinations
+    const spot=navigation.nearestWalkSpot(intersection,island);
+    if(!spot)return;
+    // Free taps snap to a known visible circular path, not a building interior.
+    const dx=spot.x-island.x,dz=spot.z-island.z,len=Math.hypot(dx,dz)||1;
+    startWalk({
+      districtId:island.id,x:island.x+dx/len*navigation.WALK_RING,
+      z:island.z+dz/len*navigation.WALK_RING
+    });
   }
   function pointerEnd(event){
     if(fingers.size===1&&fingers.has(event.pointerId)&&tap&&!tap.moved&&
@@ -568,6 +697,7 @@
     }
     updateFlights(now);
     if(isLive)runRecordedHandoff(now);
+    advanceVisitor(delta,now);
     actors.forEach((actor,index)=>{
       if(now>=actor.expires&&actor.mode!=='idle'){
         actor.mode='idle';actor.handoff=null;
@@ -589,6 +719,13 @@
         working?-Math.sin(phase+1)*.27:0;
       actor.legs.forEach(({mesh})=>{mesh.rotation.x=0;});
     });
+    if(visitor){
+      const projected=visitor.root.position.clone().add(new T.Vector3(0,3.6,0)).project(camera);
+      const x=(projected.x+1)/2*width,y=(-projected.y+1)/2*height;
+      const visible=projected.z>=-1&&projected.z<=1&&x>18&&x<width-18&&y>110&&y<height-110;
+      visitorLabel.style.display=visible?'':'none';
+      if(visible){visitorLabel.style.left=x+'px';visitorLabel.style.top=y+'px';}
+    }
     // Bridges glow faintly as a background accent to the airborne plane.
     for(let i=activeRoadSignals.length-1;i>=0;i--){
       const signal=activeRoadSignals[i];
