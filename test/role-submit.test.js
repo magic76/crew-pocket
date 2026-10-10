@@ -85,6 +85,17 @@ const { createRoleSubmitter, runChatInBackground } = require('../lib/role-submit
     await store.clearRole('teacher');
     assert.equal((await submitter.submit({ ...payload, request_id: 'test-request-000006' })).status, 'cancelled');
 
+    // Text-only 3D Role message must bypass filesystem image validation.
+    const plain = { ...payload, request_id: 'test-request-000007',
+      image_path: '', prompt: 'Hello from the 3D map' };
+    const textReceipt = await submitter.submit(plain);
+    assert.equal(textReceipt.status, 'queued');
+    const textQueued = (await store.list('teacher')).find(item => item.id === plain.request_id);
+    assert.equal(textQueued.text, plain.prompt);
+    assert.equal(textQueued.imagePath, null);
+    assert.equal((await submitter.submit(plain)).requestId, plain.request_id,
+      'text-only submission is still idempotent');
+
     // Detached chat uses the actual HTTP/SSE contract and waits for end,
     // rather than considering an init event or startTurn return a success.
     const result = await runChatInBackground(async (req, res, body) => {
