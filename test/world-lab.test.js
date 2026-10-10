@@ -147,15 +147,17 @@ assert.match(css,/world-chat-history/);
 assert.match(read('server.js'),/handleWorldChatHistory/);
 const projected = chat.readableMessages({
   success:true,roleId:'teacher',
-  messages:[{role:'assistant',text:'Teacher reply'}, {role:'user',text:'Should not appear'}]
+  messages:[{role:'assistant',text:'Teacher reply'}, {role:'user',text:'Prior task'}]
 },'teacher');
-assert.deepEqual(projected,['Teacher reply']);
+assert.deepEqual(projected,[
+  {role:'assistant',text:'Teacher reply'}, {role:'user',text:'Prior task'}
+]);
 assert.throws(()=>chat.readableMessages({success:true,roleId:'pocket',messages:[]},'teacher'),
   /驗證/);
 
 assert.match(composer,/world-chat-result/);
 assert.match(composer,/submittedByRole/);
 assert.match(composer,/data\.requestId!==submission\.requestId/);
-assert.match(composer,/if\(confirmedReply\)addBubble\(confirmedReply,'assistant'\)/);
+assert.match(composer,/if\(confirmedReply&&!replyInHistory\)/);
 assert.match(read('server.js'),/handleWorldChatResult/);
 console.log('world-lab isolated 3D demo tests: ok');
