@@ -35,137 +35,116 @@
   function cylinder(p,c,a,b,h,x=0,y=0,z=0,sides=9) {
     return part(p,new T.CylinderGeometry(a,b,h,sides),c,x,y,z);
   }
-  function island(scene,role,index) {
-    const x=role.islandX,z=role.islandZ;
-    const sides=['#638ba7','#a17f9c','#9a866e'];
-    const tops=['#91cbd0','#e6b0c6','#d2bf8e'];
-    // Wide flat shoreline supports the player's entire body at the walking
-    // ring. Earlier 3.34-radius floors could leave a player foot in the air.
-    cylinder(scene,sides[index%sides.length],4.08,3.56,1.15,x,-.55,z,12);
-    cylinder(scene,tops[index%tops.length],3.97,3.98,.30,x,.16,z,12);
-    cylinder(scene,'#f9efdb',3.84,3.84,.05,x,.335,z,16);
-    const footpath=part(scene,new T.TorusGeometry(3.0,.045,4,68),'#b9c7b5',x,.389,z);
-    footpath.rotation.x=-Math.PI/2;
-    for(let i=0;i<8;i++){
-      const angle=Math.PI*2*i/8;
-      sphere(scene,i%2?'#d2f0d4':'#e5e2b4',.13,
-        x+Math.cos(angle)*2.95,.44,z+Math.sin(angle)*2.95);
-    }
-    const group=new T.Group();group.position.set(x,0,z);scene.add(group);
-    const walls=['#a7d7ed','#eac1d5','#e8d8b3'];
-    const roofs=['#638bc1','#c779a8','#ba9268'];
-    box(group,walls[index % walls.length],2.22,1.82,1.55,.65,1.35,-1.55);
-    box(group,roofs[index % roofs.length],2.48,.36,1.92,.65,2.40,-1.55);
-    box(group,'#fff8e9',.70,.85,.10,-.12,1.31,-.73);
-    box(group,role.accent,.50,.62,.06,-.12,1.30,-.66);
-    box(group,'#25374d',.9,.67,.1,1.25,1.48,-.70);
-    box(group,role.color,.75,.51,.04,1.25,1.48,-.63);
-    box(group,'#725e68',1.45,.18,.73,.91,.82,.55);
-    box(group,'#654d5b',.12,.75,.12,.33,.49,.55);
-    box(group,'#654d5b',.12,.75,.12,1.49,.49,.55);
-    box(group,'#25374d',.92,.68,.10,.88,1.34,.20);
-    box(group,role.accent,.78,.53,.03,.88,1.34,.265);
-    box(group,'#d2babc',.66,.05,.24,.88,.96,.73);
-    box(group,'#fff2d2',.24,.45,.17,-1.62,.58,-.8);
-    sphere(group,role.color,.4,-1.62,.93,-.8,1,1.1,1);
-    for(const side of [-2.7,2.7]){
-      cylinder(group,'#d8c6a3',.055,.055,.76,side,.76,1.35,7);
-      sphere(group,'#fff1b5',.17,side,1.20,1.35);
-    }
-  }
-  // Roads connect neighboring shorelines, not every island centre to the
-  // Hub. Kruskal's non-crossing tree keeps the town readable as it grows.
-  const HUB={id:'hub',x:0,z:-.8,shore:1.05};
-  const ISLAND_SHORE=3.30;
-  function segmentDistance(point,a,b){
-    const dx=b.x-a.x,dz=b.z-a.z;
-    const length2=dx*dx+dz*dz;
-    const t=length2?Math.max(0,Math.min(1,
-      ((point.x-a.x)*dx+(point.z-a.z)*dz)/length2)):0;
-    return Math.hypot(point.x-(a.x+t*dx),point.z-(a.z+t*dz));
-  }
-  function roadCrosses(a,b,c,d){
-    if(a.id===c.id||a.id===d.id||b.id===c.id||b.id===d.id)return false;
-    const cross=(p,q,r)=>(q.x-p.x)*(r.z-p.z)-(q.z-p.z)*(r.x-p.x);
-    const x=cross(a,b,c),y=cross(a,b,d),z=cross(c,d,a),w=cross(c,d,b);
-    return x*y<-.000001&&z*w<-.000001;
-  }
+  // Continuous miniature town: one grass slab with aligned streets,
+  // sidewalks and small project workshops. No islands, docks or bridges.
+  const TOWN_SPACING=10;
   function districtNodes(roleDefs){
-    const districts=new Map();
-    for(const role of roleDefs){
+    const unique=new Map();
+    for(const role of roleDefs||[]){
       const id=role.districtId||role.id;
-      if(!districts.has(id)&&Number.isFinite(role.islandX)&&Number.isFinite(role.islandZ))
-        districts.set(id,{id,x:role.islandX,z:role.islandZ,shore:ISLAND_SHORE});
+      if(!unique.has(id))unique.set(id,{
+        id,x:role.islandX,z:role.islandZ,
+        col:role.townCol,row:role.townRow,role
+      });
     }
-    return [...districts.values()];
+    return [...unique.values()];
   }
   function planRoadNetwork(roleDefs=roles){
-    const islands=districtNodes(roleDefs);
-    if(!islands.length)return [];
-    const nodes=[HUB,...islands];
-    const candidates=[];
-    for(let i=0;i<nodes.length;i++)for(let j=i+1;j<nodes.length;j++){
-      const a=nodes[i],b=nodes[j];
-      const length=Math.hypot(b.x-a.x,b.z-a.z);
-      if(length<=a.shore+b.shore+.35)continue;
-      // A bridge must not cut through a third neighborhood, even if the
-      // endpoints are geometrically connected.
-      if(nodes.some((obstacle,k)=>k!==i&&k!==j&&
-        segmentDistance(obstacle,a,b)<obstacle.shore+.55))continue;
-      const hubEdge=i===0;
-      candidates.push({i,j,length,score:length+(hubEdge?3:0)});
-    }
-    candidates.sort((a,b)=>a.score-b.score||
-      Number(a.i===0)-Number(b.i===0)||a.i-b.i||a.j-b.j);
-    const roots=nodes.map((_,i)=>i);
-    function root(i){while(roots[i]!==i){roots[i]=roots[roots[i]];i=roots[i];}return i;}
+    const lots=districtNodes(roleDefs);
+    if(!lots.length)return[];
+    const columns=Math.ceil(Math.sqrt(lots.length));
+    const rows=Math.ceil(lots.length/columns);
+    const at=(col,row)=>({
+      id:'street-'+col+'-'+row,col,row,
+      x:(col-(columns-1)/2)*TOWN_SPACING+TOWN_SPACING/2,
+      z:(row-(rows-1)/2)*TOWN_SPACING+TOWN_SPACING/2
+    });
     const edges=[];
-    const maxHubConnections=islands.length<=3?islands.length:1;
-    let hubConnections=0;
-    for(const item of candidates){
-      const {i,j}=item;
-      if(root(i)===root(j)||(i===0&&hubConnections>=maxHubConnections))continue;
-      const a=nodes[i],b=nodes[j];
-      if(edges.some(edge=>roadCrosses(a,b,edge.a,edge.b)))continue;
-      roots[root(i)]=root(j);
-      edges.push({a,b,length:item.length});
-      if(i===0)hubConnections++;
-      if(edges.length===islands.length)break;
+    for(let row=0;row<rows;row++)for(let col=0;col<columns;col++){
+      if(col+1<columns)edges.push({a:at(col,row),b:at(col+1,row),length:TOWN_SPACING});
+      if(row+1<rows)edges.push({a:at(col,row),b:at(col,row+1),length:TOWN_SPACING});
     }
     return edges;
   }
-  function bridge(scene,edge){
-    const {a,b}=edge;
-    const vx=b.x-a.x,vz=b.z-a.z;
-    const total=Math.hypot(vx,vz);
-    const length=total-a.shore-b.shore;
-    if(!(length>.35))return;
-    const ux=vx/total,uz=vz/total;
-    const startX=a.x+ux*a.shore,startZ=a.z+uz*a.shore;
-    const endX=b.x-ux*b.shore,endZ=b.z-uz*b.shore;
-    const cx=(startX+endX)/2,cz=(startZ+endZ)/2;
-    const rotation=Math.atan2(vx,vz);
-    for(const [width,height,y,color] of [
-      [1.54,.23,.18,'#c5a78b'],[1.43,.05,.32,'#f4dcb0']]){
-      const road=box(scene,color,width,height,length,cx,y,cz);
-      road.rotation.y=rotation;
+  function buildTown(scene,lots){
+    if(!lots.length)return;
+    const cols=Math.ceil(Math.sqrt(lots.length));
+    const rows=Math.ceil(lots.length/cols);
+    const w=cols*TOWN_SPACING+4,d=rows*TOWN_SPACING+4;
+    box(scene,'#687b78',w,.75,d,0,-.47,0);
+    box(scene,'#a9caa8',w,.24,d,0,.23,0); // ground top .35
+    // Brick-edged pedestrian routes are continuous across the entire lawn.
+    for(let col=0;col<cols;col++){
+      const x=(col-(cols-1)/2)*TOWN_SPACING+TOWN_SPACING/2;
+      box(scene,'#e4d2b2',1.95,.04,d-3,x,.375,0);
+      box(scene,'#fbebce',1.35,.016,d-3,x,.405,0);
     }
-    for(const edgeOffset of [-.79,.79]){
-      const rail=box(scene,'#f3e4c6',.075,.25,length,cx,.59,cz);
-      rail.rotation.y=rotation;
-      rail.position.x+=Math.cos(rotation)*edgeOffset;
-      rail.position.z-=Math.sin(rotation)*edgeOffset;
+    for(let row=0;row<rows;row++){
+      const z=(row-(rows-1)/2)*TOWN_SPACING+TOWN_SPACING/2;
+      box(scene,'#e4d2b2',w-3,.04,1.95,0,.376,z);
+      box(scene,'#f7e8d2',w-3,.016,1.38,0,.407,z);
     }
-    // A flat light strip sits ON the existing bridge deck. It may illuminate
-    // during a verified message event; no Role ever walks across open water.
-    const lightMaterial=new T.MeshBasicMaterial({
-      color:'#77ebff',transparent:true,opacity:0,depthWrite:false
-    });
-    const light=new T.Mesh(new T.BoxGeometry(1.06,.014,Math.max(.1,length-.12)),lightMaterial);
-    light.position.set(cx,.375,cz);
-    light.rotation.y=rotation;
-    scene.add(light);
-    return light;
+    for(const lot of lots){
+      // All Role avatar slots stand on this connected building frontage.
+      box(scene,'#e9deca',9.25,.036,.78,lot.x,.389,lot.z+2.65);
+      box(scene,'#eee1ce',.88,.034,2.46,
+        lot.x+TOWN_SPACING/2,.390,lot.z+3.8);
+    }
+    // Small communal green at the perimeter, deliberately outside streets.
+    const parkX=-(cols*TOWN_SPACING)/2-1.2;
+    const parkZ=-(rows*TOWN_SPACING)/2-1.2;
+    sphere(scene,'#628f79',.76,parkX,.86,parkZ,1,1.05,1);
+    cylinder(scene,'#8c795e',.11,.12,.67,parkX,.55,parkZ,7);
+    for(const side of [-1,1]){
+      const x=side*(w/2-1.0),z=d/2-1.0;
+      cylinder(scene,'#8f7b6b',.08,.10,.64,x,.67,z,7);
+      sphere(scene,'#589c7e',.54,x,1.12,z);
+    }
+  }
+  function districtBuilding(scene,role,index){
+    const x=role.islandX,z=role.islandZ;
+    const type=profession(role);
+    const wall=['#b3d8e8','#f2ccdb','#e3dab7','#d6c5ea','#c8dfc4'];
+    const roof=['#6284b7','#bf7096','#ba8e62','#8372ae','#6d9b89'];
+    const group=new T.Group();group.position.set(x,0,z);scene.add(group);
+    const paint=wall[index%wall.length],accent=roof[index%roof.length];
+    // Workshop occupies northern half of each lot; the south sidewalk is
+    // reserved for 1–3 Role avatars and never overlaps any building.
+    box(group,paint,3.45,1.76,2.54,0,1.25,-1.6);
+    box(group,accent,3.85,.42,2.92,0,2.35,-1.6);
+    box(group,'#f8f2dd',.78,1.11,.06,0,1.04,-.30);
+    box(group,'#65818b',.54,.74,.09,0,.86,-.255);
+    for(const side of [-1,1]){
+      box(group,'#f8f3e7',.69,.72,.09,side*1.10,1.35,-.27);
+      box(group,'#80b8c2',.53,.55,.10,side*1.10,1.35,-.21);
+    }
+    // An identity-colored roof signal, but never a fabricated work status.
+    box(group,role.accent,1.22,.16,.18,0,2.02,-.1);
+    for(const p of [.32,1.02]){
+      box(group,'#eee3cd',.9,.048,.44,0,.392,p);
+    }
+    // Small lot decorations, kept clear of the player-facing walking lane.
+    cylinder(group,'#9b826a',.1,.12,.72,-3.25,.65,-1.1,7);
+    sphere(group,'#6ca792',.62,-3.25,1.21,-1.1);
+    cylinder(group,'#9b826a',.10,.12,.57,3.2,.62,-1.5,7);
+    sphere(group,'#81b99a',.51,3.2,1.08,-1.5);
+    box(group,'#927960',1.25,.12,.40,3.08,.64,1.15);
+    box(group,'#927960',.12,.55,.12,2.58,.37,1.15);
+    box(group,'#927960',.12,.55,.12,3.58,.37,1.15);
+    if(type==='teacher'){
+      box(group,'#e0b8cd',1.28,.72,.13,-2.55,1.1,-.2);
+      box(group,'#f8f0e5',1.05,.45,.14,-2.55,1.1,-.12);
+    }else if(type==='story'){
+      for(let i=0;i<3;i++)box(group,['#f1c77d','#b7afd8','#a5c8b7'][i],
+        .23,.5,.35,-2.95+i*.27,.6,-.15);
+    }else if(type==='fortune'){
+      part(group,new T.OctahedronGeometry(.48),'#b5a1d9',-2.8,.85,-.15);
+    }else if(type==='developer'){
+      box(group,'#76bbdf',1.24,.82,.13,-2.6,1.13,-.13);
+      box(group,'#274365',.99,.6,.14,-2.6,1.13,-.08);
+    }else{
+      sphere(group,'#a7d1c5',.42,-2.65,.75,-.18);
+    }
   }
   // Every Role uses the same body rig with distinct, lightweight identity props.
   function profession(role) {
@@ -351,29 +330,12 @@
     return{root,body,legs,arms};
   }
   function create(scene, roleDefs=roles) {
-    const hub=[0,-.8];
-    // A neighborhood is a project district (up to 3 Roles), not one island
-    // per Role. Preserve all individual characters/click targets/conversations.
-    const groups=new Map();
-    for(const role of roleDefs){
-      const districtId=role.districtId||role.id;
-      if(!groups.has(districtId))groups.set(districtId,role);
-    }
-    const districts=[...groups.values()];
-    const roads=planRoadNetwork(roleDefs);
-    const roadVisuals=roads.map(edge=>({...edge,light:bridge(scene,edge)}));
-    districts.forEach((role,i)=>island(scene,role,i));
-    cylinder(scene,'#d4b6df',1.05,1.2,.65,0,-.14,-.8,10);
-    cylinder(scene,'#7bcadf',.86,.9,.15,0,.28,-.8,12);
-    sphere(scene,'#a7e5ee',.55,0,1,-.8,1,1.1,1);
-    for(const [x,z,color] of [[-8.3,-.2,'#68c6a5'],[8.35,.15,'#f0a5bb'],[2.25,-8.85,'#efc47b']]){
-      cylinder(scene,'#7d7180',.1,.14,1.2,x,.86,z,7);
-      sphere(scene,color,.75,x,1.82,z,1,1.2,1);
-      sphere(scene,color,.52,x+.32,1.65,z+.25);
-    }
+    const districts=districtNodes(roleDefs);
+    buildTown(scene,districts);
+    districts.forEach((district,i)=>districtBuilding(scene,district.role,i));
     const actors=roleDefs.map((role,index)=>character(scene,role,index));
-    // Same exact non-crossing graph used for bridge meshes and event signals.
-    actors.roadVisuals=roadVisuals;
+    // Town roads are at shared street intersections, not island bridges.
+    actors.roadVisuals=planRoadNetwork(roleDefs);
     return actors;
   }
 
@@ -399,16 +361,11 @@
   const MAX_WORLD_ROLES=36;
   const MEMBERS_PER_DISTRICT=3;
   function districtPosition(index,count){
-    // Compact three-ring town: 6 inner districts, 12 middle, up to 18 outer.
-    // Avoid overlapping 7.3-unit island footprints as the town grows.
-    const ring=index<6?0:index<18?1:2;
-    const offset=ring===0?0:ring===1?6:18;
-    const capacity=[6,12,18][ring];
-    const size=Math.min(capacity,count-offset);
-    const ordinal=index-offset;
-    const angle=(Math.PI*2*(ordinal+.25*(ring%2)))/Math.max(size,1)-Math.PI/2;
-    const radius=count===1?6:[11.5,22.5,33.5][ring];
-    return {x:Math.cos(angle)*radius,z:Math.sin(angle)*radius};
+    const cols=Math.ceil(Math.sqrt(Math.max(1,count)));
+    const rows=Math.ceil(count/cols);
+    const col=index%cols,row=Math.floor(index/cols);
+    return{x:(col-(cols-1)/2)*TOWN_SPACING,
+      z:(row-(rows-1)/2)*TOWN_SPACING,col,row};
   }
   function makeLiveRoles(input) {
     if(!Array.isArray(input))return [];
@@ -439,8 +396,9 @@
         const spacing=district.members.length;
         const offset=spacing===1?0:spacing===2?(slot===0?-1.3:1.3):(slot-1)*1.8;
         positions.set(member.roleId,{districtId:district.id,
-          districtIndex,districtSize:spacing,islandX:pos.x,islandZ:pos.z,
-          x:pos.x+offset,z:pos.z+1.65});
+          districtIndex,districtSize:spacing,townCol:pos.col,townRow:pos.row,
+          islandX:pos.x,islandZ:pos.z,
+          x:pos.x+offset,z:pos.z+2.65});
       });
     });
     const assigned=new Set();
@@ -479,6 +437,13 @@
     return Math.max(10,...islands.map(r=>Math.hypot(r.islandX,r.islandZ)+4));
   }
 
+  // Standalone demo must use exactly the same continuous-town grid as live
+  // data, otherwise the visitor would spawn outside the rendered lawn.
+  roles.forEach((role,index)=>{
+    const pos=districtPosition(index,roles.length);
+    Object.assign(role,{districtId:role.id,townCol:pos.col,townRow:pos.row,
+      islandX:pos.x,islandZ:pos.z,x:pos.x,z:pos.z+2.65});
+  });
   function releaseMaterials(){cache.clear();}
-  root.WorldLabKit={roles,create,createPlayer,createPaperPlane,disposePaperPlane,makeLiveRoles,mapExtent,planRoadNetwork,roadCrosses,segmentDistance,releaseMaterials,MAX_WORLD_ROLES,MEMBERS_PER_DISTRICT};
+  root.WorldLabKit={roles,create,createPlayer,createPaperPlane,disposePaperPlane,makeLiveRoles,mapExtent,planRoadNetwork,districtPosition,releaseMaterials,MAX_WORLD_ROLES,MEMBERS_PER_DISTRICT};
 })(window);
