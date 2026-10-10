@@ -176,9 +176,13 @@
       known.add(r.roleId);return true;
     }).slice(0,6);
     const n=members.length;
+    const assigned=new Set();
     const radius=n<=3?8.2:n<=4?9.6:11.3;
     return members.map((value,index)=>{
-      const style=LIVE_COLORS[liveIndex(value,index)];
+      let paletteIndex=liveIndex(value,index);
+      while(assigned.has(paletteIndex))paletteIndex=(paletteIndex+1)%LIVE_COLORS.length;
+      assigned.add(paletteIndex);
+      const style=LIVE_COLORS[paletteIndex];
       const angle=n===1?0:2*Math.PI*index/n;
       const x=n===1?0:n===2?(index===0?-6.2:6.2):
         n===3?[-6.1,6.1,0][index]:Math.cos(angle)*radius;
