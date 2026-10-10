@@ -36,6 +36,17 @@ for(const src of [kit,html]){
   assert.doesNotMatch(src,/https?:\/\/|fetch\s*\(|XMLHttpRequest|localStorage|sessionStorage|WebSocket/);
 }
 assert.match(engine,/fetch\('\/api\/crew-status'/);
+assert.match(engine,/previous===undefined\|\|previous===signature/);
+assert.match(engine,/const recentlyWorking=/);
+assert.match(engine,/lastWorkingAt\.set\(actor\.role\.id,Date\.now\(\)\)/);
+assert.match(engine,/remaining=300000-age/);
+assert.match(engine,/else if\(!labels\[index\]\.speech\.hidden\)hideSpeech\(index\)/);
+assert.match(engine,/const overview=zoom<1\.65/,
+  'small crews also hide idle and waiting badges at overview zoom');
+assert.match(engine,/const active=roles\[index\]\.state==='working'\|\|!speech\.hidden/);
+assert.match(engine,/const lowPriority=overview&&!active/);
+assert.match(engine,/pin\.members\.some\(role=>role\.state==='working'\)/,
+  'overview project pins appear only while a member is working');
 assert.doesNotMatch(engine,/fetch\('\/api\/(chat|role-submit|role-runtime|memories)'/);
 assert.doesNotMatch(engine,/method\s*:\s*['\"](?:POST|PUT|PATCH|DELETE)/);
 assert.match(engine,/crew-world-open-role/);

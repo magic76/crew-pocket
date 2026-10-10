@@ -45,6 +45,10 @@ The scene reads verified `/api/crew-status` and saved handoff metadata;
 characters display only verified work/wait/idle statuses, current work titles
 when truly busy, and bounded latest reply *speech* previews. No cross-Role
 context, memory, credentials or workspace is shared.
+- The first reply poll after entering Map only records a baseline. Old replies
+  never pop up. A changed assistant reply can show only while its Role is
+  working or within 20 seconds after verified work, for up to five minutes;
+  the bubble hides as soon as the Role becomes idle, waiting or unknown.
 
 ## Lifecycle and safety
 
@@ -89,11 +93,12 @@ open/close memory stability and WebGL recovery.
   bridge geometry is built **once per district**, not once per person.
   Each Role is individually selectable and retains its own Role/Conversation,
   color and status; proximity does not share project context or memory.
-- At overview zoom the map shows labeled Project neighborhoods and busy/
-  selected Role badges. Zooming in reveals individual badges; the horizontal
+- At overview zoom the map hides idle/waiting Role badges and project pins
+  unless a Role is working. Working Roles and their new reply bubbles remain
+  visible; zooming in reveals all individual badges. The horizontal
   Role chip rail offers direct navigation to every rendered agent.
-- Project pins show verified busy/waiting/idle counts. They are navigational
-  only: no tool calls, new messages, or completion claims.
+- Project pins show verified working counts only while a member is working.
+  They are navigational only: no tool calls, new messages, or completion claims.
 - Camera framing accounts for the city extent. Zoom and focused district
   views remain available on phone.
 - At >36 Roles, the map labels its visible/total count rather than silently

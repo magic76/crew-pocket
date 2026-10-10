@@ -251,25 +251,32 @@
       const next=await loadStatus();
       if(disposed)return;
       const byId=new Map(next.map(item=>[item.roleId,item]));
-      for(const actor of actors){
+      actors.forEach((actor,index)=>{
         const item=byId.get(actor.role.id);
         actor.role.state=item&&['working','waiting','idle','new'].includes(item.state)?item.state:'unknown';
         actor.role.workTitle=actor.role.state==='working'&&typeof item?.currentWork?.title==='string'
           ?item.currentWork.title.slice(0,75):'';
         actor.role.attention=Number.isSafeInteger(item?.attentionCount)
           ?Math.max(0,Math.min(999,item.attentionCount)):0;
-      }
+        if(actor.role.state==='working')lastWorkingAt.set(actor.role.id,Date.now());
+        else if(!labels[index].speech.hidden)hideSpeech(index);
+      });
       synced=true;
       if(pill)pill.textContent=next.length===originalCount?statusSummary():'角色名單已改變 · 重新進入地圖更新';
     }catch(_){
       if(disposed)return;
       synced=false;
-      for(const actor of actors){actor.role.state='unknown';actor.role.workTitle='';actor.role.attention=0;}
+      actors.forEach((actor,index)=>{
+        actor.role.state='unknown';actor.role.workTitle='';actor.role.attention=0;
+        if(!labels[index].speech.hidden)hideSpeech(index);
+      });
       if(pill)pill.textContent='Runtime 未同步';
     }
     updateInfo();
   }
   const speechSeen=new Map(),speechDismissed=new Set(),speechTimers=new Map();
+  const lastWorkingAt=new Map(roles.filter(role=>role.state==='working')
+    .map(role=>[role.id,Date.now()]));
   function hideSpeech(index,dismissed=false){
     const entry=labels[index],signature=speechSeen.get(roles[index].id);
     entry.speech.hidden=true;
@@ -302,11 +309,15 @@
             String(data.message.timestamp||'')+':'+text.slice(0,1200);
           const previous=speechSeen.get(role.id);
           speechSeen.set(role.id,signature);
-          if(previous===signature||speechDismissed.has(signature))return;
+          // Initial fetch establishes a baseline; never replay old chat bubbles.
+          if(previous===undefined||previous===signature||speechDismissed.has(signature))return;
+          const lastWork=lastWorkingAt.get(role.id)||0;
+          const recentlyWorking=role.state==='working'||Date.now()-lastWork<=20000;
+          if(!recentlyWorking)return;
           const receivedAt=Date.parse(data.message.timestamp||'');
           const age=Number.isFinite(receivedAt)?Math.max(0,Date.now()-receivedAt):0;
           const remaining=300000-age;
-          if(remaining<=0||(previous===undefined&&!Number.isFinite(receivedAt)))return;
+          if(remaining<=0)return;
           const compact=text.replace(/\s+/g,' ');
           entry.speech.textContent=compact.length>240?compact.slice(0,239)+'…':compact;
           entry.speech.title=text;
@@ -504,21 +515,23 @@
         mesh.rotation.x=reduced?0:moving?Math.sin(phase)*side*.45:0;
       });
     });
-    // Overview favors project districts; only selected and active Role labels
-    // remain visible until zoomed in, preventing unreadable overlaps on phones.
-    const overview=roles.length>=10&&zoom<1.65;
+    // At overview zoom, hide waiting/idle badges even in small crews. Only
+    // active work and a newly received reply should add labels to the map.
+    const overview=zoom<1.65;
     const placements=labels.map(({button,speech},index)=>{
       const projected=actors[index].root.position.clone().add(new T.Vector3(0,3.3,0)).project(camera);
       const x=(projected.x+1)/2*width,y=(-projected.y+1)/2*height;
-      const priority=index===selected?0:!speech.hidden?1:
+      const active=roles[index].state==='working'||!speech.hidden;
+      const priority=active?(!speech.hidden?0:1):
+        index===selected?2:
         roles[index].state==='working'?2:roles[index].state==='waiting'?3:4;
-      return {button,index,x,y,priority,depth:projected.z};
+      return {button,index,x,y,priority,depth:projected.z,active};
     }).sort((a,b)=>a.priority-b.priority);
     const occupied=[];
     for(const item of placements){
-      const {button,index,x,y,depth,priority}=item;
+      const {button,index,x,y,depth,priority,active}=item;
       const out=depth<-1||depth>1||x<12||x>width-12||y<100||y>height-115;
-      const lowPriority=overview&&priority>=4;
+      const lowPriority=overview&&!active;
       const collides=occupied.some(point=>Math.abs(point.x-x)<112&&Math.abs(point.y-y)<50);
       const visible=!out&&!lowPriority&&!collides;
       button.style.display=visible?'':'none';
@@ -527,7 +540,8 @@
     for(const pin of districtPins){
       const pos=new T.Vector3(pin.role.islandX,2.9,pin.role.islandZ).project(camera);
       const x=(pos.x+1)/2*width,y=(-pos.y+1)/2*height;
-      const visible=zoom<1.75&&roles.length>=6&&pos.z>=-1&&pos.z<=1&&
+      const visible=zoom<1.75&&roles.length>=6&&
+        pin.members.some(role=>role.state==='working')&&pos.z>=-1&&pos.z<=1&&
         x>35&&x<width-35&&y>115&&y<height-120;
       pin.marker.style.display=visible?'':'none';
       if(visible){pin.marker.style.left=x+'px';pin.marker.style.top=y+'px';}
