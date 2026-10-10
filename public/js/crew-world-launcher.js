@@ -19,7 +19,28 @@
      !messages||!composer||!closeButton||!hideButton||!expandButton)return;
   let restoreMessages=null,restoreComposer=null;
   let stopWorld=null,previousFocus=null,selectedRoleId=null,selectedRoleName='';
-  let selectVersion=0,previousTab=null,restoreTab=false;
+  let selectVersion=0,previousTab=null,restoreTab=false,openVersion=0;
+  let sceneScripts=null;
+  function loadScript(src){
+    return new Promise((resolve,reject)=>{
+      const tag=document.createElement('script');
+      tag.src=src;tag.onload=resolve;tag.onerror=()=>reject(new Error('無法載入 '+src));
+      document.head.appendChild(tag);
+    });
+  }
+  function ensureScene(){
+    if(typeof window.mountCrewWorldScene==='function')return Promise.resolve();
+    if(!sceneScripts){
+      sceneScripts=(async()=>{
+        if(!window.THREE)await loadScript('/vendor/three.min.js');
+        if(!window.WorldLabKit)await loadScript('/js/world-lab-kit.js');
+        if(!window.WorldLabEvents)await loadScript('/js/world-lab-events.js');
+        if(typeof window.mountCrewWorldScene!=='function')await loadScript('/js/world-lab.js');
+        if(typeof window.mountCrewWorldScene!=='function')throw new Error('3D 啟動功能未載入');
+      })().catch(error=>{sceneScripts=null;throw error;});
+    }
+    return sceneScripts;
+  }
   function moved(){return Boolean(restoreMessages);}
   function putChatBack(){
     if(!moved())return;
@@ -55,7 +76,7 @@
   }
   function close(){
     if(modal.hidden)return;
-    selectVersion++;
+    selectVersion++;openVersion++;
     hideChat();
     stopWorld?.();stopWorld=null;
     modal.hidden=true;
@@ -74,16 +95,26 @@
     const focus=previousFocus;previousFocus=null;
     focus?.focus?.({preventScroll:true});
   }
-  function open(){
+  async function open(){
     if(!modal.hidden)return;
+    const version=++openVersion;
     previousTab=document.body.dataset.primaryTab||null;
     previousFocus=document.activeElement;
     restoreTab=true;
     modal.hidden=false;
     document.body.classList.add('crew-world-active');
-    stopWorld=window.mountCrewWorldScene?.()||null;
+    const loading=document.getElementById('world-loading');
+    if(loading){loading.hidden=false;loading.textContent='正在載入 3D 場景…';}
     closeButton.focus({preventScroll:true});
     updateKeyboard();
+    try{
+      await ensureScene();
+      if(modal.hidden||openVersion!==version)return;
+      stopWorld=window.mountCrewWorldScene?.()||null;
+    }catch(error){
+      if(!modal.hidden&&openVersion===version&&loading)
+        loading.textContent='無法載入 3D 世界，請重新開啟。'+(error.message||'');
+    }
   }
   async function openChat(roleId=selectedRoleId){
     if(modal.hidden||!roleId||!window.openCrewCockpitRole)return;
