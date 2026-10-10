@@ -56,6 +56,7 @@ async function tick(){await new Promise(resolve=>setImmediate(resolve));}
   vm.runInNewContext(file,{window:win,document:doc,console});
   nodes['crew-world-open-btn'].click();
   assert.equal(nodes['crew-world-modal'].hidden,false);
+  await tick();
   assert.equal(mountCount,1);
   win.CrewWorldHost.onSelectedRole('pocket','Pocket');
   nodes['world-chat-open'].click();
@@ -80,6 +81,7 @@ async function tick(){await new Promise(resolve=>setImmediate(resolve));}
   assert.strictEqual(nodes['chat-composer-footer'].parentNode,originalComposer);
   assert.equal(doc.body.dataset.primaryTab,'crew','return to original home tab');
   nodes['crew-world-open-btn'].click();
+  await tick();
   nodes['crew-world-close-btn'].click();
   assert.equal(disposeCount,2,'reopening and closing must not leak scene');
   console.log('Crew World portal: one Chat DOM, Role navigation, collapse and GPU cleanup passed');
