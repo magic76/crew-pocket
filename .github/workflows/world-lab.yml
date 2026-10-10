@@ -9,6 +9,11 @@ on:
       - "public/vendor/three.min.js"
       - "public/vendor/THREE-LICENSE.txt"
       - "test/world-lab.test.js"
+      - "test/world-chat-history.test.js"
+      - "test/role-submit.test.js"
+      - "lib/world-chat-history.js"
+      - "lib/role-submit.js"
+      - "server.js"
       - ".github/workflows/world-lab.yml"
   workflow_dispatch:
 jobs:
@@ -20,4 +25,7 @@ jobs:
         with:
           node-version: "22"
       - name: Check standalone 3D demo and syntax
-        run: node test/world-lab.test.js
+        run: |
+          node test/world-lab.test.js
+          node test/world-chat-history.test.js
+          node test/role-submit.test.js
