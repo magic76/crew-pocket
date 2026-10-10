@@ -515,12 +515,14 @@
               <button id="drawer-new-role-btn" type="button" aria-label="新增 Role" title="新增 Role">＋</button>
             </div>
           </div>
-          <div id="crew-room-summary" class="crew-home-summary" aria-live="polite">載入小隊狀態…</div>
-          <div id="cockpit-status-line" class="crew-home-sync" role="status">Runtime 尚未同步</div>
-          <div class="crew-home-view-toggle" role="group" aria-label="首頁檢視模式">
-            <button id="crew-home-dashboard-btn" type="button" aria-pressed="true" class="is-active"><span aria-hidden="true">▦</span> Dashboard</button>
-            <button id="crew-world-open-btn" type="button" aria-pressed="false"><span aria-hidden="true">◇</span> 地圖</button>
+          <div class="crew-home-status-row">
+            <div id="crew-room-summary" class="crew-home-summary" aria-live="polite">載入小隊狀態…</div>
+            <div class="crew-home-view-toggle" role="group" aria-label="首頁檢視模式">
+              <button id="crew-home-dashboard-btn" type="button" aria-label="Dashboard" title="Dashboard" aria-pressed="true" class="is-active"><span class="crew-home-toggle-icon" aria-hidden="true">▦</span></button>
+              <button id="crew-world-open-btn" type="button" aria-label="地圖" title="地圖" aria-pressed="false"><span class="crew-home-toggle-icon" aria-hidden="true">◇</span></button>
+            </div>
           </div>
+          <div id="cockpit-status-line" class="crew-home-sync" role="status">Runtime 尚未同步</div>
         </div>
         <div id="cockpit-scroll" class="min-h-0 flex-1 overflow-y-auto overscroll-contain">
           <div id="crew-attention-panel" aria-label="待處理的角色訊息"></div>
