@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#101b32">
+  <title>Crew World — 3D 試驗場</title>
+  <link rel="stylesheet" href="/css/world-lab.css">
+</head>
+<body>
+  <main id="world-app" class="world-app">
+    <div id="world-stage" aria-label="可縮放、平移的 3D Crew World 場景">
+      <div id="world-labels"></div>
+      <div id="world-loading" role="status">正在建立 3D 世界…</div>
+    </div>
+    <header class="world-header">
+      <a href="/" class="world-back" aria-label="返回 Crew Pocket 小隊">←</a>
+      <div class="world-brand"><span class="world-kicker">CREW POCKET / EXPERIMENT 01</span><h1>Crew World <span>3D LAB</span></h1></div>
+      <span class="world-demo-pill">獨立示範 · 非即時狀態</span>
+    </header>
+    <div class="world-hint">拖曳移動 · 雙指縮放 · 點人物選擇</div>
+    <section id="world-info" class="world-info" aria-live="polite">
+      <div class="world-info-head">
+        <div class="world-portrait" id="world-portrait">P</div>
+        <div><span class="world-caption">SELECTED AGENT</span><h2 id="world-role-name">Pocket Developer</h2><p id="world-role-state">正在等待示範動作</p></div>
+      </div>
+      <p class="world-description" id="world-role-description">選擇人物，體驗同一套 Low-poly 骨架在不同 Role 上的效果。</p>
+      <div class="world-action-row">
+        <button type="button" id="world-focus">聚焦人物</button>
+        <button type="button" id="world-work">示範工作</button>
+        <button type="button" id="world-handoff">示範交接</button>
+      </div>
+    </section>
+    <footer class="world-bottom">
+      <div class="world-roster" id="world-roster" aria-label="切換示範角色"></div>
+      <div class="world-controls">
+        <button type="button" id="world-zoom-out" aria-label="縮小">−</button>
+        <button type="button" id="world-reset">世界全景</button>
+        <button type="button" id="world-zoom-in" aria-label="放大">＋</button>
+      </div>
+    </footer>
+    <div id="world-toast" class="world-toast" role="status" aria-live="polite"></div>
+    <noscript>此 Demo 需要啟用 JavaScript。</noscript>
+  </main>
+  <script src="/vendor/three.min.js"></script>
+  <script src="/js/world-lab.js"></script>
+</body>
+</html>
