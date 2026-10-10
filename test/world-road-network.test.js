@@ -4,65 +4,71 @@ const fs=require('node:fs');
 const path=require('node:path');
 const vm=require('node:vm');
 const source=fs.readFileSync(path.join(__dirname,'../public/js/world-lab-kit.js'),'utf8');
+const nav=require('../public/js/world-lab-navigation.js');
 const sandbox={window:{THREE:{}}};
 vm.runInNewContext(source,sandbox);
 const kit=sandbox.window.WorldLabKit;
 
-function checkNetwork(roles,caseName){
-  const edges=kit.planRoadNetwork(roles);
-  const districts=[...new Set(roles.map(role=>role.districtId||role.id))];
-  assert.equal(edges.length,districts.length,caseName+': all islands connect to Hub');
-  assert.equal(edges.filter(edge=>edge.a.id==='hub'||edge.b.id==='hub').length,
-    districts.length<=3?districts.length:1,
-    caseName+': no more than one crowded Hub connection for larger islands');
-  const visited=new Set(['hub']);
-  for(let i=0;i<edges.length+1;i++){
-    for(const edge of edges){
-      if(visited.has(edge.a.id))visited.add(edge.b.id);
-      if(visited.has(edge.b.id))visited.add(edge.a.id);
-    }
+function checkTown(roles,name){
+  const lots=nav.uniqueLots(roles);
+  const expected=nav.dimensions(lots.length);
+  assert.equal(kit.mapExtent(roles)>0,true);
+  assert.ok(lots.length>0);
+  const positions=new Set();
+  for(const lot of lots){
+    const key=lot.x+','+lot.z;
+    assert.ok(!positions.has(key),name+': two buildings may not share a lot');
+    positions.add(key);
+    assert.ok(Number.isInteger(lot.col)&&Number.isInteger(lot.row));
+    const cell=nav.lotPosition(lot.col+lot.row*expected.cols,lots.length);
+    assert.equal(lot.x,cell.x);
+    assert.equal(lot.z,cell.z);
   }
-  for(const id of districts)assert.ok(visited.has(id),caseName+': reachable '+id);
-  for(let i=0;i<edges.length;i++){
-    const edge=edges[i];
-    assert.ok(edge.length>edge.a.shore+edge.b.shore+.35,
-      caseName+': bridge must have water to span, not overlap islands');
-    for(let j=i+1;j<edges.length;j++)
-      assert.equal(kit.roadCrosses(edge.a,edge.b,edges[j].a,edges[j].b),false,
-        caseName+': no crossing bridges ('+i+','+j+')');
-    for(const other of edges.flatMap(item=>[item.a,item.b])){
-      if(other.id==='hub'||other.id===edge.a.id||other.id===edge.b.id)continue;
-      const distance=kit.segmentDistance(other,edge.a,edge.b);
-      assert.ok(distance>=other.shore+.54,
-        caseName+': no road may cut through a third island ('+other.id+')');
-    }
+  const roads=kit.planRoadNetwork(roles);
+  const navRoads=nav.streetEdges(lots);
+  const expectedEdges=expected.cols*(expected.rows-1)+
+    (expected.cols-1)*expected.rows;
+  assert.equal(roads.length,expectedEdges,name+': complete grid street graph');
+  assert.equal(navRoads.length,expectedEdges,name+': navigator and geometry share topology');
+  const keys=new Set(roads.map(e=>[e.a.id,e.b.id].sort().join(':')));
+  assert.equal(keys.size,roads.length,'no duplicated streets');
+  for(let i=0;i<roads.length;i++){
+    const road=roads[i],match=navRoads[i];
+    assert.equal(road.a.id,match.a.id);
+    assert.equal(road.b.id,match.b.id);
+    assert.equal(road.a.x,match.a.x);
+    assert.equal(road.b.z,match.b.z);
+    assert.equal(road.length,nav.SPACING);
+    assert.ok(road.a.x===road.b.x||road.a.z===road.b.z,
+      name+': each visible street is strictly horizontal or vertical');
+    assert.ok(!('shore' in road.a)&&!('shore' in road.b),
+      name+': town is not an island bridge network');
   }
+  assert.equal(nav.streetLines(lots).length,expected.cols+expected.rows,
+    'the grass town contains every street centerline');
 }
-
-for(const count of [1,2,3,4,5,6,7,9,10,16,24,36]){
-  const roleData=Array.from({length:count},(_,i)=>({
+for(const n of [1,2,3,4,5,6,7,9,10,16,24,36]){
+  const records=Array.from({length:n},(_,i)=>({
     roleId:'agent-'+i,roleName:'Agent '+i,projectId:'app'
   }));
-  checkNetwork(kit.makeLiveRoles(roleData),count+' same-project agents');
+  checkTown(kit.makeLiveRoles(records),n+' same-project Roles');
 }
-for(const count of [6,11,16,24,36]){
-  const roleData=Array.from({length:count},(_,i)=>({
-    roleId:'agent-'+i,roleName:'Agent '+i,
-    projectId:['pocket','teacher','story','fortune','helper'][i%5]
+for(const n of [6,11,16,24,36]){
+  const records=Array.from({length:n},(_,i)=>({
+    roleId:'agent-'+i,roleName:'Agent '+i,projectId:'project-'+i
   }));
-  checkNetwork(kit.makeLiveRoles(roleData),count+' mixed-project agents');
+  checkTown(kit.makeLiveRoles(records),n+' distinct-project Roles');
 }
-checkNetwork(kit.roles,'standalone demo');
-const sample=kit.makeLiveRoles(Array.from({length:16},(_,i)=>({
-  roleId:'r'+i,roleName:'Agent '+i,projectId:'same'
+checkTown(kit.roles,'standalone town preview');
+const grouped=kit.makeLiveRoles(Array.from({length:16},(_,i)=>({
+  roleId:'a'+i,roleName:'Role '+i,projectId:'same'
 })));
-const roads=kit.planRoadNetwork(sample);
-assert.equal(roads.length,6,'six neighborhoods use six bridges rather than sixteen spokes');
-assert.equal(roads.filter(e=>e.a.id==='hub'||e.b.id==='hub').length,1,
-  'town has one natural Central Hub entrance');
-assert.ok(source.includes('roadVisuals=roads.map(edge=>({...edge,light:bridge(scene,edge)}))'),
-  'bridge meshes and visual message pulses share one exact road network');
-assert.ok(source.includes('a.x+ux*a.shore'));
-assert.ok(source.includes('b.x-ux*b.shore'));
-assert.doesNotMatch(source,/districts\.forEach\(role=>bridge\(scene/);
-console.log('World bridges: no crossed roads, no third-party island cuts, one hub entrance, 1-36 roles passed');
+assert.equal(nav.uniqueLots(grouped).length,6,
+  'same-project Role grouping preserves max three people per studio');
+assert.match(source,/function buildTown\(/);
+assert.match(source,/function districtBuilding\(/);
+assert.match(source,/const TOWN_SPACING=10/);
+assert.doesNotMatch(source,/function island\(scene|function bridge\(scene|const HUB=\{/,
+  'remove every free-standing island and cross-water bridge');
+assert.match(source,/actors\.roadVisuals=planRoadNetwork\(roleDefs\)/);
+console.log('World town layout: continuous floor and connected streets for 1–36 Roles passed');

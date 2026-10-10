@@ -1,5 +1,6 @@
-/* Pure ground navigation for Crew World. Coordinates use the same island
- * centres and bridge endpoints as the rendered geometry; no over-water hops. */
+/* Deterministic continuous-town geometry and grounded walking routes.
+ * Same lot/street coordinates feed WorldLabKit and the visitor navigator.
+ * No island centres, bridge hops, NavMesh download or remote data. */
 (function(root,factory){
   'use strict';
   const api=factory();
@@ -7,121 +8,138 @@
   if(root)root.WorldLabNavigation=api;
 })(typeof window!=='undefined'?window:null,function(){
   'use strict';
-  const WALK_RING=3.0;
+  const SPACING=10;
+  const FRONT_Z=2.65;
   const FOOT_Y=.43;
   const MAX_POINTS=256;
   const finite=p=>p&&Number.isFinite(p.x)&&Number.isFinite(p.z);
   const distance=(a,b)=>Math.hypot(a.x-b.x,a.z-b.z);
-  function locateIsland(point,islands,maxRadius=3.95){
-    if(!finite(point))return null;
-    let result=null,closest=maxRadius;
-    for(const island of islands||[]){
-      const d=distance(point,island);
-      if(d<=closest){closest=d;result=island;}
+  function dimensions(count){
+    const n=Math.max(1,Math.min(36,Math.floor(count)||1));
+    const cols=Math.ceil(Math.sqrt(n));
+    return{cols,rows:Math.ceil(n/cols),spacing:SPACING};
+  }
+  function lotPosition(index,count){
+    const {cols,rows}=dimensions(count);
+    const col=index%cols,row=Math.floor(index/cols);
+    return{x:(col-(cols-1)/2)*SPACING,
+      z:(row-(rows-1)/2)*SPACING,col,row};
+  }
+  function uniqueLots(roles){
+    const map=new Map();
+    for(const r of roles||[]){
+      if(!r)continue;
+      const id=r.districtId||r.id;
+      if(id&&!map.has(id))map.set(id,{id,x:r.islandX,z:r.islandZ,
+        col:r.townCol,row:r.townRow,projectId:r.projectId});
     }
-    return result;
+    return [...map.values()];
   }
-  function isSafeGround(point,island){
-    if(!finite(point)||!island)return false;
-    const dx=point.x-island.x,dz=point.z-island.z;
-    const r=Math.hypot(dx,dz);
-    if(r>3.10||r<.28)return false;
-    // House extends over southeast side of an island. Prevent walking inside
-    // its walls; the ring bypasses it on the outer perimeter.
-    if(dx>-.68&&dx<1.96&&dz>-2.6&&dz<-.58&&r<2.87)return false;
-    return true;
-  }
-  function nearestWalkSpot(point,island){
-    if(!finite(point)||!island)return null;
-    const dx=point.x-island.x,dz=point.z-island.z;
-    const len=Math.hypot(dx,dz);
-    if(len<.001)return{x:island.x,z:island.z+WALK_RING};
-    if(isSafeGround(point,island))return{x:point.x,z:point.z};
-    return{x:island.x+dx/len*WALK_RING,z:island.z+dz/len*WALK_RING};
-  }
-  function graphRoute(roads,fromId,toId){
-    if(fromId===toId)return[];
-    if(!fromId||!toId||!Array.isArray(roads))return null;
-    const graph=new Map();
-    roads.forEach((e,index)=>{
-      for(const [a,b] of [[e?.a?.id,e?.b?.id],[e?.b?.id,e?.a?.id]]){
-        if(!a||!b)return;
-        if(!graph.has(a))graph.set(a,[]);
-        graph.get(a).push({to:b,index});
-      }
-    });
-    const queue=[fromId],seen=new Set(queue),previous=new Map();
-    for(let n=0;n<queue.length;n++){
-      if(queue[n]===toId)break;
-      for(const edge of graph.get(queue[n])||[]){
-        if(seen.has(edge.to))continue;
-        seen.add(edge.to);previous.set(edge.to,{from:queue[n],index:edge.index});
-        queue.push(edge.to);
-      }
+  function nearestLot(point,lots){
+    if(!finite(point)||!Array.isArray(lots)||!lots.length)return null;
+    let near=null,min=Infinity;
+    for(const lot of lots){
+      if(!finite(lot))continue;
+      const d=distance(lot,point);
+      if(d<min){near=lot;min=d;}
     }
-    if(!seen.has(toId))return null;
-    const steps=[];
-    for(let node=toId;node!==fromId;){
-      const step=previous.get(node);
-      if(!step)return null;
-      steps.push({edgeIndex:step.index,fromId:step.from,toId:node});
-      node=step.from;
-    }
-    return steps.reverse();
+    // The ground is continuous, but tapping far outside the miniature
+    // town is not a valid walking destination.
+    return min<=SPACING*.78?near:null;
   }
-  function planWalk({roads=[],islands=[],from,to,fromDistrict,toDistrict}={}){
+  function isSafeGround(point,lot){
+    if(!finite(point)||!lot)return false;
+    const dx=point.x-lot.x,dz=point.z-lot.z;
+    if(Math.abs(dx)>SPACING/2||Math.abs(dz)>SPACING/2)return false;
+    // The front of each building is north of the shared sidewalk.
+    return !(dx>-2.1&&dx<2.1&&dz>-3.2&&dz<-.25);
+  }
+  function nearestWalkSpot(point,lot){
+    if(!finite(point)||!lot)return null;
+    // Snap taps to the visible pedestrian frontage, never through houses.
+    const x=lot.x+Math.min(4.30,Math.max(-4.30,point.x-lot.x));
+    return{x,z:lot.z+FRONT_Z};
+  }
+  const close=(a,b)=>distance(a,b)<.025;
+  function planWalk({lots,islands,from,to,fromDistrict,toDistrict}={}){
+    const sites=lots||islands||[];
     if(!finite(from)||!finite(to)||!fromDistrict||!toDistrict)return null;
-    const nodes=new Map([{id:'hub',x:0,z:-.8,shore:1.05},...(islands||[])].map(n=>[n.id,n]));
-    if(!nodes.has(fromDistrict)||!nodes.has(toDistrict))return null;
-    const steps=graphRoute(roads,fromDistrict,toDistrict);
-    if(!steps)return null;
-    const waypoints=[{x:from.x,z:from.z,y:FOOT_Y,districtId:fromDistrict}];
-    const push=(p,districtId)=>{
-      if(!finite(p)||waypoints.length>=MAX_POINTS)return;
-      const last=waypoints[waypoints.length-1];
-      if(distance(last,p)<.025)return;
-      waypoints.push({x:p.x,z:p.z,y:FOOT_Y,districtId});
-    };
-    const pointAt=(node,angle,radius)=>({
-      x:node.x+Math.cos(angle)*radius,
-      z:node.z+Math.sin(angle)*radius
-    });
-    function onLand(node,fromPoint,toPoint){
-      if(node.id==='hub'){
-        push({x:node.x,z:node.z},node.id);
-        push(toPoint,node.id);
-        return;
-      }
-      const startAngle=Math.atan2(fromPoint.z-node.z,fromPoint.x-node.x);
-      const endAngle=Math.atan2(toPoint.z-node.z,toPoint.x-node.x);
-      const first=pointAt(node,startAngle,WALK_RING);
-      const last=pointAt(node,endAngle,WALK_RING);
-      push(first,node.id);
-      let diff=(endAngle-startAngle+Math.PI*3)%(Math.PI*2)-Math.PI;
-      const count=Math.ceil(Math.abs(diff)/(.18));
-      for(let i=1;i<=count;i++)push(pointAt(node,startAngle+diff*i/count,WALK_RING),node.id);
-      push(last,node.id);
-      push(toPoint,node.id);
+    const byId=new Map(sites.map(lot=>[lot.id,lot]));
+    const start=byId.get(fromDistrict),finish=byId.get(toDistrict);
+    if(!start||!finish||!Number.isInteger(start.col)||!Number.isInteger(start.row)||
+       !Number.isInteger(finish.col)||!Number.isInteger(finish.row))return null;
+    const waypoints=[{x:from.x,z:from.z,y:FOOT_Y,districtId:start.id}];
+    function push(x,z,id){
+      if(!Number.isFinite(x)||!Number.isFinite(z)||waypoints.length>=MAX_POINTS)return;
+      const point={x,z,y:FOOT_Y,districtId:id};
+      if(!close(waypoints[waypoints.length-1],point))waypoints.push(point);
     }
-    let currentPoint=from,currentDistrict=fromDistrict;
-    for(const step of steps){
-      const edge=roads[step.edgeIndex];
-      const origin=nodes.get(step.fromId),target=nodes.get(step.toId);
-      if(!edge||!origin||!target||currentDistrict!==origin.id)return null;
-      const dx=target.x-origin.x,dz=target.z-origin.z,d=Math.hypot(dx,dz);
-      if(d<origin.shore+target.shore+.3)return null;
-      const ux=dx/d,uz=dz/d;
-      const departure={x:origin.x+ux*origin.shore,z:origin.z+uz*origin.shore};
-      const arrival={x:target.x-ux*target.shore,z:target.z-uz*target.shore};
-      onLand(origin,currentPoint,departure);
-      push(arrival,target.id); // ONLY the real existing bridge spans water.
-      currentDistrict=target.id;
-      currentPoint=arrival;
+    // Same-block visits stay on the shared front sidewalk. Do not walk all
+    // the way around a street junction simply to talk to a neighbor.
+    if(start.id===finish.id){
+      push(from.x,start.z+FRONT_Z,start.id);
+      push(to.x,finish.z+FRONT_Z,finish.id);
+      push(to.x,to.z,finish.id);
+      return{waypoints,steps:[],distance:waypoints.reduce((d,p,i)=>
+        i?d+distance(p,waypoints[i-1]):0,0)};
     }
-    onLand(nodes.get(toDistrict),currentPoint,to);
+    // The front strip connects each character to the right-hand intersection.
+    const sx=start.x+SPACING/2,sz=start.z+SPACING/2;
+    const fx=finish.x+SPACING/2,fz=finish.z+SPACING/2;
+    push(from.x,start.z+FRONT_Z,start.id);
+    push(sx,start.z+FRONT_Z,start.id);
+    push(sx,sz,start.id);
+    // Each step is along a REAL rendered horizontal or vertical street.
+    let col=start.col,row=start.row;
+    const steps=[];
+    while(col!==finish.col){
+      const next=col+Math.sign(finish.col-col);
+      push(sx+(next-start.col)*SPACING,sz,start.id);
+      steps.push({fromCol:col,fromRow:row,toCol:next,toRow:row});
+      col=next;
+    }
+    while(row!==finish.row){
+      const next=row+Math.sign(finish.row-row);
+      push(fx,sz+(next-start.row)*SPACING,start.id);
+      steps.push({fromCol:col,fromRow:row,toCol:col,toRow:next});
+      row=next;
+    }
+    push(fx,finish.z+FRONT_Z,finish.id);
+    push(to.x,finish.z+FRONT_Z,finish.id);
+    push(to.x,to.z,finish.id);
     if(waypoints.length>=MAX_POINTS)return null;
-    const total=waypoints.reduce((sum,p,i)=>i?sum+distance(waypoints[i-1],p):0,0);
-    return{waypoints,distance:total,steps};
+    return{waypoints,steps,distance:waypoints.reduce((d,p,i)=>
+      i?d+distance(p,waypoints[i-1]):0,0)};
   }
-  return{WALK_RING,FOOT_Y,locateIsland,isSafeGround,nearestWalkSpot,graphRoute,planWalk};
+  function streetEdges(lots){
+    if(!lots?.length)return[];
+    const {cols,rows}=dimensions(lots.length);
+    const at=(col,row)=>({
+      id:'street-'+col+'-'+row,col,row,
+      x:(col-(cols-1)/2)*SPACING+SPACING/2,
+      z:(row-(rows-1)/2)*SPACING+SPACING/2
+    });
+    const edges=[];
+    // Include street junctions beside empty lots on the final row. Their
+    // streets are painted in the scene even where no workshop is built.
+    for(let row=0;row<rows;row++)for(let col=0;col<cols;col++){
+      if(col+1<cols)edges.push({a:at(col,row),b:at(col+1,row),length:SPACING});
+      if(row+1<rows)edges.push({a:at(col,row),b:at(col,row+1),length:SPACING});
+    }
+    return edges;
+  }
+  function streetLines(lots){
+    if(!lots?.length)return[];
+    const xs=[...new Set(lots.map(l=>l.x))].sort((a,b)=>a-b);
+    const zs=[...new Set(lots.map(l=>l.z))].sort((a,b)=>a-b);
+    const minX=xs[0]-SPACING/2,maxX=xs[xs.length-1]+SPACING/2;
+    const minZ=zs[0]-SPACING/2,maxZ=zs[zs.length-1]+SPACING/2;
+    return[
+      ...xs.map(x=>({x:x+SPACING/2,z:(minZ+maxZ)/2,width:1.8,length:maxZ-minZ+1,vertical:true})),
+      ...zs.map(z=>({x:(minX+maxX)/2,z:z+SPACING/2,width:1.8,length:maxX-minX+1,vertical:false}))
+    ];
+  }
+  return{SPACING,FRONT_Z,FOOT_Y,dimensions,lotPosition,uniqueLots,
+    nearestLot,locateIsland:nearestLot,isSafeGround,nearestWalkSpot,
+    planWalk,streetEdges,streetLines};
 });
