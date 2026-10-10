@@ -132,6 +132,46 @@ near the center and looked like crossing spokes rather than a plausible town.
   obstruction and the hub entrance for 1–36 same-project and mixed-project
   examples.
 
+## Human visitor and living Roles (Oct 2026)
+
+Crew World has two **explicit** modes so game-like navigation does not slow
+down ordinary AI operations:
+
+- **探索中** (Explore): a distinct human visitor marked **你** stands on the
+  first project island. Tap an AI character or their name to automatically
+  navigate using a *grounded* island footpath/bridge route. On arrival the map
+  opens the **original Role chat sheet** by calling CrewWorldHost.openChat,
+  which reuses the exact same Message/Composer DOM, provider and Runtime.
+  Existing map quick-chat actions continue to bypass walking entirely.
+- **瀏覽中** (Browse): tap a Role to select and center the camera immediately
+  as before, without a walking animation.
+- Tap empty island ground while exploring to move to a nearby *walkable
+  perimeter position*. Taps in water or building interiors are ignored or
+  snapped back to the walking ring. Single-finger drag pans the map; pinch
+  zooms. Exploring while moving queues a bounded *next destination* rather
+  than teleporting the visitor to another island.
+- The visitor is **not** an Agent and has no Role ID, Memory, Context or
+  Task Runtime. Each Role still runs independently. No new model actions or
+  message submissions occur during walking.
+- Navigator `public/js/world-lab-navigation.js` is pure and uses the same
+  `planRoadNetwork` bridge connectivity as the visible scene, with perimeter
+  walking arcs around buildings and bridge shore endpoints. The map floor
+  is widened enough to support the visitor's feet.
+- **Living AI characters**: intermittent ambient idle gestures; a luminous
+  ring and working gestures only when Runtime reports `working`; a brief
+  reactive gesture when an already-recorded paper plane reaches a Role.
+  These are animations, **not evidence of background work, delivery or
+  completed execution**.
+- Lifecycle: visitor and Work Halo use the existing Three.js scene disposal,
+  and all Explore listeners are cleaned up upon closing the map.
+- `node test/world-player-explore.test.js` covers 1–36 Roles,
+  same-island/bridge routes, blocked house coordinates, no unsupported
+  cross-water hops, reuse of actual Role chat, and verified/idle animation
+  boundaries.
+
+Phone/WebView camera, touch gestures and visual collision still need on-device
+smoke testing before calling the experience fully polished.
+
 ## Paper-airplane messaging (Oct 2026)
 
 For newly observed, **saved Role-to-Role message metadata**, the primary
