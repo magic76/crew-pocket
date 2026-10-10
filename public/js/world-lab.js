@@ -90,7 +90,7 @@
       panTo(member.islandX,member.islandZ,width<700?2.35:1.85);
     });
     districtsHost?.appendChild(marker);
-    return {marker,role:members[0],members};
+    return {marker,role:members[0],members,count};
   });
   const rosterHost=document.getElementById('world-roster');
   const liveStates={working:'工作中',waiting:'待處理',idle:'待命',new:'新角色',unknown:'未知'};
@@ -148,6 +148,13 @@
   document.getElementById('world-handoff').hidden=isLive;
   if(actionRow)actionRow.style.gridTemplateColumns='repeat(3,minmax(0,1fr))';
   function updateInfo(){
+    for(const pin of districtPins){
+      const working=pin.members.filter(r=>r.state==='working').length;
+      const waiting=pin.members.filter(r=>r.state==='waiting').length;
+      pin.marker.dataset.state=!synced?'unknown':working?'working':waiting?'waiting':'idle';
+      pin.count.textContent=pin.members.length+' 位 · '+
+        (!synced?'狀態未同步':working?working+' 工作中':waiting?waiting+' 待處理':'待命');
+    }
     const actor=actors[selected],role=actor.role;
     document.getElementById('world-role-name').textContent=role.name;
     document.getElementById('world-role-state').textContent=status(actor);
