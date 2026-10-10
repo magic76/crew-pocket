@@ -47,6 +47,7 @@ const { listCrewRoles, sendCrewMessage, getCrewInbox, getCrewMessageActivity, ge
 const { createCrewAutoResponder } = require('./lib/crew-auto-response');
 const { getRoleRuntime, listRoleRuntimes, activateRoleConversation, prepareNewRoleConversation, clearRoleConversation, clearRoleConversationByConversation } = require('./lib/role-runtime');
 const { buildCrewStatus } = require('./lib/crew-status');
+const { createCrewContextUsage } = require('./lib/crew-context-usage');
 const { createWorldChatHistory, createWorldChatLatest, createWorldChatResult } = require('./lib/world-chat-history');
 const { makeMissionGraph, MAX_GRAPH_EVENTS } = require('./lib/mission-graph');
 const { listProjects, getProject } = require('./lib/projects');
@@ -1249,6 +1250,20 @@ async function handleRoleQueue(req, res, parsedUrl) {
   }
 }
 
+const readCrewContextUsage = createCrewContextUsage({
+  listRoleRuntimes, getConversationSettings,
+  getContextHealth: getConversationContextHealth
+});
+async function handleCrewContextUsage(res) {
+  try {
+    const snapshot = await readCrewContextUsage();
+    res.writeHead(200, {'Content-Type':'application/json','Cache-Control':'no-store'});
+    res.end(JSON.stringify({success:true,...snapshot}));
+  } catch (_) {
+    res.writeHead(503, {'Content-Type':'application/json','Cache-Control':'no-store'});
+    res.end(JSON.stringify({success:false,roles:{},error:'Context usage temporarily unavailable'}));
+  }
+}
 async function handleCrewStatus(res) {
   try {
     const status = await buildCrewStatus({
@@ -3122,6 +3137,8 @@ const server = http.createServer(async (req, res) => {
 
   if (pathname === '/api/visual-answer' && req.method === 'POST') {
     return handleVisualAnswer(req, res);
+  } else if (pathname === '/api/crew-context-usage' && req.method === 'GET') {
+    return handleCrewContextUsage(res);
   } else if (pathname === '/api/home' && req.method === 'GET') {
     return handleCrewHome(req, res);
   } else if (pathname === '/api/remote-pairing' && req.method === 'POST') {
