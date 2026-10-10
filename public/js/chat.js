@@ -894,6 +894,7 @@ function buildCheckpointDividerHtml(summaryText, timestamp) {
 // 🧠 Context Health UI: provider total is authoritative when exact; Crew breakdown is heuristic.
 let currentContextStats = null;
 let currentContextHealth = null;
+let currentAutoCompact = null;
 let currentContextPlan = null;
 let contextToastTimer = null;
 const criticalContextToastSeen = new Set();
@@ -999,7 +1000,9 @@ function updateHeaderCompactAction(health) {
   const status = health?.status || 'unknown';
   const show = Boolean(currentConversationId) &&
     Boolean(providerConfig().capabilities?.compact) &&
-    (status === 'warning' || status === 'critical');
+    !isStreaming &&
+    (status === 'warning' || status === 'critical' ||
+      (currentAutoCompact?.canCompact && ['suggest', 'auto'].includes(currentAutoCompact.recommendation)));
   button.classList.toggle('hidden', !show);
   if (!show) return;
 
@@ -1018,7 +1021,9 @@ function maybeNotifyCriticalContext(health) {
   showContextToast('Context is getting full. You can compact safely without losing Role memory.', { critical: true });
 }
 
-function updateContextPill(stats, health = null) {
+function updateContextPill(stats, health = null, autoCompact = undefined) {
+  if (autoCompact !== undefined) currentAutoCompact = autoCompact;
+  if (!stats && !health && autoCompact === undefined) currentAutoCompact = null;
   // Null means an actual conversation switch or post-compaction refresh.
   // Do not show another Role's last cache metrics on the next conversation.
   currentContextStats = stats || null;
@@ -1169,15 +1174,54 @@ function renderContextWarnings(health) {
   container.innerHTML = warnings.map(item => `<div>• ${escapeHtml(warningDisplayText(item.code))}</div>`).join('');
 }
 
+
+const AUTO_COMPACT_REASON_TEXT = Object.freeze({
+  CONTEXT_PRESSURE_HIGH: 'Context 的使用量偏高。',
+  STALE_CONTEXT_HIGH: '較早的對話與探索紀錄佔用許多空間。',
+  TOOL_OUTPUT_HIGH: '原始工具輸出佔用較多 Context。',
+  REPETITION_HIGH: '最近出現重複的工具檢查。',
+  TASK_STAGE_TRANSITION: '上一個工作階段剛完成，適合整理探索內容。'
+});
+
+function renderAutoCompactSuggestion() {
+  const section = document.getElementById('context-auto-suggestion');
+  const container = document.getElementById('context-auto-reasons');
+  if (!section || !container) return;
+  const assessment = currentAutoCompact;
+  const visible = Boolean(assessment?.canCompact &&
+    ['suggest', 'auto'].includes(assessment?.recommendation));
+  section.classList.toggle('hidden', !visible);
+  if (!visible) {
+    container.replaceChildren();
+    return;
+  }
+  const lines = (assessment.reasons || []).filter(code => AUTO_COMPACT_REASON_TEXT[code]);
+  container.replaceChildren();
+  for (const code of lines) {
+    const line = document.createElement('div');
+    line.textContent = '• ' + AUTO_COMPACT_REASON_TEXT[code];
+    container.appendChild(line);
+  }
+  if (assessment.cooldownActive) {
+    const note = document.createElement('div');
+    note.textContent = '自動精簡正在冷卻中；仍可手動使用 Safe Compact。';
+    container.appendChild(note);
+  }
+}
+
 function renderContextAdvanced(health) {
   const source = document.getElementById('context-advanced-source');
   const unattributed = document.getElementById('context-advanced-unattributed');
   const largest = document.getElementById('context-advanced-largest');
   const warningCodes = document.getElementById('context-advanced-warning-codes');
+  const autoDebug = document.getElementById('context-advanced-auto');
   if (source) source.textContent = `total: ${health?.totalUsage?.exact ? 'exact' : 'estimated'} · ${health?.totalUsage?.source || 'unknown'}; breakdown: estimated · heuristic`;
   if (unattributed) unattributed.textContent = `other/system: ~${formatContextTokens(health?.unattributedTokens || 0)} · over-attributed: ~${formatContextTokens(health?.overAttributedTokens || 0)}`;
   if (largest) largest.textContent = `largest compactable: ${health?.largestCompactableContribution ? contributionDisplayName(health.largestCompactableContribution) : '—'}`;
   if (warningCodes) warningCodes.textContent = `warnings: ${(health?.warnings || []).map(item => item.code).join(', ') || '—'}`;
+  if (autoDebug) autoDebug.textContent = currentAutoCompact
+    ? `auto compact: ${currentAutoCompact.recommendation} · score ${currentAutoCompact.score} · safe ${currentAutoCompact.safeNow}`
+    : 'auto compact: —';
 }
 
 function renderCodexCacheStats() {
@@ -1252,11 +1296,14 @@ function renderContextModal() {
   renderContextBreakdown(health);
   renderContextContributionLists(health);
   renderContextWarnings(health);
+  renderAutoCompactSuggestion();
   renderContextAdvanced(health);
 
   const canOfferCompact = Boolean(currentConversationId) &&
     Boolean(providerConfig().capabilities?.compact) &&
-    ['warning', 'critical'].includes(health.status);
+    !isStreaming &&
+    (['warning', 'critical'].includes(health.status) ||
+      (currentAutoCompact?.canCompact && ['suggest', 'auto'].includes(currentAutoCompact.recommendation)));
   if (compactBtn) compactBtn.classList.toggle('hidden', !canOfferCompact);
 }
 
@@ -1317,7 +1364,7 @@ async function openSafeContextCompactionPreview() {
     if (!response.ok || !data.success) throw new Error(data.error || '無法建立 compaction plan');
     currentContextPlan = data.plan;
     currentContextHealth = data.health || currentContextHealth;
-    updateContextPill(currentContextStats, currentContextHealth);
+    updateContextPill(currentContextStats, currentContextHealth, data.auto_compact || null);
 
     if (!data.can_compact) throw new Error('目前 Provider 不支援 Context compaction');
     if (!data.plan?.hasActionableWork) {
@@ -1365,7 +1412,7 @@ async function executeSafeContextCompaction() {
     const beforeHealth = data.before_health;
     const afterHealth = data.after_health;
     currentContextHealth = afterHealth || currentContextHealth;
-    updateContextPill(null, currentContextHealth);
+    updateContextPill(null, currentContextHealth, null);
 
     const beforeText = formatContextTokens(beforeHealth?.totalUsage?.value || currentContextPlan.estimatedBeforeTokens, beforeHealth?.totalUsage?.exact !== true);
     const afterText = formatContextTokens(afterHealth?.totalUsage?.value ?? currentContextPlan.estimatedAfterTokens, afterHealth?.totalUsage?.exact !== true);
@@ -2062,7 +2109,7 @@ async function loadConversationHistory(convId, { preserveComposer = false, prese
     
     // 🧠 Provider total + Crew heuristic attribution.
     if (data.context_health || data.context_stats) {
-      updateContextPill(data.context_stats || null, data.context_health || null);
+      updateContextPill(data.context_stats || null, data.context_health || null, data.auto_compact || null);
     } else {
       updateContextPill(null, null);
     }
@@ -3418,14 +3465,26 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
       stickyExecution?.dispose();
     }
 
-    // Codex streams fresh token usage during the turn. Only reload history
-    // when a provider did not provide that event; the drawer itself refreshes
-    // lazily when opened, so a closed sidebar does not trigger a filesystem
-    // scan after every answer.
-    if (targetDoneConvId && !receivedContextStats) {
-      fetch(`/api/history?id=${targetDoneConvId}&provider=${encodeURIComponent(streamProvider)}`).then(r => r.json()).then(hData => {
-        if (hData.context_stats && currentProvider === streamProvider && currentConversationId === targetDoneConvId) updateContextPill(hData.context_stats);
-      }).catch(() => {});
+    // Progress-aware advice depends on the completed task stage and stored
+    // tool history, not just streamed token totals. Refresh once after a
+    // completed turn so an early Compact CTA can appear without navigation.
+    // Do not interrupt other Roles or replace another conversation's stats.
+    if (targetDoneConvId && !incomplete && !isBtwQuery) {
+      window.setTimeout(() => {
+        fetch(`/api/history?id=${encodeURIComponent(targetDoneConvId)}&provider=${encodeURIComponent(streamProvider)}`, { cache: 'no-store' })
+          .then(r => r.ok ? r.json() : null)
+          .then(hData => {
+            if (!hData || currentProvider !== streamProvider ||
+                currentConversationId !== targetDoneConvId || isStreaming) return;
+            updateContextPill(hData.context_stats || null, hData.context_health || null, hData.auto_compact || null);
+          }).catch(() => {});
+      }, 850);
+    } else if (targetDoneConvId && !receivedContextStats) {
+      fetch(`/api/history?id=${encodeURIComponent(targetDoneConvId)}&provider=${encodeURIComponent(streamProvider)}`)
+        .then(r => r.json()).then(hData => {
+          if (hData.context_stats && currentProvider === streamProvider &&
+              currentConversationId === targetDoneConvId) updateContextPill(hData.context_stats);
+        }).catch(() => {});
     }
     if (targetDoneConvId) loadConversations();
 
