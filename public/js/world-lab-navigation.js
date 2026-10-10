@@ -74,6 +74,15 @@
       const point={x,z,y:FOOT_Y,districtId:id};
       if(!close(waypoints[waypoints.length-1],point))waypoints.push(point);
     }
+    // Same-block visits stay on the shared front sidewalk. Do not walk all
+    // the way around a street junction simply to talk to a neighbor.
+    if(start.id===finish.id){
+      push(from.x,start.z+FRONT_Z,start.id);
+      push(to.x,finish.z+FRONT_Z,finish.id);
+      push(to.x,to.z,finish.id);
+      return{waypoints,steps:[],distance:waypoints.reduce((d,p,i)=>
+        i?d+distance(p,waypoints[i-1]):0,0)};
+    }
     // The front strip connects each character to the right-hand intersection.
     const sx=start.x+SPACING/2,sz=start.z+SPACING/2;
     const fx=finish.x+SPACING/2,fz=finish.z+SPACING/2;
@@ -104,22 +113,18 @@
   }
   function streetEdges(lots){
     if(!lots?.length)return[];
-    const nodes=new Map();
-    for(const lot of lots){
-      if(!Number.isInteger(lot.col)||!Number.isInteger(lot.row))continue;
-      nodes.set(lot.col+','+lot.row,{
-        id:'street-'+lot.col+'-'+lot.row,
-        x:lot.x+SPACING/2,z:lot.z+SPACING/2,
-        col:lot.col,row:lot.row
-      });
-    }
+    const {cols,rows}=dimensions(lots.length);
+    const at=(col,row)=>({
+      id:'street-'+col+'-'+row,col,row,
+      x:(col-(cols-1)/2)*SPACING+SPACING/2,
+      z:(row-(rows-1)/2)*SPACING+SPACING/2
+    });
     const edges=[];
-    for(const node of nodes.values()){
-      for(const key of [(node.col+1)+','+node.row,
-        node.col+','+(node.row+1)]){
-        const to=nodes.get(key);
-        if(to)edges.push({a:node,b:to,length:SPACING});
-      }
+    // Include street junctions beside empty lots on the final row. Their
+    // streets are painted in the scene even where no workshop is built.
+    for(let row=0;row<rows;row++)for(let col=0;col<cols;col++){
+      if(col+1<cols)edges.push({a:at(col,row),b:at(col+1,row),length:SPACING});
+      if(row+1<rows)edges.push({a:at(col,row),b:at(col,row+1),length:SPACING});
     }
     return edges;
   }
