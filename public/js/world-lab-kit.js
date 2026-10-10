@@ -213,6 +213,11 @@
     plinth.material.emissiveIntensity=.16;
     const ring=part(root,new T.TorusGeometry(.77,.08,6,24),role.accent,0,.025,0);
     ring.rotation.x=-Math.PI/2;
+    // Runtime working is the only event allowed to light this work ring.
+    // A separate material is intentional so 36 Roles remain independent.
+    const workHalo=new T.Mesh(new T.TorusGeometry(.95,.048,5,28),
+      new T.MeshBasicMaterial({color:'#7ff2c5',transparent:true,opacity:0,depthWrite:false}));
+    workHalo.rotation.x=-Math.PI/2;workHalo.position.y=.035;root.add(workHalo);
     const kind=profession(role);
     cylinder(body,role.coat,.38,.43,.72,0,.72,0,10);
     box(body,role.color,.61,.10,.12,0,.96,.27); // strong shoulder band
@@ -265,7 +270,7 @@
     }
     const prop=accessory(body,role,kind);
     root.traverse(mesh=>{if(mesh.isMesh)mesh.userData.roleId=role.id;});
-    return {role,root,body,arms,legs,mode:'idle',expires:0};
+    return {role,root,body,arms,legs,workHalo,mode:'idle',expires:0,reactionUntil:0};
   }
   // Folded low-poly paper plane. Tiny per-flight meshes, no image assets,
   // model downloads or additional renderer. Local forward is +Z.
