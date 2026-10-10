@@ -109,9 +109,9 @@
   const portrait=document.getElementById('world-portrait');
   let chat=null;
   const openRole=document.getElementById('world-open-role');
-  if(openRole)openRole.hidden=!isLive;
+  if(openRole)openRole.hidden=!isLive||!window.CrewWorldHost;
   const inlineChat=document.getElementById('world-chat-open');
-  if(inlineChat)inlineChat.hidden=!isLive;
+  if(inlineChat)inlineChat.hidden=!isLive||!window.CrewWorldHost;
   const actionRow=document.querySelector('.world-action-row');
   // Real usage emphasizes talking and opening conversations; demo controls
   // remain available only in offline art-preview mode.
@@ -195,13 +195,7 @@
       notify('請返回小隊頁查看 '+(roles.find(role=>role.id===roleId)?.name||'Role')+' 的完整對話');
     }
   }
-  chat=window.WorldLabChat?.mount({
-    getSelected:()=>isLive?roles[selected]:null,
-    openConversation,
-    fetcher:window.fetch.bind(window),
-    cryptoProvider:window.crypto,
-    document
-  })||null;
+  // The shared main Chat is owned by CrewWorldHost; standalone scene is visual-only.
   listen(openRole,'click',()=>{
     if(!isLive)return;
     openConversation(roles[selected].id);
