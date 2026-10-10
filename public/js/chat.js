@@ -3909,6 +3909,7 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
   }
 }
 
+let queueEnqueueInFlight = false;
 function handleSendClick(e) {
   if (e) {
     try {
@@ -3928,20 +3929,37 @@ function handleSendClick(e) {
     const imgPath = uploadedImagePath;
 
     if (rawText || imgPath) {
-      // 📥 User submitted input while streaming -> Queue this message!
-      promptInput.value = '';
-      promptInput.style.height = 'auto';
-      uploadedImagePath = null;
-      if (cameraInput) cameraInput.value = '';
-      if (typeof attachInput !== 'undefined' && attachInput) attachInput.value = '';
-      if (imagePreviewContainer) imagePreviewContainer.classList.add('hidden');
-      if (slashMenu) slashMenu.classList.add('hidden');
-      if (typeof window.haptic === 'function') window.haptic([20, 20]);
-      
-      setPendingQueuedMessage({ text: rawText, imagePath: imgPath }).catch(error => {
-        console.warn('[Role Queue] Enqueue failed:', error.message);
-        if (typeof alert === 'function') alert(`排隊失敗：${error.message}`);
-      });
+      // Preserve the composer until the durable queue write is confirmed.
+      // A second tap while saving cannot enqueue the same text twice.
+      if (queueEnqueueInFlight) return;
+      queueEnqueueInFlight = true;
+      const enqueuedRoleId = currentStreamRoleId();
+      const enqueuedProviderId = currentProvider;
+      const enqueuedConversationId = currentConversationId;
+      setPendingQueuedMessage({ text: rawText, imagePath: imgPath })
+        .then(() => {
+          if (currentStreamRoleId() === enqueuedRoleId &&
+              currentProvider === enqueuedProviderId &&
+              currentConversationId === enqueuedConversationId &&
+              getPromptText() === rawText && uploadedImagePath === imgPath) {
+            promptInput.value = '';
+            promptInput.style.height = 'auto';
+            uploadedImagePath = null;
+            if (cameraInput) cameraInput.value = '';
+            if (typeof attachInput !== 'undefined' && attachInput) attachInput.value = '';
+            if (imagePreviewContainer) imagePreviewContainer.classList.add('hidden');
+          }
+          if (slashMenu) slashMenu.classList.add('hidden');
+          if (typeof window.haptic === 'function') window.haptic([20, 20]);
+        })
+        .catch(error => {
+          console.warn('[Role Queue] Enqueue failed:', error.message);
+          if (typeof alert === 'function') alert(`排隊失敗，內容已保留在輸入框：${error.message}`);
+        })
+        .finally(() => {
+          queueEnqueueInFlight = false;
+          updateSendButtonMode();
+        });
       return;
     }
 
