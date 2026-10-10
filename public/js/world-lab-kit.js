@@ -306,5 +306,6 @@
     return Math.max(10,...islands.map(r=>Math.hypot(r.islandX,r.islandZ)+4));
   }
 
-  root.WorldLabKit={roles,create,makeLiveRoles,mapExtent,MAX_WORLD_ROLES,MEMBERS_PER_DISTRICT};
+  function releaseMaterials(){cache.clear();}
+  root.WorldLabKit={roles,create,makeLiveRoles,mapExtent,releaseMaterials,MAX_WORLD_ROLES,MEMBERS_PER_DISTRICT};
 })(window);
