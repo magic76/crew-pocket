@@ -152,6 +152,16 @@
       rail.position.x+=Math.cos(rotation)*edgeOffset;
       rail.position.z-=Math.sin(rotation)*edgeOffset;
     }
+    // A flat light strip sits ON the existing bridge deck. It may illuminate
+    // during a verified message event; no Role ever walks across open water.
+    const lightMaterial=new T.MeshBasicMaterial({
+      color:'#77ebff',transparent:true,opacity:0,depthWrite:false
+    });
+    const light=new T.Mesh(new T.BoxGeometry(1.06,.014,Math.max(.1,length-.12)),lightMaterial);
+    light.position.set(cx,.375,cz);
+    light.rotation.y=rotation;
+    scene.add(light);
+    return light;
   }
   // Every Role uses the same body rig with distinct, lightweight identity props.
   function profession(role) {
@@ -264,7 +274,7 @@
     }
     const districts=[...groups.values()];
     const roads=planRoadNetwork(roleDefs);
-    roads.forEach(edge=>bridge(scene,edge));
+    const roadVisuals=roads.map(edge=>({...edge,light:bridge(scene,edge)}));
     districts.forEach((role,i)=>island(scene,role,i));
     cylinder(scene,'#d4b6df',1.05,1.2,.65,0,-.14,-.8,10);
     cylinder(scene,'#7bcadf',.86,.9,.15,0,.28,-.8,12);
@@ -274,7 +284,10 @@
       sphere(scene,color,.75,x,1.82,z,1,1.2,1);
       sphere(scene,color,.52,x+.32,1.65,z+.25);
     }
-    return roleDefs.map((role,index)=>character(scene,role,index));
+    const actors=roleDefs.map((role,index)=>character(scene,role,index));
+    // Same exact non-crossing graph used for bridge meshes and event signals.
+    actors.roadVisuals=roadVisuals;
+    return actors;
   }
 
   // Roles are read-only projections of verified /api/crew-status metadata.
