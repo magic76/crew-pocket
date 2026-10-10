@@ -29,7 +29,7 @@ async function tick(){await new Promise(resolve=>setImmediate(resolve));}
   const doc={activeElement:null,body:{dataset:{primaryTab:'crew'},classList:{
     set:new Set(),add(k){this.set.add(k);},remove(k){this.set.delete(k);}
   }},events:new Map()};
-  const ids=['crew-world-open-btn','crew-home-dashboard-btn','crew-world-dashboard-btn','crew-world-map-btn','crew-world-modal','crew-world-close-btn',
+  const ids=['crew-world-open-btn','crew-home-dashboard-btn','crew-world-dashboard-btn','crew-world-map-btn','crew-world-modal',
     'crew-world-chat-panel','crew-world-chat-messages-slot','crew-world-chat-composer-slot',
     'messages-container','chat-composer-footer','crew-world-chat-hide','crew-world-chat-expand',
     'world-chat-open','crew-world-chat-role-name','crew-back-home-btn','world-stage'];
@@ -87,7 +87,7 @@ async function tick(){await new Promise(resolve=>setImmediate(resolve));}
   assert.equal(doc.body.dataset.primaryTab,'crew','return to original home tab');
   nodes['crew-world-open-btn'].click();
   await tick();
-  nodes['crew-world-close-btn'].click();
+  nodes['crew-world-dashboard-btn'].click();
   assert.equal(disposeCount,2,'reopening and closing must not leak scene');
   console.log('Crew World portal: one Chat DOM, Role navigation, collapse and GPU cleanup passed');
 })().catch(error=>{console.error(error);process.exitCode=1;});

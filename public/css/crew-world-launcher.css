@@ -59,9 +59,7 @@
 .crew-world-modal > .world-app[hidden]{display:none!important}
 .crew-world-modal .world-app .world-back{font:inherit}
 .crew-world-modal #world-chat-open:not([hidden]){background:#286e9c;border-color:#6fc5e9;color:#fff}
-.crew-world-close{position:absolute;right:calc(env(safe-area-inset-right,0px) + 10px);top:calc(env(safe-area-inset-top,0px) + 11px);width:37px;height:37px;border:1px solid #ffffff6a;border-radius:12px;background:#12223de6;color:#fff;font-size:16px;z-index:2;cursor:pointer;box-shadow:0 3px 12px #07132480}
-.crew-world-close:focus-visible{outline:2px solid #96e3ff;outline-offset:2px}
-@media(max-width:540px){.crew-world-entry{flex-wrap:wrap}.crew-world-entry small{font-size:9px}.crew-world-close{right:calc(env(safe-area-inset-right,0px) + 8px);top:calc(env(safe-area-inset-top,0px) + 10px)}}
+@media(max-width:540px){.crew-world-entry{flex-wrap:wrap}.crew-world-entry small{font-size:9px}}
 @media(max-width:350px){.crew-world-entry small{display:none}}
 @media(prefers-reduced-motion:reduce){.crew-world-entry:active{transform:none}}
 
@@ -122,6 +120,3 @@ body.crew-world-active{overscroll-behavior:none}
  .crew-world-chat-composer-slot > #chat-composer-footer{padding:5px 7px calc(4px + env(safe-area-inset-bottom,0px))}
 }
 @media(prefers-reduced-motion:reduce){.crew-world-modal .world-info{transition:none}}
-
-/* Keep global close action reachable above the Scene header and Chat sheet. */
-.crew-world-modal > #crew-world-close-btn{z-index:30}

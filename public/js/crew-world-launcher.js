@@ -8,7 +8,6 @@
   const worldDashboardButton=document.getElementById('crew-world-dashboard-btn');
   const worldMapButton=document.getElementById('crew-world-map-btn');
   const modal=document.getElementById('crew-world-modal');
-  const closeButton=document.getElementById('crew-world-close-btn');
   const panel=document.getElementById('crew-world-chat-panel');
   const messagesSlot=document.getElementById('crew-world-chat-messages-slot');
   const composerSlot=document.getElementById('crew-world-chat-composer-slot');
@@ -18,8 +17,8 @@
   const expandButton=document.getElementById('crew-world-chat-expand');
   const chatButton=document.getElementById('world-chat-open');
   const roleName=document.getElementById('crew-world-chat-role-name');
-  if(!opener||!modal||!panel||!messagesSlot||!composerSlot||
-     !messages||!composer||!closeButton||!hideButton||!expandButton)return;
+  if(!opener||!modal||!worldDashboardButton||!panel||!messagesSlot||!composerSlot||
+     !messages||!composer||!hideButton||!expandButton)return;
   let restoreMessages=null,restoreComposer=null;
   let stopWorld=null,previousFocus=null,selectedRoleId=null,selectedRoleName='';
   let selectVersion=0,previousTab=null,restoreTab=false,openVersion=0;
@@ -121,7 +120,7 @@
     document.body.classList.add('crew-world-active');
     const loading=document.getElementById('world-loading');
     if(loading){loading.hidden=false;loading.textContent='正在載入 3D 場景…';}
-    closeButton.focus({preventScroll:true});
+    worldDashboardButton.focus({preventScroll:true});
     updateKeyboard();
     try{
       await ensureScene();
@@ -175,7 +174,6 @@
   dashboardButton?.addEventListener('click',()=>updateHomeView('dashboard'));
   worldDashboardButton?.addEventListener('click',close);
   worldMapButton?.addEventListener('click',()=>updateHomeView('map'));
-  closeButton.addEventListener('click',close);
   hideButton.addEventListener('click',hideChat);
   expandButton.addEventListener('click',toggleExpand);
   chatButton?.addEventListener('click',()=>{void openChat();});
