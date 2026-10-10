@@ -78,13 +78,30 @@ const main=read('public/index.html');
 assert.match(main,/id="crew-world-open-btn"/);
 assert.match(main,/id="crew-world-modal"/);
 assert.match(main,/\/js\/crew-world-launcher.js/);
-assert.doesNotMatch(main,/<script src="\/js\/world-lab.js"/);
+assert.match(main,/<script src="\/js\/world-lab.js"/);
+assert.match(main,/id="world-stage"/);
+assert.match(main,/id="crew-world-chat-messages-slot"/);
+assert.match(main,/id="crew-world-chat-composer-slot"/);
+assert.doesNotMatch(main,/<iframe|id="crew-world-frame"/i);
+assert.equal((main.match(/id="messages-container"/g)||[]).length,1,
+  'one original Chat message container');
+assert.equal((main.match(/id="chat-composer-footer"/g)||[]).length,1,
+  'one original Chat composer');
+assert.doesNotMatch(main,/<script src="\/js\/world-lab-chat.js"/);
 const launcher=read('public/js/crew-world-launcher.js');
 execFileSync(process.execPath,['--check',path.join(root,'public/js/crew-world-launcher.js')]);
-assert.match(launcher,/event.origin!==location.origin/);
-assert.match(launcher,/event.source!==frame.contentWindow/);
-assert.match(launcher,/frame.src='about:blank'/);
+assert.match(launcher,/window\.openCrewCockpitRole/);
+assert.match(launcher,/messagesSlot\.appendChild\(messages\)/);
+assert.match(launcher,/composerSlot\.appendChild\(composer\)/);
+assert.match(launcher,/restoreMessages\.replaceWith\(messages\)/);
+assert.match(launcher,/restoreComposer\.replaceWith\(composer\)/);
+assert.doesNotMatch(launcher,/postMessage|frame\.src|\/api\/role-submit|\/api\/world-chat-result/);
 assert.match(launcher,/getCrewCockpitSnapshot/);
+assert.match(engine,/mountCrewWorldScene/);
+assert.match(engine,/renderer\.dispose\(\)/);
+assert.match(engine,/renderer\.forceContextLoss/);
+assert.match(engine,/cancelAnimationFrame/);
+assert.match(engine,/observer\.disconnect/);
 
 const events=require('../public/js/world-lab-events.js');
 const chat=require('../public/js/world-lab-chat.js');
