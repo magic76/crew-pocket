@@ -30,15 +30,53 @@
     }));
     return{seenIds,arrivals};
   }
-  function trail(start,end,progress,hub={x:0,z:-.8}){
-    const t=Math.max(0,Math.min(1,progress));
-    if(t===0)return{x:start.x,z:start.z};
-    if(t===1)return{x:end.x,z:end.z};
-    if(t===.5)return{x:hub.x,z:hub.z};
-    const route=t<=.5?t*2:(t-.5)*2;
-    const from=t<=.5?start:hub,to=t<=.5?hub:end;
-    const ease=route*route*(3-2*route);
-    return{x:from.x+(to.x-from.x)*ease,z:from.z+(to.z-from.z)*ease};
+  // A packet of light can travel only along bridges that physically exist.
+  // Nodes are *districts*, not Roles. Same-district messages stay local.
+  function roadRoute(roads,fromDistrict,toDistrict){
+    if(!Array.isArray(roads)||!fromDistrict||!toDistrict||
+       fromDistrict===toDistrict)return [];
+    const graph=new Map();
+    roads.forEach((road,index)=>{
+      if(!road?.a?.id||!road?.b?.id||road.a.id===road.b.id)return;
+      for(const [from,to] of [[road.a.id,road.b.id],[road.b.id,road.a.id]]){
+        if(!graph.has(from))graph.set(from,[]);
+        graph.get(from).push({to,index});
+      }
+    });
+    const visited=new Set([fromDistrict]),queue=[fromDistrict],previous=new Map();
+    for(let at=0;at<queue.length;at++){
+      const node=queue[at];
+      if(node===toDistrict)break;
+      for(const edge of graph.get(node)||[]){
+        if(visited.has(edge.to))continue;
+        visited.add(edge.to);
+        previous.set(edge.to,{from:node,index:edge.index});
+        queue.push(edge.to);
+      }
+    }
+    if(!visited.has(toDistrict))return [];
+    const route=[];
+    for(let node=toDistrict;node!==fromDistrict;){
+      const step=previous.get(node);
+      if(!step)return [];
+      route.push(step.index);
+      node=step.from;
+    }
+    return route.reverse();
   }
-  return{observe,trail};
+  // A whole bridge briefly glows in turn, rather than teleporting an actor or
+  // claiming that a virtual courier has physically delivered the message.
+  function roadPulse(route,edgeIndex,elapsed,duration){
+    if(!Array.isArray(route)||!route.length||!Number.isFinite(elapsed)||
+       !Number.isFinite(duration)||duration<=0||elapsed<0||elapsed>=duration)return 0;
+    const progress=elapsed/duration*route.length;
+    let opacity=0;
+    route.forEach((index,step)=>{
+      if(index!==edgeIndex)return;
+      const distance=Math.abs(progress-(step+.5));
+      opacity=Math.max(opacity,Math.max(0,1-distance/.67));
+    });
+    return Math.min(.75,opacity*.75);
+  }
+  return{observe,roadRoute,roadPulse};
 });
