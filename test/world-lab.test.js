@@ -182,7 +182,7 @@ assert.match(engine,/launchPaperPlane/);
 assert.match(engine,/updateFlights/);
 assert.match(engine,/paperFlightPoint/);
 assert.match(engine,/edge\.light\.material\.opacity=opacity/);
-assert.doesNotMatch(engine,/planner\.trail|root\.position\.set\(point\.x|root\.position\.set\(\s*T\.MathUtils\.lerp/);
+assert.doesNotMatch(engine,/planner\.trail|actor\.root\.position\.set\(point\.x|actor\.root\.position\.set\(\s*T\.MathUtils\.lerp/);
 assert.match(engine,/headStatus/);
 assert.match(engine,/worldExtent/);
 assert.match(engine,/districtPins/);
