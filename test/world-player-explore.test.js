@@ -89,7 +89,7 @@ assert.match(world,/tap\.moved/);
 assert.match(world,/ray\.ray\.intersectPlane/);
 assert.match(world,/followPlayer=false;/);
 assert.match(world,/workHalo\.material\.opacity=working/);
-assert.match(world,/actor\.reactionUntil=now/);
+assert.match(world,/flight\.recipient\.reactionUntil=now/);
 assert.match(world,/const idleGesture=/);
 assert.doesNotMatch(world,/fetch\('\/api\/role-submit|method:\s*'POST'/);
 assert.match(launcher,/loadScript\('\/js\/world-lab-navigation.js'\)/);
