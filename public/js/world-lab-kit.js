@@ -39,9 +39,13 @@
     const x=role.islandX,z=role.islandZ;
     const sides=['#638ba7','#a17f9c','#9a866e'];
     const tops=['#91cbd0','#e6b0c6','#d2bf8e'];
-    cylinder(scene,sides[index%sides.length],3.64,3.05,1.15,x,-.55,z,10);
-    cylinder(scene,tops[index%tops.length],3.54,3.58,.30,x,.16,z,10);
-    cylinder(scene,'#f9efdb',3.34,3.34,.05,x,.335,z,10);
+    // Wide flat shoreline supports the player's entire body at the walking
+    // ring. Earlier 3.34-radius floors could leave a player foot in the air.
+    cylinder(scene,sides[index%sides.length],4.08,3.56,1.15,x,-.55,z,12);
+    cylinder(scene,tops[index%tops.length],3.97,3.98,.30,x,.16,z,12);
+    cylinder(scene,'#f9efdb',3.84,3.84,.05,x,.335,z,16);
+    const footpath=part(scene,new T.TorusGeometry(3.0,.045,4,68),'#b9c7b5',x,.389,z);
+    footpath.rotation.x=-Math.PI/2;
     for(let i=0;i<8;i++){
       const angle=Math.PI*2*i/8;
       sphere(scene,i%2?'#d2f0d4':'#e5e2b4',.13,
@@ -315,6 +319,32 @@
       });
     }
   }
+  // The human-controlled visitor is distinct from every AI Role, and never
+  // carries roleId so map raycasting cannot mistake the visitor for an agent.
+  function createPlayer(scene,point){
+    const root=new T.Group();
+    root.position.set(point.x,.43,point.z);scene.add(root);
+    const body=new T.Group();root.add(body);
+    const base=cylinder(root,'#d5f6fc',.49,.53,.085,0,-.045,0,12);
+    const ring=part(root,new T.TorusGeometry(.69,.07,5,20),'#ffe6a4',0,.02,0);
+    ring.rotation.x=-Math.PI/2;
+    cylinder(body,'#187e91',.34,.4,.66,0,.72,0,10);
+    box(body,'#f3e7cb',.23,.08,.13,0,.97,.30);
+    const legs=[],arms=[];
+    for(const side of [-1,1]){
+      const leg=cylinder(body,'#344259',.13,.13,.38,side*.18,.22,0,8);
+      legs.push({mesh:leg,side});
+      const arm=new T.Group();arm.position.set(side*.34,1.0,0);body.add(arm);
+      cylinder(arm,'#187e91',.12,.12,.43,side*.045,-.19,0,8);
+      sphere(arm,'#f1c5a2',.125,side*.045,-.42,.02);
+      arms.push(arm);
+    }
+    sphere(body,'#f1c5a2',.46,0,1.62,0);
+    sphere(body,'#314263',.47,0,1.88,-.07,1,.54,.9);
+    const pointer=part(root,new T.ConeGeometry(.28,.45,4),'#ffdc86',0,2.65,0);
+    pointer.rotation.x=Math.PI; // arrowhead points toward the visitor
+    return{root,body,legs,arms};
+  }
   function create(scene, roleDefs=roles) {
     const hub=[0,-.8];
     // A neighborhood is a project district (up to 3 Roles), not one island
@@ -445,5 +475,5 @@
   }
 
   function releaseMaterials(){cache.clear();}
-  root.WorldLabKit={roles,create,createPaperPlane,disposePaperPlane,makeLiveRoles,mapExtent,planRoadNetwork,roadCrosses,segmentDistance,releaseMaterials,MAX_WORLD_ROLES,MEMBERS_PER_DISTRICT};
+  root.WorldLabKit={roles,create,createPlayer,createPaperPlane,disposePaperPlane,makeLiveRoles,mapExtent,planRoadNetwork,roadCrosses,segmentDistance,releaseMaterials,MAX_WORLD_ROLES,MEMBERS_PER_DISTRICT};
 })(window);
