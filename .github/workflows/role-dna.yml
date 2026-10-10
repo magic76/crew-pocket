@@ -1,0 +1,47 @@
+name: Role DNA validation
+
+on:
+  push:
+    branches: [feat/role-dna-kernel-verification]
+  pull_request:
+    branches: [main]
+    paths:
+      - 'lib/skills/**'
+      - 'lib/context-builder.js'
+      - 'lib/context/types.js'
+      - 'lib/memory/dreaming.js'
+      - 'lib/providers/codex.js'
+      - 'server.js'
+      - 'public/js/role-dna.js'
+      - 'public/js/ui.js'
+      - 'public/index.html'
+      - 'test/role-dna.test.js'
+      - '.github/workflows/role-dna.yml'
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify syntax and Role DNA invariants
+        run: |
+          node --check lib/skills/registry.js
+          node --check lib/context-builder.js
+          node --check lib/context/types.js
+          node --check lib/memory/dreaming.js
+          node --check lib/providers/codex.js
+          node --check server.js
+          node --check public/js/role-dna.js
+          node --check public/js/ui.js
+          node --check test/role-dna.test.js
+          node test/role-dna.test.js
+          node test/dreaming.test.js
+          node test/role-memory-kernel.test.js
+          node test/role-centric-navigation.test.js
+          node test/memory-xray.test.js
+          node test/context-health.test.js
+          node test/context-compaction.test.js
+          node test/role-delete-lifecycle.test.js

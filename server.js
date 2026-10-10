@@ -52,6 +52,7 @@ const { makeMissionGraph, MAX_GRAPH_EVENTS } = require('./lib/mission-graph');
 const { listProjects, getProject } = require('./lib/projects');
 const { defaultRoleMessageQueueStore, listRoleQueuedMessages, enqueueRoleMessage, removeRoleQueuedMessage, clearRoleMessageQueue } = require('./lib/role-message-queue');
 const { defaultMemoryProvider } = require('./lib/memory');
+const { defaultSkillRegistry } = require('./lib/skills/registry');
 const { DreamingManager } = require('./lib/memory/dreaming');
 const {
   buildAgentContext,
@@ -110,6 +111,37 @@ async function handleDreaming(req, res) {
       : { settings: await dreamingManager.configure(await parseJsonBody(req)) };
     res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
     res.end(JSON.stringify({ success: true, ...result }));
+  } catch (error) {
+    res.writeHead(400, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+    res.end(JSON.stringify({ success: false, error: String(error.message || error) }));
+  }
+}
+
+async function handleRoleSkills(req, res, parsedUrl) {
+  try {
+    const body = req.method === 'POST' ? await parseJsonBody(req) : {};
+    const roleId = String(body.roleId || parsedUrl?.query?.role_id || '').trim();
+    if (!/^[A-Za-z0-9._-]{1,160}$/.test(roleId)) throw new Error('Invalid Role ID');
+    const role = await getRole(roleId);
+    if (!role) {
+      res.writeHead(404, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+      return res.end(JSON.stringify({ success: false, error: 'Role not found' }));
+    }
+    if (req.method === 'POST') {
+      const action = String(body.action || '');
+      const skillId = String(body.skillId || '');
+      if (action === 'evidence') {
+        await defaultSkillRegistry.recordEvidence(role.id, skillId, body.evidence);
+      } else if (['verify', 'activate', 'retire'].includes(action)) {
+        // Requires a direct explicit UI/user request; Dreaming never calls this API.
+        await defaultSkillRegistry.transition(role.id, skillId, action);
+      } else {
+        throw new Error('Unsupported Role DNA action');
+      }
+    }
+    const result = await defaultSkillRegistry.list(role.id, { withHistory: true });
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+    res.end(JSON.stringify({ success: true, roleId: role.id, ...result }));
   } catch (error) {
     res.writeHead(400, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
     res.end(JSON.stringify({ success: false, error: String(error.message || error) }));
@@ -1153,6 +1185,7 @@ async function handleRoles(req, res, parsedUrl) {
         stopActiveRoleFn: stopActiveRoleWork
       });
       await dreamingManager.forgetRole(roleId);
+      await defaultSkillRegistry.forgetRole(roleId);
       broadcastCrewStatusEvent('role-delete', roleId);
       res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
       return res.end(JSON.stringify({ success: true, deleted: result }));
@@ -3176,6 +3209,8 @@ const server = http.createServer(async (req, res) => {
     return handleRoleMemoryInspect(parsedUrl, res);
   } else if (pathname === '/api/memories' && ['GET', 'POST', 'DELETE'].includes(req.method)) {
     return handleMemories(req, res, parsedUrl);
+  } else if (pathname === '/api/role-skills' && ['GET', 'POST'].includes(req.method)) {
+    return handleRoleSkills(req, res, parsedUrl);
   } else if (pathname === '/api/dreaming' && ['GET', 'POST'].includes(req.method)) {
     return handleDreaming(req, res);
   } else if (pathname === '/api/workspaces' && req.method === 'GET') {
