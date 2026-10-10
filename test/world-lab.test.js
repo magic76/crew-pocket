@@ -1,6 +1,7 @@
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const path=require('node:path');
+const vm=require('node:vm');
 const {execFileSync}=require('node:child_process');
 const root=path.resolve(__dirname,'..');
 const read=file=>fs.readFileSync(path.join(root,file),'utf8');
@@ -40,6 +41,23 @@ assert.doesNotMatch(engine,/method\s*:\s*['\"](?:POST|PUT|PATCH|DELETE)/);
 assert.match(engine,/crew-world-open-role/);
 assert.match(kit,/makeLiveRoles/);
 assert.match(kit,/LIVE_COLORS/);
+const sampleWindow={THREE:{}};
+vm.runInNewContext(kit,{window:sampleWindow});
+const six=sampleWindow.WorldLabKit.makeLiveRoles([
+  {roleId:'one',roleName:'Pocket A',state:'working'},
+  {roleId:'two',roleName:'Pocket B',state:'waiting'},
+  {roleId:'three',roleName:'Teacher Dev',state:'idle'},
+  {roleId:'four',roleName:'Story Dev',state:'new'},
+  {roleId:'five',roleName:'Fortune Dev',state:'unknown'},
+  {roleId:'six',roleName:'Helper Dev',state:'idle'},
+  {roleId:'seven',roleName:'Extra Dev',state:'idle'}
+]);
+assert.equal(six.length,6,'world caps the rendered 3D characters at six');
+assert.equal(new Set(six.map(r=>r.color)).size,6,'every displayed Role must have a distinct color');
+assert.deepEqual(six.map(r=>r.id),['one','two','three','four','five','six']);
+assert.equal(six[4].state,'unknown','untrusted statuses cannot masquerade as work');
+assert.equal(sampleWindow.WorldLabKit.makeLiveRoles([]).length,0);
+
 assert.match(css,/touch-action:none/);
 assert.match(css,/safe-area-inset-bottom/);
 assert.match(css,/prefers-reduced-motion/);
