@@ -1,0 +1,38 @@
+/* One Context Window gauge shared by Dashboard cards and 3D Role labels. */
+.crew-context-gauge{
+  width:100%;min-width:0;display:flex;flex-direction:column;gap:4px;
+  margin-top:8px;font-variant-numeric:tabular-nums;
+}
+.crew-context-gauge-head{
+  display:flex;align-items:baseline;justify-content:space-between;gap:6px;
+  font-size:10px;line-height:1.2;color:var(--cp-text-secondary,#adb7c6);
+}
+.crew-context-gauge-head strong{font-weight:750;color:var(--cp-text,#fff);white-space:nowrap}
+.crew-context-gauge-track{
+  width:100%;height:5px;border-radius:999px;overflow:hidden;
+  background:var(--cp-border,#475569);
+}
+.crew-context-gauge-fill{
+  width:0;height:100%;background:#36a88f;border-radius:inherit;
+  transition:width .28s ease-out;
+}
+.crew-context-gauge[data-tone="warning"] .crew-context-gauge-fill{background:#ecae3f}
+.crew-context-gauge[data-tone="critical"] .crew-context-gauge-fill{background:#ed6671}
+.crew-context-gauge[data-tone="unknown"] .crew-context-gauge-track{background:var(--cp-border,#475569);opacity:.55}
+.crew-context-gauge-sub{color:var(--cp-muted,#a4aec0);font-size:9px;line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#role-nav-list .crew-context-gauge{margin-top:auto;padding-top:7px}
+#role-nav-list .role-nav-card > [data-role-nav-id]{min-height:180px!important}
+.world-app .crew-context-gauge{
+  margin-top:7px;gap:3px;--cp-text:#ebfbff;--cp-text-secondary:#c5d9ec;
+  --cp-muted:#b5cbde;--cp-border:#4e6480;
+}
+.world-app .crew-context-gauge-track{height:4px;background:#445674}
+.world-app .crew-context-gauge-head{font-size:10px;color:#c5d9ec}
+.world-app .crew-context-gauge-head strong{color:#f7ffff}
+.world-app .crew-context-gauge-sub{font-size:9px;color:#a6c4dc}
+.world-label .crew-context-gauge{margin-top:5px;min-width:75px}
+.world-label .crew-context-gauge-head{font-size:9px}
+.world-label .crew-context-gauge-track{height:3px}
+.world-label .crew-context-gauge-sub{display:none}
+.world-label .crew-context-gauge-head strong{color:#ebfaff}
+@media(prefers-reduced-motion:reduce){.crew-context-gauge-fill{transition:none}}

@@ -112,6 +112,32 @@
         ?'待處理 '+role.attention+' 項':'';
     return{state,detail,tone:role.state};
   }
+  function createGauge(){
+    const el=document.createElement('div');el.className='crew-context-gauge';
+    const head=document.createElement('div');head.className='crew-context-gauge-head';
+    const caption=document.createElement('span');caption.textContent='Context';
+    const value=document.createElement('strong');value.textContent='—';
+    head.append(caption,value);
+    const track=document.createElement('div');track.className='crew-context-gauge-track';
+    const fill=document.createElement('div');fill.className='crew-context-gauge-fill';
+    track.appendChild(fill);
+    const detail=document.createElement('span');detail.className='crew-context-gauge-sub';
+    detail.textContent='Context 尚無可用資料';
+    el.append(head,track,detail);
+    return {el,value,fill,detail};
+  }
+  function syncGauge(gauge,roleId){
+    const summary=window.CrewContextUsage?.describe(
+      isLive?window.CrewContextUsage?.get(roleId):null
+    )||{known:false,label:'—',detail:'Context 尚無可用資料',percent:0,tone:'unknown'};
+    gauge.el.dataset.tone=summary.tone;
+    gauge.value.textContent=summary.label;
+    gauge.detail.textContent=summary.detail;
+    gauge.fill.style.width=summary.known?summary.percent+'%':'0%';
+    gauge.el.title=summary.detail;
+    gauge.el.setAttribute('role','img');
+    gauge.el.setAttribute('aria-label','Context '+summary.label+' · '+summary.detail);
+  }
   const labels=roles.map((role,index)=>{
     const button=document.createElement('button');button.type='button';
     button.className='world-label';
@@ -120,13 +146,14 @@
     const detail=document.createElement('span');detail.className='world-label-detail';
     const speech=document.createElement('span');speech.className='world-speech-bubble';
     speech.hidden=true;
-    button.append(speech,title,state,detail);listen(button,'click',()=>select(index,true));
+    const gauge=createGauge();
+    button.append(speech,title,state,detail,gauge.el);listen(button,'click',()=>select(index,true));
     listen(speech,'click',event=>{
       event.preventDefault();event.stopPropagation();
       hideSpeech(index,true);
     });
     button.style.setProperty('--world-role-color',role.color);
-    labelsHost.appendChild(button);return{button,state,detail,speech};
+    labelsHost.appendChild(button);return{button,state,detail,speech,gauge};
   });
   const roster=roles.map((role,index)=>{
     const button=document.createElement('button');button.type='button';
@@ -136,6 +163,10 @@
     rosterHost.appendChild(button);return button;
   });
   const portrait=document.getElementById('world-portrait');
+  const selectedGauge=createGauge();
+  const detailCard=document.getElementById('world-info');
+  const actions=detailCard?.querySelector('.world-action-row');
+  if(actions)detailCard.insertBefore(selectedGauge.el,actions);
   let chat=null;
   const openRole=document.getElementById('world-open-role');
   if(openRole)openRole.hidden=!isLive||!window.CrewWorldHost;
@@ -156,12 +187,14 @@
         (!synced?'狀態未同步':working?working+' 工作中':waiting?waiting+' 待處理':'待命');
     }
     const actor=actors[selected],role=actor.role;
+    syncGauge(selectedGauge,role.id);
     document.getElementById('world-role-name').textContent=role.name;
     document.getElementById('world-role-state').textContent=status(actor);
     document.getElementById('world-role-description').textContent=role.description;
     portrait.textContent=role.initial;portrait.style.background=role.coat;
     labels.forEach((entry,i)=>{
       const head=headStatus(actors[i]);
+      syncGauge(entry.gauge,roles[i].id);
       entry.button.dataset.selected=String(i===selected);
       entry.button.dataset.tone=head.tone;
       entry.state.textContent=head.state;
@@ -548,6 +581,11 @@
     }
     renderer.render(scene,camera);
   }
+  listen(window,'crew:context-usage-updated',updateInfo);
+  if(isLive&&window.CrewContextUsage){
+    void window.CrewContextUsage.load();
+    trackedInterval(()=>{if(!disposed&&!document.hidden)void window.CrewContextUsage.load();},30000);
+  }
   updateInfo();
   window.CrewWorldHost?.onSelectedRole?.(roles[selected].id,roles[selected].name);
   resize();frame(performance.now());
@@ -564,6 +602,7 @@
     renderer.renderLists?.dispose?.();
     renderer.dispose();renderer.forceContextLoss?.();
     renderer.domElement.remove();
+    selectedGauge.el.remove();
     labelsHost.replaceChildren();rosterHost.replaceChildren();
     districtsHost?.replaceChildren();
     kit.releaseMaterials?.();
