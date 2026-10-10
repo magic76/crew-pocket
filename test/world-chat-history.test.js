@@ -1,6 +1,6 @@
 'use strict';
 const assert=require('node:assert/strict');
-const {projectReplies,createWorldChatHistory}=require('../lib/world-chat-history');
+const {projectReplies,createWorldChatHistory,createWorldChatResult}=require('../lib/world-chat-history');
 (async()=>{
   assert.deepEqual(projectReplies({messages:[
     {role:'system',content:'private system'},
@@ -37,5 +37,21 @@ const {projectReplies,createWorldChatHistory}=require('../lib/world-chat-history
   assert.equal(historyReads.length,2,'mismatched role never reaches provider history');
   const empty=await make({getRoleRuntime:async()=>null})('teacher');
   assert.deepEqual(empty.messages,[]);assert.equal(empty.conversationId,null);
-  console.log('World chat history: Role ownership, bounded assistant-only replies passed');
+  const submissions={
+    'world_accepted_0001':{roleId:'teacher',status:'completed',replyText:'Actual completed answer',replyTruncated:false},
+    'world_pending_00002':{roleId:'teacher',status:'running'},
+    'world_other_000003':{roleId:'pocket',status:'completed',replyText:'Private Pocket reply'}
+  };
+  const readResult=createWorldChatResult({
+    getRole:async id=>id==='teacher'?{id}:null,
+    readReceipts:async()=>submissions
+  });
+  const answer=await readResult('teacher','world_accepted_0001');
+  assert.equal(answer.response,'Actual completed answer');
+  assert.equal(answer.status,'completed');
+  assert.equal((await readResult('teacher','world_pending_00002')).response,'');
+  await assert.rejects(()=>readResult('teacher','world_other_000003'),{statusCode:404},
+    'never leak a different Role submission');
+  await assert.rejects(()=>readResult('teacher','../invalid'),{statusCode:400});
+    console.log('World chat history: Role ownership, bounded assistant-only replies passed');
 })().catch(e=>{console.error(e);process.exitCode=1;});
