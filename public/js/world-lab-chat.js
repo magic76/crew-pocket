@@ -44,8 +44,8 @@
     const readState=doc.getElementById('world-chat-read-state');
     if(!sheet||!openButton||!form||!message||!sendButton||!status||!history||!readState)return null;
     const info=doc.getElementById('world-info');
-    const drafts=new Map(), pendingByRole=new Map(), localTurns=new Map(), lastReplies=new Map();
-    let targetId=null,lastFocus=null,inflight=false,reading=false,readTimer=null,visit=0;
+    const drafts=new Map(), pendingByRole=new Map(), localTurns=new Map(), lastReplies=new Map(), submittedByRole=new Map();
+    let targetId=null,lastFocus=null,inflight=false,reading=false,readTimer=null,resultTimer=null,resultReading=false,visit=0;
     let lastRendered=null;
     function addBubble(text,kind){
       const bubble=doc.createElement('div');
@@ -59,26 +59,26 @@
     }
     function renderMessages(texts){
       const local=localTurns.get(targetId)||null;
-      const fingerprint=JSON.stringify([targetId,texts,local]);
+      const submission=submittedByRole.get(targetId)||null;
+      const confirmedReply=submission?.status==='completed'?submission.response||'':'';
+      const fingerprint=JSON.stringify([targetId,texts,local,submission?.status,confirmedReply]);
       if(lastRendered===fingerprint)return;
       const stick=history.scrollHeight-history.scrollTop-history.clientHeight<55;
       history.replaceChildren();
-      if(!texts.length&&!local){
+      if(!texts.length&&!local&&!confirmedReply){
         const empty=doc.createElement('p');
         empty.className='world-chat-empty';
         empty.textContent='這位角色目前沒有可顯示的 AI 回覆。';
         history.appendChild(empty);
       }
-      // Show the latest reply *after* the local user instruction when the
-      // assistant content changed since that instruction was accepted.
-      const baseline=readState.dataset.replyBaseline||'';
-      const newer=Boolean(local&&texts.length&&texts.at(-1)!==baseline);
-      const previous=newer?texts.slice(0,-1):texts;
+      // Never infer the answer to this submission from the latest unrelated
+      // provider-history turn. Only the matching receipt can confirm the reply.
+      const previous=confirmedReply&&texts.at(-1)===confirmedReply?texts.slice(0,-1):texts;
       for(const text of previous)addBubble(text,'assistant');
       if(local)addBubble(local,'user');
-      if(newer)addBubble(texts.at(-1),'assistant');
+      if(confirmedReply)addBubble(confirmedReply,'assistant');
       lastRendered=fingerprint;
-      if(stick||local)history.scrollTop=history.scrollHeight;
+      if(stick||local||confirmedReply)history.scrollTop=history.scrollHeight;
     }
     function updateViewport(){
       if(sheet.hidden)return;
@@ -118,13 +118,62 @@
         if(sheet.hidden||visit!==token||targetId!==id)return;
         lastReplies.set(id,texts);
         renderMessages(texts);
-        if(!localTurns.has(id))readState.dataset.replyBaseline=texts.at(-1)||'';
         readState.textContent=data.busy?'AI 正在回應，持續更新最近回覆…':
           texts.length?'已同步這個 Role 的最近 AI 回覆':'等待 Role 的第一則回覆…';
       }catch(error){
         if(visit===token&&targetId===id&&!sheet.hidden)
           readState.textContent='暫時無法同步回覆；'+(error.message||'請稍後再試');
       }finally{reading=false;}
+    }
+    async function refreshResult(){
+      const id=targetId,token=visit,submission=submittedByRole.get(id);
+      if(!id||sheet.hidden||doc.hidden||resultReading||!submission)return;
+      if(['completed','failed','unknown','cancelled'].includes(submission.status))return;
+      resultReading=true;
+      try{
+        const response=await fetcher('/api/world-chat-result?role_id='+
+          encodeURIComponent(id)+'&request_id='+encodeURIComponent(submission.requestId),{
+          cache:'no-store',credentials:'same-origin'
+        });
+        const data=await response.json();
+        if(!response.ok||data.success!==true||data.roleId!==id||
+           data.requestId!==submission.requestId)throw new Error(data.error||'無法確認工作狀態');
+        if(sheet.hidden||visit!==token||targetId!==id)return;
+        submittedByRole.set(id,{
+          ...submission,status:data.status,response:data.response||'',error:data.error||null
+        });
+        const terminal=['completed','failed','unknown','cancelled'].includes(data.status);
+        if(data.status==='completed'){
+          status.dataset.kind='success';
+          status.textContent=data.response?
+            'AI 已完成，回覆已顯示在上方'+(data.truncated?'（內容過長，完整內容請查看對話）':''):
+            '任務已完成，但尚無可顯示的最終文字；可前往完整對話確認';
+        }else if(terminal){
+          status.dataset.kind='error';
+          status.textContent=data.status==='failed'
+            ?'執行失敗：'+(data.error||'請查看完整對話'):
+              '執行狀態未確認，請查看原對話，勿直接重複發送';
+        }else{
+          status.dataset.kind='pending';
+          status.textContent=data.status==='running'
+            ?'AI 正在處理這則訊息…':'已加入 Role 佇列，等待執行…';
+        }
+        renderMessages(lastReplies.get(id)||[]);
+        if(terminal&&resultTimer!==null){
+          win.clearInterval(resultTimer);resultTimer=null;
+        }
+      }catch(error){
+        if(!sheet.hidden&&visit===token&&targetId===id){
+          status.dataset.kind='error';
+          status.textContent='暫時無法確認回覆：'+(error.message||'網路中斷')+
+            '。請查看完整對話，避免重複發送。';
+        }
+      }finally{resultReading=false;}
+    }
+    function startResultReading(){
+      if(resultTimer!==null)win.clearInterval(resultTimer);
+      resultTimer=win.setInterval(()=>{void refreshResult();},1800);
+      void refreshResult();
     }
     function startReading(){
       if(readTimer!==null)win.clearInterval(readTimer);
@@ -145,12 +194,13 @@
       message.value=drafts.get(targetId)||'';
       status.textContent='';status.dataset.kind='';
       readState.textContent='正在讀取 '+role.name+' 的最新回覆…';
-      readState.dataset.replyBaseline='';
       lastRendered=null;history.replaceChildren();
       sheet.hidden=false;
       if(info)info.hidden=true;
       updateViewport();
       startReading();
+      renderMessages(lastReplies.get(targetId)||[]);
+      if(submittedByRole.has(targetId))startResultReading();
       // Avoid forcing a mobile keyboard open as soon as the chat panel appears.
       win.requestAnimationFrame(()=>updateViewport());
     }
@@ -161,6 +211,7 @@
       if(info)info.hidden=false;
       targetId=null;lastRendered=null;
       if(readTimer!==null){win.clearInterval(readTimer);readTimer=null;}
+      if(resultTimer!==null){win.clearInterval(resultTimer);resultTimer=null;}
       sheet.style.removeProperty('--world-chat-keyboard-overlap');
       lastFocus?.focus?.({preventScroll:true});
     }
@@ -194,11 +245,16 @@
           '已記錄，請確認執行狀態';
         status.dataset.kind='success';
         status.textContent=target.name+'：'+queueState+'（不代表任務完成）';
-        readState.dataset.replyBaseline=(lastReplies.get(targetId)||[]).at(-1)||'';
         localTurns.set(targetId,command.prompt);
+        submittedByRole.set(targetId,{
+          requestId:command.request_id,
+          status:data.submission.status||'queued',
+          response:typeof data.submission.replyText==='string'?data.submission.replyText:''
+        });
         drafts.delete(targetId);pendingByRole.delete(targetId);
         message.value='';
         renderMessages(lastReplies.get(targetId)||[]);
+        startResultReading();
         void refreshReplies();
       }catch(error){
         status.dataset.kind='error';
