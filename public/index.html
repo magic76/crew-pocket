@@ -517,7 +517,10 @@
           </div>
           <div id="crew-room-summary" class="crew-home-summary" aria-live="polite">載入小隊狀態…</div>
           <div id="cockpit-status-line" class="crew-home-sync" role="status">Runtime 尚未同步</div>
-          <button id="crew-world-open-btn" type="button" class="crew-world-entry" aria-label="開啟 3D 小隊世界"><span class="crew-world-entry-icon" aria-hidden="true">◇</span><span>探索 3D 小隊世界</span><small>可隨時返回原本的小隊清單</small><span class="crew-world-entry-arrow" aria-hidden="true">↗</span></button>
+          <div class="crew-home-view-toggle" role="group" aria-label="首頁檢視模式">
+            <button id="crew-home-dashboard-btn" type="button" aria-pressed="true" class="is-active"><span aria-hidden="true">▦</span> Dashboard</button>
+            <button id="crew-world-open-btn" type="button" aria-pressed="false"><span aria-hidden="true">◇</span> 地圖</button>
+          </div>
         </div>
         <div id="cockpit-scroll" class="min-h-0 flex-1 overflow-y-auto overscroll-contain">
           <div id="crew-attention-panel" aria-label="待處理的角色訊息"></div>
@@ -1777,9 +1780,13 @@
     <header class="world-header">
       <button type="button" id="world-back" class="world-back" aria-label="返回 Crew Pocket 小隊">←</button>
       <div class="world-brand"><span class="world-kicker">CREW POCKET / EXPERIMENT 01</span><h1>Crew World <span>3D LAB</span></h1></div>
+      <div class="crew-world-view-toggle" role="group" aria-label="首頁檢視模式">
+        <button id="crew-world-dashboard-btn" type="button" aria-pressed="false">▦ Dashboard</button>
+        <button id="crew-world-map-btn" type="button" aria-pressed="true" class="is-active">◇ 地圖</button>
+      </div>
       <span class="world-demo-pill">獨立示範 · 非即時狀態</span>
     </header>
-    <div class="world-hint">拖曳移動 · 雙指縮放 · 點人物選擇</div>
+    <div class="world-hint">依專案分區 · 拖曳移動 · 雙指縮放 · 點角色進行聊天</div>
     <section id="world-info" class="world-info" aria-live="polite">
       <div class="world-info-head">
         <div class="world-portrait" id="world-portrait">P</div>
@@ -1795,7 +1802,7 @@
       </div>
     </section>
     <footer class="world-bottom">
-      <div class="world-roster" id="world-roster" aria-label="切換示範角色"></div>
+      <div class="world-roster" id="world-roster" aria-label="點擊角色名稱定位到地圖區域"></div>
       <div class="world-controls">
         <button type="button" id="world-zoom-out" aria-label="縮小">−</button>
         <button type="button" id="world-reset">世界全景</button>
