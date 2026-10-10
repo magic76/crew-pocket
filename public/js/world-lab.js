@@ -695,9 +695,8 @@
       }
       const signaling=actor.mode==='handoff'||actor.mode==='observed-handoff';
       const working=actor.mode==='working'||(isLive&&synced&&actor.role.state==='working');
-      // Agents are never physically moved away from their home island.
-      // Sending a digital message is represented by bridge illumination,
-      // not an avatar sprinting across water or through buildings.
+      // AI Roles remain at their own miniature workshop. Digital messages
+      // travel as paper planes; there is no fabricated avatar journey.
       const reaction=now<actor.reactionUntil;
       const idle=actor.role.state==='idle'&&!working&&!signaling&&!reaction;
       // Quiet idle gestures are ambient only; they never claim tool progress.
