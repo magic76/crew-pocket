@@ -1,3 +1,38 @@
+## Crew World 2.0 — Continuous Miniature Town (2026-10)
+
+The old disconnected **floating islands and over-water bridge network are
+superseded** by a single low-poly miniature grass town:
+
+- One coherent lawn slab, interlocking brick pedestrian streets, visible
+  building-front sidewalks, a flat central gathering square, roadside trees,
+  and miniature project-specific workshops (developer, teacher, story, etc.).
+- **One workshop per Project subgroup**, with up to three individually
+  selectable Roles on its frontage. The layout expands as deterministic
+  rectangular streets up to 36 Roles; no overlap-prone concentric islands.
+- Street graph comes from the exact same grid as `districtPosition()` and
+  `WorldLabNavigation.planWalk()`. Humans now use axis-aligned street routes
+  and frontage strips, not circular island paths or invented bridges.
+- In Explore mode, the human visitor can tap a Role to automatically walk to
+  its workshop and open the **existing** Crew World Role Chat sheet; taps on
+  town ground snap to an accessible sidewalk. Browse mode keeps instant
+  camera-focused Role selection, and users can still use direct Role chat.
+- Ambient idle gestures, verified working rings, paper-airplane messages,
+  and recipient reactions are retained. Paper airplanes are airborne message
+  *indicators*, not physical movement, delivery confirmation, or task success.
+- District/Role identity and Runtime/memory isolation remain unchanged.
+  Old `islandX`/`islandZ` fields remain **internal compatibility
+  coordinate names only**: they now mean **workshop lot center**, not island.
+- `test/world-road-network.test.js` and `test/world-player-explore.test.js`
+  check all 1–36-role formations for connected ground streets, unique lots,
+  house avoidance and valid player routes. Older bridge-specific tests
+  have been updated; no 3D asset package or additional network dependency.
+- **Android WebView visual and touch interaction still require real-device QA.**
+
+Older sections below document the *previous historical iterations*; this
+section reflects the current world geometry and navigation design.
+
+---
+
 # Crew World: one WebView, one Chat runtime
 
 Crew World is the Map view of Crew Pocket's home screen, paired with Dashboard.
