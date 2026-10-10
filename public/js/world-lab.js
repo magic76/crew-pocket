@@ -71,6 +71,8 @@
   const portrait=document.getElementById('world-portrait');
   const openRole=document.getElementById('world-open-role');
   if(openRole)openRole.hidden=!isLive;
+  const actionRow=document.querySelector('.world-action-row');
+  if(actionRow)actionRow.style.gridTemplateColumns='repeat('+(isLive?4:3)+',minmax(0,1fr))';
   function updateInfo(){
     const actor=actors[selected],role=actor.role;
     document.getElementById('world-role-name').textContent=role.name;
