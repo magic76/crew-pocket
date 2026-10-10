@@ -34,6 +34,7 @@
     const status=doc.getElementById('world-chat-feedback');
     const conversation=doc.getElementById('world-chat-conversation');
     if(!sheet||!openButton||!form||!message||!sendButton||!status)return null;
+    const info=doc.getElementById('world-info');
     const drafts=new Map();
     let targetId=null,pending=null,lastFocus=null,inflight=false;
     function sync(){
@@ -50,12 +51,15 @@
       message.value=drafts.get(targetId)||'';
       status.textContent='';status.dataset.kind='';
       sheet.hidden=false;
+      if(info)info.hidden=true;
       message.focus({preventScroll:true});
     }
     function close(){
       if(sheet.hidden||inflight)return;
       if(targetId)drafts.set(targetId,message.value);
-      sheet.hidden=true;targetId=null;pending=null;
+      sheet.hidden=true;
+      if(info)info.hidden=false;
+      targetId=null;pending=null;
       lastFocus?.focus?.({preventScroll:true});
     }
     async function submit(){
