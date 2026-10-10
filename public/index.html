@@ -266,6 +266,20 @@
         </div>
         
 
+        <section id="auto-compact-settings" class="mx-1 mb-3 rounded-2xl border border-slate-700/75 bg-slate-900/70 p-3 space-y-2" aria-label="Automatic Context Compaction">
+          <div class="flex items-start justify-between gap-3">
+            <div>
+              <div class="text-xs font-bold text-slate-100">Automatic Context Compaction</div>
+              <p class="mt-1 text-[10px] leading-relaxed text-slate-400">依過時內容、重複工具操作與工作階段進度建議整理，不只看 Context 使用率。</p>
+            </div>
+            <label class="flex items-center gap-2 text-[11px] text-slate-200 shrink-0">
+              <input id="auto-compact-enabled" type="checkbox" class="accent-emerald-500 w-4 h-4" aria-label="Automatic Context Compaction">自動
+            </label>
+          </div>
+          <p class="text-[10px] text-slate-500">Auto 模式預設關閉；只在沒有串流、執行中工具或 pending side effect，且通過 cooldown 時觸發。仍使用原本 Safe Compact。</p>
+          <p id="auto-compact-settings-status" class="text-[10px] text-slate-400" role="status">載入設定中…</p>
+        </section>
+
         <section id="dreaming-settings" class="mx-1 mb-3 rounded-2xl border border-slate-700/75 bg-slate-900/70 p-3 space-y-3" aria-label="長期記憶自動整理">
           <div class="flex items-center justify-between gap-3">
             <div>
@@ -1071,6 +1085,12 @@
           <div id="context-warnings" class="mt-2 space-y-1.5 text-[10px] leading-relaxed text-slate-300"></div>
         </section>
 
+        <section id="context-auto-suggestion" class="hidden rounded-2xl border border-amber-500/20 bg-amber-500/5 p-3" aria-live="polite">
+          <h3 class="text-[11px] font-semibold text-amber-200">Why compact now?</h3>
+          <p class="mt-1 text-[10px] leading-relaxed text-slate-400">Context 尚未接近上限，但部分舊的工作內容可能已不再需要持續保留。</p>
+          <div id="context-auto-reasons" class="mt-2 space-y-1 text-[10px] leading-relaxed text-slate-300"></div>
+        </section>
+
         <p class="rounded-xl border border-indigo-500/15 bg-indigo-500/5 px-3 py-2 text-[10px] leading-relaxed text-slate-400">
           精簡 Current Context 不會刪除 Role Memory，也不會刪除原始 Conversation history。
         </p>
@@ -1084,6 +1104,7 @@
             <div id="context-advanced-unattributed">other/system: —</div>
             <div id="context-advanced-largest">largest compactable: —</div>
             <div id="context-advanced-warning-codes">warnings: —</div>
+            <div id="context-advanced-auto">auto compact: —</div>
           </div>
         </details>
       </div>
@@ -1902,6 +1923,7 @@
   <script src="/js/auth.js"></script>
   <script src="/js/app.js"></script>
   <script src="/js/dreaming-settings.js"></script>
+  <script src="/js/auto-compact-settings.js"></script>
   <script src="/js/visual-inspector.js"></script>
   <script>window.CrewRoomVisual?.init(window, document); window.CrewCinematic?.init(window, document);</script>
 </body>

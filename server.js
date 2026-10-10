@@ -60,6 +60,11 @@ const {
 } = require('./lib/context-builder');
 const { analyzeConversationContext } = require('./lib/context/health');
 const { planContextCompaction } = require('./lib/context/compaction');
+const { buildAutoCompactSignals, autoCompactCooldown, evaluateAutoCompact, summarizeRepeatedTools } = require('./lib/context/auto-compact');
+const {
+  getAutoCompactSettings, setAutoCompactSettings, getAutoCompactState,
+  recordAutoCompactTurn, recordAutoCompactSuccess, appendAutoCompactTelemetry
+} = require('./lib/context/auto-compact-store');
 const { contributionFromText } = require('./lib/context/estimator');
 const { ContextSourceType, ContextPriority } = require('./lib/context/types');
 const {
@@ -719,6 +724,184 @@ async function getConversationContextHealth(providerId, conversationId, provided
   };
 }
 
+
+function autoCompactTelemetryPayload(providerId, conversationId, assessment, more = {}) {
+  return {
+    conversationId,
+    agentId: assessment.roleId,
+    provider: providerId,
+    timestamp: new Date().toISOString(),
+    beforeTokens: assessment.health.totalUsage?.value || 0,
+    contextPressure: assessment.signals.contextPressure,
+    staleContextRatio: assessment.signals.staleContextRatio,
+    toolOutputRatio: assessment.signals.toolOutputRatio,
+    repetitionScore: assessment.signals.repetitionScore,
+    taskStageTransition: assessment.signals.taskStageTransition,
+    workingStateStable: assessment.signals.workingStateStable,
+    recommendation: assessment.decision.recommendation,
+    score: assessment.decision.score,
+    safeNow: assessment.decision.safeNow,
+    didCompact: false,
+    ...more
+  };
+}
+
+async function assessAutoCompact(providerId, conversationId, bundle, {
+  recentTools = [], runtime = {}, recordTelemetry = false
+} = {}) {
+  const provider = getProvider(providerId);
+  const roleId = bundle.conversationSettings?.roleId || DEFAULT_ROLE_ID;
+  const state = await getAutoCompactState(providerId, conversationId);
+  const busy = activeChatRoles.has(roleId) || crewAutoResponder.activeRoles.has(roleId) ||
+    activeCompactRoles.has(roleId);
+  const signals = buildAutoCompactSignals({
+    health: bundle.contextHealth,
+    history: bundle.history,
+    recentTools,
+    previousStage: state.stage || null,
+    runtime: { ...runtime, streaming: Boolean(runtime.streaming || busy) }
+  });
+  // Preserve a genuine stage transition long enough for the user to see it
+  // after the turn; a timestamp is not a parallel workflow engine.
+  if (state.stageTransitionAt && Date.now() - state.stageTransitionAt < 5 * 60000) {
+    signals.taskStageTransition = true;
+  }
+  const cooldown = autoCompactCooldown({
+    ...state,
+    currentTurn: state.turnCount || 0,
+    currentTokens: bundle.contextHealth.totalUsage?.value || 0,
+    taskStageTransition: signals.taskStageTransition
+  });
+  const plan = planContextCompaction({ health: bundle.contextHealth });
+  const canCompact = Boolean(
+    provider.metadata.capabilities.compact &&
+    typeof provider.compactConversation === 'function' &&
+    plan.hasActionableWork
+  );
+  const decision = evaluateAutoCompact({
+    health: bundle.contextHealth, signals, cooldown, canCompact
+  });
+  const assessment = { roleId, health: bundle.contextHealth, signals, decision, cooldown, plan, canCompact };
+  if (recordTelemetry) {
+    // Per-turn tool counts are observed only when the completed SSE turn
+    // supplied tool events; history breakdowns must not fabricate turn metrics.
+    const toolCounts = recentTools.length ? {
+      toolCalls: recentTools.length,
+      repeatedToolCalls: summarizeRepeatedTools(recentTools).repeated
+    } : {};
+    appendAutoCompactTelemetry(autoCompactTelemetryPayload(
+      providerId, conversationId, assessment, toolCounts
+    )).catch(error => console.warn('[AutoCompact] Telemetry failed:', error.message));
+  }
+  return assessment;
+}
+
+function publicAutoCompactAssessment(assessment) {
+  return {
+    ...assessment.decision,
+    reasons: assessment.decision.reasons,
+    signals: assessment.signals, // debug only; ordinary UI renders reasons
+    cooldownActive: assessment.cooldown.active === true,
+    canCompact: assessment.canCompact
+  };
+}
+
+// Both manual and opt-in automatic paths use ONE existing compaction planner
+// and provider Safe Compact implementation. Role Memory and raw transcripts
+// are handled exclusively by that established runtime, not by this evaluator.
+async function performSafeContextCompact(providerId, conversationId, {
+  mode = 'manual', focus = '', locale = 'zh-TW', bundle = null, assessment = null
+} = {}) {
+  const beforeBundle = bundle || await getConversationContextHealth(providerId, conversationId);
+  const roleId = beforeBundle.conversationSettings?.roleId || DEFAULT_ROLE_ID;
+  if (activeChatRoles.has(roleId) || crewAutoResponder.activeRoles.has(roleId) ||
+      activeCompactRoles.has(roleId)) {
+    const error = new Error('Role is busy; context compaction must wait until idle');
+    error.statusCode = 409;
+    throw error;
+  }
+  activeCompactRoles.add(roleId);
+  try {
+    const provider = getProvider(providerId);
+    if (!provider.metadata.capabilities.compact || typeof provider.compactConversation !== 'function') {
+      throw new Error('Provider does not support conversation compaction');
+    }
+    const plan = planContextCompaction({ health: beforeBundle.contextHealth });
+    if (!plan.hasActionableWork) {
+      const error = new Error('目前沒有可安全精簡的舊 Context；最近工作內容會保留。');
+      error.statusCode = 409;
+      throw error;
+    }
+    const result = await provider.compactConversation(conversationId, {
+      focus, mode: 'continue', locale
+    });
+    if (plan.reretrieve.length > 0) {
+      await markContextMemoryReretrieve(providerId, conversationId);
+    }
+    const afterBundle = await getConversationContextHealth(providerId, conversationId);
+    await recordAutoCompactSuccess(providerId, conversationId, {
+      afterTokens: afterBundle.contextHealth.totalUsage?.value
+    }).catch(error => console.warn('[AutoCompact] Checkpoint state failed:', error.message));
+    const evidence = assessment || await assessAutoCompact(providerId, conversationId, beforeBundle);
+    appendAutoCompactTelemetry(autoCompactTelemetryPayload(providerId, conversationId, evidence, {
+      didCompact: true,
+      mode,
+      afterTokens: afterBundle.contextHealth.totalUsage?.value || 0
+    })).catch(error => console.warn('[AutoCompact] Telemetry failed:', error.message));
+    return {
+      success: true,
+      provider: providerId,
+      conversation_id: result.conversationId || conversationId,
+      message: result.message,
+      summary: result.summary,
+      checkpoint: result.checkpoint || null,
+      context_verification: result.contextVerification || null,
+      plan,
+      before_health: beforeBundle.contextHealth,
+      after_health: afterBundle.contextHealth
+    };
+  } finally {
+    activeCompactRoles.delete(roleId);
+  }
+}
+
+async function handleAutoCompactSettings(req, res) {
+  try {
+    const settings = req.method === 'POST'
+      ? await setAutoCompactSettings((await parseJsonBody(req)).enabled)
+      : await getAutoCompactSettings();
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+    res.end(JSON.stringify({ success: true, ...settings }));
+  } catch (error) {
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: false, error: error.message }));
+  }
+}
+
+async function finishAutoCompactTurn(providerId, conversationId, recentTools, status) {
+  if (!conversationId || /fail|abort|cancel|interrupt|error/i.test(String(status || ''))) return;
+  try {
+    const bundle = await getConversationContextHealth(providerId, conversationId);
+    const assessment = await assessAutoCompact(providerId, conversationId, bundle, {
+      recentTools, recordTelemetry: true
+    });
+    await recordAutoCompactTurn(providerId, conversationId, assessment.signals.currentStage);
+    if (!(await getAutoCompactSettings()).enabled || assessment.decision.recommendation !== 'auto' ||
+        !assessment.decision.safeNow) return;
+    // Revalidation and the per-Role lock prevent compaction during a new turn,
+    // another role's work, a tool operation or a concurrent manual compact.
+    const freshBundle = await getConversationContextHealth(providerId, conversationId);
+    const fresh = await assessAutoCompact(providerId, conversationId, freshBundle);
+    if (fresh.decision.recommendation !== 'auto' || !fresh.decision.safeNow) return;
+    await performSafeContextCompact(providerId, conversationId, {
+      mode: 'automatic', bundle: freshBundle, assessment: fresh
+    });
+  } catch (error) {
+    // Background opt-in evaluation must never break a user turn.
+    console.warn('[AutoCompact] Post-turn evaluation skipped:', error.message);
+  }
+}
+
 async function handleContextCompactionPlan(parsedUrl, res) {
   try {
     const providerId = normalizeProviderId(parsedUrl.query.provider);
@@ -727,7 +910,8 @@ async function handleContextCompactionPlan(parsedUrl, res) {
 
     const provider = getProvider(providerId);
     const bundle = await getConversationContextHealth(providerId, conversationId);
-    const plan = planContextCompaction({ health: bundle.contextHealth });
+    const assessment = await assessAutoCompact(providerId, conversationId, bundle, { recordTelemetry: true });
+    const plan = assessment.plan;
 
     res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
     res.end(JSON.stringify({
@@ -736,6 +920,7 @@ async function handleContextCompactionPlan(parsedUrl, res) {
       conversation_id: conversationId,
       can_compact: Boolean(provider.metadata.capabilities.compact && typeof provider.compactConversation === 'function'),
       health: bundle.contextHealth,
+      auto_compact: publicAutoCompactAssessment(assessment),
       plan
     }));
   } catch (error) {
@@ -756,47 +941,13 @@ async function handleSafeContextCompact(req, res) {
     const conversationId = String(body.conversation_id || '').trim();
     if (!conversationId || !/^[a-zA-Z0-9_-]+$/.test(conversationId)) throw new Error('Invalid conversation id');
 
-    const provider = getProvider(providerId);
-    if (!provider.metadata.capabilities.compact || typeof provider.compactConversation !== 'function') {
-      throw new Error('Provider does not support conversation compaction');
-    }
-
-    const beforeBundle = await getConversationContextHealth(providerId, conversationId);
-    const plan = planContextCompaction({ health: beforeBundle.contextHealth });
-    if (!plan.hasActionableWork) {
-      res.writeHead(409, { 'Content-Type': 'application/json' });
-      return res.end(JSON.stringify({
-        success: false,
-        error: '目前沒有可安全精簡的舊 Context；最近工作內容會保留。',
-        health: beforeBundle.contextHealth,
-        plan
-      }));
-    }
-
-    const result = await provider.compactConversation(conversationId, {
+    const result = await performSafeContextCompact(providerId, conversationId, {
+      mode: 'manual',
       focus: body.focus,
-      mode: 'continue',
       locale: body.locale === 'en' ? 'en' : 'zh-TW'
     });
-
-    if (plan.reretrieve.length > 0) {
-      await markContextMemoryReretrieve(providerId, conversationId);
-    }
-
-    const afterBundle = await getConversationContextHealth(providerId, conversationId);
     res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-    res.end(JSON.stringify({
-      success: true,
-      provider: providerId,
-      conversation_id: result.conversationId || conversationId,
-      message: result.message,
-      summary: result.summary,
-      checkpoint: result.checkpoint || null,
-      context_verification: result.contextVerification || null,
-      plan,
-      before_health: beforeBundle.contextHealth,
-      after_health: afterBundle.contextHealth
-    }));
+    res.end(JSON.stringify(result));
   } catch (error) {
     console.error('[Safe Context Compact Error]', error);
     res.writeHead(error.statusCode || 500, { 'Content-Type': 'application/json' });
@@ -830,7 +981,10 @@ async function handleProviderHistory(parsedUrl, res) {
     res.end(JSON.stringify({
       ...publicHistory,
       conversation_settings: bundle.conversationSettings,
-      context_health: bundle.contextHealth
+      context_health: bundle.contextHealth,
+      auto_compact: publicAutoCompactAssessment(
+        await assessAutoCompact(providerId, conversationId, bundle, { recordTelemetry: true })
+      )
     }));
   } catch (err) {
     res.writeHead(err.statusCode || 404, { 'Content-Type': 'application/json' });
@@ -1703,12 +1857,14 @@ async function handleRoleSubmit(req, res) {
 }
 
 const activeChatRoles = new Set();
+const activeCompactRoles = new Set();
 async function handleChat(req, res, submittedBody = null) {
   let body;
   try { body = submittedBody || await parseJsonBody(req); }
   catch (_) { res.writeHead(400, { 'Content-Type': 'application/json' }); return res.end(JSON.stringify({ error: 'Invalid JSON body' })); }
   const roleId = requestedRoleId(body) || DEFAULT_ROLE_ID;
-  if (activeChatRoles.has(roleId) || crewAutoResponder.activeRoles.has(roleId)) {
+  if (activeChatRoles.has(roleId) || crewAutoResponder.activeRoles.has(roleId) ||
+      activeCompactRoles.has(roleId)) {
     res.writeHead(409, { 'Content-Type': 'application/json' });
     return res.end(JSON.stringify({ error: 'Role 正在處理其他工作', code: 'CONVERSATION_BUSY' }));
   }
@@ -2137,6 +2293,18 @@ async function handleChatTurn(req, res, submittedBody = null) {
       })).catch(error => console.warn('[Execution Feedback] Save failed:', error.message)).finally(() => {
         sendEvent('done', finalPayload);
         res.end();
+        if (!finalPayload.error && (finalPayload.conversation_id || activeConversationId)) {
+          const toolsForAssessment = [...feedbackTools.values()].map(tool => ({
+            name: tool.tool_name,
+            state: tool.state,
+            args: tool.tool_info?.parameters
+          }));
+          const timer = setTimeout(() => finishAutoCompactTurn(
+            providerId, finalPayload.conversation_id || activeConversationId,
+            toolsForAssessment, finalPayload.status
+          ), 1500);
+          timer.unref?.();
+        }
       });
     };
 
@@ -2924,6 +3092,8 @@ const server = http.createServer(async (req, res) => {
     return handleProviderConversations(parsedUrl, res);
   } else if (pathname === '/api/history' && req.method === 'GET') {
     return handleProviderHistory(parsedUrl, res);
+  } else if (pathname === '/api/context/auto-compact-settings' && ['GET', 'POST'].includes(req.method)) {
+    return handleAutoCompactSettings(req, res);
   } else if (pathname === '/api/context/compaction-plan' && req.method === 'GET') {
     return handleContextCompactionPlan(parsedUrl, res);
   } else if (pathname === '/api/context/compact' && req.method === 'POST') {

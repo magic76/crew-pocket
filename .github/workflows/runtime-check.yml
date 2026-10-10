@@ -58,6 +58,10 @@ jobs:
           node --check lib/context/health.js
           node --check lib/context/compaction.js
           node --check lib/context/state.js
+          node --check lib/context/auto-compact.js
+          node --check lib/context/auto-compact-store.js
+          node --check test/auto-compact.test.js
+          node test/auto-compact.test.js
           node --check lib/context/index.js
           node --check lib/memory/types.js
           node --check lib/memory/provider.js
