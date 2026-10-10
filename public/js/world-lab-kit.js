@@ -50,8 +50,8 @@
     const group=new T.Group();group.position.set(x,0,z);scene.add(group);
     const walls=['#a7d7ed','#eac1d5','#e8d8b3'];
     const roofs=['#638bc1','#c779a8','#ba9268'];
-    box(group,walls[index],2.22,1.82,1.55,.65,1.35,-1.55);
-    box(group,roofs[index],2.48,.36,1.92,.65,2.40,-1.55);
+    box(group,walls[index % walls.length],2.22,1.82,1.55,.65,1.35,-1.55);
+    box(group,roofs[index % roofs.length],2.48,.36,1.92,.65,2.40,-1.55);
     box(group,'#fff8e9',.70,.85,.10,-.12,1.31,-.73);
     box(group,role.accent,.50,.62,.06,-.12,1.30,-.66);
     box(group,'#25374d',.9,.67,.1,1.25,1.48,-.70);
@@ -134,10 +134,10 @@
     root.traverse(mesh=>{if(mesh.isMesh)mesh.userData.roleId=role.id;});
     return {role,root,body,arms,legs,mode:'idle',expires:0};
   }
-  function create(scene) {
+  function create(scene, roleDefs=roles) {
     const hub=[0,-.8];
-    roles.forEach(role=>bridge(scene,[role.islandX,role.islandZ],hub));
-    roles.forEach((role,i)=>island(scene,role,i));
+    roleDefs.forEach(role=>bridge(scene,[role.islandX,role.islandZ],hub));
+    roleDefs.forEach((role,i)=>island(scene,role,i));
     cylinder(scene,'#d4b6df',1.05,1.2,.65,0,-.14,-.8,10);
     cylinder(scene,'#7bcadf',.86,.9,.15,0,.28,-.8,12);
     sphere(scene,'#a7e5ee',.55,0,1,-.8,1,1.1,1);
@@ -146,7 +146,56 @@
       sphere(scene,color,.75,x,1.82,z,1,1.2,1);
       sphere(scene,color,.52,x+.32,1.65,z+.25);
     }
-    return roles.map((role,index)=>character(scene,role,index));
+    return roleDefs.map((role,index)=>character(scene,role,index));
   }
-  root.WorldLabKit={roles,create};
+
+  // Roles are read-only projections of verified /api/crew-status metadata.
+  // Deterministic palette and positioning, no message body / shared context.
+  const LIVE_COLORS=[
+    {color:'#246EFF',coat:'#214BD4',accent:'#A2D8FF',hair:'#25304D',skin:'#EEC39B'},
+    {color:'#F72E93',coat:'#CE1977',accent:'#FFD1E9',hair:'#73365D',skin:'#F1C6AA'},
+    {color:'#FFAA18',coat:'#B85F09',accent:'#FFEAAC',hair:'#393146',skin:'#CF9D77'},
+    {color:'#8C57EF',coat:'#6437C8',accent:'#E5C8FF',hair:'#28244A',skin:'#EAC8AA'},
+    {color:'#00BB9E',coat:'#078776',accent:'#A0F8E9',hair:'#293B40',skin:'#DDB395'},
+    {color:'#F56647',coat:'#BD412D',accent:'#FFD1AE',hair:'#3F3143',skin:'#D3A487'}
+  ];
+  function liveIndex(role, fallback) {
+    const text=String(role.roleName||'')+' '+String(role.projectId||'');
+    if(/teacher|老師|教學/i.test(text))return 1;
+    if(/story|故事/i.test(text))return 2;
+    if(/fortune|星盤|占星|命理/i.test(text))return 3;
+    if(/helper|助手|助理/i.test(text))return 4;
+    if(/pocket/i.test(text))return 0;
+    return fallback%LIVE_COLORS.length;
+  }
+  function makeLiveRoles(input) {
+    if(!Array.isArray(input))return [];
+    const known=new Set();
+    const members=input.filter(r=>{
+      if(!r||typeof r.roleId!=='string'||!r.roleId.trim()||known.has(r.roleId))return false;
+      known.add(r.roleId);return true;
+    }).slice(0,6);
+    const n=members.length;
+    const radius=n<=3?8.2:n<=4?9.6:11.3;
+    return members.map((value,index)=>{
+      const style=LIVE_COLORS[liveIndex(value,index)];
+      const angle=n===1?0:2*Math.PI*index/n;
+      const x=n===1?0:n===2?(index===0?-6.2:6.2):
+        n===3?[-6.1,6.1,0][index]:Math.cos(angle)*radius;
+      const z=n===1?0:n===2?0:n===3?[1.6,1.6,-6.9][index]:
+        Math.sin(angle)*radius;
+      const name=String(value.roleName||'Role').slice(0,80);
+      return {
+        ...style,id:value.roleId,name,
+        short:name.length>13?name.slice(0,12)+'…':name,
+        initial:Array.from(name)[0]||'R',
+        description:'Role 小隊成員 · 3D 視覺化（僅顯示狀態，不共享 Context）',
+        projectId:String(value.projectId||''),
+        islandX:x,islandZ:z,x:x-.55,z:z+.9,live:true,
+        state:['working','waiting','idle','new'].includes(value.state)?value.state:'unknown'
+      };
+    });
+  }
+
+  root.WorldLabKit={roles,create,makeLiveRoles};
 })(window);
