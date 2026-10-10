@@ -133,3 +133,9 @@
  .world-district-pin b{font-size:10px}
  .world-district-pin small{font-size:8px}
 }
+
+.world-district-pin[data-state="working"]{background:#d6ffefed;border-color:#75e8b6;color:#16523b}
+.world-district-pin[data-state="working"] small{color:#286c51}
+.world-district-pin[data-state="waiting"]{background:#fff0d4ed;border-color:#ffc071;color:#6c471c}
+.world-district-pin[data-state="waiting"] small{color:#906220}
+.world-district-pin[data-state="unknown"]{background:#edf0f5e9;border-color:#afbbd4;color:#46546c}
