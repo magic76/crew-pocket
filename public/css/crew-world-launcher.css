@@ -1,0 +1,15 @@
+/* Opt-in 3D world entry. Main Crew Room remains the default UX. */
+.crew-world-entry{display:flex;align-items:center;gap:9px;width:100%;min-height:43px;margin-top:11px;padding:9px 12px;border-radius:13px;border:1px solid var(--cp-border);background:var(--cp-surface);color:var(--cp-text);text-align:left;font-size:12px;font-weight:750;line-height:1.25;cursor:pointer}
+.crew-world-entry:active{transform:scale(.995);background:var(--cp-accent-soft)}
+.crew-world-entry:focus-visible{outline:2px solid var(--cp-accent);outline-offset:2px}
+.crew-world-entry-icon{display:grid;place-items:center;flex:none;width:25px;height:25px;border-radius:8px;background:var(--cp-accent-soft);color:var(--cp-accent-strong);font-size:24px}
+.crew-world-entry small{margin-left:auto;color:var(--cp-text-secondary);font-size:10px;font-weight:450}
+.crew-world-entry-arrow{color:var(--cp-accent-strong);font-size:17px}
+.crew-world-modal[hidden]{display:none!important}
+.crew-world-modal{position:fixed;inset:0;z-index:9999;display:block;background:#101b32}
+.crew-world-modal iframe{width:100%;height:100%;height:100dvh;display:block;border:0;background:#101b32}
+.crew-world-close{position:absolute;right:calc(env(safe-area-inset-right,0px) + 10px);top:calc(env(safe-area-inset-top,0px) + 11px);width:37px;height:37px;border:1px solid #ffffff6a;border-radius:12px;background:#12223de6;color:#fff;font-size:16px;z-index:2;cursor:pointer;box-shadow:0 3px 12px #07132480}
+.crew-world-close:focus-visible{outline:2px solid #96e3ff;outline-offset:2px}
+@media(max-width:540px){.crew-world-entry{flex-wrap:wrap}.crew-world-entry small{font-size:9px}.crew-world-close{right:calc(env(safe-area-inset-right,0px) + 8px);top:calc(env(safe-area-inset-top,0px) + 10px)}}
+@media(max-width:350px){.crew-world-entry small{display:none}}
+@media(prefers-reduced-motion:reduce){.crew-world-entry:active{transform:none}}
