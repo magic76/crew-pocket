@@ -89,7 +89,13 @@
   const openRole=document.getElementById('world-open-role');
   if(openRole)openRole.hidden=!isLive;
   const actionRow=document.querySelector('.world-action-row');
-  if(actionRow)actionRow.style.gridTemplateColumns='repeat('+(isLive?5:3)+',minmax(0,1fr))';
+  // Real usage emphasizes talking and opening conversations; demo controls
+  // remain available only in offline art-preview mode.
+  if(isLive){
+    document.getElementById('world-work').hidden=true;
+    document.getElementById('world-handoff').hidden=true;
+  }
+  if(actionRow)actionRow.style.gridTemplateColumns='repeat(3,minmax(0,1fr))';
   function updateInfo(){
     const actor=actors[selected],role=actor.role;
     document.getElementById('world-role-name').textContent=role.name;
@@ -337,7 +343,7 @@
       cameraSync();
       if(t===1)focus=null;
     }
-    if(isLive&&!reduced)runRecordedHandoff(now);
+    if(isLive)runRecordedHandoff(now);
     actors.forEach((actor,index)=>{
       if(now>=actor.expires&&actor.mode!=='idle'){
         actor.mode='idle';actor.handoff=null;
