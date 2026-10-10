@@ -113,6 +113,7 @@
     window.openCrewCockpitRole?.(roleId);
   }
   function onSelectedRole(id,name){
+    if(selectedRoleId!==id)selectVersion++; // invalidate pending async openChat for prior role
     selectedRoleId=id;selectedRoleName=name||id;
     if(!panel.hidden&&window.getCurrentRoleId?.()!==id)hideChat();
   }
