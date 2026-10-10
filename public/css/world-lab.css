@@ -45,3 +45,56 @@
   .world-label-detail{max-width:32vw}
   .world-chat-sheet{left:8px;right:8px;padding:13px;bottom:calc(env(safe-area-inset-bottom,0px) + 7px)}
 }
+
+
+/* Keyboard-safe interactive chat. visualViewport (including parent iframe
+   occlusion) writes a dynamic bottom overlap instead of relying on 100dvh. */
+.world-chat-sheet{
+  position:fixed;
+  bottom:calc(env(safe-area-inset-bottom,0px) + 7px + var(--world-chat-keyboard-overlap,0px));
+  max-height:min(85dvh,var(--world-chat-available-height,calc(100dvh - 20px)));
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+  overscroll-behavior:contain;
+}
+.world-chat-sheet.keyboard-open{
+  max-height:var(--world-chat-available-height,calc(100dvh - 110px));
+}
+.world-chat-sheet .world-chat-header{flex:none}
+.world-chat-help{flex:none;margin:7px 0;font-size:10px}
+.world-chat-history{
+  min-height:65px;
+  max-height:min(31dvh,270px);
+  flex:1 1 auto;
+  overflow:auto;
+  overscroll-behavior:contain;
+  scrollbar-width:none;
+  padding:8px 5px 10px;
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+}
+.world-chat-history::-webkit-scrollbar{display:none}
+.world-chat-bubble{
+  border-radius:13px;
+  border:1px solid #ffffff28;
+  padding:9px 11px;
+  background:#1a3550;
+  color:#eaf3fe;
+  overflow-wrap:anywhere;
+  white-space:pre-wrap;
+}
+.world-chat-bubble strong{font-size:10px;font-weight:780;color:#91d9ee;display:block;margin-bottom:3px}
+.world-chat-bubble p{font-size:12px;line-height:1.52;margin:0;white-space:pre-wrap}
+.world-chat-bubble.user{background:#265782;align-self:flex-end;max-width:92%}
+.world-chat-bubble.user strong{color:#d1edff}
+.world-chat-bubble.assistant{align-self:flex-start;max-width:100%}
+.world-chat-empty{font-size:11px;color:#acc2d8;margin:auto 0;text-align:center}
+.world-chat-read-state{font-size:10px;color:#97bed1;padding:4px 0 7px;flex:none}
+#world-chat-form{flex:none;min-height:0;gap:7px}
+#world-chat-message{min-height:60px;max-height:min(18dvh,125px);font-size:16px;resize:none}
+.world-chat-sheet.keyboard-open .world-chat-history{max-height:min(19dvh,105px);min-height:50px}
+.world-chat-sheet.keyboard-open #world-chat-message{min-height:50px;max-height:84px}
+.world-chat-sheet.keyboard-open .world-chat-help{display:none}
+@media(max-width:540px){.world-chat-sheet{left:8px;right:8px;bottom:calc(7px + var(--world-chat-keyboard-overlap,0px))}}
