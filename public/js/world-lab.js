@@ -72,14 +72,15 @@
   scene.add(sunlight,new T.HemisphereLight(0xc5e6ff,0x4f527d,1.12));
   const actors=kit.create(scene,roles);
   const roadVisuals=actors.roadVisuals||[];
-  const islandNodes=[...districts.map(members=>({
+  const townLots=[...districts.map(members=>({
     id:members[0].districtId||members[0].id,
-    x:members[0].islandX,z:members[0].islandZ,shore:3.30
+    x:members[0].islandX,z:members[0].islandZ,
+    col:members[0].townCol,row:members[0].townRow
   }))];
-  const firstIsland=islandNodes[0];
-  const visitor=firstIsland&&navigation&&kit.createPlayer
-    ?kit.createPlayer(scene,{x:firstIsland.x,z:firstIsland.z+navigation.WALK_RING}):null;
-  let visitorDistrict=firstIsland?.id||null;
+  const firstLot=townLots[0];
+  const visitor=firstLot&&navigation&&kit.createPlayer
+    ?kit.createPlayer(scene,{x:firstLot.x,z:firstLot.z+navigation.FRONT_Z}):null;
+  let visitorDistrict=firstLot?.id||null;
   let walking=null,queuedDestination=null,explore=true,followPlayer=false;
   const exploreToggle=document.getElementById('world-explore-toggle');
   const hint=stage.closest('.world-app')?.querySelector('.world-hint');
@@ -90,7 +91,7 @@
       exploreToggle.disabled=Boolean(walking);
     }
     if(hint)hint.textContent=explore
-      ?'點角色走近聊天 · 點島上步道移動 · 拖曳地圖 · 雙指縮放'
+      ?'點角色走近聊天 · 點街道移動 · 拖曳地圖 · 雙指縮放'
       :'點角色定位 · 拖曳地圖 · 雙指縮放';
   }
   updateExploreUI();
@@ -99,7 +100,6 @@
     explore=!explore;
     followPlayer=false;updateExploreUI();
   });
-  const activeRoadSignals=[];
   const activePlanes=[];
   const arrivalFlashes=[];
   const MAX_ACTIVE_PLANES=3;
@@ -114,14 +114,8 @@
     plane.root.scale.setScalar(Math.max(.80,Math.min(1.55,worldExtent/22)));
     const flight={from,to,startedAt:now,duration,plane,kind,recipient};
     activePlanes.push(flight);
-    // Digital messages can fly over water. Existing bridges glow faintly
-    // as a secondary background effect; no Role ever leaves its island.
-    if(!reduced){
-      const origin=sender.role.districtId||sender.role.id;
-      const target=recipient.role.districtId||recipient.role.id;
-      const route=planner?.roadRoute?.(roadVisuals,origin,target)||[];
-      if(route.length)activeRoadSignals.push({route,startedAt:now,duration});
-    }
+    // Digital message only: the paper plane doesn't require the sender
+    // to travel or turn on unrelated roads and never implies delivery.
     return true;
   }
   function showArrivalCue(flight,now){
@@ -312,13 +306,13 @@
       notify('已排入下一個目的地');return false;
     }
     const route=navigation.planWalk({
-      roads:roadVisuals,islands:islandNodes,
+      lots:townLots,
       from:{x:visitor.root.position.x,z:visitor.root.position.z},
       to:{x:destination.x,z:destination.z},
       fromDistrict:visitorDistrict,toDistrict:destination.districtId
     });
     if(!route||route.waypoints.length<1){
-      notify('這裡沒有可行走的道路，請改點其他島嶼');return false;
+      notify('這裡沒有可行走的步道，請改點其他街道');return false;
     }
     const sameSpot=route.distance<.22;
     walking={points:route.waypoints,index:1,kind,roleId,districtId:destination.districtId};
@@ -347,11 +341,9 @@
     }
   }
   function roleDestination(role){
-    const node=islandNodes.find(n=>n.id===(role.districtId||role.id));
-    if(!node)return null;
-    const dx=role.x-node.x,dz=role.z-node.z,length=Math.hypot(dx,dz)||1;
-    return {districtId:node.id,x:node.x+dx/length*navigation.WALK_RING,
-      z:node.z+dz/length*navigation.WALK_RING};
+    const lot=townLots.find(n=>n.id===(role.districtId||role.id));
+    if(!lot)return null;
+    return {districtId:lot.id,x:role.x,z:lot.z+navigation.FRONT_Z};
   }
   function select(index,center=false){
     if(index<0||index>=actors.length)return;
@@ -632,8 +624,9 @@
       const up=new T.Vector3().setFromMatrixColumn(camera.matrixWorld,1);
       right.y=0;up.y=0;right.normalize();up.normalize();
       view.addScaledVector(right,-dx*unit).addScaledVector(up,dy*unit);
-      view.x=T.MathUtils.clamp(view.x,-13,13);
-      view.z=T.MathUtils.clamp(view.z,-16,12);
+      const panLimit=Math.max(13,worldExtent+2);
+      view.x=T.MathUtils.clamp(view.x,-panLimit,panLimit);
+      view.z=T.MathUtils.clamp(view.z,-panLimit,panLimit);
       cameraSync();
     }
   });
@@ -649,21 +642,16 @@
       select(index,true);return;
     }
     if(!explore||!visitor||!navigation)return;
-    // Ground-only tap. Raycasting against the plane merely finds the island;
-    // the navigation planner stays on the visible perimeter walking path.
+    // Ground-only tap. The nearest workshop's connected frontage provides
+    // a reachable walking target; roofs never become player destinations.
     const intersection=ray.ray.intersectPlane(
       new T.Plane(new T.Vector3(0,1,0),-.37),new T.Vector3());
     if(!intersection)return;
-    const island=navigation.locateIsland(intersection,islandNodes);
-    if(!island)return; // water / open sky are not walking destinations
-    const spot=navigation.nearestWalkSpot(intersection,island);
+    const lot=navigation.nearestLot(intersection,townLots);
+    if(!lot)return;
+    const spot=navigation.nearestWalkSpot(intersection,lot);
     if(!spot)return;
-    // Free taps snap to a known visible circular path, not a building interior.
-    const dx=spot.x-island.x,dz=spot.z-island.z,len=Math.hypot(dx,dz)||1;
-    startWalk({
-      districtId:island.id,x:island.x+dx/len*navigation.WALK_RING,
-      z:island.z+dz/len*navigation.WALK_RING
-    });
+    startWalk({districtId:lot.id,x:spot.x,z:spot.z});
   }
   function pointerEnd(event){
     if(fingers.size===1&&fingers.has(event.pointerId)&&tap&&!tap.moved&&
@@ -735,21 +723,6 @@
       visitorLabel.style.display=visible?'':'none';
       if(visible){visitorLabel.style.left=x+'px';visitorLabel.style.top=y+'px';}
     }
-    // Bridges glow faintly as a background accent to the airborne plane.
-    for(let i=activeRoadSignals.length-1;i>=0;i--){
-      const signal=activeRoadSignals[i];
-      if(now-signal.startedAt>=signal.duration)activeRoadSignals.splice(i,1);
-    }
-    roadVisuals.forEach((edge,index)=>{
-      let opacity=0;
-      for(const signal of activeRoadSignals){
-        const level=reduced
-          ?0
-          :(planner?.roadPulse?.(signal.route,index,now-signal.startedAt,signal.duration)||0)*.12;
-        opacity=Math.max(opacity,level);
-      }
-      if(edge.light)edge.light.material.opacity=opacity;
-    });
     // At overview zoom, hide waiting/idle badges even in small crews. Only
     // active work and a newly received reply should add labels to the map.
     const overview=zoom<1.65;
@@ -787,7 +760,6 @@
   window.CrewWorldHost?.onSelectedRole?.(roles[selected].id,roles[selected].name);
   resize();frame(performance.now());
   teardown=()=>{
-    activeRoadSignals.length=0;
     for(const flight of activePlanes)kit.disposePaperPlane?.(scene,flight.plane);
     activePlanes.length=0;
     for(const cue of arrivalFlashes){
