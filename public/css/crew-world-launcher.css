@@ -7,9 +7,70 @@
 .crew-world-entry-arrow{color:var(--cp-accent-strong);font-size:17px}
 .crew-world-modal[hidden]{display:none!important}
 .crew-world-modal{position:fixed;inset:0;z-index:9999;display:block;background:#101b32}
-.crew-world-modal iframe{width:100%;height:100%;height:100dvh;display:block;border:0;background:#101b32}
+.crew-world-modal > .world-app{width:100%;height:100%;height:100dvh}
+.crew-world-modal > .world-app[hidden]{display:none!important}
+.crew-world-modal .world-app .world-back{font:inherit}
+.crew-world-modal #world-chat-open:not([hidden]){background:#286e9c;border-color:#6fc5e9;color:#fff}
 .crew-world-close{position:absolute;right:calc(env(safe-area-inset-right,0px) + 10px);top:calc(env(safe-area-inset-top,0px) + 11px);width:37px;height:37px;border:1px solid #ffffff6a;border-radius:12px;background:#12223de6;color:#fff;font-size:16px;z-index:2;cursor:pointer;box-shadow:0 3px 12px #07132480}
 .crew-world-close:focus-visible{outline:2px solid #96e3ff;outline-offset:2px}
 @media(max-width:540px){.crew-world-entry{flex-wrap:wrap}.crew-world-entry small{font-size:9px}.crew-world-close{right:calc(env(safe-area-inset-right,0px) + 8px);top:calc(env(safe-area-inset-top,0px) + 10px)}}
 @media(max-width:350px){.crew-world-entry small{display:none}}
 @media(prefers-reduced-motion:reduce){.crew-world-entry:active{transform:none}}
+
+/* Portal hosts the EXISTING Chat DOM (not a cloned chat window). */
+.crew-world-chat-panel[hidden]{display:none!important}
+.crew-world-chat-panel{
+  position:absolute;z-index:12;inset:auto 0 var(--crew-keyboard-rise,0px);
+  box-sizing:border-box;margin:0 auto;width:100%;max-width:720px;
+  height:min(77dvh,calc(var(--crew-visible-height,100dvh) - 14px));
+  background:#0b1427f5;color:#f4f6ff;border:1px solid #8bbde255;
+  border-radius:21px 21px 0 0;
+  display:flex;flex-direction:column;overflow:hidden;
+  box-shadow:0 -12px 42px #050b1c90;
+  backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+}
+.crew-world-chat-panel.expanded{
+  height:min(100dvh,calc(var(--crew-visible-height,100dvh) - 8px));
+  border-radius:10px 10px 0 0;
+}
+.crew-world-chat-top{
+  display:flex;gap:7px;align-items:center;flex:none;
+  min-height:51px;padding:8px 12px;background:#152741;
+  border-bottom:1px solid #b5d5fc2e;
+}
+.crew-world-chat-identity{min-width:0;flex:1;display:flex;flex-direction:column;gap:2px}
+.crew-world-chat-identity strong{font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.crew-world-chat-identity small{font-size:10px;color:#a6c5dd}
+.crew-world-chat-top button{
+  flex:none;border:1px solid #ffffff45;background:#ffffff10;color:#fff;
+  min-height:36px;padding:0 10px;border-radius:10px;font-size:12px;
+}
+.crew-world-chat-messages-slot{display:flex;flex:1 1 auto;min-height:0;width:100%;overflow:hidden}
+.crew-world-chat-messages-slot > #messages-container{
+  display:block!important;flex:1 1 auto;min-height:0;min-width:0;
+  width:100%;overflow-y:auto!important;overscroll-behavior:contain;
+}
+.crew-world-chat-composer-slot{display:flex;flex-direction:column;flex:none;min-height:0;width:100%}
+.crew-world-chat-composer-slot > #chat-composer-footer{
+  display:block!important;width:100%;max-width:100%;margin:0;
+  padding:7px 10px calc(6px + env(safe-area-inset-bottom,0px));
+  background:#111e34!important;border-top:1px solid #cbe2fc2a;
+}
+body[data-primary-tab="crew"] #crew-world-chat-panel #messages-container,
+body[data-primary-tab="crew"] #crew-world-chat-panel #chat-composer-footer{
+  display:block!important;
+}
+.crew-world-chat-panel #chat-composer-footer .max-w-2xl{max-width:100%}
+body.crew-world-active{overscroll-behavior:none}
+.crew-world-modal .world-info{transition:opacity .18s ease}
+.crew-world-modal:has(.crew-world-chat-panel:not([hidden])) .world-info,
+.crew-world-modal:has(.crew-world-chat-panel:not([hidden])) .world-bottom{
+  opacity:.26;pointer-events:none;
+}
+@media(max-width:540px){
+ .crew-world-chat-panel{max-width:100%;height:min(74dvh,calc(var(--crew-visible-height,100dvh) - 10px))}
+ .crew-world-chat-panel.expanded{height:min(100dvh,calc(var(--crew-visible-height,100dvh) - 5px))}
+ .crew-world-chat-top{padding:6px 9px;min-height:45px}
+ .crew-world-chat-composer-slot > #chat-composer-footer{padding:5px 7px calc(4px + env(safe-area-inset-bottom,0px))}
+}
+@media(prefers-reduced-motion:reduce){.crew-world-modal .world-info{transition:none}}
