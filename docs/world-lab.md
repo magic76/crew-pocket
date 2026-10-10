@@ -55,7 +55,7 @@ returning to an existing conversation. Device-level visual tests are still neede
 - Runtime owns the selected Role's provider, project/workspace and existing
   conversation. The visualizer cannot supply or override those fields.
 - A queue receipt means accepted/queued, not completed. For the full streaming
-  reply, tap 查看完整對話 to return to the native Role conversation UI.
+  reply, map composer now shows recent assistant replies; tap 查看完整對話 for full context and tool history.
 - Head labels use real working/waiting/idle/new state. Only a *working* Role
   may show its current conversation title; waiting shows an attention count.
   No tool step, task outcome or completion is invented.
@@ -68,5 +68,29 @@ returning to an existing conversation. Device-level visual tests are still neede
 
 Check typing in Chinese Gboard, retaining text on network failures, tap target
 switching, low-power Android devices, zoomed-out head label visibility, and
-quiet/no-handoff startup. The map currently does not mirror the full live chat
-transcript; that remains in the normal Role conversation UI.
+quiet/no-handoff startup. The map shows bounded recent assistant answers, not the
+entire transcript or private tool/thinking traces; those remain in the normal UI.
+
+## 2026-10-10 fixes: text submission, keyboard and replies
+
+- Text-only requests keep image_path='' but skip realpath validation when there
+  is no image. Explicit nonempty image paths still receive root/type checks.
+- Role-scoped read-only GET /api/world-chat-history?role_id=... checks both
+  current Role Runtime and persisted conversation ownership before calling
+  provider.getHistory. It only returns bounded assistant-visible text (not
+  tool calls, thinking, or messages belonging to other Roles).
+- The composer shows the most recent assistant replies and refreshes every
+  4.5 seconds **only while open and visible**. Closing the viewer unloads it.
+  A queue acceptance is not proof that the displayed reply belongs to the
+  just-submitted message; the UI does not fabricate that correlation.
+- A WebView / iframe visualViewport adapter measures keyboard occlusion and
+  shifts the panel above Gboard. The reply log scrolls separately and composer
+  buttons stay reachable, including portrait/landscape. Open panel no longer
+  automatically focuses the textarea.
+- Uncertain POST errors preserve the draft and its request ID even if the chat
+  panel is closed/reopened within the same scene session. Retries are
+  idempotent; users should still inspect their target conversation if status
+  is unknown.
+- Verification: node test/world-lab.test.js, node test/world-chat-history.test.js
+  and node test/role-submit.test.js; manual Android keyboard and reply checks
+  are still required.
