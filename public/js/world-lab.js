@@ -70,7 +70,22 @@
   sunlight.shadow.camera.top=24;sunlight.shadow.camera.bottom=-24;
   sunlight.shadow.bias=-.0005;
   scene.add(sunlight,new T.HemisphereLight(0xc5e6ff,0x4f527d,1.12));
-  const actors=kit.create(scene,roles), hub={x:0,z:-.8};
+  const actors=kit.create(scene,roles);
+  const roadVisuals=actors.roadVisuals||[];
+  const activeRoadSignals=[];
+  function playRoadSignal(sender,recipient,now,kind='handoff'){
+    const origin=sender.role.districtId||sender.role.id;
+    const target=recipient.role.districtId||recipient.role.id;
+    const route=planner?.roadRoute?.(roadVisuals,origin,target)||[];
+    if(!route.length)return false;
+    activeRoadSignals.push({
+      route,startedAt:now,
+      duration:reduced?1500:Math.min(5200,Math.max(2000,route.length*720)),
+      kind
+    });
+    if(activeRoadSignals.length>4)activeRoadSignals.shift();
+    return true;
+  }
   const worldExtent=kit.mapExtent?.(roles)||15;
   const view=new T.Vector3(0,.7,-1.8),direction=new T.Vector3(16,21,25).normalize();
   let width=1,height=1,zoom=1,selected=0,focus=null;
@@ -96,13 +111,13 @@
   const liveStates={working:'工作中',waiting:'待處理',idle:'待命',new:'新角色',unknown:'未知'};
   const status=a=>{
     const actual=isLive?(synced?'真實狀態 · '+(liveStates[a.role.state]||'未知'):'狀態未同步 · 未知'):'示範 · 待命';
-    return a.mode==='observed-handoff'?actual+' · 已記錄角色交接':
+    return a.mode==='observed-handoff'?actual+' · 已記錄訊息（非送達確認）':
       a.mode==='working'?actual+' · 工作動畫示範':
-      a.mode==='handoff'?actual+' · 交接動畫示範':actual;
+      a.mode==='handoff'?actual+' · 道路訊號示範':actual;
   };
   function headStatus(actor){
     if(actor.mode==='observed-handoff')
-      return {state:'已記錄交接',detail:'來自真實訊息紀錄 · 非送達確認',tone:'handoff'};
+      return {state:actor.handoff?.kind==='reply'?'已記錄回覆':'已記錄訊息',detail:'道路亮燈僅示意 · 非送達確認',tone:'handoff'};
     if(!isLive||!synced)return{state:isLive?'狀態未同步':'示範角色',detail:'',tone:'unknown'};
     const role=actor.role;
     const state=liveStates[role.state]||'未知';
@@ -207,6 +222,7 @@
   let toastTimer;
   function notify(message){
     toast.textContent=message;toast.classList.add('visible');
+    activeRoadSignals.length=0;
     clearTimeout(toastTimer);
     toastTimer=trackedTimeout(()=>toast.classList.remove('visible'),2400);
   }
@@ -219,8 +235,16 @@
     updateInfo();notify('僅播放工作動畫，不會啟動真實任務');
   });
   listen(document.getElementById('world-handoff'),'click',()=>{
-    const a=actors[selected];a.mode='handoff';a.expires=performance.now()+8000;
-    updateInfo();notify('僅播放交接動畫，不會發送 Role 訊息');
+    if(actors.length<2){
+      notify('示範交接至少需要兩位 Role');return;
+    }
+    const sender=actors[selected],recipient=actors[(selected+1)%actors.length];
+    const now=performance.now();
+    const lit=playRoadSignal(sender,recipient,now,'demo');
+    sender.mode='handoff';sender.expires=now+(reduced?1000:2200);
+    updateInfo();
+    notify(lit?'訊息訊號沿現有橋樑亮起 · 不會發送 Role 訊息':
+      '相同工作區交接示意 · 不會發送 Role 訊息');
   });
   function openConversation(roleId){
     if(window.CrewWorldHost){
@@ -366,8 +390,11 @@
     pendingTransitions.shift();
     if(Date.now()-event.createdAt>45000)return;
     actor.mode='observed-handoff';
-    actor.handoff={start:now,toId:event.toRoleId,toX:recipient.role.x,toZ:recipient.role.z};
-    actor.expires=now+(reduced?2700:8600);
+    actor.handoff={start:now,toId:event.toRoleId,kind:event.kind};
+    actor.expires=now+(reduced?1400:2600);
+    // Role stays at its own island. Only the bridge deck receives the
+    // transient signal; this record does not prove delivery or completion.
+    playRoadSignal(actor,recipient,now,event.kind);
     updateInfo();
   }
   if(isLive){
@@ -480,40 +507,35 @@
         actor.root.position.set(actor.role.x,.43,actor.role.z);
         actor.root.rotation.y=0;updateInfo();
       }
-      const recorded=actor.mode==='observed-handoff';
-      const moving=actor.mode==='handoff'||recorded;
+      const signaling=actor.mode==='handoff'||actor.mode==='observed-handoff';
       const working=actor.mode==='working'||(isLive&&synced&&actor.mode==='idle'&&actor.role.state==='working');
-      if(recorded&&!reduced&&actor.handoff){
-        const h=actor.handoff;
-        const progress=T.MathUtils.clamp((now-h.start)/8600,0,1);
-        const outward=progress<.46?progress/.46:progress<.60?1:1-(progress-.60)/.40;
-        const point=planner.trail({x:actor.role.x,z:actor.role.z},
-          {x:h.toX,z:h.toZ},outward,hub);
-        const dx=point.x-actor.root.position.x,dz=point.z-actor.root.position.z;
-        actor.root.position.set(point.x,.43,point.z);
-        if(Math.hypot(dx,dz)>.001)actor.root.rotation.y=Math.atan2(dx,dz);
-      }
-      if(moving&&!reduced&&!recorded){
-        const progress=T.MathUtils.clamp(1-(actor.expires-now)/8000,0,1);
-        const route=progress<.5?progress*2:(1-progress)*2;
-        const ease=route*route*(3-2*route);
-        actor.root.position.set(
-          T.MathUtils.lerp(actor.role.x,hub.x,ease),.43,
-          T.MathUtils.lerp(actor.role.z,hub.z,ease));
-        const heading=Math.atan2(hub.x-actor.role.x,hub.z-actor.role.z);
-        actor.root.rotation.y=progress<.5?heading:heading+Math.PI;
-      }
-      const phase=elapsed*(moving?11:working?8:2)+index;
-      actor.body.position.y=reduced?0:moving?Math.abs(Math.sin(phase))*.14:
+      // Agents are never physically moved away from their home island.
+      // Sending a digital message is represented by bridge illumination,
+      // not an avatar sprinting across water or through buildings.
+      const phase=elapsed*(signaling?6:working?8:2)+index;
+      actor.body.position.y=reduced?0:signaling?Math.sin(phase)*.024:
         working?Math.sin(phase)*.022:Math.sin(phase)*.035;
       actor.body.rotation.z=reduced?0:Math.sin(phase*.6)*.025;
-      actor.arms[0].rotation.x=reduced?0:moving?Math.sin(phase)*.65:
+      actor.arms[0].rotation.x=reduced?0:signaling?Math.sin(phase)*.24:
         working?Math.sin(phase)*.3:0;
-      actor.arms[1].rotation.x=reduced?0:moving?-Math.sin(phase)*.65:
+      actor.arms[1].rotation.x=reduced?0:signaling?-.25:
         working?-Math.sin(phase+1)*.27:0;
-      actor.legs.forEach(({mesh,side})=>{
-        mesh.rotation.x=reduced?0:moving?Math.sin(phase)*side*.45:0;
-      });
+      actor.legs.forEach(({mesh})=>{mesh.rotation.x=0;});
+    });
+    // The glow is drawn on existing bridge decks, in route order.
+    for(let i=activeRoadSignals.length-1;i>=0;i--){
+      const signal=activeRoadSignals[i];
+      if(now-signal.startedAt>=signal.duration)activeRoadSignals.splice(i,1);
+    }
+    roadVisuals.forEach((edge,index)=>{
+      let opacity=0;
+      for(const signal of activeRoadSignals){
+        const level=reduced
+          ?(signal.route.includes(index)?.24:0)
+          :planner?.roadPulse?.(signal.route,index,now-signal.startedAt,signal.duration)||0;
+        opacity=Math.max(opacity,level);
+      }
+      if(edge.light)edge.light.material.opacity=opacity;
     });
     // At overview zoom, hide waiting/idle badges even in small crews. Only
     // active work and a newly received reply should add labels to the map.
