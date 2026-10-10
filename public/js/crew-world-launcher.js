@@ -37,6 +37,7 @@
         if(!window.THREE)await loadScript('/vendor/three.min.js');
         if(!window.WorldLabKit)await loadScript('/js/world-lab-kit.js');
         if(!window.WorldLabEvents)await loadScript('/js/world-lab-events.js');
+        if(!window.WorldLabNavigation)await loadScript('/js/world-lab-navigation.js');
         if(typeof window.mountCrewWorldScene!=='function')await loadScript('/js/world-lab.js');
         if(typeof window.mountCrewWorldScene!=='function')throw new Error('3D 啟動功能未載入');
       })().catch(error=>{sceneScripts=null;throw error;});
