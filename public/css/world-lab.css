@@ -142,3 +142,28 @@
 
 /* Keep individually clickable agent badges above broader district overview pins. */
 #world-labels{z-index:3}
+
+/* Crew World Explorer: player's name stays above their grounded 3D avatar. */
+.world-player-label{
+  position:absolute;transform:translate(-50%,-100%);
+  display:block;pointer-events:none;padding:4px 10px;border-radius:999px;
+  border:1px solid #ffe39d;background:#274a56ef;color:#fff6d4;
+  font:750 11px/1.2 Inter,-apple-system,BlinkMacSystemFont,"Noto Sans TC",sans-serif;
+  white-space:nowrap;box-shadow:0 3px 13px #091d2d77;z-index:3;
+}
+.world-controls #world-explore-toggle{
+  color:#e9f9fc;border-color:#76adc9b3;background:#1d5b7399;
+  padding:0 10px;min-width:65px;
+}
+.world-controls #world-explore-toggle[aria-pressed="true"]{
+  background:#277c82;border-color:#91ecdf;color:#ffffff;
+  box-shadow:inset 0 0 0 1px #91ecdf44;
+}
+.world-controls #world-explore-toggle:disabled{opacity:.72;cursor:progress}
+.world-hint{max-width:calc(100vw - 24px);text-overflow:ellipsis;overflow:hidden}
+@media(max-width:600px){
+  .world-controls #world-explore-toggle{min-width:56px;padding:0 6px;font-size:10px}
+}
+@media(prefers-reduced-motion:reduce){
+  .world-player-label{transition:none}
+}

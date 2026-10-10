@@ -6,15 +6,16 @@ on:
       - "public/world-lab.html"
       - "public/css/world-lab.css"
       - "public/js/world-lab*.js"
+      - "public/js/crew-world-launcher.js"
       - "public/vendor/three.min.js"
       - "public/vendor/THREE-LICENSE.txt"
       - "test/world-lab.test.js"
+      - "test/world-player-explore.test.js"
       - "test/world-message-motion.test.js"
       - "test/world-paper-plane.test.js"
       - "test/world-road-network.test.js"
       - "test/crew-world-portal.test.js"
       - "public/index.html"
-      - "public/js/crew-world-launcher.js"
       - "public/css/crew-world-launcher.css"
       - "test/world-chat-history.test.js"
       - "test/role-submit.test.js"
@@ -34,6 +35,8 @@ jobs:
       - name: Check standalone 3D demo and syntax
         run: |
           node test/world-lab.test.js
+          node --check public/js/world-lab-navigation.js
+          node test/world-player-explore.test.js
           node test/world-message-motion.test.js
           node test/world-paper-plane.test.js
           node test/world-road-network.test.js
