@@ -74,3 +74,6 @@ body.crew-world-active{overscroll-behavior:none}
  .crew-world-chat-composer-slot > #chat-composer-footer{padding:5px 7px calc(4px + env(safe-area-inset-bottom,0px))}
 }
 @media(prefers-reduced-motion:reduce){.crew-world-modal .world-info{transition:none}}
+
+/* Keep global close action reachable above the Scene header and Chat sheet. */
+.crew-world-modal > #crew-world-close-btn{z-index:30}
