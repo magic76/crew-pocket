@@ -138,7 +138,8 @@
         const data=await response.json();
         if(!response.ok||data.success!==true||data.roleId!==id||
            data.requestId!==submission.requestId)throw new Error(data.error||'無法確認工作狀態');
-        if(sheet.hidden||visit!==token||targetId!==id)return;
+        if(sheet.hidden||visit!==token||targetId!==id||
+           submittedByRole.get(id)?.requestId!==submission.requestId)return;
         submittedByRole.set(id,{
           ...submission,status:data.status,response:data.response||'',error:data.error||null
         });
@@ -293,7 +294,7 @@
       if(!doc.hidden&&!sheet.hidden){updateViewport();void refreshReplies();}
     });
     sync();
-    return{sync,close,refreshReplies};
+    return{sync,close,refreshReplies,refreshResult};
   }
   return{requestId,payload,readableMessages,mount};
 });
