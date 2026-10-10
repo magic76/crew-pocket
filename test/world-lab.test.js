@@ -52,9 +52,9 @@ const six=sampleWindow.WorldLabKit.makeLiveRoles([
   {roleId:'six',roleName:'Helper Dev',state:'idle'},
   {roleId:'seven',roleName:'Extra Dev',state:'idle'}
 ]);
-assert.equal(six.length,6,'world caps the rendered 3D characters at six');
-assert.equal(new Set(six.map(r=>r.color)).size,6,'every displayed Role must have a distinct color');
-assert.deepEqual(Array.from(six,r=>r.id),['one','two','three','four','five','six']);
+assert.equal(six.length,7,'world must not drop the seventh live Role');
+assert.equal(new Set(six.map(r=>r.color)).size,7,'every displayed Role must have a distinct color');
+assert.deepEqual(Array.from(six,r=>r.id),['one','two','three','four','five','six','seven']);
 assert.equal(six[4].state,'unknown','untrusted statuses cannot masquerade as work');
 assert.equal(six[0].workTitle,'','no work title without verified currentWork field');
 const busy=sampleWindow.WorldLabKit.makeLiveRoles([{
@@ -69,6 +69,38 @@ const idleWithStale=sampleWindow.WorldLabKit.makeLiveRoles([{
 }]);
 assert.equal(idleWithStale[0].workTitle,'','idle must not show stale work titles');
 
+const allSixteen=sampleWindow.WorldLabKit.makeLiveRoles(
+  Array.from({length:16},(_,i)=>({roleId:'role-'+i,roleName:'Crew Agent '+i,projectId:'crew-pocket',state:'idle'}))
+);
+assert.equal(allSixteen.length,16,'six plus ten new agents must all appear');
+assert.equal(new Set(allSixteen.map(role=>role.districtId)).size,6,
+  'sixteen agents of one project share six islands, not sixteen islands');
+assert.equal(new Set(allSixteen.map(role=>role.color)).size,16,'every agent gets distinguishable identity');
+assert.ok(allSixteen.every(role=>role.districtSize<=3));
+const groups=new Map();
+for(const r of allSixteen){
+  if(!groups.has(r.districtId))groups.set(r.districtId,[]);
+  groups.get(r.districtId).push(r);
+}
+for(const members of groups.values()){
+  assert.ok(members.length<=3);
+  assert.equal(new Set(members.map(r=>r.x)).size,members.length,
+    'each person in district stands at an individual position');
+}
+assert.ok(sampleWindow.WorldLabKit.mapExtent(allSixteen)<20,
+  'sixteen agents fit in the compact inner ring rather than an expanding 16-island circle');
+const mixed=sampleWindow.WorldLabKit.makeLiveRoles([
+  ...Array.from({length:4},(_,i)=>({roleId:'t'+i,projectId:'teacher'})),
+  ...Array.from({length:5},(_,i)=>({roleId:'p'+i,projectId:'pocket'})),
+  ...Array.from({length:2},(_,i)=>({roleId:'s'+i,projectId:'story'}))
+]);
+assert.equal(new Set(mixed.map(r=>r.districtId)).size,5,
+  'project identities determine districts');
+const forty=sampleWindow.WorldLabKit.makeLiveRoles(Array.from({length:40},(_,i)=>({roleId:'agent-'+i})));
+assert.equal(forty.length,sampleWindow.WorldLabKit.MAX_WORLD_ROLES);
+assert.equal(sampleWindow.WorldLabKit.MEMBERS_PER_DISTRICT,3);
+assert.ok(sampleWindow.WorldLabKit.mapExtent(forty)<28);
+
 assert.equal(sampleWindow.WorldLabKit.makeLiveRoles([]).length,0);
 
 assert.match(css,/touch-action:none/);
@@ -77,6 +109,11 @@ assert.match(css,/prefers-reduced-motion/);
 const main=read('public/index.html');
 assert.match(main,/id="crew-world-open-btn"/);
 assert.match(main,/id="crew-world-modal"/);
+assert.match(main,/id="crew-home-dashboard-btn"/);
+assert.match(main,/id="crew-world-dashboard-btn"/);
+assert.match(main,/id="crew-world-map-btn"/);
+assert.match(main,/id="world-districts"/);
+assert.match(html,/id="world-districts"/);
 assert.match(main,/\/js\/crew-world-launcher.js/);
 assert.doesNotMatch(main,/<script src="\/js\/world-lab.js"/);
 assert.doesNotMatch(main,/<script src="\/vendor\/three.min.js"/);
@@ -130,6 +167,12 @@ assert.match(engine,/fetch\('\/api\/crew-room-events'/);
 assert.match(engine,/planner\.observe/);
 assert.match(engine,/observed-handoff/);
 assert.match(engine,/headStatus/);
+assert.match(engine,/worldExtent/);
+assert.match(engine,/districtPins/);
+assert.match(engine,/world-district-pin/);
+assert.match(css,/world-district-pin/);
+assert.match(launcher,/worldDashboardButton/);
+
 assert.match(html,/id="world-chat-open"/);
 assert.doesNotMatch(html,/id="world-chat-sheet"|id="world-chat-submit"/);
 assert.match(kit,/function accessory/);
