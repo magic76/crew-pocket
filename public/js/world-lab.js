@@ -17,6 +17,7 @@
   }
   const stage=document.getElementById('world-stage');
   const loading=document.getElementById('world-loading');
+  if(loading){loading.textContent='正在建立 3D 世界…';loading.hidden=false;}
   if(!stage)return ()=>{};
   const fail=msg=>{if(loading)loading.textContent=msg;};
   if(!window.THREE || !window.WorldLabKit){fail('缺少本地 3D 資源，請更新 Crew Runtime。');return;}
@@ -47,7 +48,7 @@
   renderer.outputEncoding=T.sRGBEncoding;
   renderer.toneMapping=T.ACESFilmicToneMapping;
   renderer.toneMappingExposure=1.08;
-  stage.prepend(renderer.domElement);loading?.remove();
+  stage.prepend(renderer.domElement);if(loading)loading.hidden=true;
   const scene=new T.Scene();
   const camera=new T.OrthographicCamera(-8,8,8,-8,.1,150);
   const sunlight=new T.DirectionalLight(0xffffff,1.65);
@@ -109,6 +110,8 @@
   let chat=null;
   const openRole=document.getElementById('world-open-role');
   if(openRole)openRole.hidden=!isLive;
+  const inlineChat=document.getElementById('world-chat-open');
+  if(inlineChat)inlineChat.hidden=!isLive;
   const actionRow=document.querySelector('.world-action-row');
   // Real usage emphasizes talking and opening conversations; demo controls
   // remain available only in offline art-preview mode.
@@ -480,7 +483,9 @@
     });
     renderer.render(scene,camera);
   }
-  updateInfo();resize();frame(performance.now());
+  updateInfo();
+  window.CrewWorldHost?.onSelectedRole?.(roles[selected].id,roles[selected].name);
+  resize();frame(performance.now());
   teardown=()=>{
     clearTimeout(toastTimer);
     for(const timer of speechTimers.values())clearTimeout(timer);
