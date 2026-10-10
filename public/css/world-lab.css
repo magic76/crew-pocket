@@ -7,3 +7,7 @@
 .world-controls{flex:none}
 .world-action-row button[hidden]{display:none}
 @media(max-width:375px){.world-controls{width:auto}.world-info{bottom:calc(env(safe-area-inset-bottom,0px) + 89px)}}
+
+/* Color keyed nameplate stays distinguishable at world overview zoom. */
+.world-label{border-left:4px solid var(--world-role-color,#8dd4f0)}
+.world-label[data-selected=true]{border-color:var(--world-role-color,#9ceeff);box-shadow:0 0 0 2px #c4edff77,0 8px 20px #07122266}
