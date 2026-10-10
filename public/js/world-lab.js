@@ -199,9 +199,53 @@
     }
     updateInfo();
   }
+  // An observed handoff is a saved message record, NOT confirmation of delivery.
+  // Initial polling establishes a baseline; no old message is ever replayed.
+  let seenEvents=null,eventRequest=false;
+  const pendingTransitions=[];
+  async function observeHandoffs(){
+    if(!isLive||!synced||!planner||document.hidden||eventRequest)return;
+    eventRequest=true;
+    try{
+      const response=await fetch('/api/crew-room-events',{cache:'no-store',credentials:'same-origin'});
+      if(!response.ok)throw new Error('No Room event metadata');
+      const data=await response.json();
+      if(data.success!==true||!Array.isArray(data.events))throw new Error('Room events invalid');
+      const result=planner.observe(data.events,seenEvents,roles.map(role=>role.id),Date.now());
+      seenEvents=result.seenIds;
+      for(const event of result.arrivals){
+        if(pendingTransitions.length>=3)break;
+        pendingTransitions.push(event);
+      }
+    }catch(_){
+      // If tracking was interrupted, the next success resets baseline rather than
+      // interpreting historical records as newly sent messages.
+      seenEvents=null;pendingTransitions.length=0;
+    }finally{eventRequest=false;}
+  }
+  function runRecordedHandoff(now){
+    if(!pendingTransitions.length||!synced)return;
+    const event=pendingTransitions[0];
+    const actor=actors.find(a=>a.role.id===event.fromRoleId);
+    const recipient=actors.find(a=>a.role.id===event.toRoleId);
+    if(!actor||!recipient){pendingTransitions.shift();return;}
+    if(actor.mode!=='idle')return;
+    pendingTransitions.shift();
+    if(Date.now()-event.createdAt>45000)return;
+    actor.mode='observed-handoff';
+    actor.handoff={start:now,toId:event.toRoleId,toX:recipient.role.x,toZ:recipient.role.z};
+    actor.expires=now+(reduced?2700:8600);
+    updateInfo();
+  }
   if(isLive){
-    setInterval(()=>{if(!document.hidden)void synchronize();},12000);
-    document.addEventListener('visibilitychange',()=>{if(!document.hidden)void synchronize();});
+    // First fetch is a baseline only; subsequent newly saved events trigger motion.
+    void observeHandoffs();
+    setInterval(()=>{if(!document.hidden)void synchronize();},7000);
+    setInterval(()=>{if(!document.hidden)void observeHandoffs();},3200);
+    document.addEventListener('visibilitychange',()=>{
+      if(document.hidden){seenEvents=null;pendingTransitions.length=0;}
+      else{void synchronize();void observeHandoffs();}
+    });
   }
   document.getElementById('world-reset').addEventListener('click',()=>{
     panTo(0,-1.8,1);notify('返回全景');
@@ -293,14 +337,26 @@
       cameraSync();
       if(t===1)focus=null;
     }
+    if(isLive&&!reduced)runRecordedHandoff(now);
     actors.forEach((actor,index)=>{
       if(now>=actor.expires&&actor.mode!=='idle'){
-        actor.mode='idle';
+        actor.mode='idle';actor.handoff=null;
         actor.root.position.set(actor.role.x,.43,actor.role.z);
         actor.root.rotation.y=0;updateInfo();
       }
-      const moving=actor.mode==='handoff';
+      const recorded=actor.mode==='observed-handoff';
+      const moving=actor.mode==='handoff'||recorded;
       const working=actor.mode==='working'||(isLive&&synced&&actor.mode==='idle'&&actor.role.state==='working');
+      if(recorded&&!reduced&&actor.handoff){
+        const h=actor.handoff;
+        const progress=T.MathUtils.clamp((now-h.start)/8600,0,1);
+        const outward=progress<.46?progress/.46:progress<.60?1:1-(progress-.60)/.40;
+        const point=planner.trail({x:actor.role.x,z:actor.role.z},
+          {x:h.toX,z:h.toZ},outward,hub);
+        const dx=point.x-actor.root.position.x,dz=point.z-actor.root.position.z;
+        actor.root.position.set(point.x,.43,point.z);
+        if(Math.hypot(dx,dz)>.001)actor.root.rotation.y=Math.atan2(dx,dz);
+      }
       if(moving&&!reduced){
         const progress=T.MathUtils.clamp(1-(actor.expires-now)/8000,0,1);
         const route=progress<.5?progress*2:(1-progress)*2;
