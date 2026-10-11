@@ -201,6 +201,9 @@ async function tick(){await new Promise(resolve=>setImmediate(resolve));}
     'a saved event selects recipient-scoped original collaboration without sending anything');
   assert.strictEqual(nodes['messages-container'].parentNode,originalMessages);
   assert.strictEqual(nodes['chat-composer-footer'].parentNode,originalComposer);
+  nodes['crew-world-open-btn'].click();
+  await tick();await tick();
+  assert.equal(nodes['crew-world-modal'].hidden,false,'reopened for switch safety test');
   // Rapid Role switches must not create spinner flicker or dim the composer.
   assert.equal(nodes['crew-world-role-spinner'].hidden,true);
   assert.equal(nodes['send-btn'].disabled,false);
@@ -208,9 +211,9 @@ async function tick(){await new Promise(resolve=>setImmediate(resolve));}
   // A slow switch still permits editing the draft and selecting another
   // character; only sending and stale conversation-reading are guarded.
   let resolveSlow;
-  blockedNavigation={roleId:'pocket',promise:new Promise(resolve=>{resolveSlow=resolve;})};
+  blockedNavigation={roleId:'teacher',promise:new Promise(resolve=>{resolveSlow=resolve;})};
   nodes['prompt-input'].value='原本草稿';
-  nodes['crew-world-command-role'].value='pocket';
+  nodes['crew-world-command-role'].value='teacher';
   nodes['crew-world-command-role'].trigger('change');
   await tick();
   assert.equal(nodes['crew-world-role-spinner'].hidden,true,
@@ -244,8 +247,8 @@ async function tick(){await new Promise(resolve=>setImmediate(resolve));}
   assert.equal(nodes['crew-world-command-context'].disabled,false);
 
   // Failed navigation exposes retry; it never enables send for the stale Role.
-  failNavigationId='teacher';
-  nodes['crew-world-command-role'].value='teacher';
+  failNavigationId='pocket';
+  nodes['crew-world-command-role'].value='pocket';
   nodes['crew-world-command-role'].trigger('change');
   await tick();await tick();
   assert.equal(nodes['crew-world-command-retry'].hidden,false);
