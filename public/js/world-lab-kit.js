@@ -137,12 +137,17 @@
     const mesh=box(scene,color,width,.036,dist,(a.x+b.x)/2,y,(a.z+b.z)/2);
     mesh.rotation.y=Math.atan2(dx,dz);
   }
+  // The town's physical ground is a square in world coordinates. A tall
+  // phone viewport must not change the land's width/depth or road positions.
+  function townGroundSide(lots){
+    const extent=Math.max(15,...lots.map(l=>Math.max(Math.abs(l.x),Math.abs(l.z))+7));
+    return extent*2+6;
+  }
   function buildTown(scene,lots,roads){
     if(!lots.length)return;
-    const boundX=Math.max(15,...lots.map(l=>Math.abs(l.x)+7));
-    const boundZ=Math.max(15,...lots.map(l=>Math.abs(l.z)+7));
-    box(scene,'#748b80',boundX*2+6,.70,boundZ*2+6,0,-.43,0);
-    box(scene,'#a8cba8',boundX*2+6,.22,boundZ*2+6,0,.24,0);
+    const side=townGroundSide(lots);
+    box(scene,'#748b80',side,.70,side,0,-.43,0);
+    box(scene,'#a8cba8',side,.22,side,0,.24,0);
     // Road surfaces follow actual navigation polylines, including bends
     // and the curved ring. Small round joints prevent visual corner gaps.
     for(const edge of roads){
@@ -565,5 +570,5 @@
       z:pos.z+Math.cos(pos.rotation)*FRONT_Z});
   });
   function releaseMaterials(){cache.clear();}
-  root.WorldLabKit={roles,create,createPlayer,createPaperPlane,disposePaperPlane,makeLiveRoles,mapExtent,planRoadNetwork,districtPosition,releaseMaterials,MAX_WORLD_ROLES,MEMBERS_PER_DISTRICT};
+  root.WorldLabKit={roles,create,createPlayer,createPaperPlane,disposePaperPlane,makeLiveRoles,mapExtent,planRoadNetwork,districtPosition,townGroundSide,releaseMaterials,MAX_WORLD_ROLES,MEMBERS_PER_DISTRICT};
 })(window);
