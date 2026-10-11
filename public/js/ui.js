@@ -475,13 +475,13 @@ function closeCrewHistory() {
   historyReturnFocus = null;
   focus?.focus?.({ preventScroll: true });
 }
-function openCrewCollaboration(roleId = currentRoleId || DEFAULT_ROLE_ID) {
+function openCrewCollaboration(roleId = currentRoleId || DEFAULT_ROLE_ID, eventId = null) {
   const role = roleMeta(roleId);
   if (!role || !roleCollaborationModal) return;
   collaborationReturnFocus = document.activeElement;
   if (roleCollaborationTitle) roleCollaborationTitle.textContent = role.name + ' · 協作紀錄';
   toggleRoleModal(roleCollaborationModal, true);
-  window.CrewMissionGraph?.inspectRole(role.id);
+  window.CrewMissionGraph?.inspectRole(role.id, eventId);
   document.getElementById('close-role-collaboration-btn')?.focus({ preventScroll: true });
 }
 function closeCrewCollaboration({ handoff = false } = {}) {
