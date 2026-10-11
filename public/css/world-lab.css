@@ -243,6 +243,7 @@
   .world-status-strip,.world-district-picker{transition:none}
 }
 
+.world-handoffs-open[hidden],.world-handoffs-panel[hidden]{display:none!important}
 .world-handoffs-open{
   position:absolute;z-index:7;right:12px;
   top:calc(env(safe-area-inset-top,0px) + 157px);
