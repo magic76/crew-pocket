@@ -351,6 +351,65 @@ assert.match(engine,/cancelAnimationFrame/);
 assert.match(engine,/observer\.disconnect/);
 
 const events=require('../public/js/world-lab-events.js');
+// P12: attention is grounded in a verified Runtime count or newly observed
+// reply signature. A zero count, stale reply or unknown timestamp is not an alert.
+const alertNow=1_800_000;
+const alerts=events.attentionItems([
+  {id:'a',attention:2},{id:'b',attention:0},{id:'c',attention:0},
+  {id:'d',attention:-1},{id:'e',attention:0}
+],new Map([
+  ['b',{at:alertNow-1200,signature:'r-2'}],
+  ['c',{at:alertNow-300001,signature:'r-3'}],
+  ['d',{at:alertNow+900,signature:'future'}],
+  ['e',{at:alertNow-60,signature:''}]
+]),alertNow);
+assert.deepEqual(alerts.map(item=>item.role.id),['a','b'],
+  'P12 may show only verified pending work and currently observed replies');
+assert.equal(alerts[0].count,2);
+assert.equal(alerts[1].reply.signature,'r-2');
+assert.deepEqual(events.attentionItems(null,new Map(),alertNow),[]);
+// P14: only saved directed Role edges; filter keeps actual identities/IDs.
+const evidenceForTests=[
+  {id:'m1',fromRoleId:'a',toRoleId:'b',kind:'handoff'},
+  {id:'m2',fromRoleId:'c',toRoleId:'a',kind:'reply'},
+  {id:'m3',fromRoleId:'c',toRoleId:'d',kind:'handoff'},
+  {id:'m4',fromRoleId:'a',toRoleId:'a',kind:'handoff'}
+];
+assert.deepEqual(events.collaborationConnections(evidenceForTests,'a',true,3).map(item=>item.id),
+  ['m1','m2'],'selected-role view excludes unrelated and self-events');
+assert.deepEqual(events.collaborationConnections(evidenceForTests,'a',false,2).map(item=>item.id),
+  ['m1','m2'],'visual arcs remain bounded');
+for(const id of ['world-attention-open','world-attention-count','world-attention-panel',
+  'world-attention-list','world-role-peek','world-role-peek-name',
+  'world-role-peek-body','world-collaboration-links','world-handoffs-filter']){
+  assert.ok(main.includes('id="'+id+'"'),id+' exists in hosted Crew World');
+}
+assert.ok(!html.includes('id="world-attention-open"'),
+  'standalone art preview cannot masquerade as verified runtime alerts');
+assert.ok(engine.includes('planner?.attentionItems?.(roles,freshReplies,Date.now())'),
+  'world alerts use the tested, bounded verified-only projector');
+assert.ok(engine.includes('const role=roles[index];'),
+  'attention drilldown opens a real selected Role');
+assert.ok(engine.includes("void window.CrewWorldHost?.openChat?.(role.id,{compact:false})"),
+  'attention reuses the original Role-specific Chat, not a second sender');
+assert.ok(engine.includes('rolePeekBody.textContent=message.slice(0,155)'),
+  'P13 preview is read-only, bounded and sourced from actual work or response');
+assert.ok(engine.includes('actors[selected].root.add(selectionHalo,focusHalo)'),
+  'P13 accent rings follow only the selected Role');
+assert.ok(engine.includes('planner?.collaborationConnections?.('),
+  'P14 arcs consume the validated, capped event selector');
+assert.ok(engine.includes("path.setAttribute('data-kind',event.kind)"),
+  'saved replies and handoffs have separate visual treatments');
+assert.ok(engine.includes('evidenceVerified=false;evidenceRows=[]'),
+  'unverified collaboration must remove evidence instead of lingering');
+assert.ok(css.includes('.world-label[data-muted="true"]'),
+  'unrelated idle Role nameplates are visually quieter');
+assert.ok(css.includes('.world-label[data-attention="true"]{opacity:1}'),
+  'a real attention signal is not dimmed');
+assert.ok(css.includes('.world-collaboration-link[data-kind="reply"]'),
+  'recorded replies remain visually distinct');
+assert.ok(css.includes('.world-attention-open[hidden]'),
+  'no alerts are visible without verified work');
 
 const now=Date.now(), allowed=['a','b'];
 const old={id:'old',fromRoleId:'a',toRoleId:'b',createdAt:now-10000};
