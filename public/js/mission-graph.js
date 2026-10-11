@@ -26,6 +26,7 @@
   let liveRefreshTimeout = null;
   const currentSnapshot = () => window.getCrewCockpitSnapshot?.();
   let inspectedRoleId = null;
+  let pendingEvidenceId = null;
   const activeId = () => inspectedRoleId || String(currentSnapshot()?.activeRoleId || '');
 
   // The graphic is a hub-and-spoke depiction of *observed messages* only.
@@ -171,6 +172,16 @@
       lastGraph = data;
       lastFetched = Date.now();
       renderGraph(data);
+      // Direct trace from Crew World to the exact saved message, when it
+      // remains in the Role-scoped recent history. Never infer delivery.
+      if(pendingEvidenceId){
+        const target=document.getElementById('mission-event-'+pendingEvidenceId);
+        if(target){
+          target.classList.add('mission-evidence-highlight');
+          target.scrollIntoView?.({block:'center',behavior:'smooth'});
+        }
+        pendingEvidenceId=null;
+      }
     } catch (error) {
       if (token !== revision || !root.open) return;
       if (error.name === 'AbortError') return;
@@ -214,10 +225,12 @@
     if (lastGraph && lastGraph.focusRoleId === activeId() && root.open) renderGraph(lastGraph);
   });
   window.CrewMissionGraph = {
-    inspectRole(roleId) {
+    inspectRole(roleId, eventId = null) {
       const available = new Set((currentSnapshot()?.roles || []).map(role => role.id));
       if (!idValid(roleId) || !available.has(roleId)) return;
       inspectedRoleId = roleId;
+      pendingEvidenceId = typeof eventId==='string'&&/^[A-Za-z0-9._:-]{1,200}$/.test(eventId)
+        ?eventId:null;
       lastFetched = 0;
       root.open = true;
       load({ force: true });
@@ -228,6 +241,7 @@
       revision++;
       controller?.abort();
       inspectedRoleId = null;
+      pendingEvidenceId = null;
     }
   };
 })();
