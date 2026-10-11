@@ -1107,9 +1107,15 @@
   });
 
   let elapsed=0,last=performance.now();
+  let lastDraw=0;
   function frame(now){
     if(disposed||paused)return;
     raf=requestAnimationFrame(frame);
+    const busy=Boolean(focus||fingers.size||activePlanes.length||
+      roles.some(role=>role.state==='working'));
+    const minFrameMs=lowPower?(busy?30:75):(reduced&&!busy?65:16);
+    if(lastDraw&&now-lastDraw<minFrameMs)return;
+    lastDraw=now;
     const delta=Math.min((now-last)/1000,.06);last=now;
     if(document.hidden)return;
     elapsed+=delta;
@@ -1183,15 +1189,16 @@
     }
     // At overview zoom, hide waiting/idle badges even in small crews. Only
     // active work and a newly received reply should add labels to the map.
-    const overview=zoom<1.65;
+    const overview=zoom<1.65,near=zoom>=2.55;
+    const zoomTier=overview?'overview':near?'near':'district';
+    if(stage.dataset.zoomTier!==zoomTier)stage.dataset.zoomTier=zoomTier;
     const placements=labels.map(({button,speech},index)=>{
       const projected=actors[index].root.position.clone().add(new T.Vector3(0,3.3,0)).project(camera);
       const x=(projected.x+1)/2*width,y=(-projected.y+1)/2*height;
-      const active=roles[index].state==='working'||!speech.hidden||
+      const active=roles[index].state==='working'||roles[index].attention>0||!speech.hidden||
         Boolean(contextForRole(roles[index].id));
-      const priority=active?(!speech.hidden?0:contextForRole(roles[index].id)?.tone==='critical'?0:1):
-        index===selected?2:
-        roles[index].state==='working'?2:roles[index].state==='waiting'?3:4;
+      const priority=!speech.hidden||contextForRole(roles[index].id)?.tone==='critical'?0:
+        roles[index].attention>0?1:roles[index].state==='working'?2:index===selected?3:4;
       return {button,index,x,y,priority,depth:projected.z,active};
     }).sort((a,b)=>a.priority-b.priority);
     const occupied=[];
@@ -1200,8 +1207,9 @@
       const topMargin=Math.min(100,height*.18),bottomMargin=Math.min(115,height*.22);
       const out=depth<-1||depth>1||x<12||x>width-12||
         y<topMargin||y>height-bottomMargin;
-      const lowPriority=overview&&!active&&index!==selected;
-      const collides=occupied.some(point=>Math.abs(point.x-x)<112&&Math.abs(point.y-y)<50);
+      const lowPriority=(overview&&!active&&index!==selected)||
+        (!overview&&!near&&roles.length>18&&!active&&index!==selected);
+      const collides=occupied.some(point=>Math.abs(point.x-x)<(near?112:96)&&Math.abs(point.y-y)<(near?51:40));
       const visible=!out&&!lowPriority&&!collides;
       button.style.display=visible?'':'none';
       if(visible){occupied.push({x,y});button.style.left=x+'px';button.style.top=y+'px';}
@@ -1236,7 +1244,7 @@
     for(const pin of districtPins){
       const pos=new T.Vector3(pin.role.islandX,2.9,pin.role.islandZ).project(camera);
       const x=(pos.x+1)/2*width,y=(-pos.y+1)/2*height;
-      const visible=synced&&zoom<1.75&&roles.length>=6&&
+      const visible=synced&&overview&&roles.length>=6&&
         pin.members.some(role=>role.state==='working'||role.attention>0)&&
         pos.z>=-1&&pos.z<=1&&
         x>35&&x<width-35&&y>Math.min(115,height*.2)&&
