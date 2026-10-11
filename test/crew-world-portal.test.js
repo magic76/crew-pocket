@@ -60,7 +60,12 @@ async function tick(){await new Promise(resolve=>setImmediate(resolve));}
       dispose.pause=()=>pauseCount++;dispose.resume=()=>resumeCount++;return dispose;},
     getCrewCockpitSnapshot(){return{roles:[{id:'pocket',name:'Pocket'},{id:'teacher',name:'Teacher'}]};},
     getCurrentRoleId(){return roleNavigations.at(-1);},
-    async openCrewCockpitRole(id){roleNavigations.push(id);doc.body.dataset.primaryTab='chat';},
+    async openCrewCockpitRole(id){
+      roleNavigations.push(id);doc.body.dataset.primaryTab='chat';
+      // Match the existing Role navigation's actual behavior: history restore
+      // clears the native textarea before the commander restores its draft.
+      nodes['prompt-input'].value='';
+    },
     openCrewCollaboration(id,eventId){collaborationVisit={id,eventId};}
   };
   doc.getElementById=id=>nodes[id]||null;
