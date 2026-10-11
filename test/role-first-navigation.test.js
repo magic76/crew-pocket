@@ -67,15 +67,16 @@ const history = {
   replaceState(value){states[index]=value;},
   back(){if(index>0){ index--; callbacks.popstate?.({state:states[index]}); }}
 };
-let settingsVisible=false;let crewRenders=0;
+let settingsVisible=false;let crewRenders=0;let mapRestores=0;
 const window = {
   history, setTimeout:()=>0,
   addEventListener(name,fn){callbacks[name]=fn;},
   dispatchEvent(){},
-  renderRoleNavigation(){crewRenders++;}
+  renderRoleNavigation(){crewRenders++;},
+  CrewWorldHost:{restoreHomeView(){mapRestores++;}}
 };
 const customEvent = class {constructor(type,init){this.type=type;this.detail=init?.detail;}};
-vm.runInNewContext(app.slice(start,end),{
+vm.runInNewContext(app.slice(start,end)+'\nfinishCrewHomeBootstrap();',{
  window, document, drawer, Date, CustomEvent:customEvent,
  setSettingsViewOpen(open){settingsVisible=open;},
  loadWorkspaces:async()=>[], loadCrewStatus:async()=>[], loadConversations:async()=>[]
@@ -85,13 +86,17 @@ assert.equal(history.state.crewPage,'crew');
 assert.equal(drawer.classList.contains('hidden'),false);
 assert.equal(elements['chat-composer-footer'].classList.contains('hidden'),true);
 assert.equal(settingsVisible,false);
+assert.equal(mapRestores,1,
+  'default Crew landing opens the map only once bootstrap has completed');
 elements['crew-open-settings-btn'].listeners.click();
+assert.equal(mapRestores,1,'entering settings never remounts World');
 assert.equal(document.body.dataset.primaryTab,'settings');
 assert.equal(settingsVisible,true);
 assert.equal(history.state.crewPage,'settings');
 elements['crew-settings-back-btn'].listeners.click();
 assert.equal(document.body.dataset.primaryTab,'crew');
 assert.equal(settingsVisible,false);
+assert.equal(mapRestores,2,'Back from settings restores preferred Crew map');
 
 window.setPrimaryTab('chat');
 assert.equal(document.body.dataset.primaryTab,'chat');
@@ -108,6 +113,7 @@ assert.equal(history.state.crewOverlay,null);
 elements['crew-back-home-btn'].listeners.click();
 assert.equal(document.body.dataset.primaryTab,'crew');
 assert.equal(elements['chat-composer-footer'].classList.contains('hidden'),true);
+assert.equal(mapRestores,3,'return from original Chat restores preferred map');
 
 window.CrewNavigation.openOverlay('role-editor-modal');
 const count2=states.length;
@@ -117,5 +123,10 @@ window.CrewNavigation.back();
 assert.equal(history.state.crewOverlay,'role-editor-modal');
 window.CrewNavigation.back();
 assert.equal(document.body.dataset.primaryTab,'crew');
+assert.equal(mapRestores,3,'closing nested role sheets does not reopen the map again');
+assert.ok(app.includes("await restorePromise;\n      await workspacesReady;\n      finishCrewHomeBootstrap();"),
+  'the map must wait until provider conversation and Role list are restored');
+assert.ok(app.includes("if(primaryTab==='crew')window.CrewWorldHost?.restoreHomeView?.()"),
+  'bootstrap fallback restores map only when still at Crew Home');
 
 console.log('role-first-navigation tests: ok');
