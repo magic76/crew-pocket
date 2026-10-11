@@ -67,12 +67,10 @@
     if(!peek||!peekKind||!peekText||modal.hidden||panel.hidden)return;
     // This is a text-only projection from the already-rendered ORIGINAL
     // Chat DOM; execution state comes from the existing result card.
-    const resultCards=messages.querySelectorAll?.('.execution-result-card')||[];
-    const result=resultCards[resultCards.length-1];
     const assistants=messages.querySelectorAll?.('.assistant-article, .btw-card')||[];
     const latest=assistants[assistants.length-1];
-    const live=messages.querySelectorAll?.('.live-status .status-text')||[];
-    const liveStatus=live[live.length-1];
+    const result=latest?.querySelector?.('.execution-result-card');
+    const liveStatus=latest?.querySelector?.('.live-status .status-text');
     let kind='',value='';
     if(result){
       kind='工作結果';
@@ -287,6 +285,7 @@
     const version=++selectVersion;
     if(!switchingRole)commandDraft=promptInput?.value||'';
     requestedRole=roleId;switchingRole=true;
+    if(peek)peek.hidden=true; // Never show prior Role results during a switch.
     panel.classList.add('role-switching');
     updateCommandRole();
     // Serialize navigation. A superseded Role must never mount a stale
