@@ -1856,7 +1856,18 @@
     <noscript>此 Demo 需要啟用 JavaScript。</noscript>
   </div>
  
-    <section id="crew-world-chat-panel" class="crew-world-chat-panel" aria-label="現有 Role 對話" hidden>
+    <section id="crew-world-chat-panel" class="crew-world-chat-panel" aria-label="地圖指揮與原有 Role 對話" hidden>
+      <div class="crew-world-command-head">
+        <label for="crew-world-command-role">指揮角色</label>
+        <select id="crew-world-command-role" aria-label="地圖指令發送目標角色"></select>
+        <span id="crew-world-command-state" role="status" aria-live="polite">載入目前角色…</span>
+        <button id="crew-world-command-read" type="button" aria-label="查看浮動對話">查看對話</button>
+      </div>
+      <button id="crew-world-result-peek" class="crew-world-result-peek" type="button" aria-label="展開目前角色的原始回覆" hidden>
+        <span id="crew-world-result-peek-kind" class="crew-world-result-peek-kind">最新回覆</span>
+        <span id="crew-world-result-peek-text" class="crew-world-result-peek-text"></span>
+        <span class="crew-world-result-peek-more" aria-hidden="true">›</span>
+      </button>
       <div class="crew-world-chat-top">
         <div class="crew-world-chat-identity">
           <strong id="crew-world-chat-role-name">Role 對話</strong>

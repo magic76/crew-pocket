@@ -230,3 +230,88 @@ body.crew-world-focused #context-health-toast{z-index:10050!important}
 @media(prefers-reduced-motion:reduce){
   .crew-world-modal.is-role-focused .crew-world-focus-bar{transition:none}
 }
+
+/* P10: use the original Chat composer as the persistent world command bar.
+   One DOM input + one existing send handler, not an independent sender. */
+.crew-world-chat-panel .crew-world-command-head{
+  display:flex;align-items:center;gap:8px;min-width:0;flex:none;
+  padding:8px 11px;background:#132b44;
+  border-bottom:1px solid #85bed339;
+}
+.crew-world-command-head label{font-size:10px;white-space:nowrap;color:#bbd6e7;font-weight:750}
+.crew-world-command-head select{
+  flex:1;min-width:0;max-width:220px;min-height:36px;
+  padding:0 10px;background:#1e405a;color:#fff;
+  border:1px solid #91bad77b;border-radius:10px;
+  font-size:12px;font-weight:750;
+}
+.crew-world-command-head #crew-world-command-state{
+  margin-left:auto;min-width:0;max-width:25%;font-size:10px;color:#9bb8cb;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.crew-world-command-head #crew-world-command-read{
+  flex:none;min-height:36px;padding:0 9px;border-radius:10px;
+  border:1px solid #88c1d96e;color:#e3f6ff;background:#214f6e;font-size:11px;font-weight:700;
+}
+.crew-world-result-peek[hidden]{display:none!important}
+.crew-world-result-peek{
+  display:flex;align-items:center;gap:8px;flex:none;
+  width:100%;padding:10px 12px;
+  text-align:left;color:#edf8ff;background:#193853d9;border:0;
+  border-bottom:1px solid #b4d7e13a;
+}
+.crew-world-result-peek-kind{
+  flex:none;max-width:28%;font-size:10px;font-weight:780;color:#a5e2f8;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.crew-world-result-peek-text{
+  flex:1;min-width:0;font-size:11px;color:#e2eef5;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.crew-world-result-peek-more{color:#9dccdf;font-size:18px}
+.crew-world-result-peek:focus-visible,
+.crew-world-command-head select:focus-visible{outline:2px solid #76d8ff;outline-offset:-2px}
+.crew-world-chat-panel.role-switching .crew-world-chat-composer-slot{opacity:.58;pointer-events:none}
+.crew-world-chat-panel.role-switching .crew-world-command-head select{pointer-events:none}
+.crew-world-chat-panel.role-switching #crew-world-command-state{color:#ffdb9c}
+.crew-world-modal .crew-world-chat-panel.compact:not([hidden]){
+  position:absolute;inset:auto 0 var(--crew-keyboard-rise,0px);
+  width:100%;max-width:720px;height:auto;min-height:0;
+  margin:0 auto;border-radius:18px 18px 0 0;z-index:12;
+}
+.crew-world-chat-panel.compact .crew-world-chat-top{display:none!important}
+.crew-world-modal .crew-world-chat-panel:not(.compact):not(.expanded):not([hidden]){
+  position:absolute;inset:auto 12px calc(var(--crew-keyboard-rise,0px) + 8px) auto;
+  width:min(465px,calc(100% - 24px));max-width:none;
+  height:min(56dvh,calc(var(--crew-visible-height,100dvh) - 28px));
+  border-radius:18px;
+}
+.crew-world-modal .crew-world-chat-panel.expanded:not([hidden]){
+  position:absolute;inset:auto 0 var(--crew-keyboard-rise,0px);
+  width:100%;max-width:720px;margin:auto;
+}
+.crew-world-modal:has(.crew-world-chat-panel:not([hidden])) .world-info,
+.crew-world-modal:has(.crew-world-chat-panel:not([hidden])) .world-bottom{
+  opacity:1;pointer-events:auto;
+}
+.crew-world-modal .crew-world-chat-panel:not(.compact):not([hidden]) ~ .world-info{pointer-events:auto}
+@media(max-width:540px){
+  .crew-world-modal .crew-world-chat-panel:not(.compact):not(.expanded):not([hidden]){
+    left:6px;right:6px;width:calc(100% - 12px);
+    height:min(56dvh,calc(var(--crew-visible-height,100dvh) - 12px));
+    bottom:var(--crew-keyboard-rise,0px);
+    border-radius:17px 17px 0 0;
+  }
+  .crew-world-command-head label{display:none}
+  .crew-world-command-head #crew-world-command-state{max-width:22%;font-size:9px}
+  .crew-world-command-head select{max-width:none}
+  .crew-world-modal .world-bottom{bottom:calc(env(safe-area-inset-bottom,0px) + 174px)}
+}
+.crew-world-modal:has(.crew-world-chat-panel:not([hidden])) .world-bottom{
+  bottom:calc(env(safe-area-inset-bottom,0px) + 180px);
+}
+.crew-world-modal:has(.crew-world-chat-panel:not(.compact):not([hidden])) .world-bottom{display:none}
+.crew-world-modal:has(.crew-world-chat-panel.keyboard-open:not([hidden])) .world-bottom{display:none}
+@media(prefers-reduced-motion:reduce){
+  .crew-world-result-peek,.crew-world-chat-panel{animation:none!important}
+}
