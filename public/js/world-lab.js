@@ -330,7 +330,8 @@
       const ratio=Number(health.usageRatio);
       const pct=health.usageRatio!=null&&Number.isFinite(ratio)
         ?Math.round(ratio*100)+'%':'比例未知';
-      const text='Context · '+pct+' · '+usageText(health.totalUsage?.value);
+      const accuracy=health.totalUsage?.exact===true?'':'約 ';
+      const text='Context · '+pct+' · '+accuracy+usageText(health.totalUsage?.value);
       contextCache.set(key,{at:Date.now(),text});
       if(contextRequestId===requestId&&roles[selected].id===role.id)
         contextLine.textContent=text;
@@ -351,6 +352,8 @@
     lastRoleTap=double?null:{id,at:now};
     closeDistrictPicker();
     if(double){select(index,true);return;}
+    if(window.CrewWorldHost?.isFocusActive?.())
+      window.CrewWorldHost.exitFocus?.();
     select(index,false);
     panTo(roles[index].islandX,roles[index].islandZ,width<700?2.2:1.9);
     showContextIfExpanded();
