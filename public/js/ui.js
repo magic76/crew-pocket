@@ -1591,8 +1591,14 @@ async function loadProviderCatalog() {
     if (Array.isArray(data.providers) && data.providers.length > 0) availableProviders = data.providers;
   } catch (_) {}
   if (!availableProviders.some(provider => provider.id === currentProvider)) {
-    currentProvider = availableProviders[0]?.id || 'antigravity';
-    localStorage.setItem('crew_current_provider', currentProvider);
+    // Preserve a saved provider when its CLI is temporarily unavailable.
+    // The server must never silently route that Role to another AI engine.
+    const known = DEFAULT_PROVIDERS.find(provider => provider.id === currentProvider);
+    if (known) availableProviders.push({ ...known, unavailable: true });
+    else {
+      currentProvider = availableProviders[0]?.id || 'antigravity';
+      localStorage.setItem('crew_current_provider', currentProvider);
+    }
   }
   renderProviderOptions();
   return availableProviders;
@@ -1611,7 +1617,7 @@ function renderProviderOptions() {
   providerOptionsContainer.style.gridTemplateColumns = `repeat(${Math.min(availableProviders.length, 3)}, minmax(0, 1fr))`;
   providerOptionsContainer.innerHTML = availableProviders.map(provider => `
     <button type="button" data-provider="${escapeHtml(provider.id)}" onclick="selectProvider('${escapeHtml(provider.id)}')" class="provider-option px-3 py-2 rounded-xl border text-xs font-bold transition active:scale-95">
-      ${provider.icon || '🤖'} ${escapeHtml(provider.label)}
+      ${provider.icon || '🤖'} ${escapeHtml(provider.label)}${provider.unavailable ? '（未安裝）' : ''}
     </button>
   `).join('');
   providerOptionsContainer.querySelectorAll('.provider-option').forEach(button => {
