@@ -194,8 +194,11 @@
     const paint=['#b8d6e9','#ead0d9','#eadbb5','#d4c8e8','#c3d9c6','#e6c9af'];
     const roofs=['#668bb6','#bd7598','#b99468','#8c76ba','#6b9d92','#b97f62'];
     const salt=Array.from(String(role.projectId||role.id)).reduce((v,c)=>v+c.charCodeAt(0),0);
-    const variant=(index*7+salt)%6;
-    const wall=paint[variant],roof=roofs[variant];
+    // Guarantee all six silhouettes in a six-workshop town. The Project
+    // identity still alters the color and the professional details.
+    const variant=index%6;
+    const palette=(salt+index*2)%6;
+    const wall=paint[palette],roof=roofs[palette];
     const group=new T.Group();
     group.position.set(role.islandX,0,role.islandZ);
     group.rotation.y=role.townRotation||0;
