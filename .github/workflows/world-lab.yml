@@ -35,6 +35,8 @@ jobs:
       - name: Check standalone 3D demo and syntax
         run: |
           node test/world-lab.test.js
+          node --check public/js/crew-context-usage.js
+          node test/crew-context-usage.test.js
           node --check public/js/world-lab-navigation.js
           node test/world-player-explore.test.js
           node test/world-message-motion.test.js

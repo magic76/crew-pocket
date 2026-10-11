@@ -50,6 +50,9 @@ jobs:
           node --check lib/role-submit.js
           node test/role-submit.test.js
           node test/role-submit-chat.test.js
+          node --check lib/crew-context-usage.js
+          node --check test/crew-context-usage.test.js
+          node test/crew-context-usage.test.js
           node --check lib/crew-status.js
           node --check lib/crew-auto-response.js
           node --check lib/context-builder.js
