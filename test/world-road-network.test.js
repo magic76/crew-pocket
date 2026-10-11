@@ -17,6 +17,34 @@ function check(roles,title){
   assert.ok(Number.isFinite(groundSide)&&groundSide>0,
     title+': finite physical terrain size');
   const groundHalf=groundSide/2;
+  const scenery=kit.planTownDecorations(lots,roads);
+  assert.ok(scenery.length<=16,title+': bounded decorative object budget');
+  assert.deepEqual(Array.from(kit.planTownDecorations(lots,roads),p=>p.type),
+    Array.from(scenery,p=>p.type),title+': deterministic decorative planning');
+  for(const prop of scenery){
+    assert.ok(Math.max(Math.abs(prop.x),Math.abs(prop.z))+prop.radius+1.5<groundHalf,
+      title+': decoration stays inside physical square town');
+    assert.ok(Math.hypot(prop.x,prop.z)>=7+prop.radius,
+      title+': plaza stays unobstructed');
+    for(const lot of lots){
+      const local=navigation.localOffset(prop,lot);
+      assert.ok(!(Math.abs(local.x)<4.2+prop.radius&&
+        local.z>-5.4-prop.radius&&local.z<5.1+prop.radius),
+        title+': scenery cannot occupy a Role workshop or its doorway');
+    }
+    for(const edge of roads)for(let i=1;i<edge.points.length;i++){
+      const a=edge.points[i-1],b=edge.points[i];
+      const dx=b.x-a.x,dz=b.z-a.z,den=dx*dx+dz*dz;
+      const t=den?Math.max(0,Math.min(1,((prop.x-a.x)*dx+(prop.z-a.z)*dz)/den)):0;
+      assert.ok(Math.hypot(prop.x-a.x-dx*t,prop.z-a.z-dz*t)>=prop.radius+1.75-1e-8,
+        title+': scenery must keep real walking lanes open');
+    }
+  }
+  for(let i=0;i<scenery.length;i++)for(let j=i+1;j<scenery.length;j++){
+    assert.ok(distance(scenery[i],scenery[j])>=
+      scenery[i].radius+scenery[j].radius+1-1e-8,
+      title+': decorative footprints do not overlap');
+  }
   for(const lot of lots){
     assert.ok(Math.abs(lot.x)+6<groundHalf&&Math.abs(lot.z)+6<groundHalf,
       title+': buildings stay inside the square ground on both axes');
@@ -109,6 +137,16 @@ const sixLots=navigation.uniqueLots(kit.makeLiveRoles(
 ));
 assert.equal(new Set(sixLots.map(l=>l.branch)).size,6,
   'six small workspaces encircle the square instead of two opposing lines');
+for(const count of [3,6,8,10]){
+  const roles=kit.makeLiveRoles(Array.from({length:count},(_,i)=>({
+    roleId:'crowd-'+i,projectId:'individual-'+i
+  })));
+  const lots=navigation.uniqueLots(roles);
+  const decorations=kit.planTownDecorations(lots,kit.planRoadNetwork(roles));
+  assert.ok(decorations.length>=3,'town with '+count+' Roles has additional non-Role scenery');
+  assert.ok(decorations.every(prop=>!('roleId' in prop)),
+    'filler props must never masquerade as chat targets');
+}
 check(kit.roles,'standalone');
 assert.equal(navigation.uniqueLots(kit.makeLiveRoles(Array.from({length:16},(_,i)=>({
   roleId:'agent-'+i,roleName:'Agent '+i,projectId:'project'

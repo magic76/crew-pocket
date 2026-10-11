@@ -32,6 +32,22 @@ assert.ok(engine.includes('index!==selected'),
   'a selected idle Role remains visible at overview zoom');
 assert.ok(kit.includes('const keepClear=(x,z)=>'),
   'decorative greenery avoids navigation lanes');
+assert.match(kit,/function planTownDecorations\(/);
+assert.match(kit,/function buildTownDecorations\(/);
+assert.match(kit,/function profession\(/);
+assert.ok(kit.includes("return 'writer'"),'writer gets a distinct studio identity');
+assert.ok(kit.includes('group.userData.decorative=true'),
+  'scenery cannot inherit a Role identity');
+assert.ok(kit.includes('actors.workshops=workshops'),
+  'workshop effects have explicit handles separate from Role rigs');
+assert.ok(engine.includes('workshopGroups=new Map()'));
+assert.ok(engine.includes("actor.role.state==='working'"));
+assert.ok(engine.includes('isLive?Boolean(synced&&actor.role.state'),
+  'live work animations are gated by verified Runtime state');
+assert.ok(engine.includes('isLive&&synced&&!working'),
+  'waiting attention cues never masquerade as work');
+assert.ok(engine.includes('const wander=idle&&!reduced'),
+  'idle motion is gentle and respects reduced-motion settings');
 assert.match(engine,/new T.WebGLRenderer/);
 assert.match(engine,/ray.intersectObjects/);
 assert.match(engine,/pointermove/);

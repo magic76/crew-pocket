@@ -80,6 +80,12 @@
   sunlight.shadow.bias=-.0005;
   scene.add(sunlight,new T.HemisphereLight(0xc9e6ec,0x526459,.66));
   const actors=kit.create(scene,roles);
+  const workshopGroups=new Map();
+  actors.forEach(actor=>{
+    const id=actor.role.districtId||actor.role.id;
+    if(!workshopGroups.has(id))workshopGroups.set(id,[]);
+    workshopGroups.get(id).push(actor);
+  });
   const roadVisuals=actors.roadVisuals||[];
   // This is the same immutable lot/frontage geometry used for mesh rotation
   // and Role standing positions. Navigation never invents parallel roads.
@@ -755,7 +761,10 @@
         actor.root.rotation.y=0;updateInfo();
       }
       const signaling=actor.mode==='handoff'||actor.mode==='observed-handoff';
-      const working=actor.mode==='working'||(isLive&&synced&&actor.role.state==='working');
+      // Live working effects must reflect a verified runtime status, never
+      // residual demo gestures or merely moving across the town.
+      const working=isLive?Boolean(synced&&actor.role.state==='working'):
+        actor.mode==='working';
       // AI Roles remain at their own miniature workshop. Digital messages
       // travel as paper planes; there is no fabricated avatar journey.
       const reaction=now<actor.reactionUntil;
@@ -767,15 +776,38 @@
       actor.body.position.y=reduced?0:signaling?Math.sin(phase)*.024:
         working?Math.sin(phase)*.024:Math.sin(phase)*.022;
       actor.body.rotation.z=reduced?0:Math.sin(phase*.6)*.025;
+      // Small home-front idle wander; the Role never walks between lots for
+      // paper-plane deliveries, and stays within its standing area.
+      const wander=idle&&!reduced;
+      actor.root.position.x=actor.role.x+(wander ? .12*Math.sin(elapsed*.34+index*2.1):0);
+      actor.root.position.z=actor.role.z+(wander ? .10*Math.cos(elapsed*.28+index*1.4):0);
+      actor.body.rotation.y=wander ? .13*Math.sin(elapsed*.4+index*1.9):0;
       actor.arms[0].rotation.x=reduced?0:reaction?-.86:
         signaling?Math.sin(phase)*.24:working?Math.sin(phase)*.34:
         idleGesture?-.36:0;
       actor.arms[1].rotation.x=reduced?0:reaction?Math.sin(phase*1.2)*.27:
         signaling?-.25:working?-Math.sin(phase+1)*.27:
         idleGesture?-.16:0;
-      actor.legs.forEach(({mesh})=>{mesh.rotation.x=0;});
+      actor.legs.forEach(({mesh,side})=>{
+        mesh.rotation.x=wander?Math.sin(elapsed*.65+index)*side*.06:0;
+      });
       actor.workHalo.material.opacity=working?(reduced?.32:.22+Math.sin(elapsed*3+index)*.08):0;
     });
+    // One status signal per real workshop, even when several Roles share it.
+    // Waiting yields only a dim attention cue; bright windows exclusively
+    // indicate a currently verified live working Role (or labeled demo).
+    for(const [districtId,lights] of actors.workshops||[]){
+      const members=workshopGroups.get(districtId)||[];
+      const working=members.some(actor=>isLive
+        ?synced&&actor.role.state==='working'
+        :actor.mode==='working');
+      const attention=isLive&&synced&&!working&&members.some(actor=>
+        actor.role.state==='waiting'&&actor.role.attention>0);
+      lights.lamp.material.opacity=working
+        ?(reduced?.69:.62+Math.sin(elapsed*2.6)*.10):.08;
+      lights.status.material.opacity=attention
+        ?(reduced?.28:.20+Math.sin(elapsed*1.3)*.06):0;
+    }
     if(!reduced)selectionHalo.scale.setScalar(1+.045*Math.sin(now*.003));
     if(visitor){
       const projected=visitor.root.position.clone().add(new T.Vector3(0,3.6,0)).project(camera);
