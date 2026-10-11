@@ -1782,18 +1782,17 @@
       <svg id="world-collaboration-links" class="world-collaboration-links" aria-label="近期已記錄角色協作關係" aria-hidden="true"></svg>
     </div>
     <div id="world-status-strip" class="world-status-strip" role="status" aria-live="polite">讀取小隊狀態中…</div>
+    <button id="world-activity-open" class="world-activity-open" type="button" aria-expanded="false"
+      aria-controls="world-attention-panel world-handoffs-panel" aria-label="查看小隊動態" hidden>
+      <span id="world-activity-label">動態</span><span id="world-activity-count" hidden>0</span>
+    </button>
     <button id="world-attention-open" class="world-attention-open" type="button" aria-expanded="false"
       aria-controls="world-attention-panel" aria-label="查看需要注意的角色" hidden>待處理 <span id="world-attention-count">0</span></button>
     <section id="world-attention-panel" class="world-attention-panel" aria-label="真實待處理與新回覆" hidden>
-      <div class="world-attention-heading"><strong>需要關注</strong><button id="world-attention-close" type="button" aria-label="關閉提醒">✕</button></div>
+      <div class="world-attention-heading"><strong>需要關注</strong><button id="world-activity-to-handoffs" type="button">協作紀錄 ›</button><button id="world-attention-close" type="button" aria-label="關閉提醒">✕</button></div>
       <div id="world-attention-list" class="world-attention-list"></div>
       <p>只列出 Runtime 待處理數量與本次開啟後觀察到的新回覆，不推測失敗或已讀。</p>
     </section>
-    <button id="world-role-peek" class="world-role-peek" type="button" aria-label="打開選中角色的原始對話" hidden>
-      <strong id="world-role-peek-name"></strong>
-      <span id="world-role-peek-body"></span>
-      <span class="world-role-peek-action" aria-hidden="true">查看 ›</span>
-    </button>
     <!-- Real saved messages only; this is a flight cue, NOT delivery proof. -->
     <button id="world-flight-notice" class="world-flight-notice" type="button"
       aria-label="查看剛記錄的角色協作訊息" hidden>
@@ -1805,6 +1804,7 @@
     <section id="world-handoffs-panel" class="world-handoffs-panel" aria-label="已保存的角色間訊息" hidden>
       <div class="world-handoffs-heading">
         <div><strong>最近協作</strong><small>虛線表示已記錄訊息，非送達／已讀／完成</small></div>
+        <button id="world-activity-to-attention" type="button" hidden>待處理</button>
         <button id="world-handoffs-close" type="button" aria-label="關閉協作紀錄">✕</button>
       </div>
       <button id="world-handoffs-filter" class="world-handoffs-filter" type="button" aria-pressed="false">只看目前 Role</button>

@@ -88,15 +88,22 @@ for(const src of [kit,html]){
   assert.doesNotMatch(src,/https?:\/\/|fetch\s*\(|XMLHttpRequest|localStorage|sessionStorage|WebSocket/);
 }
 assert.match(engine,/fetch\('\/api\/crew-status'/);
+assert.ok(engine.includes('if(Array.isArray(liveRows)&&liveRows.length===0)'),
+  'verified empty crew must never show the three sample demo agents');
+assert.ok(engine.includes("window.CrewWorldHost?.refreshSceneRoles?.()"),
+  'the empty crew and normal status poll both support adding a first Role');
 assert.match(engine,/previous===undefined\|\|previous===signature/);
 assert.match(engine,/const recentlyWorking=/);
 assert.match(engine,/lastWorkingAt\.set\(actor\.role\.id,Date\.now\(\)\)/);
 assert.match(engine,/remaining=300000-age/);
 assert.match(engine,/else if\(!labels\[index\]\.speech\.hidden\)hideSpeech\(index\)/);
-assert.match(engine,/const overview=zoom<1\.65/,
-  'small crews also hide idle and waiting badges at overview zoom');
-assert.match(engine,/const active=roles\[index\]\.state==='working'\|\|!speech\.hidden/);
-assert.match(engine,/const lowPriority=overview&&!active/);
+assert.match(engine,/const overview=zoom<1\.65,near=zoom>=2\.55/,
+  'zoom separates project overview, Role states and detail');
+assert.ok(engine.includes("stage.dataset.zoomTier=zoomTier"));
+assert.ok(engine.includes("roles[index].attention>0||!speech.hidden"),
+  'verified waiting roles must remain discoverable at overview scale');
+assert.ok(engine.includes('const lowPriority=(overview&&!active&&index!==selected)'),
+  'low-priority idle labels yield to working and attention states');
 assert.match(engine,/pin\.members\.some\(role=>role\.state==='working'\|\|role\.attention>0\)/,
   'overview district pins appear only for verified work or attention');
 assert.doesNotMatch(engine,/fetch\('\/api\/(chat|role-submit|role-runtime|memories)'/);
@@ -435,8 +442,9 @@ assert.deepEqual(events.collaborationConnections(evidenceForTests,'a',true,3).ma
 assert.deepEqual(events.collaborationConnections(evidenceForTests,'a',false,2).map(item=>item.id),
   ['m1','m2'],'visual arcs remain bounded');
 for(const id of ['world-attention-open','world-attention-count','world-attention-panel',
-  'world-attention-list','world-role-peek','world-role-peek-name',
-  'world-role-peek-body','world-collaboration-links','world-handoffs-filter']){
+  'world-attention-list','world-activity-open','world-activity-label','world-activity-count',
+  'world-activity-to-handoffs','world-activity-to-attention',
+  'world-collaboration-links','world-handoffs-filter']){
   assert.ok(main.includes('id="'+id+'"'),id+' exists in hosted Crew World');
 }
 assert.ok(!html.includes('id="world-attention-open"'),
@@ -447,8 +455,9 @@ assert.ok(engine.includes('const role=roles[index];'),
   'attention drilldown opens a real selected Role');
 assert.ok(engine.includes("void window.CrewWorldHost?.openChat?.(role.id,{compact:false})"),
   'attention reuses the original Role-specific Chat, not a second sender');
-assert.ok(engine.includes('rolePeekBody.textContent=message.slice(0,155)'),
-  'P13 preview is read-only, bounded and sourced from actual work or response');
+assert.ok(!main.includes('id="world-role-peek"')&&
+  launcher.includes("messages.querySelectorAll?.('.assistant-article, .btw-card')"),
+  'only the original Chat result preview remains, without a duplicate world bubble');
 assert.ok(engine.includes('actors[selected].root.add(selectionHalo,focusHalo)'),
   'P13 accent rings follow only the selected Role');
 assert.ok(engine.includes('planner?.collaborationConnections?.('),
@@ -463,8 +472,13 @@ assert.ok(css.includes('.world-label[data-attention="true"]{opacity:1}'),
   'a real attention signal is not dimmed');
 assert.ok(css.includes('.world-collaboration-link[data-kind="reply"]'),
   'recorded replies remain visually distinct');
-assert.ok(css.includes('.world-attention-open[hidden]'),
-  'no alerts are visible without verified work');
+assert.ok(css.includes('.world-attention-open[hidden]')&&css.includes('.world-activity-open[hidden]'),
+  'activity entry and alerts remain hidden until a live map exists');
+assert.ok(css.includes('[data-zoom-tier="overview"]'));
+assert.ok(engine.includes('if(nextSignature!==liveSignature)'));
+assert.ok(engine.includes('dispose.getCameraState=()=>snapshotCamera()'));
+assert.ok(engine.includes('const minFrameMs=lowPower?'),
+  'coarse-pointer devices reduce idle frame rate');
 
 const now=Date.now(), allowed=['a','b'];
 const old={id:'old',fromRoleId:'a',toRoleId:'b',createdAt:now-10000};
@@ -511,8 +525,8 @@ assert.ok(!engine.includes('refreshFocusActivity')&&!engine.includes('isRoleFocu
   'no P7 ribbon is gated behind a removed mode');
 assert.ok(engine.includes("已停止執行 · 結果需查看對話確認"),
   'recent execution stop remains honestly visible on P13 Role peek');
-assert.ok(engine.includes("rolePeekBody.textContent=message.slice(0,155)"),
-  'Role peek stays read-only and grounded in actual activity');
+assert.ok(engine.includes("entry.speech.textContent='新回覆'"),
+  'world replies use a short event cue, not a second text preview');
 assert.ok(engine.includes("planner.traceableEvents?.(data.events"),
   'only saved message records are listed');
 assert.ok(engine.includes("evidenceVerified=false;evidenceRows=[]"),

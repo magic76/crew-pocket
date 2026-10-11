@@ -387,3 +387,23 @@ body.crew-world-active .crew-world-modal:not([hidden]){inset:0}
 .crew-world-modal .world-app:has(.world-flight-notice:not([hidden])) .world-attention-open{
   top:calc(var(--crew-shared-header-height,96px) + 165px);
 }
+
+/* Map command dock: preserve the original composer, with quiet Context access. */
+.crew-world-command-head #crew-world-command-context{
+  position:relative;min-width:36px;width:36px;max-width:36px;
+  padding:0!important;font-size:0!important;
+}
+.crew-world-command-head #crew-world-command-context::before{
+  content:"◔";font-size:19px;line-height:1;
+}
+.crew-world-command-head #crew-world-command-context[data-context-tone="warning"]::after,
+.crew-world-command-head #crew-world-command-context[data-context-tone="critical"]::after{
+  content:"";position:absolute;right:4px;top:4px;width:7px;height:7px;
+  border-radius:50%;background:#f4c06b;
+}
+.crew-world-command-head #crew-world-command-context[data-context-tone="critical"]::after{
+  background:#ff8780;
+}
+.crew-world-result-peek{min-height:35px;padding:7px 11px}
+.crew-world-result-peek-kind{max-width:22%}
+.crew-world-modal .world-status-strip{pointer-events:none}

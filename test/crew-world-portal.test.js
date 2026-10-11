@@ -68,6 +68,7 @@ async function tick(){await new Promise(resolve=>setImmediate(resolve));}
   originalMessages.appendChild(nodes['messages-container']);
   originalComposer.appendChild(nodes['chat-composer-footer']);
   let mountCount=0,disposeCount=0,pauseCount=0,resumeCount=0,roleNavigations=[];
+  const mountArgs=[];
   let historyRestores=0;
   let contextOpenCount=0,collaborationVisit=null;
   let blockedNavigation=null,failNavigationId=null,clockIndex=0;
@@ -88,8 +89,10 @@ async function tick(){await new Promise(resolve=>setImmediate(resolve));}
     addEventListener(){},requestAnimationFrame(fn){fn();},
     setTimeout(fn,ms){const id=++clockIndex;scheduled.set(id,{fn,ms});return id;},
     clearTimeout(id){scheduled.delete(id);},
-    mountCrewWorldScene(){mountCount++;const dispose=()=>disposeCount++;
-      dispose.pause=()=>pauseCount++;dispose.resume=()=>resumeCount++;return dispose;},
+    mountCrewWorldScene(camera){mountCount++;mountArgs.push(camera);const dispose=()=>disposeCount++;
+      dispose.pause=()=>pauseCount++;dispose.resume=()=>resumeCount++;
+      dispose.getCameraState=()=>({x:3,z:-2,zoom:2.25,selectedId:'pocket'});
+      return dispose;},
     getCrewCockpitSnapshot(){return{roles:[{id:'pocket',name:'Pocket'},{id:'teacher',name:'Teacher'}]};},
     getCurrentRoleId(){return roleNavigations.at(-1);},
     async openCrewCockpitRole(id){
@@ -320,6 +323,19 @@ async function tick(){await new Promise(resolve=>setImmediate(resolve));}
   assert.strictEqual(nodes['chat-composer-footer'].parentNode,nodes['crew-world-chat-composer-slot'],
     'the original Chat is restored after async map resume');
   assert.equal(disposeCount,0,'view changes should pause/resume the existing 3D scene, not rebuild it');
+  // Runtime Role additions/removals rebuild ONLY the scene, not the command dock.
+  const beforeRoles=roleNavigations.slice();
+  nodes['prompt-input'].value='新增角色也要保留的草稿';
+  win.CrewWorldHost.refreshSceneRoles();
+  assert.equal(disposeCount,1,'roster change disposes the obsolete graphics once');
+  assert.equal(mountCount,2,'roster change mounts the new map without reloading Chat');
+  assert.equal(mountArgs[1].x,3);
+  assert.equal(mountArgs[1].z,-2);
+  assert.equal(mountArgs[1].zoom,2.25);
+  assert.equal(mountArgs[1].selectedId,'pocket');
+  assert.deepEqual(roleNavigations,beforeRoles,'scene refresh does not navigate provider sessions');
+  assert.equal(nodes['prompt-input'].value,'新增角色也要保留的草稿');
+  assert.strictEqual(nodes['chat-composer-footer'].parentNode,nodes['crew-world-chat-composer-slot']);
   console.log('Non-blocking Role switch: fast/slow, draft safety, keyboard guard, failure retry OK');
   console.log('Crew World modeless portal: original Context, full reading, navigation and one Chat DOM passed');
 })().catch(error=>{console.error(error);process.exitCode=1;});

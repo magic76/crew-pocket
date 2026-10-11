@@ -1,7 +1,7 @@
 /* Crew World 3D visual prototype: sample-only states, zero Runtime writes. */
 (() => {
   'use strict';
-  function mountWorld(){
+  function mountWorld(initialCamera=null){
   let disposed=false,paused=false,pausedAt=0,sceneReady=false,contextLost=false,teardown=null,raf=0;
   let pauseScene=()=>{
     if(disposed)return;
@@ -12,6 +12,7 @@
   };
   let resumeScene=()=>{};
   let activeSelectWorldRole=()=>false;
+  let snapshotCamera=()=>null;
   const cleanups=[];
   function listen(target,event,handler,options){
     if(!target)return;
@@ -27,7 +28,7 @@
   const stage=document.getElementById('world-stage');
   const loading=document.getElementById('world-loading');
   const worldModal=document.getElementById('crew-world-modal');
-  if(loading){loading.textContent='正在建立 3D 世界…';loading.hidden=false;}
+  if(loading){loading.textContent='正在建立 3D 世界…';loading.hidden=Boolean(initialCamera);}
   if(!stage)return ()=>{};
   const fail=msg=>{if(loading)loading.textContent=msg;};
   if(!window.THREE || !window.WorldLabKit){fail('缺少本地 3D 資源，請更新 Crew Runtime。');return;}
@@ -43,9 +44,29 @@
     let liveRows=null;
     try { liveRows=await loadStatus(); } catch (_) { /* Keep standalone art preview available. */ }
     if(disposed)return;
+    // An empty verified Runtime is not an art demo: never invent sample Roles.
+    // Keep a lightweight watcher so adding the first Role activates the town.
+    if(Array.isArray(liveRows)&&liveRows.length===0){
+      if(loading){
+        loading.dataset.empty='true';
+        loading.textContent='目前沒有角色，請從上方新增 Role';
+        loading.hidden=false;
+      }
+      trackedInterval(async()=>{
+        if(disposed||paused||document.hidden)return;
+        try{
+          const current=await loadStatus();
+          if(!disposed&&!paused&&current.length)
+            window.CrewWorldHost?.refreshSceneRoles?.();
+        }catch(_){/* Wait for the real Runtime rather than showing demo agents. */}
+      },7000);
+      return;
+    }
+    if(loading)delete loading.dataset.empty;
     const roles=liveRows?.length?kit.makeLiveRoles(liveRows):kit.roles;
     const liveRuntimeByRole=new Map((liveRows||[]).map(row=>[row.roleId,row.runtime]));
     const originalCount=liveRows?.length||roles.length;
+    const liveSignature=JSON.stringify((liveRows||[]).map(row=>[row.roleId,row.projectId||'']));
     const districtMap=new Map();
     for(const role of roles){
       const key=role.districtId||role.id;
@@ -68,10 +89,11 @@
       :'地圖 '+roles.length+' 位 · '+districts.length+' 區';
     if(pill)pill.textContent=isLive?statusSummary():'示範場景 · 非即時';
   const reduced=window.matchMedia?.('(prefers-reduced-motion: reduce)').matches||false;
+  const lowPower=window.matchMedia?.('(pointer: coarse)').matches||false;
   let renderer;
   try{renderer=new T.WebGLRenderer({antialias:true,alpha:true,powerPreference:'low-power'});}
   catch(_){fail('無法啟動 WebGL，請檢查瀏覽器硬體加速。');return;}
-  renderer.setPixelRatio(Math.min(devicePixelRatio||1,1.7));
+  renderer.setPixelRatio(Math.min(devicePixelRatio||1,lowPower?1.35:1.7));
   renderer.shadowMap.enabled=true;
   renderer.shadowMap.type=T.PCFSoftShadowMap;
   renderer.outputEncoding=T.sRGBEncoding;
@@ -83,7 +105,7 @@
   const sunlight=new T.DirectionalLight(0xfff5dd,1.05);
   sunlight.position.set(-7,18,13);
   sunlight.castShadow=true;
-  sunlight.shadow.mapSize.set(1024,1024);
+  sunlight.shadow.mapSize.set(lowPower||roles.length>12?512:1024,lowPower||roles.length>12?512:1024);
   sunlight.shadow.camera.left=-24;sunlight.shadow.camera.right=24;
   sunlight.shadow.camera.top=24;sunlight.shadow.camera.bottom=-24;
   sunlight.shadow.bias=-.0005;
@@ -205,8 +227,13 @@
   const overviewZoom=roles.length<=12?1.32:1.12;
   // Open the world on the actual active Role, not always the first list item.
   const currentRole=window.getCurrentRoleId?.()||window.getCrewCockpitSnapshot?.()?.activeRoleId;
-  const initialSelection=roles.findIndex(role=>role.id===currentRole);
-  let width=1,height=1,zoom=overviewZoom,selected=Math.max(0,initialSelection),focus=null;
+  const initialSelection=roles.findIndex(role=>role.id===(initialCamera?.selectedId||currentRole));
+  const initialZoom=Number(initialCamera?.zoom);
+  let width=1,height=1,zoom=Number.isFinite(initialZoom)&&initialZoom>=.65&&initialZoom<=4.5?initialZoom:overviewZoom,
+    selected=Math.max(0,initialSelection),focus=null;
+  if(Number.isFinite(initialCamera?.x)&&Number.isFinite(initialCamera?.z))
+    view.set(initialCamera.x,.7,initialCamera.z);
+  snapshotCamera=()=>({x:view.x,z:view.z,zoom,selectedId:roles[selected]?.id||null});
   const selectionHalo=new T.Mesh(new T.RingGeometry(1.08,1.42,36),
     new T.MeshBasicMaterial({color:'#f7de8b',transparent:true,opacity:.82,
       side:T.DoubleSide,depthWrite:false}));
@@ -351,8 +378,26 @@
     if(!isLive||!synced)return[];
     return planner?.attentionItems?.(roles,freshReplies,Date.now())||[];
   }
+  const activityOpen=document.getElementById('world-activity-open');
+  const activityCount=document.getElementById('world-activity-count');
+  const activityLabel=document.getElementById('world-activity-label');
+  const toAttention=document.getElementById('world-activity-to-attention');
+  const toHandoffs=document.getElementById('world-activity-to-handoffs');
+  if(activityOpen)activityOpen.hidden=!isLive||!window.CrewWorldHost;
+  function syncActivityDisclosure(){
+    activityOpen?.setAttribute('aria-expanded',String(Boolean(!attentionPanel?.hidden||!handoffsPanel?.hidden)));
+  }
+  function syncActivityBadge(count){
+    if(!activityOpen)return;
+    activityOpen.dataset.alert=String(count>0);
+    if(activityCount){activityCount.hidden=count===0;activityCount.textContent=String(count);}
+    if(activityLabel)activityLabel.textContent=count?'待處理':'動態';
+    if(toAttention)toAttention.hidden=count===0;
+    activityOpen.setAttribute('aria-label',count?count+' 位角色需要關注，查看小隊動態':'查看小隊協作動態');
+  }
   function renderAttention(){
     const concerns=concernRoles();
+    syncActivityBadge(concerns.length);
     const signature=concerns.map(({role,reply})=>role.id+':'+role.attention+':'+(reply?.signature||'')).join('|');
     if(attentionOpenButton){
       attentionOpenButton.hidden=!concerns.length;
@@ -362,6 +407,7 @@
     if(attentionPanel&&(!concerns.length||!synced)){
       attentionPanel.hidden=true;
       attentionOpenButton?.setAttribute('aria-expanded','false');
+      syncActivityDisclosure();
     }
     if(attentionList&&signature!==attentionSignature){
       attentionSignature=signature;
@@ -391,23 +437,31 @@
     if(!isLive||!synced||index<0||index>=roles.length)return;
     const role=roles[index];
     if(!(role.attention>0||activeReply(role.id)))return;
-    if(attentionPanel)attentionPanel.hidden=true;
-    attentionOpenButton?.setAttribute('aria-expanded','false');
+    showAttention(false);
     select(index,false);
     panTo(role.islandX,role.islandZ,width<700?2.25:1.85);
     // Reuse existing Chat on this Role. Showing an event is not marking it read.
     void window.CrewWorldHost?.openChat?.(role.id,{compact:false});
   }
-  listen(attentionOpenButton,'click',()=>{
-    if(!attentionPanel||attentionOpenButton.hidden)return;
-    attentionPanel.hidden=!attentionPanel.hidden;
-    attentionOpenButton.setAttribute('aria-expanded',String(!attentionPanel.hidden));
-    if(!attentionPanel.hidden)showHandoffs(false);
+  function showAttention(open){
+    if(!attentionPanel)return;
+    const available=Boolean(synced&&concernRoles().length);
+    if(open&&!available){showHandoffs(true);return;}
+    if(open)showHandoffs(false);
+    attentionPanel.hidden=!open;
+    attentionOpenButton?.setAttribute('aria-expanded',String(open));
+    syncActivityDisclosure();
+  }
+  listen(attentionOpenButton,'click',()=>showAttention(Boolean(attentionPanel?.hidden)));
+  listen(attentionClose,'click',()=>showAttention(false));
+  listen(activityOpen,'click',()=>{
+    const open=!attentionPanel?.hidden||!handoffsPanel?.hidden;
+    if(open){showAttention(false);showHandoffs(false);}
+    else if(concernRoles().length)showAttention(true);
+    else showHandoffs(true);
   });
-  listen(attentionClose,'click',()=>{
-    if(attentionPanel)attentionPanel.hidden=true;
-    attentionOpenButton?.setAttribute('aria-expanded','false');
-  });
+  listen(toAttention,'click',()=>showAttention(true));
+  listen(toHandoffs,'click',()=>showHandoffs(true));
   listen(attentionList,'click',event=>{
     const button=event.target.closest?.('button[data-role-index]');
     if(button&&attentionList.contains(button))openAttentionRole(Number(button.dataset.roleIndex));
@@ -441,6 +495,7 @@
     }
     handoffsPanel.hidden=!open;
     handoffsOpen?.setAttribute('aria-expanded',String(open));
+    syncActivityDisclosure();
     if(open)renderHandoffs();
   }
   function shownHandoffs(){
@@ -480,7 +535,7 @@
     if(!handoffsOpen||!handoffsList)return;
     renderCollaborationLinks();
     handoffsOpen.hidden=!isLive||!window.CrewWorldHost;
-    if(handoffsOpen.hidden){handoffsPanel.hidden=true;return;}
+    if(handoffsOpen.hidden){handoffsPanel.hidden=true;syncActivityDisclosure();return;}
     const rows=shownHandoffs();
     // Compact icon/count control leaves more of the living map visible.
     const handoffCount=evidenceVerified?String(evidenceRows.length):'—';
@@ -733,10 +788,7 @@
     if(center)roster[index]?.scrollIntoView?.({inline:'center',block:'nearest'});
     window.CrewWorldHost?.onSelectedRole?.(roles[index].id,roles[index].name);
     // Double tap is a closer camera target, not a second UI mode.
-    if(attentionPanel&&!attentionPanel.hidden){
-      attentionPanel.hidden=true;
-      attentionOpenButton?.setAttribute('aria-expanded','false');
-    }
+    if(attentionPanel&&!attentionPanel.hidden)showAttention(false);
     if(center){
       // Selection moves only the camera. There is no user-controlled avatar,
       // simulated travel or delayed Role Chat transition.
@@ -822,6 +874,8 @@
     try{
       const next=await loadStatus();
       if(disposed||paused)return;
+      const nextSignature=JSON.stringify(next.map(row=>[row.roleId,row.projectId||'']));
+      if(nextSignature!==liveSignature){window.CrewWorldHost?.refreshSceneRoles?.();return;}
       const byId=new Map(next.map(item=>[item.roleId,item]));
       actors.forEach((actor,index)=>{
         const item=byId.get(actor.role.id);
@@ -896,7 +950,7 @@
           const remaining=300000-age;
           if(remaining<=0)return;
           const compact=text.replace(/\s+/g,' ');
-          entry.speech.textContent=compact.length>240?compact.slice(0,239)+'…':compact;
+          entry.speech.textContent='新回覆';
           entry.speech.title=text;
           freshReplies.set(role.id,{at:Date.now(),signature});
           renderAttention();refreshRolePeek();
@@ -1072,9 +1126,15 @@
   });
 
   let elapsed=0,last=performance.now();
+  let lastDraw=0;
   function frame(now){
     if(disposed||paused)return;
     raf=requestAnimationFrame(frame);
+    const busy=Boolean(focus||fingers.size||activePlanes.length||
+      roles.some(role=>role.state==='working'));
+    const minFrameMs=lowPower?(busy?30:75):(reduced&&!busy?65:16);
+    if(lastDraw&&now-lastDraw<minFrameMs)return;
+    lastDraw=now;
     const delta=Math.min((now-last)/1000,.06);last=now;
     if(document.hidden)return;
     elapsed+=delta;
@@ -1148,15 +1208,16 @@
     }
     // At overview zoom, hide waiting/idle badges even in small crews. Only
     // active work and a newly received reply should add labels to the map.
-    const overview=zoom<1.65;
+    const overview=zoom<1.65,near=zoom>=2.55;
+    const zoomTier=overview?'overview':near?'near':'district';
+    if(stage.dataset.zoomTier!==zoomTier)stage.dataset.zoomTier=zoomTier;
     const placements=labels.map(({button,speech},index)=>{
       const projected=actors[index].root.position.clone().add(new T.Vector3(0,3.3,0)).project(camera);
       const x=(projected.x+1)/2*width,y=(-projected.y+1)/2*height;
-      const active=roles[index].state==='working'||!speech.hidden||
+      const active=roles[index].state==='working'||roles[index].attention>0||!speech.hidden||
         Boolean(contextForRole(roles[index].id));
-      const priority=active?(!speech.hidden?0:contextForRole(roles[index].id)?.tone==='critical'?0:1):
-        index===selected?2:
-        roles[index].state==='working'?2:roles[index].state==='waiting'?3:4;
+      const priority=!speech.hidden||contextForRole(roles[index].id)?.tone==='critical'?0:
+        roles[index].attention>0?1:roles[index].state==='working'?2:index===selected?3:4;
       return {button,index,x,y,priority,depth:projected.z,active};
     }).sort((a,b)=>a.priority-b.priority);
     const occupied=[];
@@ -1165,8 +1226,9 @@
       const topMargin=Math.min(100,height*.18),bottomMargin=Math.min(115,height*.22);
       const out=depth<-1||depth>1||x<12||x>width-12||
         y<topMargin||y>height-bottomMargin;
-      const lowPriority=overview&&!active&&index!==selected;
-      const collides=occupied.some(point=>Math.abs(point.x-x)<112&&Math.abs(point.y-y)<50);
+      const lowPriority=(overview&&!active&&index!==selected)||
+        (!overview&&!near&&roles.length>18&&!active&&index!==selected);
+      const collides=occupied.some(point=>Math.abs(point.x-x)<(near?112:96)&&Math.abs(point.y-y)<(near?51:40));
       const visible=!out&&!lowPriority&&!collides;
       button.style.display=visible?'':'none';
       if(visible){occupied.push({x,y});button.style.left=x+'px';button.style.top=y+'px';}
@@ -1201,7 +1263,7 @@
     for(const pin of districtPins){
       const pos=new T.Vector3(pin.role.islandX,2.9,pin.role.islandZ).project(camera);
       const x=(pos.x+1)/2*width,y=(-pos.y+1)/2*height;
-      const visible=synced&&zoom<1.75&&roles.length>=6&&
+      const visible=synced&&overview&&roles.length>=6&&
         pin.members.some(role=>role.state==='working'||role.attention>0)&&
         pos.z>=-1&&pos.z<=1&&
         x>35&&x<width-35&&y>Math.min(115,height*.2)&&
@@ -1270,6 +1332,7 @@
   dispose.pause=()=>pauseScene();
   dispose.resume=()=>{if(!sceneReady){paused=false;return;}resumeScene();};
   dispose.selectRole=roleId=>activeSelectWorldRole(roleId);
+   dispose.getCameraState=()=>snapshotCamera();
   return dispose;
   }
   window.mountCrewWorldScene=mountWorld;
