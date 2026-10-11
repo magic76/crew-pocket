@@ -39,7 +39,6 @@ async function tick(){await new Promise(resolve=>setImmediate(resolve));}
     'world-chat-open','crew-world-chat-role-name','crew-back-home-btn','world-stage',
     'crew-world-focus-bar','crew-world-focus-back','crew-world-focus-name',
     'crew-world-focus-full','crew-world-focus-context','context-pill','world-reset',
-    'world-tools-menu',
     'crew-world-command-role','crew-world-command-state','crew-world-command-read',
     'crew-world-result-peek','crew-world-result-peek-kind','crew-world-result-peek-text',
     'prompt-input'];
@@ -155,10 +154,9 @@ async function tick(){await new Promise(resolve=>setImmediate(resolve));}
   nodes['crew-world-open-btn'].click();
   await tick();await tick();
   assert.equal(mountCount,1,'reopening resumes the existing scene');
-  nodes['world-tools-menu'].open=true;
   win.CrewWorldHost.focusRole('teacher','Teacher');
-  assert.equal(nodes['world-tools-menu'].open,false,
-    'Role focus dismisses the secondary map control popover');
+  assert.strictEqual(nodes['crew-home-view-toggle'].parentNode,nodes['crew-home-header'],
+    'Role focus preserves the shared Dashboard/Map navigation');
   nodes['crew-world-focus-back'].click();
   assert.equal(resumeCount,1,'reopening resumes the paused world');
   nodes['crew-home-dashboard-btn'].click();
