@@ -2,8 +2,15 @@
 (() => {
   'use strict';
   function mountWorld(){
-  let disposed=false,paused=false,pausedAt=0,sceneReady=false,teardown=null,raf=0;
-  let pauseScene=()=>{},resumeScene=()=>{};
+  let disposed=false,paused=false,pausedAt=0,sceneReady=false,contextLost=false,teardown=null,raf=0;
+  let pauseScene=()=>{
+    if(disposed)return;
+    if(!paused)pausedAt=performance.now();
+    paused=true;
+    if(raf)cancelAnimationFrame(raf);
+    raf=0;
+  };
+  let resumeScene=()=>{};
   const cleanups=[];
   function listen(target,event,handler,options){
     if(!target)return;
@@ -18,6 +25,7 @@
   }
   const stage=document.getElementById('world-stage');
   const loading=document.getElementById('world-loading');
+  const worldModal=document.getElementById('crew-world-modal');
   if(loading){loading.textContent='正在建立 3D 世界…';loading.hidden=false;}
   if(!stage)return ()=>{};
   const fail=msg=>{if(loading)loading.textContent=msg;};
@@ -684,7 +692,17 @@
   listen(window,'resize',resize);
   if(window.ResizeObserver){const observer=new ResizeObserver(resize);observer.observe(stage);cleanups.push(()=>observer.disconnect());}
   listen(stage,'webglcontextlost',event=>{
-    event.preventDefault();fail('3D 繪圖環境中斷，請重新開啟頁面。');
+    event.preventDefault();contextLost=true;pauseScene();
+    if(!worldModal?.hidden&&loading){
+      loading.textContent='正在恢復 3D 繪圖環境…';loading.hidden=false;
+    }
+  });
+  listen(stage,'webglcontextrestored',()=>{
+    contextLost=false;
+    renderer.resetState?.();
+    resize();
+    if(loading)loading.hidden=true;
+    if(!worldModal?.hidden)resumeScene();
   });
 
   let elapsed=0,last=performance.now();
@@ -781,20 +799,20 @@
   updateInfo();
   window.CrewWorldHost?.onSelectedRole?.(roles[selected].id,roles[selected].name);
   sceneReady=true;
-  pauseScene=()=>{
-    if(disposed||paused)return;
-    paused=true;pausedAt=performance.now();
-    if(raf)cancelAnimationFrame(raf);
-    raf=0;
-  };
   resumeScene=()=>{
     if(disposed||!paused)return;
+    const gl=renderer.getContext();
+    if(contextLost||gl.isContextLost?.()){
+      contextLost=true;
+      if(loading){loading.textContent='正在恢復 3D 繪圖環境…';loading.hidden=false;}
+      try{gl.getExtension('WEBGL_lose_context')?.restoreContext();}catch(_){/* Browser may restore it automatically. */}
+      return;
+    }
     const now=performance.now(),duration=Math.max(0,now-pausedAt);
     paused=false;last=now;
     if(focus)focus.start+=duration;
     actors.forEach(actor=>{if(actor.mode!=='idle')actor.expires+=duration;});
     activePlanes.forEach(flight=>{flight.startedAt+=duration;});
-    activeRoadSignals.forEach(signal=>{signal.startedAt+=duration;});
     arrivalFlashes.forEach(cue=>{cue.startedAt+=duration;});
     resize();
     if(document.hidden)return;
@@ -832,7 +850,7 @@
     disposed=true;teardown?.();teardown=null;
     for(const cleanup of cleanups.splice(0).reverse())cleanup();
   };
-  dispose.pause=()=>{paused=true;pauseScene();};
+  dispose.pause=()=>pauseScene();
   dispose.resume=()=>{if(!sceneReady){paused=false;return;}resumeScene();};
   return dispose;
   }

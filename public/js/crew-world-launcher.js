@@ -181,8 +181,10 @@
       if(stopWorld)stopWorld.resume?.();
       else stopWorld=window.mountCrewWorldScene?.()||null;
     }catch(error){
-      if(!modal.hidden&&openVersion===version&&loading)
+      if(!modal.hidden&&openVersion===version&&loading){
         loading.textContent='無法載入 3D 世界，請重新開啟。'+(error.message||'');
+        loading.hidden=false;
+      }
     }
   }
   async function openChat(roleId=selectedRoleId,{compact=false}={}){
