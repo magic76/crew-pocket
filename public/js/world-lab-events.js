@@ -99,7 +99,8 @@
   // It flies independently of the decorative bridge graph.
   function paperFlightDuration(start,end){
     const distance=Math.hypot((end?.x||0)-(start?.x||0),(end?.z||0)-(start?.z||0));
-    return Math.round(Math.max(820,Math.min(1650,780+distance*17)));
+    // Long enough to read on mobile, capped to avoid lingering aircraft.
+    return Math.round(Math.max(2050,Math.min(3200,1750+distance*33)));
   }
   function paperFlightPoint(start,end,progress){
     const t=Math.max(0,Math.min(1,Number.isFinite(progress)?progress:0));
