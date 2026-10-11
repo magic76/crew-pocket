@@ -427,7 +427,7 @@ assert.deepEqual(events.collaborationConnections(
 assert.deepEqual(events.collaborationConnections(evidenceForTests,'a',false,3,linkNow+linkWindow+1),[],
   'old arcs disappear without receiving any newer messages');
 assert.deepEqual(events.traceableEvents([obsolete,...evidenceForTests],['a','b','c','d'],6,linkNow)
-  .map(item=>item.id),['m3','m4','m1','m2','yesterday'].filter(id=>id!=='m4'),
+  .map(item=>item.id),['m3','m1','m2','yesterday'],
   'archived Role-to-Role messages remain inspectable after their map connection expires');
 for(const id of ['world-attention-open','world-attention-count','world-attention-panel',
   'world-attention-list','world-role-peek','world-role-peek-name',
