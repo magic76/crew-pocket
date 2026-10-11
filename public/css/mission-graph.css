@@ -115,8 +115,12 @@
   padding: 11px;
 }
 .mission-event:target .mission-event-content,
-.mission-event:focus-within .mission-event-content {
+.mission-event:focus-within .mission-event-content,
+.mission-event.mission-evidence-highlight .mission-event-content {
   border-color: var(--cp-accent);
+}
+.mission-event.mission-evidence-highlight .mission-event-content {
+  box-shadow: 0 0 0 2px var(--cp-accent-soft);
 }
 .mission-event-overview { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 .mission-event-overview strong { color: var(--cp-text); font-size: 12px; font-weight: 750; }

@@ -118,15 +118,18 @@
   const arrivalFlashes=[];
   const MAX_ACTIVE_PLANES=3;
   const MAX_PENDING_MESSAGES=6;
-  function launchPaperPlane(sender,recipient,now,kind='handoff'){
+  function launchPaperPlane(sender,recipient,now,kind='handoff',eventId=null){
     if(activePlanes.length>=MAX_ACTIVE_PLANES||!planner?.paperFlightPoint||
        !kit?.createPaperPlane)return false;
     const from={x:sender.role.x,y:3.25,z:sender.role.z};
     const to={x:recipient.role.x,y:3.25,z:recipient.role.z};
     const duration=reduced?760:planner.paperFlightDuration(from,to);
     const plane=kit.createPaperPlane(scene,kind);
+    if(eventId)plane.root.traverse(mesh=>{
+      if(mesh.isMesh)mesh.userData.handoffEventId=eventId;
+    });
     plane.root.scale.setScalar(Math.max(.80,Math.min(1.55,worldExtent/22)));
-    const flight={from,to,startedAt:now,duration,plane,kind,recipient};
+    const flight={from,to,startedAt:now,duration,plane,kind,recipient,eventId};
     activePlanes.push(flight);
     // Digital message only: the paper plane doesn't require the sender
     // to travel or turn on unrelated roads and never implies delivery.
@@ -299,6 +302,103 @@
   listen(window,'keydown',event=>{
     if(event.key==='Escape'&&picker&&!picker.hidden)closeDistrictPicker();
   });
+  // P7 and P8 are read-only projections of verified Runtime and saved
+  // message events. No inferred tool progress, delivery or task success.
+  const focusActivity=document.getElementById('world-focus-activity');
+  const focusActivityText=document.getElementById('world-focus-activity-text');
+  const focusActivityOpen=document.getElementById('world-focus-activity-open');
+  const handoffsOpen=document.getElementById('world-handoffs-open');
+  const handoffsPanel=document.getElementById('world-handoffs-panel');
+  const handoffsClose=document.getElementById('world-handoffs-close');
+  const handoffsList=document.getElementById('world-handoffs-list');
+  const stoppedAt=new Map(),freshReplies=new Map();
+  let evidenceRows=[],evidenceVerified=false,evidenceSignature='';
+  const memberById=new Map(roles.map(role=>[role.id,role]));
+  function refreshFocusActivity(){
+    if(!focusActivity||!focusActivityText)return;
+    const role=roles[selected],focused=window.CrewWorldHost?.isRoleFocused?.(role.id);
+    focusActivity.hidden=!isLive||!focused;
+    if(focusActivity.hidden)return;
+    let tone='unknown',detail='Runtime 狀態未同步';
+    const fresh=freshReplies.get(role.id);
+    if(synced){
+      if(fresh&&Date.now()-fresh.at<300000){
+        tone='reply';detail='已記錄新回覆 · 點擊查看原本對話';
+      }else if(role.state==='working'){
+        tone='working';detail='正在執行 · '+(role.workTitle||'詳細步驟請查看對話');
+      }else if(role.state==='waiting'){
+        tone='waiting';detail=role.attention
+          ?'待處理 '+role.attention+' 項 · 查看原本對話':'等待處理';
+      }else if(stoppedAt.has(role.id)&&Date.now()-stoppedAt.get(role.id)<45000){
+        tone='idle';detail='已停止執行 · 結果需查看對話確認';
+      }else{
+        tone='idle';detail=role.state==='new'?'尚無工作':'目前待命';
+      }
+    }
+    focusActivity.dataset.tone=tone;
+    focusActivityText.textContent=detail;
+    if(focusActivityOpen)focusActivityOpen.textContent=tone==='reply'?'查看回覆':'查看對話';
+  }
+  listen(focusActivityOpen,'click',()=>{
+    const role=roles[selected];
+    freshReplies.delete(role.id);
+    window.CrewWorldHost?.expandFocusedChat?.();
+    refreshFocusActivity();
+  });
+  function showHandoffs(open){
+    if(!handoffsPanel)return;
+    handoffsPanel.hidden=!open;
+    handoffsOpen?.setAttribute('aria-expanded',String(open));
+    if(open)renderHandoffs();
+  }
+  function renderHandoffs(){
+    if(!handoffsOpen||!handoffsList)return;
+    handoffsOpen.hidden=!isLive||!window.CrewWorldHost;
+    if(handoffsOpen.hidden){handoffsPanel.hidden=true;return;}
+    handoffsOpen.textContent='協作紀錄'+(evidenceVerified&&evidenceRows.length?' · '+evidenceRows.length:'');
+    const signature=(evidenceVerified?'verified':'unknown')+':'+evidenceRows.map(row=>row.id).join('|');
+    if(signature===evidenceSignature)return;
+    evidenceSignature=signature;
+    handoffsList.replaceChildren();
+    if(!evidenceVerified||!evidenceRows.length){
+      const note=document.createElement('p');
+      note.textContent=!evidenceVerified?'協作資料尚未同步':'目前沒有已保存的角色訊息';
+      handoffsList.appendChild(note);return;
+    }
+    for(const event of evidenceRows){
+      const sender=memberById.get(event.fromRoleId),recipient=memberById.get(event.toRoleId);
+      if(!sender||!recipient)continue;
+      const button=document.createElement('button');
+      button.type='button';button.dataset.handoffId=event.id;
+      button.setAttribute('aria-label',sender.name+' 傳給 '+recipient.name+' · 查看協作證據');
+      const symbol=document.createElement('span');symbol.className='world-handoff-symbol';
+      symbol.textContent=event.kind==='reply'?'↩':'↗';
+      const info=document.createElement('span');info.className='world-handoff-info';
+      const title=document.createElement('strong');
+      title.textContent=sender.name+' → '+recipient.name;
+      const subtitle=document.createElement('small');
+      subtitle.textContent=(event.kind==='reply'?'已記錄回覆':'已記錄訊息')+' · '+
+        new Date(event.createdAt).toLocaleString('zh-TW',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'});
+      info.append(title,subtitle);
+      const more=document.createElement('span');more.className='world-handoff-open';
+      more.textContent='查看 ›';button.append(symbol,info,more);handoffsList.appendChild(button);
+    }
+  }
+  function openEvidence(eventId){
+    if(!evidenceVerified)return;
+    const record=evidenceRows.find(row=>row.id===eventId);
+    if(!record||!memberById.has(record.toRoleId))return;
+    // Original, Role-scoped mission graph displays actual message content,
+    // reply links and recorded receipts; no parallel message reader in World.
+    window.CrewWorldHost?.openCollaboration?.(record.toRoleId,record.id);
+  }
+  listen(handoffsOpen,'click',()=>showHandoffs(Boolean(handoffsPanel?.hidden)));
+  listen(handoffsClose,'click',()=>showHandoffs(false));
+  listen(handoffsList,'click',event=>{
+    const button=event.target.closest?.('button[data-handoff-id]');
+    if(button&&handoffsList.contains(button))openEvidence(button.dataset.handoffId);
+  });
+  renderHandoffs();
   const contextLine=document.getElementById('world-role-context');
   const contextCache=new Map();
   let contextRequestId=0;
@@ -416,6 +516,7 @@
     actors[selected].root.add(selectionHalo);
     if(contextLine&&document.getElementById('world-info')?.classList.contains('is-collapsed'))
       contextLine.textContent='Context · 展開詳情後讀取';
+    refreshFocusActivity();
   }
   function cameraSync(){
     const aspect=width/Math.max(1,height);
@@ -491,6 +592,7 @@
     if(center)roster[index]?.scrollIntoView?.({inline:'center',block:'nearest'});
     window.CrewWorldHost?.onSelectedRole?.(roles[index].id,roles[index].name);
     if(center)window.CrewWorldHost?.focusRole?.(roles[index].id,roles[index].name);
+    refreshFocusActivity();
     if(center){
       const role=roles[index];
       if(explore&&visitor&&navigation){
@@ -610,6 +712,10 @@
       const byId=new Map(next.map(item=>[item.roleId,item]));
       actors.forEach((actor,index)=>{
         const item=byId.get(actor.role.id);
+        const previous=synced?actor.role.state:'unknown';
+        if(previous==='working'&&item?.state!=='working')
+          stoppedAt.set(actor.role.id,Date.now());
+        if(item?.state==='working')stoppedAt.delete(actor.role.id);
         liveRuntimeByRole.set(actor.role.id,item?.runtime||null);
         actor.role.state=item&&['working','waiting','idle','new'].includes(item.state)?item.state:'unknown';
         actor.role.workTitle=actor.role.state==='working'&&typeof item?.currentWork?.title==='string'
@@ -679,6 +785,8 @@
           const compact=text.replace(/\s+/g,' ');
           entry.speech.textContent=compact.length>240?compact.slice(0,239)+'…':compact;
           entry.speech.title=text;
+          freshReplies.set(role.id,{at:Date.now(),signature});
+          refreshFocusActivity();
           entry.speech.hidden=false;
           const head=headStatus(actors[index]);
           entry.button.setAttribute('aria-label',role.name+' · '+head.state+' · 最新回覆：'+entry.speech.textContent);
@@ -702,6 +810,8 @@
       const data=await response.json();
       if(data.success!==true||!Array.isArray(data.events))throw new Error('Room events invalid');
       if(disposed||paused)return;
+      evidenceRows=planner.traceableEvents?.(data.events,roles.map(role=>role.id),6,Date.now())||[];
+      evidenceVerified=true;renderHandoffs();
       const result=planner.observe(data.events,seenEvents,roles.map(role=>role.id),Date.now());
       seenEvents=result.seenIds;
       for(const event of result.arrivals){
@@ -712,6 +822,7 @@
       // If tracking was interrupted, the next success resets baseline rather than
       // interpreting historical records as newly sent messages.
       seenEvents=null;pendingTransitions.length=0;
+      evidenceVerified=false;evidenceRows=[];renderHandoffs();
     }finally{eventRequest=false;}
   }
   function runRecordedHandoff(now){
@@ -723,7 +834,7 @@
       const actor=actors.find(a=>a.role.id===event.fromRoleId);
       const recipient=actors.find(a=>a.role.id===event.toRoleId);
       if(!actor||!recipient)continue;
-      if(!launchPaperPlane(actor,recipient,now,event.kind))continue;
+      if(!launchPaperPlane(actor,recipient,now,event.kind,event.id))continue;
       actor.mode='observed-handoff';
       actor.handoff={start:now,toId:event.toRoleId,kind:event.kind};
       actor.expires=now+(reduced?800:1750);
@@ -745,7 +856,9 @@
     });
   }
   listen(document.getElementById('world-reset'),'click',()=>{
+    showHandoffs(false);
     window.CrewWorldHost?.exitFocus?.();
+    refreshFocusActivity();
     panTo(0,-1.8,overviewZoom);notify('返回全景');
   });
   function setZoom(value){
@@ -801,7 +914,13 @@
     const point=new T.Vector2((x-b.left)/b.width*2-1,-(y-b.top)/b.height*2+1);
     ray.setFromCamera(point,camera);
     // Respect mesh depth: scenery cannot act as a fake Role or a walk target.
-    const hit=ray.intersectObjects(actors.pickableObjects||actors.map(a=>a.root),true)[0];
+    const planeRoots=activePlanes.filter(flight=>flight.eventId).map(flight=>flight.plane.root);
+    const hit=ray.intersectObjects([
+      ...(actors.pickableObjects||actors.map(a=>a.root)),...planeRoots
+    ],true)[0];
+    if(hit?.object.userData.handoffEventId){
+      openEvidence(hit.object.userData.handoffEventId);return;
+    }
     if(hit?.object.userData.decorative)return;
     if(hit?.object.userData.roleId){
       handleRoleTap(roles.findIndex(role=>role.id===hit.object.userData.roleId));

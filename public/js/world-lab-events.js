@@ -30,6 +30,22 @@
     }));
     return{seenIds,arrivals};
   }
+  // Evidence tray uses the SAME saved-event metadata as paper flights.
+  // No body or delivery status is available here: never infer either.
+  function traceableEvents(events,roleIds,limit=6,now=Date.now()){
+    const allowed=new Set(roleIds||[]),seen=new Set();
+    const count=Math.max(0,Math.min(12,Math.floor(Number(limit)||0)));
+    return (Array.isArray(events)?events:[]).filter(item=>{
+      if(!item||typeof item.id!=='string'||!item.id||seen.has(item.id)||
+         !allowed.has(item.fromRoleId)||!allowed.has(item.toRoleId)||
+         item.fromRoleId===item.toRoleId||!Number.isFinite(item.createdAt)||
+         item.createdAt<=0||item.createdAt>now+MAX_FUTURE_MS)return false;
+      seen.add(item.id);return true;
+    }).sort((a,b)=>b.createdAt-a.createdAt).slice(0,count).map(item=>({
+      id:item.id,fromRoleId:item.fromRoleId,toRoleId:item.toRoleId,
+      kind:item.kind==='reply'?'reply':'handoff',createdAt:item.createdAt
+    }));
+  }
   // A packet of light can travel only along bridges that physically exist.
   // Nodes are *districts*, not Roles. Same-district messages stay local.
   function roadRoute(roads,fromDistrict,toDistrict){
@@ -98,5 +114,5 @@
       y:start.y+(end.y-start.y)*e+Math.sin(Math.PI*t)*rise
     };
   }
-  return{observe,roadRoute,roadPulse,paperFlightDuration,paperFlightPoint};
+  return{observe,traceableEvents,roadRoute,roadPulse,paperFlightDuration,paperFlightPoint};
 });

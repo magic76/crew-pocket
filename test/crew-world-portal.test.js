@@ -45,7 +45,7 @@ async function tick(){await new Promise(resolve=>setImmediate(resolve));}
   originalMessages.appendChild(nodes['messages-container']);
   originalComposer.appendChild(nodes['chat-composer-footer']);
   let mountCount=0,disposeCount=0,pauseCount=0,resumeCount=0,roleNavigations=[];
-  let contextOpenCount=0;
+  let contextOpenCount=0,collaborationVisit=null;
   nodes['context-pill'].addEventListener('click',()=>contextOpenCount++);
   let width=810;
   const win={
@@ -55,7 +55,8 @@ async function tick(){await new Promise(resolve=>setImmediate(resolve));}
       dispose.pause=()=>pauseCount++;dispose.resume=()=>resumeCount++;return dispose;},
     getCrewCockpitSnapshot(){return{roles:[{id:'pocket',name:'Pocket'},{id:'teacher',name:'Teacher'}]};},
     getCurrentRoleId(){return roleNavigations.at(-1);},
-    async openCrewCockpitRole(id){roleNavigations.push(id);doc.body.dataset.primaryTab='chat';}
+    async openCrewCockpitRole(id){roleNavigations.push(id);doc.body.dataset.primaryTab='chat';},
+    openCrewCollaboration(id,eventId){collaborationVisit={id,eventId};}
   };
   doc.getElementById=id=>nodes[id]||null;
   doc.createComment=text=>new Node('#comment',doc);
@@ -157,5 +158,21 @@ async function tick(){await new Promise(resolve=>setImmediate(resolve));}
   assert.strictEqual(nodes['messages-container'].parentNode,originalMessages);
   assert.strictEqual(nodes['chat-composer-footer'].parentNode,originalComposer);
   assert.equal(doc.body.dataset.primaryTab,'chat');
-  console.log('Crew World portal: immersive focus/Context lifecycle, one Chat DOM and scene pause/resume passed');
+
+  nodes['crew-world-open-btn'].click();
+  await tick();
+  win.CrewWorldHost.focusRole('pocket','Pocket');
+  await tick();await tick();
+  win.CrewWorldHost.expandFocusedChat();
+  assert.equal(nodes['crew-world-chat-panel'].classList.contains('compact'),false,
+    'activity ribbon expands the same original Chat DOM');
+  assert.strictEqual(nodes['chat-composer-footer'].parentNode,nodes['crew-world-chat-composer-slot']);
+  win.CrewWorldHost.openCollaboration('teacher','m2');
+  assert.equal(nodes['crew-world-modal'].hidden,true,'jumping to evidence closes World');
+  assert.equal(doc.body.classList.set.has('crew-world-focused'),false);
+  assert.deepEqual(collaborationVisit,{id:'teacher',eventId:'m2'},
+    'a saved event selects recipient-scoped original collaboration without sending anything');
+  assert.strictEqual(nodes['messages-container'].parentNode,originalMessages);
+  assert.strictEqual(nodes['chat-composer-footer'].parentNode,originalComposer);
+  console.log('Crew World portal: verified activity expansion, original message evidence, one Chat DOM passed');
 })().catch(error=>{console.error(error);process.exitCode=1;});

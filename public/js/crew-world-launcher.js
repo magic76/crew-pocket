@@ -224,6 +224,21 @@
     if(focusContext)focusContext.disabled=focusedRoleId!==roleId;
     messages.scrollTop=messages.scrollHeight;
   }
+  function openCollaboration(roleId,eventId=null){
+    const snapshot=window.getCrewCockpitSnapshot?.();
+    if(!roleId||!snapshot?.roles?.some(role=>role.id===roleId))return;
+    // Reuse existing Role-scoped collaboration evidence (including previews,
+    // reply links, delivery receipts). The World owns no parallel messages.
+    close();
+    window.openCrewCollaboration?.(roleId,eventId);
+  }
+  function expandFocusedChat(){
+    if(!focusedRoleId||panel.hidden||window.getCurrentRoleId?.()!==focusedRoleId)return;
+    panel.classList.remove('compact','expanded');
+    expandButton.textContent='全螢幕';
+    expandButton.setAttribute('aria-pressed','false');
+    updateKeyboard();
+  }
   function openFullChat(roleId=selectedRoleId){
     if(!roleId)return;
     restoreTab=false;
@@ -280,6 +295,6 @@
   });
   // Exposed only to the scene in this same document, not cross-frame messages.
   window.CrewWorldHost={open,close,hideChat,openChat,openFullChat,onSelectedRole,
-    focusRole,exitFocus,isRoleFocused:id=>focusedRoleId===id,
+    focusRole,exitFocus,openCollaboration,expandFocusedChat,isRoleFocused:id=>focusedRoleId===id,
     isFocusActive:()=>Boolean(focusedRoleId)};
 })();

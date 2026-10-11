@@ -298,6 +298,35 @@ assert.equal(events.roadRoute([], 'island-a', 'island-b').length,0,
 assert.deepEqual(events.roadRoute([{a:{id:'a'},b:{id:'b'}}],'a','b'),[0],
   'recorded digital signal uses an existing bridge rather than old hub trajectory');
 assert.equal(events.roadPulse([0],0,500,1000)>.6,true);
+for(const document of [main,html]){
+  for(const id of ['world-focus-activity','world-focus-activity-text',
+    'world-focus-activity-open','world-handoffs-open','world-handoffs-panel','world-handoffs-list']){
+    assert.ok(document.includes('id="'+id+'"'),id+' exists in both map experiences');
+  }
+}
+assert.ok(css.includes('.world-focus-activity[hidden]'));
+assert.ok(css.includes('.crew-world-modal:not(.is-role-focused) .world-focus-activity'),
+  'an overview or resumed World must not retain the old focused activity ribbon');
+assert.ok(engine.includes("window.CrewWorldHost?.exitFocus?.();\n    refreshFocusActivity();"),
+  'returning to overview immediately hides the previously selected Role activity');
+assert.ok(css.includes('.world-handoffs-panel[hidden]'));
+assert.match(engine,/function refreshFocusActivity\(\)/);
+assert.ok(engine.includes("window.CrewWorldHost?.isRoleFocused?.(role.id)"),
+  'the activity ribbon only appears for the focused real Role');
+assert.ok(engine.includes("if(synced){"),
+  'verified status gates activity labels');
+assert.ok(engine.includes("已停止執行 · 結果需查看對話確認"),
+  'stopping work never claims successful completion');
+assert.ok(engine.includes("window.CrewWorldHost?.expandFocusedChat?.()"),
+  'new reply expands the single existing Chat DOM');
+assert.ok(engine.includes("planner.traceableEvents?.(data.events"),
+  'only saved message records are listed');
+assert.ok(engine.includes("evidenceVerified=false;evidenceRows=[]"),
+  'stale handoff metadata clears on sync failure');
+assert.ok(engine.includes("window.CrewWorldHost?.openCollaboration?.(record.toRoleId,record.id)"),
+  'the evidence tray opens recipient-scoped original collaboration');
+assert.doesNotMatch(engine,/fetch\('\/api\/role-submit|method:\s*'POST'/,
+  'read-only World activity must never emit messages or invent tasks');
 assert.match(engine,/fetch\('\/api\/crew-room-events'/);
 assert.match(engine,/planner\.observe/);
 assert.match(engine,/observed-handoff/);

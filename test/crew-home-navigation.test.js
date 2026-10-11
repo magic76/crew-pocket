@@ -53,9 +53,11 @@ assert.ok(ui.includes("await window.openCrewConversation(runtime.providerId, run
 assert.ok(ui.includes("await window.openCrewConversation(latest.provider, latest.id)"),
   'historical last-work fallback remains available');
 assert.ok(ui.includes("return selectRole(roleId, true)"));
-assert.ok(ui.includes("window.CrewMissionGraph?.inspectRole(role.id)"));
+assert.ok(ui.includes("window.CrewMissionGraph?.inspectRole(role.id, eventId)"),
+  'collaboration drawer passes an optional saved-message jump to the existing graph');
 assert.ok(ui.includes("case 'collaboration': return openCrewCollaboration(roleId)"));
-assert.ok(graph.includes('inspectRole(roleId)'));
+assert.ok(graph.includes('inspectRole(roleId, eventId = null)'),
+  'mission graph accepts an optional exact saved-event destination');
 assert.ok(graph.includes('const available = new Set((currentSnapshot()?.roles || []).map(role => role.id))'),
   'collaboration detail must refuse unknown Role IDs');
 assert.ok(ui.includes('if (markup === lastRoleRosterMarkup) return'),

@@ -88,7 +88,8 @@ assert.equal(scene.children.length,0,'all paper-airplane resources are released'
 assert.match(world,/const MAX_ACTIVE_PLANES=3/);
 assert.match(world,/const MAX_PENDING_MESSAGES=6/);
 assert.match(world,/pendingTransitions\.shift\(\)/);
-assert.match(world,/launchPaperPlane\(actor,recipient,now,event.kind\)/);
+assert.match(world,/launchPaperPlane\(actor,recipient,now,event.kind,event.id\)/,
+  'a real flight must keep the exact saved message ID for evidence tracing');
 assert.match(world,/launchPaperPlane\(sender,recipient,now,'demo'\)/);
 assert.match(world,/kit\.disposePaperPlane\?\.\(scene,flight.plane\)/);
 assert.match(world,/paperFlightPoint\(flight.from,flight.to/);
