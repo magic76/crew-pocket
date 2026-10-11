@@ -24,6 +24,7 @@
   const focusBack=document.getElementById('crew-world-focus-back');
   const focusName=document.getElementById('crew-world-focus-name');
   const focusFull=document.getElementById('crew-world-focus-full');
+  const focusContext=document.getElementById('crew-world-focus-context');
   if(!opener||!dashboardButton||!toggle||!headerHost||!homeHeader||!modal||!panel||!messagesSlot||!composerSlot||
      !messages||!composer||!hideButton||!expandButton)return;
   let restoreMessages=null,restoreComposer=null;
@@ -91,8 +92,10 @@
   function exitFocus(){
     if(!focusedRoleId)return;
     focusedRoleId=null;
+    document.body.classList.remove('crew-world-focused');
     modal.classList.remove('is-role-focused');
     if(focusBar)focusBar.hidden=true;
+    if(focusContext)focusContext.disabled=true;
     selectVersion++; // Ignore an unfinished Role navigation.
     hideChat();
   }
@@ -109,10 +112,14 @@
     if(modal.hidden||!roleId)return;
     const changed=focusedRoleId!==roleId;
     focusedRoleId=roleId;
+    // Only focus mode suppresses the normal Chat and Crew headers. The
+    // current Role Chat itself remains mounted (same composer and stream).
+    document.body.classList.add('crew-world-focused');
     modal.classList.add('is-role-focused');
     if(focusBar)focusBar.hidden=false;
     if(focusName)focusName.textContent=name||roleId;
     const sameActiveChat=!panel.hidden&&window.getCurrentRoleId?.()===roleId;
+    if(focusContext)focusContext.disabled=!sameActiveChat;
     if(changed&&!sameActiveChat)hideChat();
     if(sameActiveChat){
       showCompactChat(); // Reuse the already mounted Role Chat synchronously.
@@ -140,6 +147,7 @@
     if(modal.hidden)return;
     selectVersion++;openVersion++;
     if(focusedRoleId)exitFocus();else hideChat();
+    document.body.classList.remove('crew-world-focused');
     stopWorld?.pause?.();
     modal.hidden=true;
     updateHomeView('dashboard');
@@ -165,6 +173,8 @@
     previousFocus=document.activeElement;
     restoreTab=true;
     document.body.classList.add('crew-world-active');
+    document.body.classList.remove('crew-world-focused');
+    if(focusContext)focusContext.disabled=true;
     syncHeaderHeight();
     modal.hidden=false;
     focusedRoleId=null;
@@ -211,6 +221,7 @@
     hideButton.textContent='收合';
     if(compact&&focusedRoleId===roleId)showCompactChat();
     else updateKeyboard();
+    if(focusContext)focusContext.disabled=focusedRoleId!==roleId;
     messages.scrollTop=messages.scrollHeight;
   }
   function openFullChat(roleId=selectedRoleId){
@@ -244,6 +255,12 @@
   addRoleButton?.addEventListener('click',()=>{if(!modal.hidden)close();});
   focusBack?.addEventListener('click',()=>document.getElementById('world-reset')?.click());
   focusFull?.addEventListener('click',()=>openFullChat(focusedRoleId));
+  // Delegate to the original Context Health UI. The button stays disabled
+  // until this same Role has finished loading, so it cannot show stale data.
+  focusContext?.addEventListener('click',()=>{
+    if(!focusedRoleId||panel.hidden||window.getCurrentRoleId?.()!==focusedRoleId)return;
+    document.getElementById('context-pill')?.click();
+  });
   hideButton.addEventListener('click',collapseChat);
   expandButton.addEventListener('click',toggleExpand);
   chatButton?.addEventListener('click',()=>{void openChat();});
