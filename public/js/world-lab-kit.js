@@ -225,6 +225,7 @@
             .23,Math.sin(a)*.61,.96,Math.cos(a)*.61);
         }
       }
+      group.traverse(mesh=>{if(mesh.isMesh)mesh.userData.decorative=true;});
     }
   }
   function buildTown(scene,lots,roads){
@@ -421,7 +422,10 @@
     });
     const status=new T.Mesh(new T.SphereGeometry(.17,7,6),statusMaterial);
     status.position.set(1.75,2.40,-.11);group.add(status);
-    return {lamp,status};
+    // All components of a real workshop point to one actual Project district.
+    // Filler buildings never receive this metadata.
+    group.traverse(mesh=>{if(mesh.isMesh)mesh.userData.districtId=role.districtId||role.id;});
+    return {lamp,status,root:group};
   }
   // Every Role uses the same body rig with distinct, lightweight identity props.
   function profession(role) {
@@ -616,6 +620,9 @@
     const actors=roleDefs.map((role,index)=>character(scene,role,index));
     actors.roadVisuals=roads;
     actors.workshops=workshops;
+    actors.pickableObjects=[...actors.map(actor=>actor.root),
+      ...[...workshops.values()].map(workshop=>workshop.root),
+      ...scene.children.filter(group=>group.userData.decorative)];
     return actors;
   }
 
