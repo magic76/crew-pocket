@@ -77,7 +77,10 @@ const health=(used,cap,exact=true)=>({
   const scene=fs.readFileSync(path.join(__dirname,'..','public/js/world-lab.js'),'utf8');
   const page=fs.readFileSync(path.join(__dirname,'..','public/index.html'),'utf8');
   const server=fs.readFileSync(path.join(__dirname,'..','server.js'),'utf8');
-  assert.match(scene,/contextForRole\(roles\[i\].id\)/);
+  assert.match(scene,/contextWarningByRole\.set\(roles\[i\].id,pressure\)/,
+    'calculate Context pressure once per data refresh, not each 3D frame');
+  assert.match(scene,/contextForRole\(roles\[index\].id\)/,
+    'render uses already computed Role warning entries');
   assert.match(scene,/contextMark\.hidden=!pressure/);
   assert.match(scene,/crew:context-usage-updated/);
   assert.match(scene,/pill\.dataset\.contextWarningCount/);
