@@ -145,6 +145,88 @@
     const extent=Math.max(15,...lots.map(l=>Math.max(Math.abs(l.x),Math.abs(l.z))+7));
     return extent*2+6;
   }
+
+  // Filler buildings are scenery only. Planning shares the *actual* road
+  // polylines and workshop lot positions, but never modifies either graph.
+  function segmentDistance(x,z,a,b){
+    const dx=b.x-a.x,dz=b.z-a.z,den=dx*dx+dz*dz;
+    const t=den?Math.max(0,Math.min(1,((x-a.x)*dx+(z-a.z)*dz)/den)):0;
+    return Math.hypot(x-a.x-dx*t,z-a.z-dz*t);
+  }
+  function planTownDecorations(lots,roads){
+    if(!lots.length)return[];
+    const half=townGroundSide(lots)/2;
+    const placements=[];
+    const target=Math.min(16,Math.max(7,Math.ceil(lots.length*.9)+4));
+    const types=['home','garden','cafe','home','bench','shop','lamp','garden'];
+    for(const band of [.40,.58,.73,.84]){
+      for(let i=0;i<32&&placements.length<target;i++){
+        const theta=(i+.31*(Math.floor(band*100)%5))*Math.PI*2/32;
+        const x=Math.cos(theta)*half*band,z=Math.sin(theta)*half*band;
+        const type=types[(i+Math.round(band*100))%types.length];
+        const radius=type==='home'||type==='cafe'||type==='shop'?2.6:
+          type==='garden'?1.5:type==='bench'?1.1:.8;
+        if(Math.max(Math.abs(x),Math.abs(z))+radius+1.5>=half)continue;
+        if(Math.hypot(x,z)<7.0+radius)continue; // central plaza stays open
+        if(lots.some(lot=>{
+          const dx=x-lot.x,dz=z-lot.z,rot=lot.rotation||0;
+          const lx=Math.cos(rot)*dx-Math.sin(rot)*dz;
+          const lz=Math.sin(rot)*dx+Math.cos(rot)*dz;
+          return Math.abs(lx)<4.2+radius&&lz>-5.4-radius&&lz<5.1+radius;
+        }))continue;
+        if(roads.some(edge=>edge.points.some((p,j)=>j&&
+          segmentDistance(x,z,edge.points[j-1],p)<radius+1.75)))continue;
+        if(placements.some(p=>Math.hypot(x-p.x,z-p.z)<radius+p.radius+1.0))continue;
+        placements.push({type,x,z,radius,rotation:theta+Math.PI});
+      }
+    }
+    return placements;
+  }
+  function buildTownDecorations(scene,decorations){
+    for(const item of decorations){
+      const group=new T.Group();
+      group.position.set(item.x,0,item.z);group.rotation.y=item.rotation;
+      group.userData.decorative=true; // Never receives a Role ID.
+      scene.add(group);
+      const type=item.type;
+      if(type==='home'||type==='cafe'||type==='shop'){
+        const color=type==='home'?'#e3d0b6':type==='cafe'?'#e3bfa1':'#bfd4d4';
+        const roof=type==='home'?'#9b776b':type==='cafe'?'#c38d65':'#618f9f';
+        box(group,color,3.0,1.95,2.65,0,1.36,0);
+        const top=box(group,roof,3.5,.36,3.12,0,2.55,0);
+        top.rotation.z=type==='home'?.10:-.07;
+        box(group,'#5f746e',.70,1.20,.09,.10,1.09,1.37);
+        for(const side of [-1,1])
+          box(group,'#9fc3c4',.54,.62,.08,side*1.00,1.57,1.37);
+        if(type==='cafe'){
+          box(group,'#f5e2bf',3.25,.30,.78,0,2.21,1.47);
+          box(group,'#b88160',1.33,.25,.11,0,2.12,1.92);
+        }else if(type==='shop'){
+          box(group,'#c4dbe0',3.18,.20,.72,0,2.13,1.38);
+          box(group,'#476777',1.70,.35,.12,0,2.28,1.79);
+        }else{
+          box(group,'#f5e8d0',.97,.20,.13,0,2.12,1.42);
+        }
+      }else if(type==='lamp'){
+        cylinder(group,'#455d5e',.10,.14,2.40,0,1.58,0,7);
+        sphere(group,'#f0d5a0',.32,0,2.89,0);
+        part(group,new T.ConeGeometry(.43,.32,6),'#445a5d',0,3.20,0);
+      }else if(type==='bench'){
+        box(group,'#926b50',1.65,.20,.48,0,.92,0);
+        box(group,'#8a634a',1.65,.71,.16,0,1.22,-.30);
+        for(const side of [-1,1])
+          box(group,'#556967',.13,.54,.40,side*.66,.61,0);
+      }else if(type==='garden'){
+        cylinder(group,'#608b70',1.18,1.35,.10,0,.39,0,10);
+        for(let i=0;i<3;i++){
+          const a=i*Math.PI*2/3;
+          cylinder(group,'#67855e',.045,.06,.45,Math.sin(a)*.61,.65,Math.cos(a)*.61,5);
+          sphere(group,['#eab99e','#f2d19d','#bdb8e5'][i],
+            .23,Math.sin(a)*.61,.96,Math.cos(a)*.61);
+        }
+      }
+    }
+  }
   function buildTown(scene,lots,roads){
     if(!lots.length)return;
     const side=townGroundSide(lots);
@@ -223,6 +305,7 @@
       cylinder(group,'#987c65',.09,.11,.52,3.3,.58,-1.55,7);
       sphere(group,'#4d956f',.50,3.3,1.08,-1.55);
     }
+    buildTownDecorations(scene,planTownDecorations(lots,roads));
   }
   // Six genuinely different silhouettes, not the same box recolored.
   // Building front is local +Z; rotation faces each workshop's lane.
@@ -299,11 +382,52 @@
       box(group,'#2d5576',.72,.51,.11,1.98,1.05,-.17);
       box(group,role.accent,.59,.37,.12,1.98,1.05,-.10);
     }
+
+    // Silhouettes already vary by workshop; front props make professions
+    // recognizable without consuming the real pedestrian entrance.
+    if(kind==='developer'){
+      box(group,'#2c415d',1.35,.18,.56,-2.14,.77,.02);
+      box(group,'#223f56',1.11,.75,.12,-2.12,1.22,-.09);
+      box(group,'#73c6df',.89,.52,.07,-2.12,1.24,-.012);
+      box(group,'#a1adbd',.25,.12,.18,-2.07,.66,.40);
+    }else if(kind==='teacher'){
+      box(group,'#d2ad86',1.48,1.24,.14,-2.02,1.35,-.03);
+      box(group,'#416f68',1.25,.94,.08,-2.02,1.35,.06);
+      box(group,'#f5eac3',.69,.08,.09,-2.02,1.55,.12);
+      box(group,'#e9d5a8',.85,.16,.48,2.1,.68,.03);
+    }else if(kind==='writer'||kind==='story'){
+      box(group,'#94755f',1.33,1.43,.37,-2.05,1.38,-.14);
+      for(let j=0;j<3;j++)
+        box(group,['#e9c1ac','#b3c6d8','#efd59a'][j],
+          1.02,.23,.42,-2.05,.96+j*.40,.10);
+      box(group,'#e9dcbd',.80,.045,.55,1.97,.83,.21);
+    }else if(kind==='helper'){
+      box(group,'#487e82',1.40,.99,.62,2.02,.96,.03);
+      box(group,'#d6e3d2',1.10,.27,.66,2.02,1.53,.06);
+      box(group,'#edcf92',.46,.31,.11,2.02,1.79,.29);
+    }else if(kind==='fortune'){
+      cylinder(group,'#846ca4',.79,.85,.60,2.06,.67,-.04,8);
+      part(group,new T.OctahedronGeometry(.52),'#ccb1e7',2.06,1.43,-.04);
+    }
+    // Unique per-workshop light material: never modify shared palette cache.
+    const lampMaterial=new T.MeshBasicMaterial({
+      color:'#b7f5e3',transparent:true,opacity:.08,depthWrite:false
+    });
+    const lamp=new T.Mesh(new T.PlaneGeometry(1.16,.57),lampMaterial);
+    lamp.position.set(0,1.54,-.17);
+    group.add(lamp);
+    const statusMaterial=new T.MeshBasicMaterial({
+      color:'#eac890',transparent:true,opacity:0,depthWrite:false
+    });
+    const status=new T.Mesh(new T.SphereGeometry(.17,7,6),statusMaterial);
+    status.position.set(1.75,2.40,-.11);group.add(status);
+    return {lamp,status};
   }
   // Every Role uses the same body rig with distinct, lightweight identity props.
   function profession(role) {
     const text=(String(role.name||'')+' '+String(role.projectId||'')).toLowerCase();
     if(/teacher|老師|教學/.test(text))return 'teacher';
+    if(/writer|copywriter|content|文案|寫作|編輯|作者/.test(text))return 'writer';
     if(/story|故事|創作/.test(text))return 'story';
     if(/fortune|占星|命理|星盤/.test(text))return 'fortune';
     if(/helper|助理|助手/.test(text))return 'helper';
@@ -487,9 +611,11 @@
     const districts=districtNodes(roleDefs);
     const roads=planRoadNetwork(roleDefs);
     buildTown(scene,districts,roads);
-    districts.forEach((district,i)=>districtBuilding(scene,district.role,i));
+    const workshops=new Map();
+    districts.forEach((district,i)=>workshops.set(district.id,districtBuilding(scene,district.role,i)));
     const actors=roleDefs.map((role,index)=>character(scene,role,index));
     actors.roadVisuals=roads;
+    actors.workshops=workshops;
     return actors;
   }
 
@@ -600,5 +726,5 @@
       z:pos.z+Math.cos(pos.rotation)*FRONT_Z});
   });
   function releaseMaterials(){cache.clear();}
-  root.WorldLabKit={roles,create,createPlayer,createPaperPlane,disposePaperPlane,makeLiveRoles,mapExtent,planRoadNetwork,districtPosition,townGroundSide,releaseMaterials,MAX_WORLD_ROLES,MEMBERS_PER_DISTRICT};
+  root.WorldLabKit={roles,create,createPlayer,createPaperPlane,disposePaperPlane,makeLiveRoles,mapExtent,planRoadNetwork,districtPosition,townGroundSide,planTownDecorations,releaseMaterials,MAX_WORLD_ROLES,MEMBERS_PER_DISTRICT};
 })(window);
