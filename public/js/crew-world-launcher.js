@@ -37,6 +37,9 @@
   let stopWorld=null,previousFocus=null,selectedRoleId=null,selectedRoleName='';
   let selectVersion=0,previousTab=null,restoreTab=false,openVersion=0;
   let sceneScripts=null;
+  // Map is the default home view on each app launch. A manual Dashboard
+  // choice is respected while this page remains open, including Back from Chat.
+  let preferredHomeView='map',pendingSceneRoleId=null;
   let requestedRole=null,roleSwitchQueue=Promise.resolve(),switchingRole=false,commandDraft='';
   let switchFailed=false,switchTimer=null,sendLockHeld=false,sendWasDisabled=false;
   let rolesSignature='',previewObserver=null,previewFrame=0;
@@ -255,6 +258,7 @@
     focus?.focus?.({preventScroll:true});
   }
   async function open(){
+    preferredHomeView='map';
     if(!modal.hidden)return;
     const version=++openVersion;
     previousTab=document.body.dataset.primaryTab||null;
@@ -286,6 +290,11 @@
         loading.hidden=false;
       }
     }
+  }
+  function restoreHomeView(){
+    if(preferredHomeView!=='map'||!modal.hidden||
+      document.body.dataset.primaryTab!=='crew')return;
+    void open();
   }
   function openChat(roleId=selectedRoleId,{compact=false}={}){
     if(modal.hidden||!roleId||!window.openCrewCockpitRole||!liveRole(roleId))
@@ -364,7 +373,8 @@
     window.openCrewCockpitRole?.(roleId);
   }
   function onSelectedRole(id,name){
-    if(!liveRole(id))return;
+    if(!liveRole(id)){pendingSceneRoleId=id;return;}
+    pendingSceneRoleId=null;
     const changed=selectedRoleId!==id;
     selectedRoleId=id;selectedRoleName=name||liveRole(id).name||id;
     updateCommandRole();
@@ -389,8 +399,26 @@
     syncReadAction();
   }
   opener.addEventListener('click',open);
-  dashboardButton.addEventListener('click',()=>{if(!modal.hidden)close();else updateHomeView('dashboard');});
-  settingsButton?.addEventListener('click',()=>{if(!modal.hidden)close();});
+  dashboardButton.addEventListener('click',()=>{
+    preferredHomeView='dashboard';
+    if(!modal.hidden)close();
+    else updateHomeView('dashboard');
+  });
+  settingsButton?.addEventListener('click',()=>{
+    if(!modal.hidden){
+      // Settings is a temporary primary page, not a Dashboard preference.
+      // It must not trigger a Crew-home return while entering Settings.
+      restoreTab=false;
+      close();
+    }
+  });
+  window.addEventListener('crew:roster-updated',()=>{
+    if(modal.hidden||selectedRoleId||switchingRole)return;
+    const target=liveRole(pendingSceneRoleId)
+      ||roleSnapshot()?.roles?.find(role=>role.id===window.getCurrentRoleId?.())
+      ||roleSnapshot()?.roles?.find(role=>role.id===roleSnapshot()?.activeRoleId);
+    if(target)onSelectedRole(target.id,target.name);
+  });
   addRoleButton?.addEventListener('click',()=>{if(!modal.hidden)close();});
   // Both actions stay attached to the ORIGINAL active Role Chat. Switching
   // target cannot open stale Context or another Role's conversation.
@@ -452,5 +480,5 @@
   });
   // Exposed only to the scene in this same document, not cross-frame messages.
   window.CrewWorldHost={open,close,hideChat,openChat,openFullChat,onSelectedRole,
-    openCollaboration};
+    openCollaboration,restoreHomeView};
 })();
