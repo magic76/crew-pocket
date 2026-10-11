@@ -42,7 +42,7 @@ async function tick(){await new Promise(resolve=>setImmediate(resolve));}
     'world-chat-open','crew-world-chat-role-name','crew-back-home-btn','world-stage',
     'context-pill','world-reset',
     'crew-world-command-role','crew-world-command-state','crew-world-command-read',
-    'crew-world-command-context','crew-world-command-full',
+    'crew-world-command-context',
     'crew-world-role-spinner','crew-world-command-retry','send-btn',
     'crew-world-result-peek','crew-world-result-peek-kind','crew-world-result-peek-text',
     'prompt-input'];
@@ -122,8 +122,8 @@ async function tick(){await new Promise(resolve=>setImmediate(resolve));}
   assert.deepEqual(roleNavigations,['pocket','teacher']);
   assert.equal(nodes['crew-world-command-role'].value,'teacher');
 
-  // No secondary focused mode: the same selected Role and single composer
-  // remain active, with Context and full reading on the command dock.
+  // No secondary focused mode: Context stays on the commander; the same
+  // original floating chat exposes its existing full-screen expand control.
   assert.equal(nodes['crew-world-command-context'].disabled,false);
   nodes['crew-world-command-context'].click();
   assert.equal(contextOpenCount,1,'Context delegates to ORIGINAL Context Health');
@@ -132,17 +132,23 @@ async function tick(){await new Promise(resolve=>setImmediate(resolve));}
   assert.equal(doc.body.classList.set.has('crew-world-active'),true,
     'selecting or reading a Role never leaves the active World');
   assert.equal(nodes['crew-world-chat-panel'].classList.contains('compact'),true);
-  nodes['crew-world-chat-expand'].click();
+  assert.equal(nodes['crew-world-command-read'].textContent,'對話',
+    'the command bar starts with one clear conversation entry');
+  nodes['crew-world-command-read'].click();
   assert.equal(nodes['crew-world-chat-panel'].classList.contains('compact'),false,
-    'expand reveals the existing chat messages without duplicating the composer');
+    'conversation command opens the original floating Chat DOM');
+  assert.equal(nodes['crew-world-command-read'].textContent,'收合',
+    'the same command becomes a collapse action');
   assert.equal(nodes['crew-world-chat-panel'].classList.contains('expanded'),false);
-  nodes['crew-world-command-full'].click();
+  nodes['crew-world-chat-expand'].click();
   assert.equal(nodes['crew-world-chat-panel'].classList.contains('expanded'),true,
-    'full reading uses original messages inside map, never another Chat screen');
+    'existing floating Chat expand control provides full reading without a duplicate dock button');
   assert.equal(nodes['crew-world-modal'].hidden,false);
   nodes['crew-world-chat-hide'].click();
   assert.equal(nodes['crew-world-chat-panel'].classList.contains('compact'),true,
     'collapse returns to one persistent composer');
+  assert.equal(nodes['crew-world-command-read'].textContent,'對話',
+    'the entry resets once the floating reader closes');
   nodes['world-reset'].click();
   assert.equal(overviewClicks,1,'overview camera control stays available');
   assert.equal(nodes['crew-world-modal'].hidden,false,'returning to full town does not change Role');
@@ -221,7 +227,6 @@ async function tick(){await new Promise(resolve=>setImmediate(resolve));}
   assert.equal(nodes['send-btn'].disabled,true,
     'native send click is blocked until intended Role is confirmed');
   assert.equal(nodes['crew-world-command-context'].disabled,true);
-  assert.equal(nodes['crew-world-command-full'].disabled,true);
   assert.equal(nodes['crew-world-command-read'].disabled,true);
   assert.equal(nodes['crew-world-command-role'].disabled,false,
     'Role picker stays interactive while a history request is pending');
