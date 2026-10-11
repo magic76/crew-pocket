@@ -290,7 +290,9 @@ async function tick(){await new Promise(resolve=>setImmediate(resolve));}
   win.CrewWorldHost.restoreHomeView();
   assert.equal(nodes['crew-world-modal'].hidden,false,
     'returning to Crew restores map when it was the most recent home surface');
-  assert.strictEqual(nodes['chat-composer-footer'].parentNode,nodes['crew-world-chat-composer-slot']);
+  await tick();await tick();
+  assert.strictEqual(nodes['chat-composer-footer'].parentNode,nodes['crew-world-chat-composer-slot'],
+    'the original Chat is restored after async map resume');
   assert.equal(disposeCount,0,'view changes should pause/resume the existing 3D scene, not rebuild it');
   console.log('Non-blocking Role switch: fast/slow, draft safety, keyboard guard, failure retry OK');
   console.log('Crew World modeless portal: original Context, full reading, navigation and one Chat DOM passed');
