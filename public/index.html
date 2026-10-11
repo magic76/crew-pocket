@@ -1819,25 +1819,6 @@
       </div>
       <div id="world-district-picker-list" class="world-district-picker-list"></div>
     </section>
-    <section id="world-info" class="world-info is-collapsed" aria-live="polite">
-      <div class="world-info-head">
-        <div class="world-portrait" id="world-portrait">P</div>
-        <div><span class="world-caption">SELECTED AGENT</span><h2 id="world-role-name">Pocket Developer</h2><p id="world-role-state">正在等待示範動作</p></div>
-        <div class="world-info-actions">
-          <button type="button" id="world-info-quick-focus" aria-label="鏡頭靠近選中角色">靠近</button>
-          <button type="button" id="world-info-toggle" aria-expanded="false" aria-controls="world-role-description">詳情</button>
-        </div>
-      </div>
-      <p class="world-context-health" id="world-role-context" aria-live="polite">Context · 展開詳情後讀取</p>
-      <p class="world-description" id="world-role-description">選擇人物，體驗同一套 Low-poly 骨架在不同 Role 上的效果。</p>
-      <div class="world-action-row">
-        <button type="button" id="world-focus">鏡頭靠近</button>
-        <button type="button" id="world-work">示範工作</button>
-        <button type="button" id="world-handoff">示範交接</button>
-        <button type="button" id="world-chat-open" hidden>開啟聊天</button>
-        <button type="button" id="world-open-role" hidden>前往對話</button>
-      </div>
-    </section>
     <!-- Dashboard and World share the original top navigation, including
          its Dashboard / Map toggle; only the Chat header is hidden. -->
     <!-- Map tools belong to the overview corner, not a bottom control row.
@@ -2025,6 +2006,7 @@
   <script src="/js/crew-room.js"></script>
   <script src="/js/crew-cinematic.js"></script>
   <!-- World 3D scripts are loaded on first visit to avoid startup WebGL cost. -->
+  <script src="/js/crew-context-usage.js"></script>
   <script src="/js/crew-world-launcher.js"></script>
   <script src="/js/ui.js"></script>
   <script src="/js/memory-xray.js"></script>
