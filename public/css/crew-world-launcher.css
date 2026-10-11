@@ -58,7 +58,7 @@ body.crew-world-active #crew-home-header-host{display:block}
 .crew-world-modal #world-loading:not([hidden]){
   inset:0;top:0;left:0;width:100%;height:100%;transform:none;z-index:20;
   display:flex;flex-direction:column;align-items:center;justify-content:center;gap:13px;
-  background:#101b32ed;color:#d9efff;backdrop-filter:blur(8px);
+  background:#101b32f0;color:#d9efff;
 }
 .crew-world-modal #world-loading:not([hidden])::before{
   content:"";width:24px;height:24px;border:2px solid #a9d8ef66;
@@ -202,9 +202,23 @@ body.crew-world-active #context-health-toast{z-index:10050!important}
 .crew-world-result-peek-more{color:#9dccdf;font-size:18px}
 .crew-world-result-peek:focus-visible,
 .crew-world-command-head select:focus-visible{outline:2px solid #76d8ff;outline-offset:-2px}
-.crew-world-chat-panel.role-switching .crew-world-chat-composer-slot{opacity:.58;pointer-events:none}
-.crew-world-chat-panel.role-switching .crew-world-command-head select{pointer-events:none}
+/* Switching is non-blocking: the town, camera, Role picker and draft input
+   stay responsive. Native send + keyboard guards protect the old Role. */
+.crew-world-command-head .crew-world-role-spinner[hidden],
+.crew-world-command-head #crew-world-command-retry[hidden]{display:none!important}
+.crew-world-role-spinner{
+  flex:none;width:14px;height:14px;border:2px solid #a6d0e260;
+  border-top-color:#98e6ff;border-radius:100%;
+  animation:crew-world-spin .75s linear infinite;
+}
+.crew-world-command-head #crew-world-command-retry{
+  flex:none;min-height:36px;padding:0 8px;border-radius:10px;
+  border:1px solid #e9ad6fa8;color:#ffe3c3;background:#5a382b;font-size:11px;font-weight:750;
+}
 .crew-world-chat-panel.role-switching #crew-world-command-state{color:#ffdb9c}
+.crew-world-chat-panel #send-btn:disabled{cursor:wait;opacity:.6}
+.crew-world-command-head #crew-world-command-read:disabled{opacity:.48;cursor:wait}
+@media(prefers-reduced-motion:reduce){.crew-world-role-spinner{animation:none}}
 .crew-world-modal .crew-world-chat-panel.compact:not([hidden]){
   position:absolute;inset:auto 0 var(--crew-keyboard-rise,0px);
   width:100%;max-width:720px;height:auto;min-height:0;
@@ -241,6 +255,9 @@ body.crew-world-active #context-health-toast{z-index:10050!important}
   .crew-world-command-head #crew-world-command-read,
   .crew-world-command-head #crew-world-command-context,
   .crew-world-command-head #crew-world-command-full{padding:0 7px;font-size:10px}
+  .crew-world-command-head #crew-world-command-retry{min-height:36px;padding:0 6px;font-size:10px}
+  .crew-world-role-spinner{width:12px;height:12px}
+  .crew-world-command-head #crew-world-command-state{display:none}
   .crew-world-modal .world-bottom{bottom:calc(env(safe-area-inset-bottom,0px) + 174px)}
 }
 .crew-world-modal:has(.crew-world-chat-panel:not([hidden])) .world-bottom{
