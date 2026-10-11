@@ -1903,6 +1903,15 @@ function stopBackgroundHistoryPoll() {
 }
 
 function showHistoryLoadOverlay() {
+  // Crew World has its own persistent 3D stage and Role command dock.
+  // Loading a different Role's original history must not cover/blur the map.
+  // The World launcher displays a small, delayed inline progress indicator,
+  // while it keeps sending guarded until the requested Role is confirmed.
+  if (document.body?.classList?.contains('crew-world-active')) {
+    if (historyLoadOverlay) historyLoadOverlay.remove();
+    historyLoadOverlay = null;
+    return null;
+  }
   if (historyLoadOverlay) historyLoadOverlay.remove();
   const overlay = document.createElement('div');
   overlay.className = 'fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/98 backdrop-blur-md opacity-0 transition-opacity duration-150';

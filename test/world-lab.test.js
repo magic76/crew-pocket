@@ -182,6 +182,32 @@ assert.match(css,/prefers-reduced-motion/);
 const main=read('public/index.html');
 const launcher=read('public/js/crew-world-launcher.js');
 const worldShell=read('public/css/crew-world-launcher.css');
+const originalChat=read('public/js/chat.js');
+assert.ok(originalChat.includes("document.body?.classList?.contains('crew-world-active')"),
+  'original Chat history loader bypasses full-screen blur only inside World');
+assert.ok(originalChat.includes("historyLoadOverlay = null;\n    return null;"),
+  'suppressed history loader remains optional for cleanup');
+assert.ok(originalChat.includes("const overlay = document.createElement('div');"),
+  'ordinary Chat still preserves original history-loading overlay');
+assert.ok(!worldShell.includes('.role-switching .crew-world-chat-composer-slot{opacity:.58'),
+  'Role switching must not dim the editable command draft');
+assert.ok(!worldShell.includes('.role-switching .crew-world-command-head select{pointer-events:none}'),
+  'Role selector remains usable during slow navigation');
+for(const id of ['crew-world-role-spinner','crew-world-command-retry']){
+  assert.ok(main.includes('id="'+id+'"'),id+' is available inside the existing command dock');
+}
+assert.ok(launcher.includes('},200);'),'quick switch cannot flash the inline spinner');
+assert.ok(launcher.includes('window.getCurrentRoleId?.()===selectedRoleId'),
+  'Context and native Send only activate for the intended live Role');
+assert.ok(launcher.includes('sendButton.disabled=guard||sendWasDisabled'),
+  'native send/stop button stays guarded without blurring the textarea');
+assert.ok(launcher.includes('event.stopImmediatePropagation?.()'),
+  'Ctrl/Cmd+Enter cannot send against the previous Role while switching');
+assert.ok(launcher.includes('switchFailed=!ok'),
+  'failed navigation keeps the outgoing message locked until retry');
+assert.ok(launcher.includes('if(!modal.hidden)commandDraft=promptInput.value'),
+  'user can keep editing the unsent draft during pending navigation');
+
 // Only the standalone art lab keeps its debug control strip. The actual
 // Crew Pocket map has a compact utility corner and the P10 Role commander.
 assert.ok(!main.includes('id="world-roster"'),'no duplicate Role strip in hosted map');
@@ -277,8 +303,9 @@ assert.equal((main.match(/id="prompt-input"/g)||[]).length,1,
   'P10 commands use the only original Chat input');
 assert.ok(launcher.includes("roleSwitchQueue=Promise.resolve()"),
   'Role target navigation is serialized to avoid stale selection races');
-assert.ok(launcher.includes("if(promptInput&&commandDraft&&!promptInput.value)"),
-  'the global unsent draft survives Role navigation');
+assert.ok(launcher.includes("if(!promptInput||!commandDraft||promptInput.value)return;")&&
+  launcher.includes("restoreWorldDraft();"),
+  'the global unsent draft survives Role navigation, including slow and failed loads');
 assert.ok(launcher.includes("messages.querySelectorAll?.('.assistant-article, .btw-card')"),
   'P11 result preview projects the original message DOM');
 assert.ok(launcher.includes("const result=latest?.querySelector?.('.execution-result-card')"),
