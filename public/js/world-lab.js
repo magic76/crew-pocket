@@ -333,7 +333,7 @@
     }
     if(completed.roleId){
       const role=roles.find(r=>r.id===completed.roleId);
-      if(role&&isLive&&window.CrewWorldHost?.isRoleFocused?.(role.id)){
+      if(role&&isLive&&window.CrewWorldHost?.isFocusActive?.()){
         // Focus mode already owns this Role's compact composer.
       }else if(role&&isLive&&window.CrewWorldHost?.openChat){
         void window.CrewWorldHost.openChat(role.id);
@@ -729,7 +729,9 @@
     if(visitor){
       const projected=visitor.root.position.clone().add(new T.Vector3(0,3.6,0)).project(camera);
       const x=(projected.x+1)/2*width,y=(-projected.y+1)/2*height;
-      const visible=projected.z>=-1&&projected.z<=1&&x>18&&x<width-18&&y>110&&y<height-110;
+      const marginY=Math.min(110,height*.18);
+      const visible=projected.z>=-1&&projected.z<=1&&x>18&&x<width-18&&
+        y>marginY&&y<height-marginY;
       visitorLabel.style.display=visible?'':'none';
       if(visible){visitorLabel.style.left=x+'px';visitorLabel.style.top=y+'px';}
     }
@@ -748,7 +750,9 @@
     const occupied=[];
     for(const item of placements){
       const {button,index,x,y,depth,priority,active}=item;
-      const out=depth<-1||depth>1||x<12||x>width-12||y<100||y>height-115;
+      const topMargin=Math.min(100,height*.18),bottomMargin=Math.min(115,height*.22);
+      const out=depth<-1||depth>1||x<12||x>width-12||
+        y<topMargin||y>height-bottomMargin;
       const lowPriority=overview&&!active;
       const collides=occupied.some(point=>Math.abs(point.x-x)<112&&Math.abs(point.y-y)<50);
       const visible=!out&&!lowPriority&&!collides;
@@ -760,7 +764,8 @@
       const x=(pos.x+1)/2*width,y=(-pos.y+1)/2*height;
       const visible=zoom<1.75&&roles.length>=6&&
         pin.members.some(role=>role.state==='working')&&pos.z>=-1&&pos.z<=1&&
-        x>35&&x<width-35&&y>115&&y<height-120;
+        x>35&&x<width-35&&y>Math.min(115,height*.2)&&
+        y<height-Math.min(120,height*.24);
       pin.marker.style.display=visible?'':'none';
       if(visible){pin.marker.style.left=x+'px';pin.marker.style.top=y+'px';}
     }
