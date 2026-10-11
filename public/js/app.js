@@ -162,7 +162,8 @@ function initAppAndListeners() {
   function finishCrewHomeBootstrap(){
     if(crewHomeBootstrapReady)return;
     crewHomeBootstrapReady = true;
-    if(primaryTab==='crew')window.CrewWorldHost?.restoreHomeView?.();
+    if(primaryTab==='crew'&&!window.history.state?.crewOverlay)
+      window.CrewWorldHost?.restoreHomeView?.();
   }
 
   const updatePrimaryChromeMetrics = () => {
@@ -207,7 +208,8 @@ function initAppAndListeners() {
     if (target === 'crew') {
       window.showRoleNavigationView?.();
       refreshCrewHome({ force: switchingToCrew });
-      if(crewHomeBootstrapReady)window.CrewWorldHost?.restoreHomeView?.();
+      if(crewHomeBootstrapReady&&!window.history.state?.crewOverlay)
+        window.CrewWorldHost?.restoreHomeView?.();
     }
     setSettingsViewOpen(target === 'settings');
   }
