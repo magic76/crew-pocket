@@ -156,6 +156,14 @@ function initAppAndListeners() {
   const crewSettingsBackBtn = document.getElementById('crew-settings-back-btn');
   let primaryTab = 'crew';
   let lastCrewRefresh = 0;
+  // Do not mount the map until provider, Role list and the active Conversation
+  // have been restored. Otherwise its initial selection can race with Chat.
+  let crewHomeBootstrapReady = false;
+  function finishCrewHomeBootstrap(){
+    if(crewHomeBootstrapReady)return;
+    crewHomeBootstrapReady = true;
+    if(primaryTab==='crew')window.CrewWorldHost?.restoreHomeView?.();
+  }
 
   const updatePrimaryChromeMetrics = () => {
     const header = document.querySelector('header');
@@ -199,6 +207,7 @@ function initAppAndListeners() {
     if (target === 'crew') {
       window.showRoleNavigationView?.();
       refreshCrewHome({ force: switchingToCrew });
+      if(crewHomeBootstrapReady)window.CrewWorldHost?.restoreHomeView?.();
     }
     setSettingsViewOpen(target === 'settings');
   }
@@ -254,7 +263,8 @@ function initAppAndListeners() {
   crewOpenSettingsBtn?.addEventListener('click', () => setPrimaryTab('settings'));
   crewSettingsBackBtn?.addEventListener('click', () => window.CrewNavigation.back());
 
-  // Always start at Crew; preserve token-cleanup state fields.
+  // Start at Crew, then show the preferred map after the session is restored;
+  // preserve token-cleanup state fields.
   window.history.replaceState({
     ...(window.history.state || {}), crewPage: 'crew', crewOverlay: null
   }, '');
@@ -925,7 +935,7 @@ function initAppAndListeners() {
       // with its persisted provider/model settings.
       applyAvailableModelDefaults();
       updateWorkspaceUI();
-      loadWorkspaces().catch(() => {});
+      const workspacesReady = loadWorkspaces().catch(() => {});
       const savedConvId = localStorage.getItem(activeConversationStorageKey());
       let restorePromise = Promise.resolve();
       if (savedConvId === '__new__') {
@@ -956,13 +966,20 @@ function initAppAndListeners() {
         })();
       }
 
+      // Restore the current session and Role registry BEFORE opening the map.
+      // Model catalog refresh is optional and may take longer on mobile.
+      await restorePromise;
+      await workspacesReady;
+      finishCrewHomeBootstrap();
       const modelsData = await modelsReady;
       applyAvailableModelDefaults(modelsData);
-      await restorePromise;
     } catch (e) {
       console.error('Init load error:', e);
       updateModelUI();
       updateEffortUI();
+    } finally {
+      // Even a provider discovery error cannot strand users on a dead home.
+      finishCrewHomeBootstrap();
     }
   })();
 
