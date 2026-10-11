@@ -210,6 +210,14 @@ assert.ok(main.includes('class="world-stage-frame"'));
 assert.ok(main.includes('id="crew-world-focus-bar"'));
 assert.ok(main.includes('id="crew-world-focus-back"'));
 assert.ok(main.includes('id="crew-world-focus-full"'));
+assert.equal((main.match(/id="crew-chat-main-header"/g)||[]).length,1,
+  'the original Chat header remains a single DOM node');
+assert.ok(main.includes('id="crew-world-focus-context"'),
+  'the focused toolbar has a Context Health shortcut');
+assert.equal((main.match(/id="context-pill"/g)||[]).length,1,
+  'the original Context control remains the single entry to its state');
+assert.equal((main.match(/id="context-modal"/g)||[]).length,1,
+  'no duplicate Context Health dialog is introduced');
 assert.match(main,/id="crew-world-chat-messages-slot"/);
 assert.match(main,/id="crew-world-chat-composer-slot"/);
 assert.doesNotMatch(main,/<iframe|id="crew-world-frame"/i);
@@ -222,11 +230,33 @@ const launcher=read('public/js/crew-world-launcher.js');
 execFileSync(process.execPath,['--check',path.join(root,'public/js/crew-world-launcher.js')]);
 assert.ok(launcher.includes('function focusRole('));
 assert.ok(launcher.includes('function exitFocus('));
+assert.ok(launcher.includes("document.body.classList.add('crew-world-focused')"),
+  'entering Role focus must opt into immersive chrome');
+assert.ok((launcher.match(/document.body.classList.remove\('crew-world-focused'\)/g)||[]).length>=3,
+  'leaving focus, closing World, and opening fresh World all restore standard chrome');
+assert.ok(launcher.includes("document.getElementById('context-pill')?.click()"),
+  'the focused Context button delegates to existing Context Health');
+assert.ok(launcher.includes("window.getCurrentRoleId?.()!==focusedRoleId"),
+  'Context must not open against a stale prior Role');
+assert.ok(launcher.includes("if(focusContext)focusContext.disabled=!sameActiveChat"),
+  'Context stays disabled while a different Role conversation is loading');
 assert.ok(launcher.includes('isFocusActive:'));
 assert.ok(engine.includes('CrewWorldHost?.focusRole?.('));
 assert.ok(engine.includes('CrewWorldHost?.exitFocus?.('));
 const worldShellCss=read('public/css/crew-world-launcher.css');
 assert.ok(worldShellCss.includes('.crew-world-modal.is-role-focused'));
+assert.ok(worldShellCss.includes('body.crew-world-focused > #crew-chat-main-header'),
+  'only focused World suppresses the standard Chat header');
+assert.ok(worldShellCss.includes('body.crew-world-focused #crew-home-header-host'),
+  'only focused World suppresses the Crew dashboard header');
+assert.ok(worldShellCss.includes('.crew-world-modal.is-role-focused{inset:0}'),
+  'focused 3D viewport uses the entire phone screen');
+assert.ok(worldShellCss.includes("top:calc(env(safe-area-inset-top,0px) + 7px)"),
+  'focused toolbar respects safe-area inset');
+assert.ok(worldShellCss.includes('body.crew-world-focused #context-modal{z-index:10030!important}'),
+  'Context Health opens above the full-screen World canvas');
+assert.ok(worldShellCss.includes('body.crew-world-focused #context-compact-preview-modal'),
+  'a Context compact preview remains accessible above immersive World');
 assert.ok(worldShellCss.includes('position:absolute;inset:auto 0 0;z-index:12'),
   'focused compact chat overlays the full-height map');
 assert.ok(!worldShellCss.includes('grid-template-rows:auto minmax(0,1fr) auto'),

@@ -195,3 +195,38 @@ body.crew-world-active{overscroll-behavior:none}
 
 /* No zoom controls floating over the compact composer while typing. */
 .crew-world-modal.is-role-focused:has(.crew-world-chat-panel.keyboard-open:not([hidden])) .world-bottom{display:none}
+
+/* Immersive Role focus: hide the ORIGINAL Chat/Crew chrome without moving or
+   cloning it. Leaving focus or opening full Chat restores both immediately. */
+body.crew-world-focused > #crew-chat-main-header,
+body.crew-world-focused #crew-home-header-host{display:none!important}
+.crew-world-modal.is-role-focused{inset:0}
+.crew-world-modal.is-role-focused .crew-world-focus-bar{
+  top:calc(env(safe-area-inset-top,0px) + 7px);
+  min-height:48px;padding:5px 3px;
+  background:linear-gradient(90deg,#10233ce3,#152b43c0);
+  border:1px solid #9ac3ed3d;border-radius:15px;
+  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+}
+.crew-world-modal.is-role-focused .world-status-strip{display:none!important}
+.crew-world-focus-bar #crew-world-focus-context{
+  flex:none;display:grid;place-items:center;width:40px;min-width:40px;
+  padding:0;border:1px solid #83b8d36e;background:#1b4356a6;
+}
+.crew-world-focus-bar #crew-world-focus-context:disabled{opacity:.38;cursor:wait}
+.crew-world-focus-bar #crew-world-focus-context svg{pointer-events:none}
+@media(max-width:375px){
+  .crew-world-modal.is-role-focused .crew-world-focus-bar{
+    left:7px;right:7px;gap:5px;padding:4px;
+  }
+  .crew-world-focus-identity strong{font-size:13px}
+  .crew-world-focus-bar #crew-world-focus-context{width:36px;min-width:36px}
+}
+/* Context Health uses the exact same original modal. Raise it above the
+   full-bleed World (z-index:9999), including its confirmation preview. */
+body.crew-world-focused #context-modal{z-index:10030!important}
+body.crew-world-focused #context-compact-preview-modal{z-index:10040!important}
+body.crew-world-focused #context-health-toast{z-index:10050!important}
+@media(prefers-reduced-motion:reduce){
+  .crew-world-modal.is-role-focused .crew-world-focus-bar{transition:none}
+}

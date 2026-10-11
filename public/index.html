@@ -93,7 +93,7 @@
   </div>
 
   <!-- TOP HEADER -->
-  <header class="bg-slate-950/80 backdrop-blur-xl border-b border-slate-800/80 px-2.5 py-2 flex items-center justify-between z-20 shrink-0 w-full max-w-full min-w-0">
+  <header id="crew-chat-main-header" class="bg-slate-950/80 backdrop-blur-xl border-b border-slate-800/80 px-2.5 py-2 flex items-center justify-between z-20 shrink-0 w-full max-w-full min-w-0">
     <div class="flex items-center gap-1.5 sm:gap-2.5 min-w-0 flex-1">
       <button id="crew-back-home-btn" type="button" class="crew-back-home-btn" aria-label="返回 AI 小隊" title="返回 AI 小隊">←</button>
       <div class="flex min-w-0 flex-1 items-center gap-2">
@@ -1779,6 +1779,11 @@
         <strong id="crew-world-focus-name">Role</strong>
         <small id="crew-world-focus-state">待命</small>
       </div>
+      <button type="button" id="crew-world-focus-context" aria-label="查看目前角色 Context Health" title="Context Health" disabled>
+        <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="8.5"/><path d="M12 7.5v5l3.2 2"/><path d="M4.8 6.8a9 9 0 0 1 14.3-.4"/>
+        </svg>
+      </button>
       <button type="button" id="crew-world-focus-full" aria-label="閱讀角色完整對話">完整對話</button>
     </div>
     <div class="world-stage-frame">

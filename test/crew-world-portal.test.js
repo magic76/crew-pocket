@@ -24,7 +24,7 @@ class Node {
   trigger(name){for(const fn of this.events.get(name)||[])fn({key:'',preventDefault(){}});}
   setAttribute(k,v){this[k]=v;}
   focus(){this.doc.activeElement=this;}
-  click(){this.trigger('click');}
+  click(){if(!this.disabled)this.trigger('click');}
 }
 async function tick(){await new Promise(resolve=>setImmediate(resolve));}
 (async()=>{
@@ -36,7 +36,7 @@ async function tick(){await new Promise(resolve=>setImmediate(resolve));}
     'messages-container','chat-composer-footer','crew-world-chat-hide','crew-world-chat-expand',
     'world-chat-open','crew-world-chat-role-name','crew-back-home-btn','world-stage',
     'crew-world-focus-bar','crew-world-focus-back','crew-world-focus-name',
-    'crew-world-focus-full','world-reset'];
+    'crew-world-focus-full','crew-world-focus-context','context-pill','world-reset'];
   const nodes=Object.fromEntries(ids.map(id=>[id,new Node(id,doc)]));
   nodes['crew-home-header-host'].appendChild(nodes['crew-home-header']);
   nodes['crew-home-header'].appendChild(nodes['crew-home-view-toggle']);
@@ -45,6 +45,8 @@ async function tick(){await new Promise(resolve=>setImmediate(resolve));}
   originalMessages.appendChild(nodes['messages-container']);
   originalComposer.appendChild(nodes['chat-composer-footer']);
   let mountCount=0,disposeCount=0,pauseCount=0,resumeCount=0,roleNavigations=[];
+  let contextOpenCount=0;
+  nodes['context-pill'].addEventListener('click',()=>contextOpenCount++);
   let width=810;
   const win={
     innerHeight:810,visualViewport:{offsetTop:0,height:810,addEventListener(){}},
@@ -91,6 +93,12 @@ async function tick(){await new Promise(resolve=>setImmediate(resolve));}
   assert.equal(nodes['crew-world-modal'].classList.contains('is-role-focused'),true);
   assert.equal(nodes['crew-world-focus-bar'].hidden,false);
   assert.equal(nodes['crew-world-focus-name'].textContent,'Teacher');
+  assert.equal(doc.body.classList.set.has('crew-world-focused'),true,
+    'immersive focus hides the ordinary Chat and Crew headers');
+  assert.equal(nodes['crew-world-focus-context'].disabled,false,
+    'Context is enabled only for the active mounted Role');
+  nodes['crew-world-focus-context'].click();
+  assert.equal(contextOpenCount,1,'focus Context opens the ORIGINAL Context Health control');
   assert.equal(nodes['crew-world-chat-panel'].classList.contains('compact'),true);
   assert.strictEqual(nodes['chat-composer-footer'].parentNode,nodes['crew-world-chat-composer-slot']);
   nodes['crew-world-chat-expand'].click();
@@ -107,6 +115,10 @@ async function tick(){await new Promise(resolve=>setImmediate(resolve));}
   nodes['crew-world-focus-back'].click();
   assert.equal(nodes['crew-world-modal'].classList.contains('is-role-focused'),false);
   assert.equal(nodes['crew-world-focus-bar'].hidden,true);
+  assert.equal(doc.body.classList.set.has('crew-world-focused'),false,
+    'overview restores ordinary headers');
+  assert.equal(nodes['crew-world-focus-context'].disabled,true,
+    'no stale Role context shortcut after focus closes');
   assert.strictEqual(nodes['chat-composer-footer'].parentNode,originalComposer,
     'returning to overview restores the sole composer');
   assert.equal(nodes['crew-world-modal'].hidden,false,'returning to overview keeps map open');
@@ -125,5 +137,25 @@ async function tick(){await new Promise(resolve=>setImmediate(resolve));}
   nodes['crew-home-dashboard-btn'].click();
   assert.equal(pauseCount,2,'Dashboard switch pauses the scene again');
   assert.equal(disposeCount,0,'Dashboard switches preserve the scene for reuse');
-  console.log('Crew World portal: shared navigation, one Chat DOM, and scene pause/resume passed');
+
+  nodes['crew-world-open-btn'].click();
+  await tick();
+  win.CrewWorldHost.focusRole('pocket','Pocket');
+  assert.equal(nodes['crew-world-focus-context'].disabled,true,
+    'newly focused Role cannot show the previous Role context while loading');
+  await tick();await tick();
+  assert.equal(nodes['crew-world-focus-context'].disabled,false,
+    'Context shortcut activates after the target Role conversation loads');
+  nodes['crew-world-focus-context'].click();
+  assert.equal(contextOpenCount,2);
+  nodes['crew-world-focus-full'].click();
+  assert.equal(nodes['crew-world-modal'].hidden,true,
+    'full conversation exits the map instead of duplicating Chat');
+  assert.equal(doc.body.classList.set.has('crew-world-focused'),false,
+    'full Chat restores its standard header');
+  assert.equal(nodes['crew-world-focus-context'].disabled,true);
+  assert.strictEqual(nodes['messages-container'].parentNode,originalMessages);
+  assert.strictEqual(nodes['chat-composer-footer'].parentNode,originalComposer);
+  assert.equal(doc.body.dataset.primaryTab,'chat');
+  console.log('Crew World portal: immersive focus/Context lifecycle, one Chat DOM and scene pause/resume passed');
 })().catch(error=>{console.error(error);process.exitCode=1;});
