@@ -35,6 +35,9 @@
      !messages||!composer||!hideButton||!expandButton)return;
   let restoreMessages=null,restoreComposer=null;
   let stopWorld=null,previousFocus=null,selectedRoleId=null,selectedRoleName='';
+  // The map is the primary home surface on each cold start. Preserve an
+  // explicit Dashboard choice while navigating to Chat, Settings or overlays.
+  let preferredHomeView='map';
   let selectVersion=0,previousTab=null,restoreTab=false,openVersion=0;
   let sceneScripts=null;
   let requestedRole=null,roleSwitchQueue=Promise.resolve(),switchingRole=false,commandDraft='';
@@ -228,7 +231,8 @@
     const height=headerHost.getBoundingClientRect?.().height||headerHost.offsetHeight||0;
     if(height>0)document.documentElement.style.setProperty('--crew-shared-header-height',Math.ceil(height)+'px');
   }
-  function close(){
+  function close({preferDashboard=false}={}){
+    if(preferDashboard)preferredHomeView='dashboard';
     if(modal.hidden)return;
     selectVersion++;openVersion++;
     stopSwitchTimer();
@@ -255,6 +259,7 @@
     focus?.focus?.({preventScroll:true});
   }
   async function open(){
+    preferredHomeView='map';
     if(!modal.hidden)return;
     const version=++openVersion;
     previousTab=document.body.dataset.primaryTab||null;
@@ -388,8 +393,22 @@
     updateKeyboard();
     syncReadAction();
   }
-  opener.addEventListener('click',open);
-  dashboardButton.addEventListener('click',()=>{if(!modal.hidden)close();else updateHomeView('dashboard');});
+  function restoreHomeView(){
+    // Called after the primary-page router restores Crew, including WebView
+    // Back from Chat/Settings. Never place the map over a nested dialog.
+    if(document.body.dataset.primaryTab!=='crew'||window.history?.state?.crewOverlay)return;
+    if(preferredHomeView==='map'){
+      if(modal.hidden)void open();
+    }else if(!modal.hidden){
+      close({preferDashboard:true});
+    }else updateHomeView('dashboard');
+  }
+  opener.addEventListener('click',()=>{void open();});
+  dashboardButton.addEventListener('click',()=>{
+    preferredHomeView='dashboard';
+    if(!modal.hidden)close({preferDashboard:true});
+    else updateHomeView('dashboard');
+  });
   settingsButton?.addEventListener('click',()=>{if(!modal.hidden)close();});
   addRoleButton?.addEventListener('click',()=>{if(!modal.hidden)close();});
   // Both actions stay attached to the ORIGINAL active Role Chat. Switching
@@ -451,6 +470,6 @@
     }
   });
   // Exposed only to the scene in this same document, not cross-frame messages.
-  window.CrewWorldHost={open,close,hideChat,openChat,openFullChat,onSelectedRole,
+  window.CrewWorldHost={open,close,restoreHomeView,hideChat,openChat,openFullChat,onSelectedRole,
     openCollaboration};
 })();
