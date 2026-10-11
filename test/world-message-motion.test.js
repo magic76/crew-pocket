@@ -29,7 +29,14 @@ assert.match(sceneSource,/sender.mode='handoff'/);
 assert.match(sceneSource,/flight\.recipient\.reactionUntil=now/);
 assert.match(sceneSource,/非送達確認/);
 assert.doesNotMatch(sceneSource,/planner\.trail|actor\.root\.position\.set\(point\.x/);
-assert.match(sceneSource,/actor\.legs\.forEach\(\(\{mesh\}\)=>\{mesh\.rotation\.x=0;\}\)/);
+assert.match(sceneSource,/const wander=idle&&!reduced/,
+  'tiny steps must be limited to idle Roles');
+assert.match(sceneSource,/actor\.root\.position\.x=actor\.role\.x\+\(wander \? \.12\*Math\.sin/,
+  'idle steps stay anchored to the actual home frontage');
+assert.match(sceneSource,/actor\.root\.position\.z=actor\.role\.z\+\(wander \? \.10\*Math\.cos/,
+  'idle depth drift stays well inside the entrance');
+assert.match(sceneSource,/mesh\.rotation\.x=wander\?Math\.sin/,
+  'Role legs may move subtly at home, without delivery travel');
 assert.ok(nav.FRONT_Z>0,'roles remain outside each workshop');
 assert.match(kitSource,/actors\.roadVisuals=roads/);
 assert.doesNotMatch(kitSource,/function bridge\(|function island\(/,
