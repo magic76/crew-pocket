@@ -421,7 +421,7 @@ assert.deepEqual(events.collaborationConnections(evidenceForTests,'a',true,3,lin
 assert.deepEqual(events.collaborationConnections(evidenceForTests,'a',false,2,linkNow).map(item=>item.id),
   ['m1','m2'],'visual arcs remain bounded even with many saved events');
 assert.deepEqual(events.collaborationConnections(evidenceForTests,'a',false,3,linkNow+55000).map(item=>item.id),
-  ['m3','m7'],'previous arcs expire while later-timestamped messages remain eligible';
+  ['m3','m7'],'previous arcs expire while later-timestamped messages remain eligible');
 assert.deepEqual(events.collaborationConnections(evidenceForTests,'a',false,3,linkNow+61000),[],
   'after 60s all lines disappear without requiring any new message');
 assert.deepEqual(events.collaborationConnections(evidenceForTests,'a',true,3,linkNow+55000),[],
