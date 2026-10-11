@@ -178,6 +178,40 @@ assert.ok(!css.includes('aspect-ratio:1 / 1')&&!css.includes('100cqh'),
 assert.match(css,/safe-area-inset-bottom/);
 assert.match(css,/prefers-reduced-motion/);
 const main=read('public/index.html');
+const launcher=read('public/js/crew-world-launcher.js');
+const worldShell=read('public/css/crew-world-launcher.css');
+// Only the standalone art lab keeps its debug control strip. The actual
+// Crew Pocket map has a compact utility corner and the P10 Role commander.
+assert.ok(!main.includes('id="world-roster"'),'no duplicate Role strip in hosted map');
+assert.ok(main.includes('id="world-exit-map"'),'full-screen map has its own Dashboard exit');
+assert.ok(worldShell.includes('body.crew-world-active > #crew-chat-main-header'),
+  'P10 may activate Chat without exposing its duplicate top header');
+assert.ok(worldShell.includes('body.crew-world-active #crew-home-header-host'),
+  'the old Dashboard header stays hidden while World is active');
+assert.ok(worldShell.includes('body.crew-world-active .crew-world-modal:not([hidden]){inset:0}'),
+  'both overview and Role focus use the full available viewport');
+assert.ok(worldShell.includes('.crew-world-modal.is-role-focused .world-exit-map{display:none!important}'),
+  'Role focus shows its own back control without another duplicate');
+assert.ok(launcher.includes("worldExitMap?.addEventListener('click',()=>dashboardButton.click())"),
+  'return to Dashboard delegates to the existing original tab lifecycle');
+assert.ok(!main.includes('id="world-zoom-in"'),'touch pinch replaces hosted zoom+');
+assert.ok(!main.includes('id="world-zoom-out"'),'touch pinch replaces hosted zoom-');
+assert.ok(!main.includes('<footer class="world-bottom">'),'no hosted bottom control row');
+for(const id of ['world-reset','world-tools-menu','world-explore-toggle']){
+  assert.ok(main.includes('id="'+id+'"'),'hosted toolbar preserves '+id);
+}
+assert.ok(main.includes('aria-label="回到世界全景"'),'overview reset remains accessible');
+assert.ok(main.includes('aria-label="更多地圖操作"'),'explore remains in secondary menu');
+assert.ok(html.includes('id="world-roster"'),'standalone debug lab may keep its Role roster');
+assert.ok(worldShell.includes('.crew-world-modal.is-role-focused .world-quick-tools{display:none!important}'),
+  'focused Role keeps only its dedicated back-to-overview control');
+assert.ok(engine.includes("if(toolsMenu?.open)toolsMenu.open=false"),
+  'touching the map dismisses the secondary menu');
+assert.ok(engine.includes("panTo(0,-1.8,overviewZoom);notify('返回全景')"),
+  'the small overview button uses the original smooth reset');
+assert.ok(engine.includes('const roster=rosterHost?roles.map('),
+  'hosted world does not allocate a hidden duplicate list');
+
 assert.match(main,/id="crew-world-open-btn"/);
 assert.match(main,/id="crew-world-modal"/);
 assert.match(main,/id="crew-home-dashboard-btn"/);
@@ -220,7 +254,7 @@ assert.equal((main.match(/id="context-modal"/g)||[]).length,1,
   'no duplicate Context Health dialog is introduced');
 assert.match(main,/id="crew-world-chat-messages-slot"/);
 assert.match(main,/id="crew-world-chat-composer-slot"/);
-const launcher=read('public/js/crew-world-launcher.js');
+
 assert.match(main,/id="crew-world-command-role"/);
 assert.match(main,/id="crew-world-command-read"/);
 assert.match(main,/id="crew-world-result-peek"/);

@@ -315,3 +315,76 @@ body.crew-world-focused #context-health-toast{z-index:10050!important}
 @media(prefers-reduced-motion:reduce){
   .crew-world-result-peek,.crew-world-chat-panel{animation:none!important}
 }
+
+/* P10 keeps the original Chat active behind World. Hide BOTH underlying
+   page headers for the entire map lifecycle, not only focused Role mode. */
+body.crew-world-active > #crew-chat-main-header,
+body.crew-world-active #crew-home-header-host{display:none!important}
+body.crew-world-active .crew-world-modal:not([hidden]){inset:0}
+/* The overview has its own escape hatch now; don't strand the user on a
+   fullscreen map after suppressing the Dashboard/Map switch. */
+.crew-world-modal .world-exit-map{
+  position:absolute;z-index:8;
+  top:calc(env(safe-area-inset-top,0px) + 8px);left:10px;
+  display:grid;place-items:center;min-height:40px;
+  padding:0 12px;border:1px solid #91bede8a;border-radius:13px;
+  color:#f0f9ff;background:#142e46ed;box-shadow:0 6px 17px #06142770;
+  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+  font-size:12px;font-weight:750;
+}
+.crew-world-modal.is-role-focused .world-exit-map{display:none!important}
+.crew-world-modal .world-exit-map:focus-visible{outline:2px solid #91e0ff;outline-offset:2px}
+@media(max-width:540px){.crew-world-modal .world-exit-map{left:9px;min-height:39px}}
+/* World controls live in one tiny overview corner. P10 already replaces the
+   duplicate Role roster; gestures replace the zoom +/- buttons. */
+.crew-world-modal .world-quick-tools{
+  position:absolute;z-index:8;
+  top:calc(env(safe-area-inset-top,0px) + 10px);
+  right:10px;display:flex;align-items:flex-start;gap:7px;
+  pointer-events:auto;
+}
+.crew-world-modal .world-quick-tools > button,
+.crew-world-modal .world-tools-menu > summary{
+  display:grid;place-items:center;list-style:none;
+  min-width:40px;width:40px;height:40px;padding:0;
+  border:1px solid #91bede8a;border-radius:13px;
+  background:#142e46ed;color:#f0f9ff;
+  box-shadow:0 6px 17px #06142770;
+  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+  cursor:pointer;
+}
+.crew-world-modal .world-tools-menu > summary::-webkit-details-marker{display:none}
+.crew-world-modal .world-tools-menu > summary{font-size:19px;font-weight:800;letter-spacing:1px}
+.crew-world-modal .world-quick-tools > button:focus-visible,
+.crew-world-modal .world-tools-menu > summary:focus-visible{
+  outline:2px solid #91e0ff;outline-offset:2px;
+}
+.crew-world-modal .world-tools-menu{position:relative}
+.crew-world-modal .world-tools-popover{
+  position:absolute;right:0;top:47px;width:min(240px,80vw);
+  padding:10px;display:grid;gap:8px;
+  border:1px solid #9dc5df79;border-radius:14px;
+  background:#11263ff4;box-shadow:0 15px 34px #040f25b8;
+  color:#eaf7ff;
+}
+.crew-world-modal .world-tools-popover button{
+  min-height:42px;padding:0 12px;border:1px solid #8ccee8b1;
+  border-radius:10px;background:#21536e;color:#e8faff;
+  text-align:left;font-size:12px;font-weight:750;
+}
+.crew-world-modal .world-tools-popover button[aria-pressed="true"]{background:#216f6c;border-color:#86dfc0}
+.crew-world-modal .world-tools-popover button:disabled{opacity:.5}
+.crew-world-modal .world-tools-popover p{margin:0;color:#adc9dc;font-size:11px;line-height:1.55}
+.crew-world-modal.is-role-focused .world-quick-tools{display:none!important}
+.crew-world-modal .world-info{
+  bottom:calc(env(safe-area-inset-bottom,0px) + 158px);
+}
+.crew-world-modal .world-info:has(.world-description:not([hidden])){max-height:min(43dvh,310px);overflow-y:auto}
+/* Don't place the selected-role caption on top of the floating original chat. */
+.crew-world-modal:has(.crew-world-chat-panel:not(.compact):not([hidden])) .world-info{display:none!important}
+@media(max-width:540px){
+  .crew-world-modal .world-quick-tools{top:calc(env(safe-area-inset-top,0px) + 8px);right:9px;gap:6px}
+  .crew-world-modal .world-quick-tools > button,
+  .crew-world-modal .world-tools-menu > summary{width:39px;min-width:39px;height:39px}
+  .crew-world-modal .world-info{bottom:calc(env(safe-area-inset-bottom,0px) + 156px)}
+}

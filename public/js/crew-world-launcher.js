@@ -32,6 +32,8 @@
   const focusName=document.getElementById('crew-world-focus-name');
   const focusFull=document.getElementById('crew-world-focus-full');
   const focusContext=document.getElementById('crew-world-focus-context');
+  const worldToolsMenu=document.getElementById('world-tools-menu');
+  const worldExitMap=document.getElementById('world-exit-map');
   if(!opener||!dashboardButton||!toggle||!headerHost||!homeHeader||!modal||!panel||!messagesSlot||!composerSlot||
      !messages||!composer||!hideButton||!expandButton)return;
   let restoreMessages=null,restoreComposer=null;
@@ -187,6 +189,7 @@
     if(modal.hidden||!roleId)return;
     const changed=focusedRoleId!==roleId;
     focusedRoleId=roleId;
+    if(worldToolsMenu)worldToolsMenu.open=false;
     // Only focus mode suppresses the normal Chat and Crew headers. The
     // current Role Chat itself remains mounted (same composer and stream).
     document.body.classList.add('crew-world-focused');
@@ -219,6 +222,7 @@
   function close(){
     if(modal.hidden)return;
     selectVersion++;openVersion++;
+    if(worldToolsMenu)worldToolsMenu.open=false;
     if(focusedRoleId)exitFocus();
     hideChat();
     requestedRole=null;switchingRole=false;selectVersion++;
@@ -244,6 +248,7 @@
   async function open(){
     if(!modal.hidden)return;
     const version=++openVersion;
+    if(worldToolsMenu)worldToolsMenu.open=false;
     previousTab=document.body.dataset.primaryTab||null;
     previousFocus=document.activeElement;
     restoreTab=true;
@@ -378,6 +383,9 @@
   }
   opener.addEventListener('click',open);
   dashboardButton.addEventListener('click',()=>{if(!modal.hidden)close();else updateHomeView('dashboard');});
+  // This native map exit replaces the hidden Dashboard/Map page header.
+  // Delegate to the original dashboard switch so tab and active Chat restore.
+  worldExitMap?.addEventListener('click',()=>dashboardButton.click());
   settingsButton?.addEventListener('click',()=>{if(!modal.hidden)close();});
   addRoleButton?.addEventListener('click',()=>{if(!modal.hidden)close();});
   focusBack?.addEventListener('click',()=>document.getElementById('world-reset')?.click());
@@ -420,6 +428,7 @@
   document.addEventListener('keydown',event=>{
     if(event.key==='Escape'&&!modal.hidden){
       event.preventDefault();
+      if(worldToolsMenu?.open){worldToolsMenu.open=false;return;}
       if(!panel.hidden&&!panel.classList.contains('compact'))collapseChat();
       else if(focusedRoleId)document.getElementById('world-reset')?.click();
       else close();

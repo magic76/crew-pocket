@@ -105,6 +105,7 @@
   let visitorDistrict=firstLot?.id||null;
   let walking=null,queuedDestination=null,explore=true,followPlayer=false;
   const exploreToggle=document.getElementById('world-explore-toggle');
+  const toolsMenu=document.getElementById('world-tools-menu');
   const hint=stage.closest('.world-app')?.querySelector('.world-hint');
   function updateExploreUI(){
     if(exploreToggle){
@@ -121,6 +122,7 @@
     if(walking)return;
     explore=!explore;
     followPlayer=false;updateExploreUI();
+    if(toolsMenu)toolsMenu.open=false;
   });
   const activePlanes=[];
   const arrivalFlashes=[];
@@ -297,13 +299,15 @@
     button.style.setProperty('--world-role-color',role.color);
     labelsHost.appendChild(button);return{button,state,detail,speech};
   });
-  const roster=roles.map((role,index)=>{
+  // Standalone 3D Lab retains its debug roster; the hosted map deliberately
+  // has no duplicate Role strip beside the persistent P10 commander.
+  const roster=rosterHost?roles.map((role,index)=>{
     const button=document.createElement('button');button.type='button';
     const dot=document.createElement('span');dot.style.background=role.color;
     button.append(dot,document.createTextNode(role.short));
     listen(button,'click',()=>handleRoleTap(index));
     rosterHost.appendChild(button);return button;
-  });
+  }):[];
   const statusStrip=document.getElementById('world-status-strip');
   const picker=document.getElementById('world-district-picker');
   const pickerTitle=document.getElementById('world-district-picker-name');
@@ -549,7 +553,7 @@
     chat?.sync();
     const focusState=document.getElementById('crew-world-focus-state');
     if(focusState)focusState.textContent=liveStates[role.state]||'未知';
-    roster.forEach((button,i)=>button.setAttribute('aria-pressed',String(i===selected)));
+    roster.forEach((button,i)=>button?.setAttribute('aria-pressed',String(i===selected)));
     actors[selected].root.add(selectionHalo);
     if(contextLine&&document.getElementById('world-info')?.classList.contains('is-collapsed'))
       contextLine.textContent='Context · 展開詳情後讀取';
@@ -645,6 +649,7 @@
     }
   }
   activeSelectWorldRole=roleId=>{
+    if(toolsMenu)toolsMenu.open=false;
     const idx=roles.findIndex(role=>role.id===roleId);
     if(idx<0)return false;
     select(idx,false);
@@ -902,6 +907,8 @@
   }
   listen(document.getElementById('world-reset'),'click',()=>{
     showHandoffs(false);
+    if(toolsMenu)toolsMenu.open=false;
+    followPlayer=false;
     window.CrewWorldHost?.exitFocus?.();
     refreshFocusActivity();
     panTo(0,-1.8,overviewZoom);notify('返回全景');
@@ -919,6 +926,7 @@
   const fingers=new Map();
   let pinch=0,tap=null;
   listen(stage,'pointerdown',event=>{
+    if(toolsMenu?.open)toolsMenu.open=false;
     if(event.target.closest?.('.world-label, .world-district-pin, .world-player-label'))return;
     stage.setPointerCapture?.(event.pointerId);
     fingers.set(event.pointerId,{x:event.clientX,y:event.clientY});
@@ -1192,7 +1200,7 @@
     renderer.renderLists?.dispose?.();
     renderer.dispose();renderer.forceContextLoss?.();
     renderer.domElement.remove();
-    labelsHost.replaceChildren();rosterHost.replaceChildren();
+    labelsHost.replaceChildren();rosterHost?.replaceChildren();
     districtsHost?.replaceChildren();
     kit.releaseMaterials?.();
   };

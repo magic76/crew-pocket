@@ -39,6 +39,7 @@ async function tick(){await new Promise(resolve=>setImmediate(resolve));}
     'world-chat-open','crew-world-chat-role-name','crew-back-home-btn','world-stage',
     'crew-world-focus-bar','crew-world-focus-back','crew-world-focus-name',
     'crew-world-focus-full','crew-world-focus-context','context-pill','world-reset',
+    'world-exit-map','world-tools-menu',
     'crew-world-command-role','crew-world-command-state','crew-world-command-read',
     'crew-world-result-peek','crew-world-result-peek-kind','crew-world-result-peek-text',
     'prompt-input'];
@@ -139,7 +140,9 @@ async function tick(){await new Promise(resolve=>setImmediate(resolve));}
   assert.strictEqual(nodes['chat-composer-footer'].parentNode,nodes['crew-world-chat-composer-slot'],
     'returning to overview keeps the persistent single composer docked');
   assert.equal(nodes['crew-world-modal'].hidden,false,'returning to overview keeps map open');
-  nodes['crew-home-dashboard-btn'].click();
+  // The full-screen map has its own exit; no underlying header controls
+  // may be needed to return to Dashboard.
+  nodes['world-exit-map'].click();
   assert.equal(nodes['crew-world-open-btn']['aria-pressed'],'false');
   assert.equal(nodes['crew-home-dashboard-btn']['aria-pressed'],'true');
   assert.equal(pauseCount,1,'switching to Dashboard pauses the existing world');
@@ -150,6 +153,11 @@ async function tick(){await new Promise(resolve=>setImmediate(resolve));}
   nodes['crew-world-open-btn'].click();
   await tick();await tick();
   assert.equal(mountCount,1,'reopening resumes the existing scene');
+  nodes['world-tools-menu'].open=true;
+  win.CrewWorldHost.focusRole('teacher','Teacher');
+  assert.equal(nodes['world-tools-menu'].open,false,
+    'Role focus dismisses the secondary map control popover');
+  nodes['crew-world-focus-back'].click();
   assert.equal(resumeCount,1,'reopening resumes the paused world');
   nodes['crew-home-dashboard-btn'].click();
   assert.equal(pauseCount,2,'Dashboard switch pauses the scene again');
