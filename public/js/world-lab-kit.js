@@ -533,38 +533,49 @@
     root.traverse(mesh=>{if(mesh.isMesh)mesh.userData.roleId=role.id;});
     return {role,root,body,arms,legs,workHalo,mode:'idle',expires:0,reactionUntil:0};
   }
-  // Folded low-poly paper plane. Tiny per-flight meshes, no image assets,
-  // model downloads or additional renderer. Local forward is +Z.
+  // A crisp two-tone silhouette survives the low-poly town's bright roofs,
+  // even at overview zoom. Only primitive meshes, no bloom or image assets.
   function createPaperPlane(scene,kind='handoff'){
     const reply=kind==='reply';
-    const paper=reply?'#dafff0':'#e5f5ff';
-    const fold=reply?'#64db9b':'#8cbcff';
+    const paper=reply?'#e0fff1':'#f4fbff';
+    const fold=reply?'#30c98f':'#57baff';
+    const outline=reply?'#116956':'#245792';
     const root=new T.Group();
-    const surface=new T.BufferGeometry();
     const wingTriangles=[
-      // Left and right open wings
       0,.02,.76,  -.51,-.08,-.34,  0,.17,-.24,
       0,.02,.76,   0,.17,-.24,    .51,-.08,-.34,
-      // Folded tail panels add an origami crease
       0,.02,.76,   0,.17,-.24,    0,.025,-.61,
       0,.02,.76,   0,.025,-.61,   0,.17,-.24
     ];
+    const outlineTriangles=[];
+    for(let i=0;i<wingTriangles.length;i+=3){
+      outlineTriangles.push(wingTriangles[i]*1.14,wingTriangles[i+1]-.045,
+        wingTriangles[i+2]*1.12);
+    }
+    const edgeSurface=new T.BufferGeometry();
+    edgeSurface.setAttribute('position',new T.Float32BufferAttribute(outlineTriangles,3));
+    edgeSurface.computeVertexNormals();
+    const edge=new T.Mesh(edgeSurface,new T.MeshBasicMaterial({
+      color:outline,side:T.DoubleSide,transparent:true,opacity:.92,depthWrite:false
+    }));
+    root.add(edge);
+    const surface=new T.BufferGeometry();
     surface.setAttribute('position',new T.Float32BufferAttribute(wingTriangles,3));
     surface.computeVertexNormals();
     const wings=new T.Mesh(surface,new T.MeshBasicMaterial({
-      color:paper,side:T.DoubleSide,transparent:true,opacity:.98
+      color:paper,side:T.DoubleSide,transparent:true,opacity:1,depthWrite:false
     }));
     root.add(wings);
-    const stripe=new T.Mesh(new T.BoxGeometry(.045,.025,.48),
+    const stripe=new T.Mesh(new T.BoxGeometry(.065,.035,.66),
       new T.MeshBasicMaterial({color:fold}));
-    stripe.position.set(0,.15,-.12);
+    stripe.position.set(0,.17,-.10);
     root.add(stripe);
-    root.scale.setScalar(.8);
+    root.scale.setScalar(1);
     scene.add(root);
     const trails=[];
-    for(let i=0;i<3;i++){
+    for(let i=0;i<4;i++){
       const bead=new T.Mesh(
-        new T.SphereGeometry(.085-i*.014,6,4),
+        new T.SphereGeometry(.17-i*.026,7,5),
         new T.MeshBasicMaterial({
           color:fold,transparent:true,opacity:0,depthWrite:false
         })
