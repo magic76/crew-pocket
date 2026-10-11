@@ -303,8 +303,9 @@ assert.equal((main.match(/id="prompt-input"/g)||[]).length,1,
   'P10 commands use the only original Chat input');
 assert.ok(launcher.includes("roleSwitchQueue=Promise.resolve()"),
   'Role target navigation is serialized to avoid stale selection races');
-assert.ok(launcher.includes("if(promptInput&&commandDraft&&!promptInput.value)"),
-  'the global unsent draft survives Role navigation');
+assert.ok(launcher.includes("if(!promptInput||!commandDraft||promptInput.value)return;")&&
+  launcher.includes("restoreWorldDraft();"),
+  'the global unsent draft survives Role navigation, including slow and failed loads');
 assert.ok(launcher.includes("messages.querySelectorAll?.('.assistant-article, .btw-card')"),
   'P11 result preview projects the original message DOM');
 assert.ok(launcher.includes("const result=latest?.querySelector?.('.execution-result-card')"),
