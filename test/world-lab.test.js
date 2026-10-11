@@ -401,17 +401,34 @@ assert.deepEqual(alerts.map(item=>item.role.id),['a','b'],
 assert.equal(alerts[0].count,2);
 assert.equal(alerts[1].reply.signature,'r-2');
 assert.deepEqual(events.attentionItems(null,new Map(),alertNow),[]);
-// P14: only saved directed Role edges; filter keeps actual identities/IDs.
+// P14: a line is only a brief activity cue, not a permanent relationship.
+// Archived saved events must remain in the evidence tray regardless of age.
+const linkNow=1_800_000,linkWindow=events.COLLABORATION_LINK_WINDOW_MS;
+assert.equal(linkWindow,45000,'temporary arcs align with observed handoff recency');
 const evidenceForTests=[
-  {id:'m1',fromRoleId:'a',toRoleId:'b',kind:'handoff'},
-  {id:'m2',fromRoleId:'c',toRoleId:'a',kind:'reply'},
-  {id:'m3',fromRoleId:'c',toRoleId:'d',kind:'handoff'},
-  {id:'m4',fromRoleId:'a',toRoleId:'a',kind:'handoff'}
+  {id:'m1',fromRoleId:'a',toRoleId:'b',kind:'handoff',createdAt:linkNow-1500},
+  {id:'m2',fromRoleId:'c',toRoleId:'a',kind:'reply',createdAt:linkNow-12000},
+  {id:'m3',fromRoleId:'c',toRoleId:'d',kind:'handoff',createdAt:linkNow-200},
+  {id:'m4',fromRoleId:'a',toRoleId:'a',kind:'handoff',createdAt:linkNow-300}
 ];
-assert.deepEqual(events.collaborationConnections(evidenceForTests,'a',true,3).map(item=>item.id),
+assert.deepEqual(events.collaborationConnections(evidenceForTests,'a',true,3,linkNow).map(item=>item.id),
   ['m1','m2'],'selected-role view excludes unrelated and self-events');
-assert.deepEqual(events.collaborationConnections(evidenceForTests,'a',false,2).map(item=>item.id),
+assert.deepEqual(events.collaborationConnections(evidenceForTests,'a',false,2,linkNow).map(item=>item.id),
   ['m1','m2'],'visual arcs remain bounded');
+const obsolete={...evidenceForTests[0],id:'yesterday',createdAt:linkNow-86400000};
+const justExpired={...evidenceForTests[0],id:'expired',createdAt:linkNow-linkWindow};
+const unknownTime={...evidenceForTests[0],id:'unknown-time',createdAt:undefined};
+const futureTime={...evidenceForTests[0],id:'future',createdAt:linkNow+6000};
+assert.deepEqual(events.collaborationConnections([obsolete,justExpired,unknownTime,futureTime], 'a',false,3,linkNow),[],
+  'stale, expired, timestamp-less or far-future messages never draw a map connection');
+assert.deepEqual(events.collaborationConnections(
+  [{...evidenceForTests[0],createdAt:linkNow-linkWindow+1}],'a',false,3,linkNow
+).map(item=>item.id),['m1'],'links remain visible strictly within the time window');
+assert.deepEqual(events.collaborationConnections(evidenceForTests,'a',false,3,linkNow+linkWindow+1),[],
+  'old arcs disappear without receiving any newer messages');
+assert.deepEqual(events.traceableEvents([obsolete,...evidenceForTests],['a','b','c','d'],6,linkNow)
+  .map(item=>item.id),['m3','m4','m1','m2','yesterday'].filter(id=>id!=='m4'),
+  'archived Role-to-Role messages remain inspectable after their map connection expires');
 for(const id of ['world-attention-open','world-attention-count','world-attention-panel',
   'world-attention-list','world-role-peek','world-role-peek-name',
   'world-role-peek-body','world-collaboration-links','world-handoffs-filter']){
@@ -431,6 +448,12 @@ assert.ok(engine.includes('actors[selected].root.add(selectionHalo,focusHalo)'),
   'P13 accent rings follow only the selected Role');
 assert.ok(engine.includes('planner?.collaborationConnections?.('),
   'P14 arcs consume the validated, capped event selector');
+assert.ok(engine.includes('shownHandoffs(),roles[selected].id,false,3,Date.now()'),
+  'visible P14 arcs are filtered using wall-clock event age');
+assert.ok(engine.includes('Date.now()>=nextLinkExpiryAt'),
+  'render loop expires arcs even if the collaboration API is not polling successfully');
+assert.ok(engine.includes('planner.COLLABORATION_LINK_WINDOW_MS'),
+  'the render deadline shares the same 45-second time window as the selector');
 assert.ok(engine.includes("path.setAttribute('data-kind',event.kind)"),
   'saved replies and handoffs have separate visual treatments');
 assert.ok(engine.includes('evidenceVerified=false;evidenceRows=[]'),
