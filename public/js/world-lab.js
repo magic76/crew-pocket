@@ -299,13 +299,15 @@
     button.style.setProperty('--world-role-color',role.color);
     labelsHost.appendChild(button);return{button,state,detail,speech};
   });
-  const roster=roles.map((role,index)=>{
+  // Standalone 3D Lab retains its debug roster; the hosted map deliberately
+  // has no duplicate Role strip beside the persistent P10 commander.
+  const roster=rosterHost?roles.map((role,index)=>{
     const button=document.createElement('button');button.type='button';
     const dot=document.createElement('span');dot.style.background=role.color;
     button.append(dot,document.createTextNode(role.short));
     listen(button,'click',()=>handleRoleTap(index));
-    rosterHost?.appendChild(button);return rosterHost?button:null;
-  });
+    rosterHost.appendChild(button);return button;
+  }):[];
   const statusStrip=document.getElementById('world-status-strip');
   const picker=document.getElementById('world-district-picker');
   const pickerTitle=document.getElementById('world-district-picker-name');
