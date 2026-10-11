@@ -46,6 +46,24 @@ function check(roles,title){
     assert.equal(roads.filter(e=>e.b.id===lot.id).length,1,
       'each workshop connects to the street network exactly once');
   }
+  // Every rendered road is sampled against each rotated building footprint.
+  // It must never run under a workshop, even when a curved loop approaches.
+  for(const road of roads){
+    for(let step=1;step<road.points.length;step++){
+      const a=road.points[step-1],b=road.points[step];
+      const count=Math.max(1,Math.ceil(distance(a,b)/.3));
+      for(let sample=0;sample<=count;sample++){
+        const t=sample/count;
+        const point={x:a.x+(b.x-a.x)*t,z:a.z+(b.z-a.z)*t};
+        for(const lot of lots){
+          const p=navigation.localOffset(point,lot);
+          assert.ok(!(Math.abs(p.x)<2.9&&p.z>-3.4&&p.z<.40),
+            title+': street crosses rotated workshop '+lot.id+
+            ' on '+road.a.id+'→'+road.b.id);
+        }
+      }
+    }
+  }
   for(let i=0;i<lots.length;i++)for(let j=i+1;j<lots.length;j++){
     assert.ok(distance(lots[i],lots[j])>=7.8,
       title+': no colliding buildings '+lots[i].id+' / '+lots[j].id);
