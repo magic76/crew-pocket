@@ -115,7 +115,8 @@ async function tick(){await new Promise(resolve=>setImmediate(resolve));}
   assert.equal(contextOpenCount,1,'Context delegates to ORIGINAL Context Health');
   assert.strictEqual(nodes['crew-home-view-toggle'].parentNode,nodes['crew-home-header']);
   assert.equal(nodes['crew-world-modal'].classList.contains('is-role-focused'),false);
-  assert.equal(doc.body.classList.set.has('crew-world-active'),false);
+  assert.equal(doc.body.classList.set.has('crew-world-active'),true,
+    'selecting or reading a Role never leaves the active World');
   assert.equal(nodes['crew-world-chat-panel'].classList.contains('compact'),true);
   nodes['crew-world-chat-expand'].click();
   assert.equal(nodes['crew-world-chat-panel'].classList.contains('compact'),false,
