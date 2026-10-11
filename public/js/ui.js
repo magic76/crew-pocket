@@ -5,11 +5,12 @@ const DEFAULT_PROVIDERS = [
   { id: 'antigravity', label: 'Antigravity', shortLabel: 'AGY', icon: '✨', storagePrefix: 'agy', badgeClass: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40', greeting: '你好！已為你開啟新對話。有什麼可以幫你的？', capabilities: { history: true, rewind: true, autoTitle: false, compact: 'checkpoint', usage: { mode: 'endpoint', endpoint: '/api/usage' } } },
   { id: 'codex', label: 'OpenAI Codex', shortLabel: 'Codex', icon: '🧩', storagePrefix: 'codex', badgeClass: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40', greeting: '你好！Codex provider 已就緒。有什麼開發任務？', capabilities: { history: true, rewind: false, autoTitle: false, compact: 'native', usage: { mode: 'external-link', url: 'https://chatgpt.com/codex/settings/usage' } } }
 ];
+DEFAULT_PROVIDERS.push({ id: 'claude', label: 'Claude Code', shortLabel: 'Claude', icon: '🟣', storagePrefix: 'claude', badgeClass: 'bg-purple-500/20 text-purple-300 border-purple-500/40', greeting: 'Claude Code 已就緒', capabilities: { history: true, rewind: false, compact: false, contextUsage: false, usage: { mode: 'unsupported' } } });
 let availableProviders = DEFAULT_PROVIDERS;
 let currentConversationId = null;
 let currentProvider = localStorage.getItem('crew_current_provider') || 'antigravity';
-const initialModelStoragePrefix = currentProvider === 'codex' ? 'codex' : 'agy';
-const initialModelFallback = currentProvider === 'codex' ? 'gpt-5.6-terra' : 'gemini-3.7-flash';
+const initialModelStoragePrefix = currentProvider === 'codex' ? 'codex' : currentProvider === 'claude' ? 'claude' : 'agy';
+const initialModelFallback = currentProvider === 'codex' ? 'gpt-5.6-terra' : currentProvider === 'claude' ? 'sonnet' : 'gemini-3.7-flash';
 let currentModel = localStorage.getItem(`${initialModelStoragePrefix}_current_model`)
   || (currentProvider === 'antigravity' ? localStorage.getItem('agy_current_model') : null)
   || initialModelFallback;
@@ -22,6 +23,7 @@ const BUILTIN_MODEL_FALLBACKS = [
   { id: 'gpt-5.6-terra', provider: 'codex', name: 'GPT-5.6 Terra', desc: '能力與速度平衡 · 日常開發推薦', icon: '🌍', badge: '預設', badgeColor: 'bg-amber-500/20 text-amber-300 border-amber-500/40', isDefault: true, defaultReasoningEffort: 'medium', supportedReasoningEfforts: ['low', 'medium', 'high', 'xhigh', 'max'] },
   { id: 'gpt-5.6-luna', provider: 'codex', name: 'GPT-5.6 Luna', desc: '快速省資源 · 高頻輕量工作', icon: '🌙', badge: 'Luna', badgeColor: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40', isDefault: false, defaultReasoningEffort: 'medium', supportedReasoningEfforts: ['low', 'medium', 'high', 'xhigh', 'max'] }
 ];
+BUILTIN_MODEL_FALLBACKS.push({ id: 'sonnet', provider: 'claude', name: 'Claude Sonnet', desc: 'Claude Code CLI', icon: '🟣', isDefault: true, defaultReasoningEffort: 'medium', supportedReasoningEfforts: ['low', 'medium', 'high'] });
 let availableModels = [...BUILTIN_MODEL_FALLBACKS];
 let availableEfforts = [
   { id: 'low', name: 'Low (極速)', desc: '⚡ 0~1s 秒回 · 日常對話', icon: '⚡', color: 'emerald' },
@@ -1589,8 +1591,14 @@ async function loadProviderCatalog() {
     if (Array.isArray(data.providers) && data.providers.length > 0) availableProviders = data.providers;
   } catch (_) {}
   if (!availableProviders.some(provider => provider.id === currentProvider)) {
-    currentProvider = availableProviders[0]?.id || 'antigravity';
-    localStorage.setItem('crew_current_provider', currentProvider);
+    // Preserve a saved provider when its CLI is temporarily unavailable.
+    // The server must never silently route that Role to another AI engine.
+    const known = DEFAULT_PROVIDERS.find(provider => provider.id === currentProvider);
+    if (known) availableProviders.push({ ...known, unavailable: true });
+    else {
+      currentProvider = availableProviders[0]?.id || 'antigravity';
+      localStorage.setItem('crew_current_provider', currentProvider);
+    }
   }
   renderProviderOptions();
   return availableProviders;
@@ -1609,7 +1617,7 @@ function renderProviderOptions() {
   providerOptionsContainer.style.gridTemplateColumns = `repeat(${Math.min(availableProviders.length, 3)}, minmax(0, 1fr))`;
   providerOptionsContainer.innerHTML = availableProviders.map(provider => `
     <button type="button" data-provider="${escapeHtml(provider.id)}" onclick="selectProvider('${escapeHtml(provider.id)}')" class="provider-option px-3 py-2 rounded-xl border text-xs font-bold transition active:scale-95">
-      ${provider.icon || '🤖'} ${escapeHtml(provider.label)}
+      ${provider.icon || '🤖'} ${escapeHtml(provider.label)}${provider.unavailable ? '（未安裝）' : ''}
     </button>
   `).join('');
   providerOptionsContainer.querySelectorAll('.provider-option').forEach(button => {

@@ -502,7 +502,7 @@ function initAppAndListeners() {
       const displayTitle = c.title || '未命名對話';
       const safeTitle = displayTitle.replace(/"/g, '&quot;');
       const workspaceName = c.workspace ? (c.workspace === '/data/data/com.termux/files/home' ? 'Home' : c.workspace.split('/').filter(Boolean).pop()) : '一般';
-      const providerLabel = c.provider === 'codex' ? 'Codex' : 'AGY';
+      const providerLabel = (typeof providerConfig === 'function' ? providerConfig(c.provider).shortLabel : null) || (c.provider === 'codex' ? 'Codex' : c.provider === 'claude' ? 'Claude' : 'AGY');
       return `
         <button type="button" class="mention-item w-full text-left p-2 rounded-xl hover:bg-indigo-600/20 hover:text-indigo-300 flex items-center justify-between text-slate-200 transition group cursor-pointer" data-id="${c.id}" data-title="${safeTitle}">
           <div class="flex items-center gap-2 min-w-0">
@@ -918,7 +918,7 @@ function initAppAndListeners() {
         const providerModels = availableModels.filter(model => (model.provider || 'antigravity') === currentProvider);
         const storedModel = localStorage.getItem(providerStorageKey('current_model'))
           || (currentProvider === 'antigravity' ? localStorage.getItem('agy_current_model') : null);
-        currentModel = storedModel || (providerModels.find(model => model.isDefault) || providerModels[0] || {}).id || (currentProvider === 'codex' ? 'gpt-5.6-terra' : 'gemini-3.7-flash');
+        currentModel = storedModel || (providerModels.find(model => model.isDefault) || providerModels[0] || {}).id || (currentProvider === 'codex' ? 'gpt-5.6-terra' : currentProvider === 'claude' ? 'sonnet' : 'gemini-3.7-flash');
         const selectedModel = providerModels.find(model => model.id === currentModel);
         const supported = selectedModel?.supportedReasoningEfforts || ['low', 'medium', 'high'];
         currentEffort = localStorage.getItem(providerStorageKey('current_effort')) || selectedModel?.defaultReasoningEffort || 'low';

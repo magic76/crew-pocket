@@ -40,6 +40,17 @@ crew start   # 啟動服務並開啟 Crew Pocket
 
 ---
 
+## 🟣 Claude Code CLI（第三種 Provider，預覽）
+
+Crew Pocket 也能連接你自己已安裝、已登入的 Claude Code CLI，沿用同一套 Role、Memory、Dreaming、Context 與聊天 UI，支援串流、工具事件、明確 Session Resume 與中斷。
+
+Claude Code 必須安裝在 **執行 Crew Runtime 的主機上**，而不是只安裝在開啟 Web 畫面的另一台電腦。這版尚未將 Mac Runtime 或 Android 套件改為跨主機執行。CLI 未安裝時不會出現在可用 Provider 清單。
+
+詳見 [Claude Code Provider 設定、安全性與限制](docs/claude-code-provider.md)。
+
+---
+
+
 ## 🌟 核心特色 (Key Features)
 
 - 🌐 **原生無縫內嵌沙盒 2.0 (Seamless Inline Sandboxes)**：HTML / SVG / Web Audio / Chart.js 產物直接在對話中滿版動態渲染，高度智慧自適應，支援觸控互動、全螢幕大視野與代碼一鍵複製。
