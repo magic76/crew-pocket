@@ -62,16 +62,20 @@
       return{role,index,reply,count};
     }).filter(item=>item.role?.id&&(item.count>0||item.reply));
   }
-  // P14 arcs use only the traceable, already-validated event metadata.
-  // The optional selected Role filter does not create or modify messages.
-  function collaborationConnections(rows,roleId,onlySelected=false,limit=3){
+  // P14 lines describe LIVE RECENT collaboration, not an enduring relationship.
+  // The evidence tray may list historical saved messages; visual links must
+  // expire independently even when those messages remain the newest records.
+  const COLLABORATION_LINK_MAX_AGE_MS=60000;
+  function collaborationConnections(rows,roleId,onlySelected=false,limit=3,now=Date.now()){
     const max=Math.max(0,Math.min(6,Math.floor(Number(limit)||0)));
-    return (Array.isArray(rows)?rows:[]).filter(event=>event&&
-      typeof event.id==='string'&&event.id&&
-      typeof event.fromRoleId==='string'&&typeof event.toRoleId==='string'&&
-      event.fromRoleId!==event.toRoleId&&
-      (!onlySelected||event.fromRoleId===roleId||event.toRoleId===roleId))
-      .slice(0,max);
+    return (Array.isArray(rows)?rows:[]).filter(event=>{
+      const age=now-Number(event?.createdAt);
+      return event&&typeof event.id==='string'&&event.id&&
+        typeof event.fromRoleId==='string'&&typeof event.toRoleId==='string'&&
+        event.fromRoleId!==event.toRoleId&&Number.isFinite(age)&&
+        age>=0&&age<COLLABORATION_LINK_MAX_AGE_MS&&
+        (!onlySelected||event.fromRoleId===roleId||event.toRoleId===roleId);
+    }).slice(0,max);
   }
   // A packet of light can travel only along bridges that physically exist.
   // Nodes are *districts*, not Roles. Same-district messages stay local.
@@ -142,5 +146,5 @@
       y:start.y+(end.y-start.y)*e+Math.sin(Math.PI*t)*rise
     };
   }
-  return{observe,traceableEvents,attentionItems,collaborationConnections,roadRoute,roadPulse,paperFlightDuration,paperFlightPoint};
+  return{observe,traceableEvents,attentionItems,collaborationConnections,COLLABORATION_LINK_MAX_AGE_MS,roadRoute,roadPulse,paperFlightDuration,paperFlightPoint};
 });
