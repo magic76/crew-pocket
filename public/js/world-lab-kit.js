@@ -118,9 +118,11 @@
         let finish=Math.atan2(to.z,to.x);
         while(finish<=start)finish+=Math.PI*2;
         const points=[{x:from.x,z:from.z}];
+        // Pull the loop inside the workshop row. An outer 13.5-radius
+        // arc would cut through the first buildings on each avenue.
         for(let j=1;j<6;j++){
           const t=j/6,theta=start+(finish-start)*t;
-          const r=13.5;
+          const r=8.5;
           points.push({x:Math.cos(theta)*r,z:Math.sin(theta)*r});
         }
         points.push({x:to.x,z:to.z});
