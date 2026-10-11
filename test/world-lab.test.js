@@ -88,6 +88,10 @@ for(const src of [kit,html]){
   assert.doesNotMatch(src,/https?:\/\/|fetch\s*\(|XMLHttpRequest|localStorage|sessionStorage|WebSocket/);
 }
 assert.match(engine,/fetch\('\/api\/crew-status'/);
+assert.ok(engine.includes('if(Array.isArray(liveRows)&&liveRows.length===0)'),
+  'verified empty crew must never show the three sample demo agents');
+assert.ok(engine.includes("window.CrewWorldHost?.refreshSceneRoles?.()"),
+  'the empty crew and normal status poll both support adding a first Role');
 assert.match(engine,/previous===undefined\|\|previous===signature/);
 assert.match(engine,/const recentlyWorking=/);
 assert.match(engine,/lastWorkingAt\.set\(actor\.role\.id,Date\.now\(\)\)/);
