@@ -24,6 +24,14 @@ for(const name of ['Pocket Developer','Teacher Developer','Story Developer']){
 }
 assert.match(kit,/function character\(/);
 assert.match(kit,/roleId=role.id/);
+assert.ok(engine.includes('renderer.toneMappingExposure=.78'));
+assert.ok(engine.includes('new T.DirectionalLight(0xfff5dd,1.05)'));
+assert.ok(engine.includes('new T.RingGeometry(1.08,1.42,36)'),
+  'the selected agent has an explicit map highlight');
+assert.ok(engine.includes('index!==selected'),
+  'a selected idle Role remains visible at overview zoom');
+assert.ok(kit.includes('const keepClear=(x,z)=>'),
+  'decorative greenery avoids navigation lanes');
 assert.match(engine,/new T.WebGLRenderer/);
 assert.match(engine,/ray.intersectObjects/);
 assert.match(engine,/pointermove/);
@@ -141,6 +149,12 @@ assert.match(main,/\/js\/crew-world-launcher.js/);
 assert.doesNotMatch(main,/<script src="\/js\/world-lab.js"/);
 assert.doesNotMatch(main,/<script src="\/vendor\/three.min.js"/);
 assert.match(main,/id="world-stage"/);
+assert.ok(main.includes('id="world-info-toggle"'));
+assert.ok(main.includes('id="world-info-quick-focus"'));
+assert.ok(main.includes('class="world-info is-collapsed"'),
+  'the hosted map starts with a compact Role card');
+assert.ok(css.includes('.world-info.is-collapsed .world-action-row'),
+  'secondary Role actions stay in the expandable detail sheet');
 assert.ok(main.includes('class="world-stage-frame"'));
 assert.ok(main.includes('id="crew-world-focus-bar"'));
 assert.ok(main.includes('id="crew-world-focus-back"'));
