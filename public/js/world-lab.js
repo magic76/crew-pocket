@@ -54,6 +54,13 @@
     const districts=[...districtMap.values()];
     const isLive=Boolean(liveRows?.length);
     let synced=isLive;
+    const flightNotice=document.getElementById('world-flight-notice');
+    const flightNoticeText=document.getElementById('world-flight-notice-text');
+    const flightNoticeState={eventId:null,until:0};
+    function hideFlightNotice(){
+      flightNoticeState.eventId=null;flightNoticeState.until=0;
+      if(flightNotice)flightNotice.hidden=true;
+    }
     const pill=stage.closest('.world-app')?.querySelector('.world-demo-pill');
     const statusSummary=()=>originalCount>roles.length
       ?'地圖 '+roles.length+'/'+originalCount+' 位 · '+districts.length+' 區'
@@ -123,31 +130,53 @@
        !kit?.createPaperPlane)return false;
     const from={x:sender.role.x,y:3.25,z:sender.role.z};
     const to={x:recipient.role.x,y:3.25,z:recipient.role.z};
-    const duration=reduced?760:planner.paperFlightDuration(from,to);
+    const duration=reduced?1300:planner.paperFlightDuration(from,to);
     const plane=kit.createPaperPlane(scene,kind);
     if(eventId)plane.root.traverse(mesh=>{
       if(mesh.isMesh)mesh.userData.handoffEventId=eventId;
     });
-    plane.root.scale.setScalar(Math.max(.80,Math.min(1.55,worldExtent/22)));
+    // Screen-space size is adjusted per frame; a 36-Role town should not
+    // shrink the paper airplane into a barely visible speck.
     const flight={from,to,startedAt:now,duration,plane,kind,recipient,eventId};
     activePlanes.push(flight);
+    if(eventId&&isLive&&synced&&flightNotice&&flightNoticeText){
+      const fromName=sender.role.short||sender.role.name;
+      const toName=recipient.role.short||recipient.role.name;
+      flightNoticeText.textContent=fromName+' → '+toName+' · 已記錄'+
+        (kind==='reply'?'回覆':'訊息')+'（非送達確認）';
+      flightNotice.dataset.kind=kind;
+      flightNoticeState.eventId=eventId;
+      flightNoticeState.until=now+duration+950;
+      flightNotice.hidden=false;
+    }
+    showDepartureCue(flight,now);
     // Digital message only: the paper plane doesn't require the sender
     // to travel or turn on unrelated roads and never implies delivery.
     return true;
   }
-  function showArrivalCue(flight,now){
+  function showPulseCue(point,kind,now,origin=false){
     if(reduced)return;
-    const ring=new T.Mesh(new T.TorusGeometry(.67,.065,5,20),
+    // Departure = recorded message; recipient pulse = visual arrival ONLY,
+    // not proof of delivery/read/execution.
+    const ring=new T.Mesh(new T.TorusGeometry(origin?.76:1.02,.093,6,26),
       new T.MeshBasicMaterial({
-        color:flight.kind==='reply'?'#7af1b1':'#88dbff',
-        transparent:true,opacity:.48,depthWrite:false
+        color:kind==='reply'?'#65f1af':'#77dcff',
+        transparent:true,opacity:origin?.65:.72,depthWrite:false
       }));
     ring.rotation.x=-Math.PI/2;
-    ring.position.set(flight.to.x,.64,flight.to.z);
+    ring.position.set(point.x,.68,point.z);
     scene.add(ring);
-    arrivalFlashes.push({ring,startedAt:now,duration:460});
+    arrivalFlashes.push({ring,startedAt:now,duration:origin?600:740,
+      initialOpacity:origin?.65:.72});
   }
+  function showDepartureCue(flight,now){showPulseCue(flight.from,flight.kind,now,true);}
+  function showArrivalCue(flight,now){showPulseCue(flight.to,flight.kind,now);}
+  listen(flightNotice,'click',()=>{
+    const id=flightNoticeState.eventId;
+    if(id)openEvidence(id);
+  });
   function updateFlights(now){
+    if(flightNoticeState.until&&now>=flightNoticeState.until)hideFlightNotice();
     for(let i=activePlanes.length-1;i>=0;i--){
       const flight=activePlanes[i];
       const elapsed=Math.max(0,now-flight.startedAt);
@@ -164,19 +193,23 @@
       const prev=planner.paperFlightPoint(flight.from,flight.to,Math.max(0,t-.015));
       const dx=next.x-prev.x,dz=next.z-prev.z,dy=next.y-prev.y;
       const root=flight.plane.root;
+      const worldUnitsPerPixel=(camera.top-camera.bottom)/Math.max(1,height);
+      const readableScale=Math.max(.88,Math.min(3.8,worldUnitsPerPixel*42/1.37));
+      root.scale.setScalar(readableScale);
       root.position.set(point.x,point.y,point.z);
       root.rotation.y=Math.atan2(dx,dz);
       root.rotation.x=reduced?0:-Math.atan2(dy,Math.hypot(dx,dz));
       root.rotation.z=reduced?0:Math.sin(Math.PI*t*2)*.13;
       for(let j=0;j<flight.plane.trails.length;j++){
         const bead=flight.plane.trails[j];
-        const behind=t-(j+1)*.033;
+        const behind=t-(j+1)*.048;
         const visible=!reduced&&behind>0;
         bead.visible=visible;
         if(!visible)continue;
         const tail=planner.paperFlightPoint(flight.from,flight.to,behind);
         bead.position.set(tail.x,tail.y,tail.z);
-        bead.material.opacity=(.23-j*.055)*Math.sin(Math.PI*t);
+        bead.scale.setScalar(Math.max(.9,Math.min(2.2,readableScale*.72)));
+        bead.material.opacity=(.68-j*.12)*Math.sin(Math.PI*t);
       }
     }
     for(let i=arrivalFlashes.length-1;i>=0;i--){
@@ -187,8 +220,8 @@
         arrivalFlashes.splice(i,1);
         continue;
       }
-      cue.ring.scale.setScalar(1+t*.45);
-      cue.ring.material.opacity=.48*(1-t);
+      cue.ring.scale.setScalar(1+t*.85);
+      cue.ring.material.opacity=cue.initialOpacity*(1-t);
     }
   }
   const worldExtent=kit.mapExtent?.(roles)||15;
@@ -823,6 +856,7 @@
       // interpreting historical records as newly sent messages.
       seenEvents=null;pendingTransitions.length=0;
       evidenceVerified=false;evidenceRows=[];renderHandoffs();
+      hideFlightNotice();
     }finally{eventRequest=false;}
   }
   function runRecordedHandoff(now){
@@ -1119,6 +1153,7 @@
     actors.forEach(actor=>{if(actor.mode!=='idle')actor.expires+=duration;});
     activePlanes.forEach(flight=>{flight.startedAt+=duration;});
     arrivalFlashes.forEach(cue=>{cue.startedAt+=duration;});
+    if(flightNoticeState.until)flightNoticeState.until+=duration;
     resize();
     if(document.hidden)return;
     raf=requestAnimationFrame(frame);
@@ -1126,6 +1161,7 @@
   };
   resize();if(!paused)frame(performance.now());
   teardown=()=>{
+    hideFlightNotice();
     for(const flight of activePlanes)kit.disposePaperPlane?.(scene,flight.plane);
     activePlanes.length=0;
     for(const cue of arrivalFlashes){
