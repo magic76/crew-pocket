@@ -404,7 +404,7 @@ assert.deepEqual(events.attentionItems(null,new Map(),alertNow),[]);
 // P14: a connection indicates ACTUAL RECENT activity, not a permanent
 // relationship derived from the last six saved messages. The evidence tray
 // still keeps older saved messages available for inspection.
-const linkNow=1_800_000;
+const linkNow=18_000_000;
 const evidenceForTests=[
   {id:'m1',fromRoleId:'a',toRoleId:'b',kind:'handoff',createdAt:linkNow-6000},
   {id:'m2',fromRoleId:'c',toRoleId:'a',kind:'reply',createdAt:linkNow-59500},
