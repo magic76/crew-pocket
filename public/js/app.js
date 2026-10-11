@@ -199,6 +199,10 @@ function initAppAndListeners() {
     if (target === 'crew') {
       window.showRoleNavigationView?.();
       refreshCrewHome({ force: switchingToCrew });
+      // Crew's primary surface is the World map. Dashboard is an explicitly
+      // selected secondary view, not a separate primary tab. The World host
+      // also restores this choice when returning from Chat or Settings.
+      window.CrewWorldHost?.restoreHomeView?.();
     }
     setSettingsViewOpen(target === 'settings');
   }
@@ -254,7 +258,8 @@ function initAppAndListeners() {
   crewOpenSettingsBtn?.addEventListener('click', () => setPrimaryTab('settings'));
   crewSettingsBackBtn?.addEventListener('click', () => window.CrewNavigation.back());
 
-  // Always start at Crew; preserve token-cleanup state fields.
+  // Always start in the Crew section; its map-first World host opens in
+  // setPrimaryTab, without requiring any prior Role Conversation.
   window.history.replaceState({
     ...(window.history.state || {}), crewPage: 'crew', crewOverlay: null
   }, '');
