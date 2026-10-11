@@ -403,7 +403,7 @@ assert.equal(alerts[1].reply.signature,'r-2');
 assert.deepEqual(events.attentionItems(null,new Map(),alertNow),[]);
 // P14: a line is only a brief activity cue, not a permanent relationship.
 // Archived saved events must remain in the evidence tray regardless of age.
-const linkNow=1_800_000,linkWindow=events.COLLABORATION_LINK_WINDOW_MS;
+const linkNow=1_800_000_000_000,linkWindow=events.COLLABORATION_LINK_WINDOW_MS;
 assert.equal(linkWindow,45000,'temporary arcs align with observed handoff recency');
 const evidenceForTests=[
   {id:'m1',fromRoleId:'a',toRoleId:'b',kind:'handoff',createdAt:linkNow-1500},
