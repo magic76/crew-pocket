@@ -35,129 +35,227 @@
   function cylinder(p,c,a,b,h,x=0,y=0,z=0,sides=9) {
     return part(p,new T.CylinderGeometry(a,b,h,sides),c,x,y,z);
   }
-  // Continuous miniature town: one grass slab with aligned streets,
-  // sidewalks and small project workshops. No islands, docks or bridges.
-  const TOWN_SPACING=10;
+  // A deterministic miniature village: central plaza, gently bending radial
+  // lanes and varied workshops on both sides. The same edge polylines are
+  // painted here AND supplied to WorldLabNavigation for actual player travel.
+  const TOWN_SPACING=8.7;
+  const FRONT_Z=2.65;
+  const branchCount=count=>Math.min(6,Math.max(2,Math.ceil(Math.max(1,count)/4)));
+  function lanePoint(branch,depth,branches){
+    const angle=-Math.PI/2+2*Math.PI*branch/branches+
+      .095*Math.sin(branch*2.4+.5);
+    const ux=Math.cos(angle),uz=Math.sin(angle);
+    const vx=-uz,vz=ux;
+    const radius=13.5+TOWN_SPACING*depth;
+    const bend=.9*Math.sin(depth*.9+branch*1.2);
+    return {x:radius*ux+bend*vx,z:radius*uz+bend*vz,
+      ux,uz,vx,vz,angle};
+  }
+  function districtPosition(index,count){
+    const branches=branchCount(count),branch=index%branches,depth=Math.floor(index/branches);
+    const lane=lanePoint(branch,depth,branches);
+    const side=(branch+depth)%2===0?1:-1;
+    const lateral=5.9+.35*Math.sin(index*1.71);
+    const x=lane.x+lane.vx*side*lateral,z=lane.z+lane.vz*side*lateral;
+    const towards={x:lane.x-x,z:lane.z-z};
+    const baseRotation=Math.atan2(towards.x,towards.z);
+    const rotation=baseRotation+.07*Math.sin(index*2.53);
+    return{x,z,branch,depth,rotation,roadX:lane.x,roadZ:lane.z,
+      frontX:x+Math.sin(rotation)*3.30,
+      frontZ:z+Math.cos(rotation)*3.30};
+  }
   function districtNodes(roleDefs){
     const unique=new Map();
     for(const role of roleDefs||[]){
       const id=role.districtId||role.id;
-      if(!unique.has(id))unique.set(id,{
+      if(id&&!unique.has(id))unique.set(id,{
         id,x:role.islandX,z:role.islandZ,
-        col:role.townCol,row:role.townRow,role
+        branch:role.townBranch,depth:role.townDepth,
+        rotation:role.townRotation,
+        frontX:role.townFrontX,frontZ:role.townFrontZ,
+        roadX:role.townRoadX,roadZ:role.townRoadZ,role
       });
     }
     return [...unique.values()];
   }
+  const lengthOf=points=>points.reduce((sum,p,i)=>i?sum+
+    Math.hypot(p.x-points[i-1].x,p.z-points[i-1].z):0,0);
   function planRoadNetwork(roleDefs=roles){
     const lots=districtNodes(roleDefs);
     if(!lots.length)return[];
-    const columns=Math.ceil(Math.sqrt(lots.length));
-    const rows=Math.ceil(lots.length/columns);
-    const at=(col,row)=>({
-      id:'street-'+col+'-'+row,col,row,
-      x:(col-(columns-1)/2)*TOWN_SPACING+TOWN_SPACING/2,
-      z:(row-(rows-1)/2)*TOWN_SPACING+TOWN_SPACING/2
-    });
-    const edges=[];
-    for(let row=0;row<rows;row++)for(let col=0;col<columns;col++){
-      if(col+1<columns)edges.push({a:at(col,row),b:at(col+1,row),length:TOWN_SPACING});
-      if(row+1<rows)edges.push({a:at(col,row),b:at(col,row+1),length:TOWN_SPACING});
+    const branches=branchCount(lots.length);
+    const center={id:'plaza',x:0,z:0};
+    const edges=[],laneMap=new Map();
+    const add=(a,b,points)=>{
+      const line=points||[{x:a.x,z:a.z},{x:b.x,z:b.z}];
+      const length=lengthOf(line);
+      if(length>.08)edges.push({a,b,points:line,length});
+    };
+    for(let branch=0;branch<branches;branch++){
+      const laneLots=lots.filter(l=>l.branch===branch).sort((a,b)=>a.depth-b.depth);
+      let previous=center;
+      for(const lot of laneLots){
+        const node={id:'lane-'+branch+'-'+lot.depth,x:lot.roadX,z:lot.roadZ};
+        laneMap.set(node.id,node);
+        // Every leg begins and ends exactly at a rendered junction.
+        add(previous,node);
+        const curb={id:lot.id,x:lot.frontX,z:lot.frontZ};
+        add(node,curb);
+        previous=node;
+      }
+    }
+    // The first junctions form a curved village loop, not a grid. These
+    // additional walkable shortcuts make travel around the plaza natural.
+    if(branches>=3){
+      for(let branch=0;branch<branches;branch++){
+        const next=(branch+1)%branches;
+        const from=laneMap.get('lane-'+branch+'-0');
+        const to=laneMap.get('lane-'+next+'-0');
+        if(!from||!to)continue;
+        let start=Math.atan2(from.z,from.x);
+        let finish=Math.atan2(to.z,to.x);
+        while(finish<=start)finish+=Math.PI*2;
+        const points=[{x:from.x,z:from.z}];
+        for(let j=1;j<6;j++){
+          const t=j/6,theta=start+(finish-start)*t;
+          const r=13.5;
+          points.push({x:Math.cos(theta)*r,z:Math.sin(theta)*r});
+        }
+        points.push({x:to.x,z:to.z});
+        add(from,to,points);
+      }
     }
     return edges;
   }
-  function buildTown(scene,lots){
+  function roadSegment(scene,a,b,width,color,y=.385){
+    const dx=b.x-a.x,dz=b.z-a.z,dist=Math.hypot(dx,dz);
+    if(dist<.04)return;
+    const mesh=box(scene,color,width,.036,dist,(a.x+b.x)/2,y,(a.z+b.z)/2);
+    mesh.rotation.y=Math.atan2(dx,dz);
+  }
+  function buildTown(scene,lots,roads){
     if(!lots.length)return;
-    const cols=Math.ceil(Math.sqrt(lots.length));
-    const rows=Math.ceil(lots.length/cols);
-    const w=cols*TOWN_SPACING+4,d=rows*TOWN_SPACING+4;
-    box(scene,'#687b78',w,.75,d,0,-.47,0);
-    box(scene,'#a9caa8',w,.24,d,0,.23,0); // ground top .35
-    // Brick-edged pedestrian routes are continuous across the entire lawn.
-    for(let col=0;col<cols;col++){
-      const x=(col-(cols-1)/2)*TOWN_SPACING+TOWN_SPACING/2;
-      box(scene,'#e4d2b2',1.95,.04,d-3,x,.375,0);
-      box(scene,'#fbebce',1.35,.016,d-3,x,.405,0);
-    }
-    for(let row=0;row<rows;row++){
-      const z=(row-(rows-1)/2)*TOWN_SPACING+TOWN_SPACING/2;
-      box(scene,'#e4d2b2',w-3,.04,1.95,0,.376,z);
-      box(scene,'#f7e8d2',w-3,.016,1.38,0,.407,z);
-    }
-    // The center street crossing becomes a flat communal square without a
-    // collider: visitors can continue walking through it without clipping.
-    if(cols>1&&rows>1){
-      cylinder(scene,'#d4bfa2',2.2,2.2,.035,0,.415,0,16);
-      const trim=part(scene,new T.TorusGeometry(1.7,.055,4,24),'#f4e7cf',0,.442,0);
-      trim.rotation.x=-Math.PI/2;
-      for(const side of [-1,1]){
-        for(const depth of [-1,1]){
-          const x=side*2.65,z=depth*2.65;
-          cylinder(scene,'#927d69',.08,.10,.48,x,.61,z,7);
-          sphere(scene,'#75a893',.42,x,.95,z);
-        }
+    const boundX=Math.max(15,...lots.map(l=>Math.abs(l.x)+7));
+    const boundZ=Math.max(15,...lots.map(l=>Math.abs(l.z)+7));
+    box(scene,'#748b80',boundX*2+6,.70,boundZ*2+6,0,-.43,0);
+    box(scene,'#a8cba8',boundX*2+6,.22,boundZ*2+6,0,.24,0);
+    // Road surfaces follow actual navigation polylines, including bends
+    // and the curved ring. Small round joints prevent visual corner gaps.
+    for(const edge of roads){
+      for(let i=1;i<edge.points.length;i++){
+        roadSegment(scene,edge.points[i-1],edge.points[i],1.95,'#d9c3a8');
+        roadSegment(scene,edge.points[i-1],edge.points[i],1.38,'#f3e1bf',.412);
+      }
+      for(let i=1;i<edge.points.length-1;i++){
+        cylinder(scene,'#f3e1bf',.76,.76,.032,edge.points[i].x,.418,edge.points[i].z,12);
       }
     }
-    for(const lot of lots){
-      // All Role avatar slots stand on this connected building frontage.
-      box(scene,'#e9deca',9.25,.036,.78,lot.x,.389,lot.z+2.65);
-      box(scene,'#eee1ce',.88,.034,2.46,
-        lot.x+TOWN_SPACING/2,.390,lot.z+3.8);
+    for(const edge of roads){
+      for(const node of [edge.a,edge.b]){
+        cylinder(scene,'#f3e1bf',.85,.85,.032,node.x,.417,node.z,12);
+      }
     }
-    // Small communal green at the perimeter, deliberately outside streets.
-    const parkX=-(cols*TOWN_SPACING)/2-1.2;
-    const parkZ=-(rows*TOWN_SPACING)/2-1.2;
-    sphere(scene,'#628f79',.76,parkX,.86,parkZ,1,1.05,1);
-    cylinder(scene,'#8c795e',.11,.12,.67,parkX,.55,parkZ,7);
-    for(const side of [-1,1]){
-      const x=side*(w/2-1.0),z=d/2-1.0;
-      cylinder(scene,'#8f7b6b',.08,.10,.64,x,.67,z,7);
-      sphere(scene,'#589c7e',.54,x,1.12,z);
+    // Distinct curved-edge public square, kept free for walking.
+    cylinder(scene,'#bfa995',4.25,4.25,.037,0,.415,0,24);
+    cylinder(scene,'#e2d0b4',3.95,3.95,.04,0,.44,0,24);
+    const ring=part(scene,new T.TorusGeometry(3.35,.06,5,32),'#fbefdb',0,.470,0);
+    ring.rotation.x=-Math.PI/2;
+    for(let i=0;i<6;i++){
+      const angle=i*Math.PI/3+.21,x=Math.cos(angle)*5.3,z=Math.sin(angle)*5.3;
+      cylinder(scene,'#96816d',.10,.12,.72,x,.71,z,7);
+      sphere(scene,i%2?'#78b49b':'#629f89',.58,x,1.28,z);
+    }
+    // Each building gets its own locally rotated frontage and threshold.
+    for(const lot of lots){
+      const group=new T.Group();
+      group.position.set(lot.x,0,lot.z);
+      group.rotation.y=lot.rotation;
+      scene.add(group);
+      box(group,'#e8ddc9',6.8,.034,.78,0,.387,FRONT_Z);
+      box(group,'#ead9c0',1.0,.03,.94,0,.397,3.18);
+    }
+    // Peripheral greenery preserves the tiny-town feel without obstructing
+    // either the avenue centre-lines or the visible Role entrances.
+    for(const lot of lots){
+      const group=new T.Group();
+      group.position.set(lot.x,0,lot.z);group.rotation.y=lot.rotation;scene.add(group);
+      cylinder(group,'#987c65',.12,.14,.64,-3.33,.64,-1.3,7);
+      sphere(group,'#77b59c',.64,-3.33,1.16,-1.3);
+      cylinder(group,'#987c65',.09,.11,.52,3.3,.58,-1.55,7);
+      sphere(group,'#6fa589',.50,3.3,1.08,-1.55);
     }
   }
+  // Six genuinely different silhouettes, not the same box recolored.
+  // Building front is local +Z; rotation faces each workshop's lane.
   function districtBuilding(scene,role,index){
-    const x=role.islandX,z=role.islandZ;
-    const type=profession(role);
-    const wall=['#b3d8e8','#f2ccdb','#e3dab7','#d6c5ea','#c8dfc4'];
-    const roof=['#6284b7','#bf7096','#ba8e62','#8372ae','#6d9b89'];
-    const group=new T.Group();group.position.set(x,0,z);scene.add(group);
-    const paint=wall[index%wall.length],accent=roof[index%roof.length];
-    // Workshop occupies northern half of each lot; the south sidewalk is
-    // reserved for 1–3 Role avatars and never overlaps any building.
-    box(group,paint,3.45,1.76,2.54,0,1.25,-1.6);
-    box(group,accent,3.85,.42,2.92,0,2.35,-1.6);
-    box(group,'#f8f2dd',.78,1.11,.06,0,1.04,-.30);
-    box(group,'#65818b',.54,.74,.09,0,.86,-.255);
+    const kind=profession(role);
+    const paint=['#b8d6e9','#ead0d9','#eadbb5','#d4c8e8','#c3d9c6','#e6c9af'];
+    const roofs=['#668bb6','#bd7598','#b99468','#8c76ba','#6b9d92','#b97f62'];
+    const salt=Array.from(String(role.projectId||role.id)).reduce((v,c)=>v+c.charCodeAt(0),0);
+    const variant=(index*7+salt)%6;
+    const wall=paint[variant],roof=roofs[variant];
+    const group=new T.Group();
+    group.position.set(role.islandX,0,role.islandZ);
+    group.rotation.y=role.townRotation||0;
+    scene.add(group);
+    // Distinct base proportions and separate window/roof/entrance grammar.
+    if(variant===0){ // creative cottage with pitched two-piece roof
+      box(group,wall,3.7,1.85,2.65,0,1.25,-1.70);
+      for(const side of [-1,1]){
+        const slope=box(group,roof,2.50,.23,3.2,side*.95,2.42,-1.7);
+        slope.rotation.z=side*.43;
+      }
+      box(group,'#f1e9d8',1.02,.31,.36,-1.2,2.04,-.13);
+    }else if(variant===1){ // stacked research townhouse
+      box(group,wall,3.25,3.15,2.54,0,1.94,-1.72);
+      box(group,roof,3.56,.28,2.86,0,3.67,-1.72);
+      box(group,'#fff0d7',1.28,.24,.22,0,3.27,-.30);
+      for(const side of [-1,1])box(group,'#84c4d9',.55,.48,.1,side*.91,2.58,-.39);
+    }else if(variant===2){ // glass conservatory / language academy
+      box(group,'#d0e9e7',4.0,1.80,2.80,0,1.27,-1.65);
+      box(group,'#82bfc3',3.45,.95,.07,0,1.31,-.19);
+      for(let j=-1;j<=1;j++)box(group,'#e9f2e9',.09,1.65,.10,j*1.08,1.30,-.13);
+      const canopy=box(group,roof,4.35,.24,1.32,0,2.35,-.78);
+      canopy.rotation.z=.08;
+    }else if(variant===3){ // corner shop / low pavilion
+      box(group,wall,4.25,1.64,2.30,0,1.12,-1.65);
+      box(group,roof,4.72,.27,2.82,0,2.11,-1.65);
+      box(group,'#f6e3c8',4.4,.22,.90,0,1.89,-.13);
+      for(let j=-1;j<=1;j++)box(group,['#eec5aa','#cad9ed','#e6d0e5'][j+1],
+        1.19,.18,.60,j*1.42,1.81,.14);
+    }else if(variant===4){ // observatory / fortune turret
+      cylinder(group,wall,1.80,1.92,2.75,0,1.75,-1.70,9);
+      part(group,new T.ConeGeometry(2.16,1.2,9),roof,0,3.68,-1.70);
+      cylinder(group,'#d6edf0',1.06,1.12,.60,0,3.24,-1.70,9);
+      box(group,'#ece4d8',1.1,.36,.3,0,2.25,-.12);
+    }else{ // studio with asymmetric modern monitor roof
+      box(group,wall,4.0,1.91,2.65,-.22,1.28,-1.70);
+      box(group,roof,4.44,.25,2.93,-.25,2.44,-1.70);
+      box(group,'#9ad1d9',1.50,1.19,.07,1.02,1.39,-.32);
+      box(group,'#cad9e6',1.20,.42,.45,-1.3,2.67,-1.42);
+    }
+    // Every type has a visible doorway and a reachable front standing area.
+    box(group,'#f5ebd7',.86,1.20,.08,-.12,.98,-.27);
+    box(group,'#607982',.65,.98,.09,-.12,.88,-.20);
+    sphere(group,'#f5d9a4',.065,.15,.91,-.135);
+    box(group,role.accent,1.30,.14,.22,0,2.01,-.11);
     for(const side of [-1,1]){
-      box(group,'#f8f3e7',.69,.72,.09,side*1.10,1.35,-.27);
-      box(group,'#80b8c2',.53,.55,.10,side*1.10,1.35,-.21);
+      if(variant!==1&&variant!==2){
+        box(group,'#fff3e5',.70,.72,.07,side*1.17,1.35,-.30);
+        box(group,'#8fc1d0',.52,.56,.075,side*1.17,1.35,-.25);
+      }
     }
-    // An identity-colored roof signal, but never a fabricated work status.
-    box(group,role.accent,1.22,.16,.18,0,2.02,-.1);
-    for(const p of [.32,1.02]){
-      box(group,'#eee3cd',.9,.048,.44,0,.392,p);
-    }
-    // Small lot decorations, kept clear of the player-facing walking lane.
-    cylinder(group,'#9b826a',.1,.12,.72,-3.25,.65,-1.1,7);
-    sphere(group,'#6ca792',.62,-3.25,1.21,-1.1);
-    cylinder(group,'#9b826a',.10,.12,.57,3.2,.62,-1.5,7);
-    sphere(group,'#81b99a',.51,3.2,1.08,-1.5);
-    box(group,'#927960',1.25,.12,.40,3.08,.64,1.15);
-    box(group,'#927960',.12,.55,.12,2.58,.37,1.15);
-    box(group,'#927960',.12,.55,.12,3.58,.37,1.15);
-    if(type==='teacher'){
-      box(group,'#e0b8cd',1.28,.72,.13,-2.55,1.1,-.2);
-      box(group,'#f8f0e5',1.05,.45,.14,-2.55,1.1,-.12);
-    }else if(type==='story'){
-      for(let i=0;i<3;i++)box(group,['#f1c77d','#b7afd8','#a5c8b7'][i],
-        .23,.5,.35,-2.95+i*.27,.6,-.15);
-    }else if(type==='fortune'){
-      part(group,new T.OctahedronGeometry(.48),'#b5a1d9',-2.8,.85,-.15);
-    }else if(type==='developer'){
-      box(group,'#76bbdf',1.24,.82,.13,-2.6,1.13,-.13);
-      box(group,'#274365',.99,.6,.14,-2.6,1.13,-.08);
-    }else{
-      sphere(group,'#a7d1c5',.42,-2.65,.75,-.18);
+    if(kind==='teacher'){
+      box(group,'#f6e4e9',1.05,.46,.08,-2.0,.96,-.26);
+      box(group,'#d697bd',.75,.11,.09,-2.0,.97,-.20);
+    }else if(kind==='story'){
+      for(let j=0;j<3;j++)box(group,['#f2cd88','#a8c0dc','#abd7c6'][j],
+        .20,.58,.26,-1.94+j*.22,.64,-.24);
+    }else if(kind==='fortune'){
+      part(group,new T.OctahedronGeometry(.36),'#c4a9ea',1.94,.78,-.10);
+    }else if(kind==='developer'){
+      box(group,'#2d5576',.72,.51,.11,1.98,1.05,-.17);
+      box(group,role.accent,.59,.37,.12,1.98,1.05,-.10);
     }
   }
   // Every Role uses the same body rig with distinct, lightweight identity props.
@@ -345,11 +443,11 @@
   }
   function create(scene, roleDefs=roles) {
     const districts=districtNodes(roleDefs);
-    buildTown(scene,districts);
+    const roads=planRoadNetwork(roleDefs);
+    buildTown(scene,districts,roads);
     districts.forEach((district,i)=>districtBuilding(scene,district.role,i));
     const actors=roleDefs.map((role,index)=>character(scene,role,index));
-    // Town roads are at shared street intersections, not island bridges.
-    actors.roadVisuals=planRoadNetwork(roleDefs);
+    actors.roadVisuals=roads;
     return actors;
   }
 
@@ -374,13 +472,6 @@
   }
   const MAX_WORLD_ROLES=36;
   const MEMBERS_PER_DISTRICT=3;
-  function districtPosition(index,count){
-    const cols=Math.ceil(Math.sqrt(Math.max(1,count)));
-    const rows=Math.ceil(count/cols);
-    const col=index%cols,row=Math.floor(index/cols);
-    return{x:(col-(cols-1)/2)*TOWN_SPACING,
-      z:(row-(rows-1)/2)*TOWN_SPACING,col,row};
-  }
   function makeLiveRoles(input) {
     if(!Array.isArray(input))return [];
     const seen=new Set();
@@ -410,9 +501,13 @@
         const spacing=district.members.length;
         const offset=spacing===1?0:spacing===2?(slot===0?-1.3:1.3):(slot-1)*1.8;
         positions.set(member.roleId,{districtId:district.id,
-          districtIndex,districtSize:spacing,townCol:pos.col,townRow:pos.row,
+          districtIndex,districtSize:spacing,
+          townBranch:pos.branch,townDepth:pos.depth,townRotation:pos.rotation,
+          townRoadX:pos.roadX,townRoadZ:pos.roadZ,
+          townFrontX:pos.frontX,townFrontZ:pos.frontZ,
           islandX:pos.x,islandZ:pos.z,
-          x:pos.x+offset,z:pos.z+2.65});
+          x:pos.x+Math.cos(pos.rotation)*offset+Math.sin(pos.rotation)*FRONT_Z,
+          z:pos.z-Math.sin(pos.rotation)*offset+Math.cos(pos.rotation)*FRONT_Z});
       });
     });
     const assigned=new Set();
@@ -451,12 +546,16 @@
     return Math.max(10,...islands.map(r=>Math.hypot(r.islandX,r.islandZ)+4));
   }
 
-  // Standalone demo must use exactly the same continuous-town grid as live
-  // data, otherwise the visitor would spawn outside the rendered lawn.
+  // Standalone demo uses the same plaza, streets and house orientation.
   roles.forEach((role,index)=>{
     const pos=districtPosition(index,roles.length);
-    Object.assign(role,{districtId:role.id,townCol:pos.col,townRow:pos.row,
-      islandX:pos.x,islandZ:pos.z,x:pos.x,z:pos.z+2.65});
+    Object.assign(role,{districtId:role.id,
+      townBranch:pos.branch,townDepth:pos.depth,townRotation:pos.rotation,
+      townRoadX:pos.roadX,townRoadZ:pos.roadZ,
+      townFrontX:pos.frontX,townFrontZ:pos.frontZ,
+      islandX:pos.x,islandZ:pos.z,
+      x:pos.x+Math.sin(pos.rotation)*FRONT_Z,
+      z:pos.z+Math.cos(pos.rotation)*FRONT_Z});
   });
   function releaseMaterials(){cache.clear();}
   root.WorldLabKit={roles,create,createPlayer,createPaperPlane,disposePaperPlane,makeLiveRoles,mapExtent,planRoadNetwork,districtPosition,releaseMaterials,MAX_WORLD_ROLES,MEMBERS_PER_DISTRICT};
