@@ -44,6 +44,25 @@
     let liveRows=null;
     try { liveRows=await loadStatus(); } catch (_) { /* Keep standalone art preview available. */ }
     if(disposed)return;
+    // An empty verified Runtime is not an art demo: never invent sample Roles.
+    // Keep a lightweight watcher so adding the first Role activates the town.
+    if(Array.isArray(liveRows)&&liveRows.length===0){
+      if(loading){
+        loading.dataset.empty='true';
+        loading.textContent='目前沒有角色，請從上方新增 Role';
+        loading.hidden=false;
+      }
+      trackedInterval(async()=>{
+        if(disposed||paused||document.hidden)return;
+        try{
+          const current=await loadStatus();
+          if(!disposed&&!paused&&current.length)
+            window.CrewWorldHost?.refreshSceneRoles?.();
+        }catch(_){/* Wait for the real Runtime rather than showing demo agents. */}
+      },7000);
+      return;
+    }
+    if(loading)delete loading.dataset.empty;
     const roles=liveRows?.length?kit.makeLiveRoles(liveRows):kit.roles;
     const liveRuntimeByRole=new Map((liveRows||[]).map(row=>[row.roleId,row.runtime]));
     const originalCount=liveRows?.length||roles.length;
