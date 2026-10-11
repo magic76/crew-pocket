@@ -91,7 +91,10 @@ async function tick(){await new Promise(resolve=>setImmediate(resolve));}
   nodes['world-reset'].addEventListener('click',()=>overviewClicks++);
   const file=fs.readFileSync(path.join(__dirname,'..','public/js/crew-world-launcher.js'),'utf8');
   vm.runInNewContext(file,{window:win,document:doc,console});
-  nodes['crew-world-open-btn'].click();
+  // The production router now opens World immediately on cold launch,
+  // before provider history finishes restoring its active Conversation.
+  win.CrewWorldHost.deferInitialRole();
+  win.CrewWorldHost.restoreHomeView();
   assert.equal(nodes['crew-world-modal'].hidden,false);
   assert.strictEqual(nodes['crew-home-header'].parentNode,nodes['crew-home-header-host']);
   assert.equal(nodes['crew-home-view-toggle'].dataset.view,'map');
@@ -99,6 +102,9 @@ async function tick(){await new Promise(resolve=>setImmediate(resolve));}
   assert.equal(nodes['crew-home-dashboard-btn']['aria-pressed'],'false');
   await tick();await tick();
   assert.equal(mountCount,1);
+  assert.deepEqual(roleNavigations,[],'initial World must not navigate a Role before history restore');
+  win.CrewWorldHost.onBootstrapReady();
+  await tick();await tick();
   assert.equal(nodes['crew-world-command-role'].children.length,2,'all real Roles are targets');
   assert.equal(nodes['crew-world-command-role'].value,'pocket','active Role selected by default');
   assert.equal(nodes['crew-world-chat-panel'].hidden,false);
@@ -270,6 +276,22 @@ async function tick(){await new Promise(resolve=>setImmediate(resolve));}
   assert.equal(nodes['send-btn'].disabled,false,
     'switch safety lock is released when leaving World');
   assert.strictEqual(nodes['chat-composer-footer'].parentNode,originalComposer);
+  // An explicit Dashboard choice remains secondary until the user selects
+  // World again. Leaving World for Chat/Settings must not discard map-first
+  // preference on subsequent returns to Crew.
+  doc.body.dataset.primaryTab='crew';
+  win.CrewWorldHost.restoreHomeView();
+  assert.equal(nodes['crew-world-modal'].hidden,true,
+    'returning from another page must respect an explicit Dashboard choice');
+  nodes['crew-world-open-btn'].click();
+  await tick();await tick();
+  win.CrewWorldHost.close();
+  assert.equal(nodes['crew-world-modal'].hidden,true);
+  win.CrewWorldHost.restoreHomeView();
+  assert.equal(nodes['crew-world-modal'].hidden,false,
+    'returning to Crew restores map when it was the most recent home surface');
+  assert.strictEqual(nodes['chat-composer-footer'].parentNode,nodes['crew-world-chat-composer-slot']);
+  assert.equal(disposeCount,0,'view changes should pause/resume the existing 3D scene, not rebuild it');
   console.log('Non-blocking Role switch: fast/slow, draft safety, keyboard guard, failure retry OK');
   console.log('Crew World modeless portal: original Context, full reading, navigation and one Chat DOM passed');
 })().catch(error=>{console.error(error);process.exitCode=1;});
