@@ -447,8 +447,10 @@
   }
   function renderCollaborationLinks(){
     if(!linkSvg)return;
+    // The evidence panel may retain historical messages; the lines are
+    // short-lived activity cues only, not permanent Role relationships.
     const events=planner?.collaborationConnections?.(
-      shownHandoffs(),roles[selected].id,false,3)||[];
+      shownHandoffs(),roles[selected].id,false,3,Date.now())||[];
     const signature=events.map(event=>event.id).join('|')+':'+
       (onlySelectedHandoffs?roles[selected].id:'all');
     if(signature===linkSignature)return;
@@ -1167,6 +1169,9 @@
     arrivalFlashes.forEach(cue=>{cue.startedAt+=duration;});
     if(flightNoticeState.until)flightNoticeState.until+=duration;
     resize();
+    // The scene may have been paused longer than the connection TTL. Drop
+    // expired arcs immediately on resume, before the next network poll.
+    renderCollaborationLinks();
     if(document.hidden)return;
     raf=requestAnimationFrame(frame);
     if(isLive){void synchronize();void observeHandoffs();void refreshSpeechBubbles();}
