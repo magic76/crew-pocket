@@ -28,7 +28,13 @@ assert.ok(html.includes('id="crew-open-settings-btn"'));
 assert.ok(html.includes('id="crew-settings-back-btn"'));
 assert.equal(html.includes('id="primary-bottom-nav"'), false);
 assert.ok(app.includes("setPrimaryTab('crew', { hapticFeedback: false, recordHistory: false })"),
-  'startup must select Crew Home without requiring a Role Conversation');
+  'startup must select Crew section without requiring a Role Conversation');
+assert.ok(app.includes("window.CrewWorldHost?.restoreHomeView?.()"),
+  'Crew section opens the primary World map rather than starting in the auxiliary Dashboard');
+assert.ok(app.includes("window.CrewWorldHost?.deferInitialRole?.()"),
+  'startup waits for the original Conversation identity before activating any Role');
+assert.ok(app.includes("window.CrewWorldHost?.onBootstrapReady?.()"),
+  'startup reuses the original Chat DOM after provider history restoration');
 assert.ok(app.includes("drawer?.classList.toggle('hidden', primaryTab !== 'crew')"));
 assert.ok(app.includes("chatComposerFooter?.classList.toggle('hidden', primaryTab !== 'chat')"));
 assert.ok(app.includes("crewBackHomeBtn?.addEventListener('click'"));

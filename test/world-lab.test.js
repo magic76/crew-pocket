@@ -256,6 +256,17 @@ assert.match(main,/id="crew-world-open-btn"/);
 assert.match(main,/id="crew-world-modal"/);
 assert.match(main,/id="crew-home-dashboard-btn"/);
 assert.match(main,/id="crew-home-view-toggle"/);
+assert.match(main,/id="crew-home-view-toggle"[^>]*data-view="map"/);
+assert.match(main,/id="crew-world-open-btn"[^>]*aria-pressed="true"/);
+assert.match(main,/id="crew-home-dashboard-btn"[^>]*aria-pressed="false"/);
+assert.ok(main.indexOf('id="crew-world-open-btn"')<main.indexOf('id="crew-home-dashboard-btn"'),
+  'map is the first main toggle, Dashboard is the secondary destination');
+assert.ok(worldShell.includes('.crew-home-view-toggle[data-view="dashboard"]::before{transform:translateX(100%)}'),
+  'secondary Dashboard occupies the right side of the shared toggle');
+assert.doesNotMatch(main,/id="crew-world-modal"[^>]*aria-modal="true"/,
+  'primary 3D map is a Region, not an always-open dialog');
+assert.match(launcher,/function restoreHomeView\(\)/);
+assert.match(launcher,/function onBootstrapReady\(\)/);
 assert.match(main,/id="crew-home-header-host"/);
 assert.match(main,/id="crew-home-header"/);
 assert.doesNotMatch(main,/id="crew-world-dashboard-btn"|id="crew-world-map-btn"/);

@@ -35,6 +35,10 @@
      !messages||!composer||!hideButton||!expandButton)return;
   let restoreMessages=null,restoreComposer=null;
   let stopWorld=null,previousFocus=null,selectedRoleId=null,selectedRoleName='';
+  // The map is the primary home surface on each cold start. Preserve an
+  // explicit Dashboard choice while navigating to Chat, Settings or overlays.
+  let preferredHomeView='map';
+  let bootstrapRolePending=false,initialSceneRole=null;
   let selectVersion=0,previousTab=null,restoreTab=false,openVersion=0;
   let sceneScripts=null;
   let requestedRole=null,roleSwitchQueue=Promise.resolve(),switchingRole=false,commandDraft='';
@@ -228,7 +232,8 @@
     const height=headerHost.getBoundingClientRect?.().height||headerHost.offsetHeight||0;
     if(height>0)document.documentElement.style.setProperty('--crew-shared-header-height',Math.ceil(height)+'px');
   }
-  function close(){
+  function close({preferDashboard=false}={}){
+    if(preferDashboard)preferredHomeView='dashboard';
     if(modal.hidden)return;
     selectVersion++;openVersion++;
     stopSwitchTimer();
@@ -243,18 +248,23 @@
     document.body.classList.remove('crew-world-active');
     guardSend(false);
     if(switchRetry)switchRetry.hidden=true;
-    // Leave the underlying active Role untouched; restore the tab from which
-    // the optional map was opened, without touching ongoing generations.
+    // Role navigation can temporarily put Chat behind the map. Restore the
+    // original Crew page synchronously before opening Settings or Dashboard:
+    // history.back() is asynchronous and otherwise races a Settings pushState.
     if(restoreTab&&previousTab==='crew'&&document.body.dataset.primaryTab==='chat'){
-      // Calling the existing primary-tab action is safer than direct dataset
-      // mutation, because it also updates navigation and original chat state.
-      document.getElementById('crew-back-home-btn')?.click();
+      if(typeof window.syncPrimaryTabChrome==='function'){
+        window.history?.replaceState?.({
+          ...(window.history.state||{}),crewPage:'crew',crewOverlay:null
+        },'');
+        window.syncPrimaryTabChrome('crew');
+      }else document.getElementById('crew-back-home-btn')?.click();
     }
     restoreTab=false;previousTab=null;
     const focus=previousFocus;previousFocus=null;
     focus?.focus?.({preventScroll:true});
   }
   async function open(){
+    preferredHomeView='map';
     if(!modal.hidden)return;
     const version=++openVersion;
     previousTab=document.body.dataset.primaryTab||null;
@@ -365,6 +375,20 @@
   }
   function onSelectedRole(id,name){
     if(!liveRole(id))return;
+    // On cold launch the provider history may still be restoring the actual
+    // Role. Never navigate into an arbitrary map Role before that completes.
+    if(bootstrapRolePending){
+      selectedRoleId=id;selectedRoleName=name||liveRole(id).name||id;
+      updateCommandRole();
+      return;
+    }
+    if(initialSceneRole&&id!==initialSceneRole){
+      const aligned=stopWorld?.selectRole?.(initialSceneRole);
+      initialSceneRole=null;
+      if(aligned)return;
+    }else if(id===initialSceneRole){
+      initialSceneRole=null;
+    }
     const changed=selectedRoleId!==id;
     selectedRoleId=id;selectedRoleName=name||liveRole(id).name||id;
     updateCommandRole();
@@ -388,8 +412,48 @@
     updateKeyboard();
     syncReadAction();
   }
-  opener.addEventListener('click',open);
-  dashboardButton.addEventListener('click',()=>{if(!modal.hidden)close();else updateHomeView('dashboard');});
+  function deferInitialRole(){
+    bootstrapRolePending=true;
+  }
+  function onBootstrapReady(){
+    if(!bootstrapRolePending)return;
+    bootstrapRolePending=false;
+    if(modal.hidden)return;
+    const activeId=window.getCurrentRoleId?.();
+    const active=liveRole(activeId);
+    if(active){
+      // Reuse the conversation and its message DOM already restored by
+      // app.js. No duplicate loadConversationHistory/Role navigation.
+      initialSceneRole=active.id;
+      selectedRoleId=active.id;selectedRoleName=active.name||active.id;
+      roleName.textContent=selectedRoleName;
+      putChatInPanel();
+      panel.hidden=false;
+      showCompactChat();
+      updateCommandRole();
+      const aligned=stopWorld?.selectRole?.(active.id);
+      if(aligned)initialSceneRole=null;
+      updatePreview();syncCommandActions();
+    }else if(selectedRoleId&&liveRole(selectedRoleId)){
+      void openChat(selectedRoleId,{compact:true});
+    }
+  }
+  function restoreHomeView(){
+    // Called after the primary-page router restores Crew, including WebView
+    // Back from Chat/Settings. Never place the map over a nested dialog.
+    if(document.body.dataset.primaryTab!=='crew'||window.history?.state?.crewOverlay)return;
+    if(preferredHomeView==='map'){
+      if(modal.hidden)void open();
+    }else if(!modal.hidden){
+      close({preferDashboard:true});
+    }else updateHomeView('dashboard');
+  }
+  opener.addEventListener('click',()=>{void open();});
+  dashboardButton.addEventListener('click',()=>{
+    preferredHomeView='dashboard';
+    if(!modal.hidden)close({preferDashboard:true});
+    else updateHomeView('dashboard');
+  });
   settingsButton?.addEventListener('click',()=>{if(!modal.hidden)close();});
   addRoleButton?.addEventListener('click',()=>{if(!modal.hidden)close();});
   // Both actions stay attached to the ORIGINAL active Role Chat. Switching
@@ -451,6 +515,6 @@
     }
   });
   // Exposed only to the scene in this same document, not cross-frame messages.
-  window.CrewWorldHost={open,close,hideChat,openChat,openFullChat,onSelectedRole,
-    openCollaboration};
+  window.CrewWorldHost={open,close,restoreHomeView,deferInitialRole,onBootstrapReady,
+    hideChat,openChat,openFullChat,onSelectedRole,openCollaboration};
 })();
