@@ -336,3 +336,58 @@
 @media(prefers-reduced-motion:reduce){
   .world-focus-activity,.world-handoffs-open,.world-handoffs-panel{transition:none}
 }
+
+/* Recorded-message paper flights: short, legible, clickable. Neither the
+   ribbon nor the arrival rings imply message delivery or task completion. */
+.world-flight-notice[hidden]{display:none!important}
+.world-flight-notice{
+  position:absolute;z-index:9;
+  top:calc(env(safe-area-inset-top,0px) + 127px);left:12px;
+  display:flex;align-items:center;gap:8px;
+  max-width:min(370px,calc(100% - 24px));min-height:44px;
+  padding:7px 10px;border-radius:13px;border:1px solid #82d5ffb3;
+  background:#102c48ed;box-shadow:0 9px 28px #061428bb;
+  color:#e7f7ff;text-align:left;backdrop-filter:blur(10px);
+}
+.world-flight-notice-plane{
+  flex:none;display:grid;place-items:center;width:32px;height:32px;
+  border-radius:10px;background:#69c6f231;color:#c1f0ff;
+  font-size:20px;line-height:1;transform:rotate(-20deg);
+}
+.world-flight-notice[data-kind="reply"]{border-color:#78d9aaaf}
+.world-flight-notice[data-kind="reply"] .world-flight-notice-plane{
+  color:#baffdc;background:#45c99130;
+}
+.world-flight-notice-text{min-width:0;flex:1;font-size:11px;line-height:1.45;font-weight:650}
+.world-flight-notice-action{flex:none;font-size:11px;font-weight:750;color:#9ddeff}
+.world-flight-notice:focus-visible{outline:2px solid #9ae2ff;outline-offset:2px}
+.world-app:has(.world-flight-notice:not([hidden])) .world-handoffs-open{
+  top:calc(env(safe-area-inset-top,0px) + 193px);
+}
+.world-app:has(.world-flight-notice:not([hidden])) .world-handoffs-panel{
+  top:calc(env(safe-area-inset-top,0px) + 238px);
+}
+.crew-world-modal.is-role-focused .world-flight-notice{
+  top:calc(env(safe-area-inset-top,0px) + 131px);
+}
+.crew-world-modal.is-role-focused:has(.world-flight-notice:not([hidden])) .world-handoffs-open{
+  top:calc(env(safe-area-inset-top,0px) + 194px);
+}
+.crew-world-modal.is-role-focused:has(.world-flight-notice:not([hidden])) .world-handoffs-panel{
+  top:calc(env(safe-area-inset-top,0px) + 236px);
+}
+.crew-world-modal.is-role-focused:has(.crew-world-chat-panel.keyboard-open:not([hidden])) .world-flight-notice{
+  display:none!important;
+}
+@media(max-width:540px){
+  .world-flight-notice{top:calc(env(safe-area-inset-top,0px) + 111px);left:9px;max-width:calc(100% - 18px)}
+  .world-app:has(.world-flight-notice:not([hidden])) .world-handoffs-open{
+    top:calc(env(safe-area-inset-top,0px) + 172px);
+  }
+  .world-app:has(.world-flight-notice:not([hidden])) .world-handoffs-panel{
+    top:calc(env(safe-area-inset-top,0px) + 216px);
+  }
+}
+@media(prefers-reduced-motion:reduce){
+  .world-flight-notice-plane{transform:none}
+}
