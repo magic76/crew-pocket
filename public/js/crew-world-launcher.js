@@ -31,7 +31,6 @@
   const peekKind=document.getElementById('crew-world-result-peek-kind');
   const peekText=document.getElementById('crew-world-result-peek-text');
   const commandContext=document.getElementById('crew-world-command-context');
-  const commandFull=document.getElementById('crew-world-command-full');
   if(!opener||!dashboardButton||!toggle||!headerHost||!homeHeader||!modal||!panel||!messagesSlot||!composerSlot||
      !messages||!composer||!hideButton||!expandButton)return;
   let restoreMessages=null,restoreComposer=null;
@@ -68,7 +67,6 @@
     const ready=!modal.hidden&&!panel.hidden&&!switchingRole&&Boolean(selectedRoleId)&&
       Boolean(liveRole(selectedRoleId))&&window.getCurrentRoleId?.()===selectedRoleId;
     if(commandContext)commandContext.disabled=!ready;
-    if(commandFull)commandFull.disabled=!ready;
     if(commandRead)commandRead.disabled=!ready;
     if(peek)peek.disabled=!ready;
     guardSend(!modal.hidden&&!ready);
@@ -184,6 +182,13 @@
       Math.floor(vv?.height||window.innerHeight)+'px');
     panel.classList.toggle('keyboard-open',bottom>100);
   }
+  function syncReadAction(){
+    if(!commandRead)return;
+    const reading=!panel.hidden&&!panel.classList.contains('compact');
+    commandRead.textContent=reading?'收合':'對話';
+    commandRead.setAttribute('aria-label',reading?'收合地圖對話':'展開地圖對話');
+    commandRead.setAttribute('aria-pressed',String(reading));
+  }
   function hideChat(){
     panel.hidden=true;panel.classList.remove('expanded','compact','keyboard-open');
     expandButton.textContent='展開';
@@ -192,6 +197,7 @@
     stopPreview();
     putChatBack();
     syncCommandActions();
+    syncReadAction();
     // We preserve the active Role and its stream, only move DOM visibility.
     window.requestAnimationFrame(()=>{
       document.getElementById('world-stage')?.focus?.({preventScroll:true});
@@ -205,6 +211,7 @@
     expandButton.setAttribute('aria-pressed','false');
     hideButton.textContent='收合';
     updateKeyboard();
+    syncReadAction();
   }
   function collapseChat(){
     if(!panel.hidden)showCompactChat();
@@ -317,6 +324,7 @@
         panel.classList.remove('compact');
         expandButton.textContent='全螢幕';
         updateKeyboard();
+        syncReadAction();
       }
       // selectRole / loadConversationHistory can clear the original textarea.
       // Restore the unsent draft only after the intended Role is verified.
@@ -378,6 +386,7 @@
       expandButton.setAttribute('aria-pressed',String(expanded));
     }
     updateKeyboard();
+    syncReadAction();
   }
   opener.addEventListener('click',open);
   dashboardButton.addEventListener('click',()=>{if(!modal.hidden)close();else updateHomeView('dashboard');});
@@ -389,17 +398,6 @@
     syncCommandActions();
     if(commandContext.disabled)return;
     document.getElementById('context-pill')?.click();
-  });
-  commandFull?.addEventListener('click',()=>{
-    syncCommandActions();
-    if(commandFull.disabled)return;
-    // P11's same DOM becomes the full reading surface *inside* World.
-    panel.classList.remove('compact');
-    panel.classList.add('expanded');
-    expandButton.textContent='縮小';
-    expandButton.setAttribute('aria-pressed','true');
-    updateKeyboard();
-    messages.scrollTop=messages.scrollHeight;
   });
   commandRole?.addEventListener('change',()=>{
     const id=commandRole.value;
