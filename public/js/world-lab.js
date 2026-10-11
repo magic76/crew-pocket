@@ -358,6 +358,12 @@
       if(explore&&visitor&&navigation){
         const destination=roleDestination(role);
         if(destination)startWalk(destination,'role',role.id);
+        // On the hosted map, focus remains on the selected Role while the
+        // visitor travels. Free exploration still follows the visitor.
+        if(window.CrewWorldHost){
+          followPlayer=false;
+          panTo(role.islandX,role.islandZ,width<700?2.65:2.0);
+        }
       }else panTo(role.islandX,role.islandZ,width<700?2.65:2.0);
     }
   }
