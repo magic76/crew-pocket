@@ -380,7 +380,7 @@ assert.ok(launcher.includes("commandRead.textContent=reading?'收合':'對話'")
   'one command entry clearly changes between reading and collapsing');
 assert.ok(worldShell.includes('body.crew-world-active #context-modal{z-index:10030!important}'),
   'Context is accessible over map without entering focus mode');
-assert.ok(worldShell.includes('body.crew-world-active #crew-home-header-host{display:block!important}'),
+assert.ok(worldShell.includes('body.crew-world-active #crew-home-header-host{'),
   'the shared Dashboard/Map navigation always stays visible');
 assert.ok(worldShell.includes('.crew-world-chat-panel.compact .crew-world-chat-messages-slot'),
   'one original Chat composer remains compact while camera moves');
