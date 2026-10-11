@@ -123,10 +123,11 @@ window.CrewNavigation.back();
 assert.equal(history.state.crewOverlay,'role-editor-modal');
 window.CrewNavigation.back();
 assert.equal(document.body.dataset.primaryTab,'crew');
-assert.equal(mapRestores,3,'closing nested role sheets does not reopen the map again');
+assert.equal(mapRestores,4,
+  'nested Role delete keeps the map closed until its enclosing Role sheet closes');
 assert.ok(app.includes("await restorePromise;\n      await workspacesReady;\n      finishCrewHomeBootstrap();"),
   'the map must wait until provider conversation and Role list are restored');
-assert.ok(app.includes("if(primaryTab==='crew')window.CrewWorldHost?.restoreHomeView?.()"),
-  'bootstrap fallback restores map only when still at Crew Home');
+assert.ok(app.includes("if(primaryTab==='crew'&&!window.history.state?.crewOverlay)"),
+  'bootstrap fallback never opens World over a nested Role sheet');
 
 console.log('role-first-navigation tests: ok');
