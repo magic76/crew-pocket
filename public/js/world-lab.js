@@ -461,6 +461,7 @@
     freshReplies.delete(role.id);
     window.CrewWorldHost?.expandFocusedChat?.();
     refreshFocusActivity();
+    renderAttention();refreshRolePeek();
   });
   function showHandoffs(open){
     if(!handoffsPanel)return;
@@ -468,21 +469,57 @@
     handoffsOpen?.setAttribute('aria-expanded',String(open));
     if(open)renderHandoffs();
   }
+  function shownHandoffs(){
+    if(!synced||!evidenceVerified)return[];
+    return evidenceRows.filter(event=>!onlySelectedHandoffs||
+      event.fromRoleId===roles[selected].id||event.toRoleId===roles[selected].id);
+  }
+  function renderCollaborationLinks(){
+    if(!linkSvg)return;
+    const events=shownHandoffs().slice(0,3);
+    const signature=events.map(event=>event.id).join('|')+':'+
+      (onlySelectedHandoffs?roles[selected].id:'all');
+    if(signature===linkSignature)return;
+    linkSignature=signature;
+    linkSvg.replaceChildren();linkPaths=[];
+    for(const event of events){
+      if(!memberById.has(event.fromRoleId)||!memberById.has(event.toRoleId))continue;
+      const path=document.createElementNS('http://www.w3.org/2000/svg','path');
+      path.setAttribute('class','world-collaboration-link');
+      path.setAttribute('data-kind',event.kind);
+      const title=document.createElementNS('http://www.w3.org/2000/svg','title');
+      title.textContent=memberById.get(event.fromRoleId).name+' → '+
+        memberById.get(event.toRoleId).name+' · 已記錄'+(event.kind==='reply'?'回覆':'訊息')+
+        '，不代表送達';
+      path.appendChild(title);
+      linkSvg.appendChild(path);linkPaths.push({event,path});
+    }
+  }
+  listen(filterHandoffs,'click',()=>{
+    onlySelectedHandoffs=!onlySelectedHandoffs;
+    filterHandoffs?.setAttribute('aria-pressed',String(onlySelectedHandoffs));
+    evidenceSignature='';linkSignature='';
+    renderHandoffs();
+  });
   function renderHandoffs(){
     if(!handoffsOpen||!handoffsList)return;
+    renderCollaborationLinks();
     handoffsOpen.hidden=!isLive||!window.CrewWorldHost;
     if(handoffsOpen.hidden){handoffsPanel.hidden=true;return;}
+    const rows=shownHandoffs();
     handoffsOpen.textContent='協作紀錄'+(evidenceVerified&&evidenceRows.length?' · '+evidenceRows.length:'');
-    const signature=(evidenceVerified?'verified':'unknown')+':'+evidenceRows.map(row=>row.id).join('|');
+    const signature=(evidenceVerified?'verified':'unknown')+':'+rows.map(row=>row.id).join('|')+
+      ':'+String(onlySelectedHandoffs)+':'+roles[selected].id;
     if(signature===evidenceSignature)return;
     evidenceSignature=signature;
     handoffsList.replaceChildren();
-    if(!evidenceVerified||!evidenceRows.length){
+    if(!evidenceVerified||!rows.length){
       const note=document.createElement('p');
-      note.textContent=!evidenceVerified?'協作資料尚未同步':'目前沒有已保存的角色訊息';
+      note.textContent=!evidenceVerified?'協作資料尚未同步':
+        onlySelectedHandoffs?'目前 Role 沒有已保存的近期協作':'目前沒有已保存的角色訊息';
       handoffsList.appendChild(note);return;
     }
-    for(const event of evidenceRows){
+    for(const event of rows){
       const sender=memberById.get(event.fromRoleId),recipient=memberById.get(event.toRoleId);
       if(!sender||!recipient)continue;
       const button=document.createElement('button');
@@ -619,6 +656,8 @@
     labels.forEach((entry,i)=>{
       const head=headStatus(actors[i]);
       entry.button.dataset.selected=String(i===selected);
+      entry.button.dataset.muted=String(i!==selected&&
+        !roles[i].attention&&!activeReply(roles[i].id)&&roles[i].state!=='working');
       entry.button.dataset.tone=head.tone;
       entry.state.textContent=head.state;
       entry.detail.textContent=head.detail;
@@ -630,10 +669,13 @@
     const focusState=document.getElementById('crew-world-focus-state');
     if(focusState)focusState.textContent=liveStates[role.state]||'未知';
     roster.forEach((button,i)=>button?.setAttribute('aria-pressed',String(i===selected)));
-    actors[selected].root.add(selectionHalo);
+    actors[selected].root.add(selectionHalo,focusHalo);
     if(contextLine&&document.getElementById('world-info')?.classList.contains('is-collapsed'))
       contextLine.textContent='Context · 展開詳情後讀取';
     refreshFocusActivity();
+    renderAttention();
+    refreshRolePeek();
+    renderHandoffs();
   }
   function cameraSync(){
     const aspect=width/Math.max(1,height);
@@ -825,6 +867,7 @@
           entry.speech.title=text;
           freshReplies.set(role.id,{at:Date.now(),signature});
           refreshFocusActivity();
+          renderAttention();refreshRolePeek();
           entry.speech.hidden=false;
           const head=headStatus(actors[index]);
           entry.button.setAttribute('aria-label',role.name+' · '+head.state+' · 最新回覆：'+entry.speech.textContent);
@@ -1068,7 +1111,10 @@
       lights.status.material.opacity=attention
         ?(reduced?.28:.20+Math.sin(elapsed*1.3)*.06):0;
     }
-    if(!reduced)selectionHalo.scale.setScalar(1+.045*Math.sin(now*.003));
+    if(!reduced){
+      selectionHalo.scale.setScalar(1+.045*Math.sin(now*.003));
+      focusHalo.scale.setScalar(1+.07*Math.sin(now*.0021));
+    }
     // At overview zoom, hide waiting/idle badges even in small crews. Only
     // active work and a newly received reply should add labels to the map.
     const overview=zoom<1.65;
@@ -1092,6 +1138,33 @@
       const visible=!out&&!lowPriority&&!collides;
       button.style.display=visible?'':'none';
       if(visible){occupied.push({x,y});button.style.left=x+'px';button.style.top=y+'px';}
+    }
+    // P13 compact response card follows the actual selected Role. It is
+    // read-only; opening it delegates to the existing Role Chat.
+    if(rolePeek&&!rolePeek.hidden){
+      const anchor=new T.Vector3(roles[selected].x,3.7,roles[selected].z).project(camera);
+      const x=(anchor.x+1)/2*width,y=(-anchor.y+1)/2*height;
+      const visible=anchor.z>=-1&&anchor.z<=1&&x>28&&x<width-28&&
+        y>Math.min(135,height*.24)&&y<height-Math.min(218,height*.34);
+      rolePeek.style.display=visible?'':'none';
+      if(visible){rolePeek.style.left=x+'px';rolePeek.style.top=(y+17)+'px';}
+    }
+    // P14 only draws edges from saved, verified Role-to-Role events.
+    if(linkSvg&&linkPaths.length){
+      linkSvg.setAttribute('viewBox','0 0 '+width+' '+height);
+      for(const {event,path} of linkPaths){
+        const from=memberById.get(event.fromRoleId),to=memberById.get(event.toRoleId);
+        if(!from||!to){path.setAttribute('d','');continue;}
+        const a=new T.Vector3(from.x,2.3,from.z).project(camera);
+        const b=new T.Vector3(to.x,2.3,to.z).project(camera);
+        if(a.z < -1||a.z>1||b.z < -1||b.z>1){path.setAttribute('d','');continue;}
+        const x1=(a.x+1)*width/2,y1=(1-a.y)*height/2;
+        const x2=(b.x+1)*width/2,y2=(1-b.y)*height/2;
+        const rise=Math.min(70,Math.max(20,Math.hypot(x2-x1,y2-y1)*.16));
+        path.setAttribute('d','M '+x1.toFixed(1)+' '+y1.toFixed(1)+
+          ' Q '+((x1+x2)/2).toFixed(1)+' '+(((y1+y2)/2)-rise).toFixed(1)+
+          ' '+x2.toFixed(1)+' '+y2.toFixed(1));
+      }
     }
     for(const pin of districtPins){
       const pos=new T.Vector3(pin.role.islandX,2.9,pin.role.islandZ).project(camera);
