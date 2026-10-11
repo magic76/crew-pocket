@@ -7,7 +7,7 @@ const vm=require('node:vm');
 class Node {
   constructor(id,doc){this.id=id;this.doc=doc;this.parentNode=null;this.children=[];
     this.hidden=['crew-world-modal','crew-world-chat-panel','crew-world-focus-bar'].includes(id);
-    this.events=new Map();this.textContent='';this.className='';
+    this.events=new Map();this.textContent='';this.className='';this.value='';
     this.style={values:{},setProperty(k,v){this.values[k]=v;},removeProperty(k){delete this.values[k];}};
     this.classList={set:new Set(),add(...keys){for(const k of keys)this.set.add(k);},
       remove(...keys){for(const k of keys)this.set.delete(k);},
@@ -17,6 +17,8 @@ class Node {
   }
   appendChild(node){node.parentNode?.removeChild(node);this.children.push(node);node.parentNode=this;return node;}
   removeChild(node){this.children.splice(this.children.indexOf(node),1);node.parentNode=null;}
+  replaceChildren(...items){for(const node of this.children)node.parentNode=null;this.children=[];for(const node of items)this.appendChild(node);}
+  querySelectorAll(){return [];}
   replaceWith(node){const p=this.parentNode;if(!p)throw Error('missing parent');
     const i=p.children.indexOf(this);node.parentNode?.removeChild(node);
     p.children[i]=node;node.parentNode=p;this.parentNode=null;}
@@ -36,7 +38,10 @@ async function tick(){await new Promise(resolve=>setImmediate(resolve));}
     'messages-container','chat-composer-footer','crew-world-chat-hide','crew-world-chat-expand',
     'world-chat-open','crew-world-chat-role-name','crew-back-home-btn','world-stage',
     'crew-world-focus-bar','crew-world-focus-back','crew-world-focus-name',
-    'crew-world-focus-full','crew-world-focus-context','context-pill','world-reset'];
+    'crew-world-focus-full','crew-world-focus-context','context-pill','world-reset',
+    'crew-world-command-role','crew-world-command-state','crew-world-command-read',
+    'crew-world-result-peek','crew-world-result-peek-kind','crew-world-result-peek-text',
+    'prompt-input'];
   const nodes=Object.fromEntries(ids.map(id=>[id,new Node(id,doc)]));
   nodes['crew-home-header-host'].appendChild(nodes['crew-home-header']);
   nodes['crew-home-header'].appendChild(nodes['crew-home-view-toggle']);
@@ -60,6 +65,7 @@ async function tick(){await new Promise(resolve=>setImmediate(resolve));}
   };
   doc.getElementById=id=>nodes[id]||null;
   doc.createComment=text=>new Node('#comment',doc);
+  doc.createElement=tag=>new Node(tag,doc);
   doc.addEventListener=()=>{};
   nodes['crew-back-home-btn'].addEventListener('click',()=>doc.body.dataset.primaryTab='crew');
   nodes['world-reset'].addEventListener('click',()=>win.CrewWorldHost.exitFocus());
@@ -71,11 +77,10 @@ async function tick(){await new Promise(resolve=>setImmediate(resolve));}
   assert.equal(nodes['crew-home-view-toggle'].dataset.view,'map');
   assert.equal(nodes['crew-world-open-btn']['aria-pressed'],'true');
   assert.equal(nodes['crew-home-dashboard-btn']['aria-pressed'],'false');
-  await tick();
-  assert.equal(mountCount,1);
-  win.CrewWorldHost.onSelectedRole('pocket','Pocket');
-  nodes['world-chat-open'].click();
   await tick();await tick();
+  assert.equal(mountCount,1);
+  assert.equal(nodes['crew-world-command-role'].children.length,2,'all real Roles are targets');
+  assert.equal(nodes['crew-world-command-role'].value,'pocket','active Role selected by default');
   assert.equal(nodes['crew-world-chat-panel'].hidden,false);
   assert.strictEqual(nodes['messages-container'].parentNode,nodes['crew-world-chat-messages-slot']);
   assert.strictEqual(nodes['chat-composer-footer'].parentNode,nodes['crew-world-chat-composer-slot']);
@@ -83,13 +88,19 @@ async function tick(){await new Promise(resolve=>setImmediate(resolve));}
   assert.equal(nodes['crew-world-chat-role-name'].textContent,'Pocket');
   assert.equal(nodes['crew-world-chat-composer-slot'].children.length,1,'no duplicated composer');
   nodes['crew-world-chat-hide'].click();
-  assert.strictEqual(nodes['messages-container'].parentNode,originalMessages);
-  assert.strictEqual(nodes['chat-composer-footer'].parentNode,originalComposer);
+  assert.strictEqual(nodes['messages-container'].parentNode,nodes['crew-world-chat-messages-slot']);
+  assert.strictEqual(nodes['chat-composer-footer'].parentNode,nodes['crew-world-chat-composer-slot'],
+    'collapsing floating chat leaves the global command dock usable');
   assert.equal(nodes['crew-world-modal'].hidden,false,'collapsing chat keeps world alive');
-  win.CrewWorldHost.onSelectedRole('teacher','Teacher');
-  nodes['world-chat-open'].click();
+  // A single global unsent draft follows the target Role without a second input.
+  nodes['prompt-input'].value='檢查這個 UI';
+  nodes['crew-world-command-role'].value='teacher';
+  nodes['crew-world-command-role'].trigger('change');
   await tick();await tick();
+  assert.equal(nodes['prompt-input'].value,'檢查這個 UI',
+    'Role navigation must preserve the original unsent command text');
   assert.deepEqual(roleNavigations,['pocket','teacher']);
+  assert.equal(nodes['crew-world-command-role'].value,'teacher');
   win.CrewWorldHost.focusRole('teacher','Teacher');
   assert.equal(nodes['crew-world-modal'].classList.contains('is-role-focused'),true);
   assert.equal(nodes['crew-world-focus-bar'].hidden,false);
@@ -120,8 +131,8 @@ async function tick(){await new Promise(resolve=>setImmediate(resolve));}
     'overview restores ordinary headers');
   assert.equal(nodes['crew-world-focus-context'].disabled,true,
     'no stale Role context shortcut after focus closes');
-  assert.strictEqual(nodes['chat-composer-footer'].parentNode,originalComposer,
-    'returning to overview restores the sole composer');
+  assert.strictEqual(nodes['chat-composer-footer'].parentNode,nodes['crew-world-chat-composer-slot'],
+    'returning to overview keeps the persistent single composer docked');
   assert.equal(nodes['crew-world-modal'].hidden,false,'returning to overview keeps map open');
   nodes['crew-home-dashboard-btn'].click();
   assert.equal(nodes['crew-world-open-btn']['aria-pressed'],'false');
@@ -132,7 +143,7 @@ async function tick(){await new Promise(resolve=>setImmediate(resolve));}
   assert.strictEqual(nodes['chat-composer-footer'].parentNode,originalComposer);
   assert.equal(doc.body.dataset.primaryTab,'crew','return to original home tab');
   nodes['crew-world-open-btn'].click();
-  await tick();
+  await tick();await tick();
   assert.equal(mountCount,1,'reopening resumes the existing scene');
   assert.equal(resumeCount,1,'reopening resumes the paused world');
   nodes['crew-home-dashboard-btn'].click();
@@ -140,7 +151,8 @@ async function tick(){await new Promise(resolve=>setImmediate(resolve));}
   assert.equal(disposeCount,0,'Dashboard switches preserve the scene for reuse');
 
   nodes['crew-world-open-btn'].click();
-  await tick();
+  await tick();await tick();
+  win.CrewWorldHost.onSelectedRole('pocket','Pocket');
   win.CrewWorldHost.focusRole('pocket','Pocket');
   assert.equal(nodes['crew-world-focus-context'].disabled,true,
     'newly focused Role cannot show the previous Role context while loading');
@@ -160,7 +172,7 @@ async function tick(){await new Promise(resolve=>setImmediate(resolve));}
   assert.equal(doc.body.dataset.primaryTab,'chat');
 
   nodes['crew-world-open-btn'].click();
-  await tick();
+  await tick();await tick();
   win.CrewWorldHost.focusRole('pocket','Pocket');
   await tick();await tick();
   win.CrewWorldHost.expandFocusedChat();
