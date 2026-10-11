@@ -258,6 +258,9 @@ function initAppAndListeners() {
   crewOpenSettingsBtn?.addEventListener('click', () => setPrimaryTab('settings'));
   crewSettingsBackBtn?.addEventListener('click', () => window.CrewNavigation.back());
 
+  // Start drawing the World immediately, but let the existing provider and
+  // active Conversation finish restoration before picking the map Role.
+  window.CrewWorldHost?.deferInitialRole?.();
   // Always start in the Crew section; its map-first World host opens in
   // setPrimaryTab, without requiring any prior Role Conversation.
   window.history.replaceState({
@@ -968,6 +971,10 @@ function initAppAndListeners() {
       console.error('Init load error:', e);
       updateModelUI();
       updateEffortUI();
+    } finally {
+      // Mount the ORIGINAL restored Conversation into World without navigating
+      // a second time or creating another Chat input/SSE connection.
+      window.CrewWorldHost?.onBootstrapReady?.();
     }
   })();
 
