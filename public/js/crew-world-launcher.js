@@ -33,6 +33,7 @@
   const focusFull=document.getElementById('crew-world-focus-full');
   const focusContext=document.getElementById('crew-world-focus-context');
   const worldToolsMenu=document.getElementById('world-tools-menu');
+  const worldExitMap=document.getElementById('world-exit-map');
   if(!opener||!dashboardButton||!toggle||!headerHost||!homeHeader||!modal||!panel||!messagesSlot||!composerSlot||
      !messages||!composer||!hideButton||!expandButton)return;
   let restoreMessages=null,restoreComposer=null;
@@ -382,6 +383,9 @@
   }
   opener.addEventListener('click',open);
   dashboardButton.addEventListener('click',()=>{if(!modal.hidden)close();else updateHomeView('dashboard');});
+  // This native map exit replaces the hidden Dashboard/Map page header.
+  // Delegate to the original dashboard switch so tab and active Chat restore.
+  worldExitMap?.addEventListener('click',()=>dashboardButton.click());
   settingsButton?.addEventListener('click',()=>{if(!modal.hidden)close();});
   addRoleButton?.addEventListener('click',()=>{if(!modal.hidden)close();});
   focusBack?.addEventListener('click',()=>document.getElementById('world-reset')?.click());
