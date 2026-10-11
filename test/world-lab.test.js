@@ -220,6 +220,31 @@ assert.equal((main.match(/id="context-modal"/g)||[]).length,1,
   'no duplicate Context Health dialog is introduced');
 assert.match(main,/id="crew-world-chat-messages-slot"/);
 assert.match(main,/id="crew-world-chat-composer-slot"/);
+assert.match(main,/id="crew-world-command-role"/);
+assert.match(main,/id="crew-world-command-read"/);
+assert.match(main,/id="crew-world-result-peek"/);
+assert.equal((main.match(/id="prompt-input"/g)||[]).length,1,
+  'P10 commands use the only original Chat input');
+assert.ok(launcher.includes("roleSwitchQueue=Promise.resolve()"),
+  'Role target navigation is serialized to avoid stale selection races');
+assert.ok(launcher.includes("if(promptInput&&commandDraft&&!promptInput.value)"),
+  'the global unsent draft survives Role navigation');
+assert.ok(launcher.includes("messages.querySelectorAll?.('.assistant-article, .btw-card')"),
+  'P11 result preview projects the original message DOM');
+assert.ok(launcher.includes("const result=latest?.querySelector?.('.execution-result-card')"),
+  'only an actual execution card may be labeled as a work result');
+assert.ok(launcher.includes("watchPreview()"),
+  'the dock observes original SSE-rendered messages rather than duplicating chat');
+assert.ok(engine.includes("dispose.selectRole=roleId=>activeSelectWorldRole(roleId)"),
+  'the commander can pan directly to a Role on the live map');
+assert.ok(engine.includes("const currentRole=window.getCurrentRoleId?.()"),
+  'the map begins at the active Role, never a hard-coded first actor');
+const commanderCss=read('public/css/crew-world-launcher.css');
+assert.ok(commanderCss.includes('.crew-world-chat-panel .crew-world-command-head'));
+assert.ok(commanderCss.includes('.crew-world-chat-panel.compact .crew-world-chat-top{display:none!important}'),
+  'compact commander does not duplicate header chrome');
+assert.ok(commanderCss.includes('.crew-world-modal .crew-world-chat-panel:not(.compact):not(.expanded):not([hidden])'),
+  'P11 floats the original message DOM in a map reading sheet');
 assert.doesNotMatch(main,/<iframe|id="crew-world-frame"/i);
 assert.equal((main.match(/id="messages-container"/g)||[]).length,1,
   'one original Chat message container');
