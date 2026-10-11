@@ -1,7 +1,7 @@
 /* Crew World 3D visual prototype: sample-only states, zero Runtime writes. */
 (() => {
   'use strict';
-  function mountWorld(){
+  function mountWorld(initialCamera=null){
   let disposed=false,paused=false,pausedAt=0,sceneReady=false,contextLost=false,teardown=null,raf=0;
   let pauseScene=()=>{
     if(disposed)return;
@@ -12,6 +12,7 @@
   };
   let resumeScene=()=>{};
   let activeSelectWorldRole=()=>false;
+  let snapshotCamera=()=>null;
   const cleanups=[];
   function listen(target,event,handler,options){
     if(!target)return;
@@ -27,7 +28,7 @@
   const stage=document.getElementById('world-stage');
   const loading=document.getElementById('world-loading');
   const worldModal=document.getElementById('crew-world-modal');
-  if(loading){loading.textContent='正在建立 3D 世界…';loading.hidden=false;}
+  if(loading){loading.textContent='正在建立 3D 世界…';loading.hidden=Boolean(initialCamera);}
   if(!stage)return ()=>{};
   const fail=msg=>{if(loading)loading.textContent=msg;};
   if(!window.THREE || !window.WorldLabKit){fail('缺少本地 3D 資源，請更新 Crew Runtime。');return;}
@@ -46,6 +47,7 @@
     const roles=liveRows?.length?kit.makeLiveRoles(liveRows):kit.roles;
     const liveRuntimeByRole=new Map((liveRows||[]).map(row=>[row.roleId,row.runtime]));
     const originalCount=liveRows?.length||roles.length;
+    const liveSignature=JSON.stringify((liveRows||[]).map(row=>[row.roleId,row.projectId||'']));
     const districtMap=new Map();
     for(const role of roles){
       const key=role.districtId||role.id;
@@ -68,10 +70,11 @@
       :'地圖 '+roles.length+' 位 · '+districts.length+' 區';
     if(pill)pill.textContent=isLive?statusSummary():'示範場景 · 非即時';
   const reduced=window.matchMedia?.('(prefers-reduced-motion: reduce)').matches||false;
+  const lowPower=window.matchMedia?.('(pointer: coarse)').matches||false;
   let renderer;
   try{renderer=new T.WebGLRenderer({antialias:true,alpha:true,powerPreference:'low-power'});}
   catch(_){fail('無法啟動 WebGL，請檢查瀏覽器硬體加速。');return;}
-  renderer.setPixelRatio(Math.min(devicePixelRatio||1,1.7));
+  renderer.setPixelRatio(Math.min(devicePixelRatio||1,lowPower?1.35:1.7));
   renderer.shadowMap.enabled=true;
   renderer.shadowMap.type=T.PCFSoftShadowMap;
   renderer.outputEncoding=T.sRGBEncoding;
@@ -83,7 +86,7 @@
   const sunlight=new T.DirectionalLight(0xfff5dd,1.05);
   sunlight.position.set(-7,18,13);
   sunlight.castShadow=true;
-  sunlight.shadow.mapSize.set(1024,1024);
+  sunlight.shadow.mapSize.set(lowPower||roles.length>12?512:1024,lowPower||roles.length>12?512:1024);
   sunlight.shadow.camera.left=-24;sunlight.shadow.camera.right=24;
   sunlight.shadow.camera.top=24;sunlight.shadow.camera.bottom=-24;
   sunlight.shadow.bias=-.0005;
@@ -205,8 +208,13 @@
   const overviewZoom=roles.length<=12?1.32:1.12;
   // Open the world on the actual active Role, not always the first list item.
   const currentRole=window.getCurrentRoleId?.()||window.getCrewCockpitSnapshot?.()?.activeRoleId;
-  const initialSelection=roles.findIndex(role=>role.id===currentRole);
-  let width=1,height=1,zoom=overviewZoom,selected=Math.max(0,initialSelection),focus=null;
+  const initialSelection=roles.findIndex(role=>role.id===(initialCamera?.selectedId||currentRole));
+  const initialZoom=Number(initialCamera?.zoom);
+  let width=1,height=1,zoom=Number.isFinite(initialZoom)&&initialZoom>=.65&&initialZoom<=4.5?initialZoom:overviewZoom,
+    selected=Math.max(0,initialSelection),focus=null;
+  if(Number.isFinite(initialCamera?.x)&&Number.isFinite(initialCamera?.z))
+    view.set(initialCamera.x,.7,initialCamera.z);
+  snapshotCamera=()=>({x:view.x,z:view.z,zoom,selectedId:roles[selected]?.id||null});
   const selectionHalo=new T.Mesh(new T.RingGeometry(1.08,1.42,36),
     new T.MeshBasicMaterial({color:'#f7de8b',transparent:true,opacity:.82,
       side:T.DoubleSide,depthWrite:false}));
@@ -351,8 +359,26 @@
     if(!isLive||!synced)return[];
     return planner?.attentionItems?.(roles,freshReplies,Date.now())||[];
   }
+  const activityOpen=document.getElementById('world-activity-open');
+  const activityCount=document.getElementById('world-activity-count');
+  const activityLabel=document.getElementById('world-activity-label');
+  const toAttention=document.getElementById('world-activity-to-attention');
+  const toHandoffs=document.getElementById('world-activity-to-handoffs');
+  if(activityOpen)activityOpen.hidden=!isLive||!window.CrewWorldHost;
+  function syncActivityDisclosure(){
+    activityOpen?.setAttribute('aria-expanded',String(Boolean(!attentionPanel?.hidden||!handoffsPanel?.hidden)));
+  }
+  function syncActivityBadge(count){
+    if(!activityOpen)return;
+    activityOpen.dataset.alert=String(count>0);
+    if(activityCount){activityCount.hidden=count===0;activityCount.textContent=String(count);}
+    if(activityLabel)activityLabel.textContent=count?'待處理':'動態';
+    if(toAttention)toAttention.hidden=count===0;
+    activityOpen.setAttribute('aria-label',count?count+' 位角色需要關注，查看小隊動態':'查看小隊協作動態');
+  }
   function renderAttention(){
     const concerns=concernRoles();
+    syncActivityBadge(concerns.length);
     const signature=concerns.map(({role,reply})=>role.id+':'+role.attention+':'+(reply?.signature||'')).join('|');
     if(attentionOpenButton){
       attentionOpenButton.hidden=!concerns.length;
@@ -362,6 +388,7 @@
     if(attentionPanel&&(!concerns.length||!synced)){
       attentionPanel.hidden=true;
       attentionOpenButton?.setAttribute('aria-expanded','false');
+      syncActivityDisclosure();
     }
     if(attentionList&&signature!==attentionSignature){
       attentionSignature=signature;
@@ -391,23 +418,31 @@
     if(!isLive||!synced||index<0||index>=roles.length)return;
     const role=roles[index];
     if(!(role.attention>0||activeReply(role.id)))return;
-    if(attentionPanel)attentionPanel.hidden=true;
-    attentionOpenButton?.setAttribute('aria-expanded','false');
+    showAttention(false);
     select(index,false);
     panTo(role.islandX,role.islandZ,width<700?2.25:1.85);
     // Reuse existing Chat on this Role. Showing an event is not marking it read.
     void window.CrewWorldHost?.openChat?.(role.id,{compact:false});
   }
-  listen(attentionOpenButton,'click',()=>{
-    if(!attentionPanel||attentionOpenButton.hidden)return;
-    attentionPanel.hidden=!attentionPanel.hidden;
-    attentionOpenButton.setAttribute('aria-expanded',String(!attentionPanel.hidden));
-    if(!attentionPanel.hidden)showHandoffs(false);
+  function showAttention(open){
+    if(!attentionPanel)return;
+    const available=Boolean(synced&&concernRoles().length);
+    if(open&&!available){showHandoffs(true);return;}
+    if(open)showHandoffs(false);
+    attentionPanel.hidden=!open;
+    attentionOpenButton?.setAttribute('aria-expanded',String(open));
+    syncActivityDisclosure();
+  }
+  listen(attentionOpenButton,'click',()=>showAttention(Boolean(attentionPanel?.hidden)));
+  listen(attentionClose,'click',()=>showAttention(false));
+  listen(activityOpen,'click',()=>{
+    const open=!attentionPanel?.hidden||!handoffsPanel?.hidden;
+    if(open){showAttention(false);showHandoffs(false);}
+    else if(concernRoles().length)showAttention(true);
+    else showHandoffs(true);
   });
-  listen(attentionClose,'click',()=>{
-    if(attentionPanel)attentionPanel.hidden=true;
-    attentionOpenButton?.setAttribute('aria-expanded','false');
-  });
+  listen(toAttention,'click',()=>showAttention(true));
+  listen(toHandoffs,'click',()=>showHandoffs(true));
   listen(attentionList,'click',event=>{
     const button=event.target.closest?.('button[data-role-index]');
     if(button&&attentionList.contains(button))openAttentionRole(Number(button.dataset.roleIndex));
@@ -441,6 +476,7 @@
     }
     handoffsPanel.hidden=!open;
     handoffsOpen?.setAttribute('aria-expanded',String(open));
+    syncActivityDisclosure();
     if(open)renderHandoffs();
   }
   function shownHandoffs(){
@@ -480,7 +516,7 @@
     if(!handoffsOpen||!handoffsList)return;
     renderCollaborationLinks();
     handoffsOpen.hidden=!isLive||!window.CrewWorldHost;
-    if(handoffsOpen.hidden){handoffsPanel.hidden=true;return;}
+    if(handoffsOpen.hidden){handoffsPanel.hidden=true;syncActivityDisclosure();return;}
     const rows=shownHandoffs();
     // Compact icon/count control leaves more of the living map visible.
     const handoffCount=evidenceVerified?String(evidenceRows.length):'—';
@@ -733,10 +769,7 @@
     if(center)roster[index]?.scrollIntoView?.({inline:'center',block:'nearest'});
     window.CrewWorldHost?.onSelectedRole?.(roles[index].id,roles[index].name);
     // Double tap is a closer camera target, not a second UI mode.
-    if(attentionPanel&&!attentionPanel.hidden){
-      attentionPanel.hidden=true;
-      attentionOpenButton?.setAttribute('aria-expanded','false');
-    }
+    if(attentionPanel&&!attentionPanel.hidden)showAttention(false);
     if(center){
       // Selection moves only the camera. There is no user-controlled avatar,
       // simulated travel or delayed Role Chat transition.
@@ -822,6 +855,8 @@
     try{
       const next=await loadStatus();
       if(disposed||paused)return;
+      const nextSignature=JSON.stringify(next.map(row=>[row.roleId,row.projectId||'']));
+      if(nextSignature!==liveSignature){window.CrewWorldHost?.refreshSceneRoles?.();return;}
       const byId=new Map(next.map(item=>[item.roleId,item]));
       actors.forEach((actor,index)=>{
         const item=byId.get(actor.role.id);
@@ -896,7 +931,7 @@
           const remaining=300000-age;
           if(remaining<=0)return;
           const compact=text.replace(/\s+/g,' ');
-          entry.speech.textContent=compact.length>240?compact.slice(0,239)+'…':compact;
+          entry.speech.textContent='新回覆';
           entry.speech.title=text;
           freshReplies.set(role.id,{at:Date.now(),signature});
           renderAttention();refreshRolePeek();
@@ -1270,6 +1305,7 @@
   dispose.pause=()=>pauseScene();
   dispose.resume=()=>{if(!sceneReady){paused=false;return;}resumeScene();};
   dispose.selectRole=roleId=>activeSelectWorldRole(roleId);
+   dispose.getCameraState=()=>snapshotCamera();
   return dispose;
   }
   window.mountCrewWorldScene=mountWorld;
