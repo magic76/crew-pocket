@@ -11,6 +11,7 @@
     raf=0;
   };
   let resumeScene=()=>{};
+  let activeSelectWorldRole=()=>false;
   const cleanups=[];
   function listen(target,event,handler,options){
     if(!target)return;
@@ -229,7 +230,10 @@
   // Keep the occupied village legible on narrow screens. The larger square
   // grass ground is intentionally allowed to extend beyond the camera.
   const overviewZoom=roles.length<=12?1.32:1.12;
-  let width=1,height=1,zoom=overviewZoom,selected=0,focus=null;
+  // Open the world on the actual active Role, not always the first list item.
+  const currentRole=window.getCurrentRoleId?.()||window.getCrewCockpitSnapshot?.()?.activeRoleId;
+  const initialSelection=roles.findIndex(role=>role.id===currentRole);
+  let width=1,height=1,zoom=overviewZoom,selected=Math.max(0,initialSelection),focus=null;
   const selectionHalo=new T.Mesh(new T.RingGeometry(1.08,1.42,36),
     new T.MeshBasicMaterial({color:'#f7de8b',transparent:true,opacity:.82,
       side:T.DoubleSide,depthWrite:false}));
@@ -640,6 +644,13 @@
       }else panTo(role.islandX,role.islandZ,width<700?2.65:2.0);
     }
   }
+  activeSelectWorldRole=roleId=>{
+    const idx=roles.findIndex(role=>role.id===roleId);
+    if(idx<0)return false;
+    select(idx,false);
+    panTo(roles[idx].islandX,roles[idx].islandZ,width<700?1.85:1.55);
+    return true;
+  };
   function advanceVisitor(delta,now){
     if(!walking||!visitor)return;
     let remaining=Math.min(.06,delta)*11.5;
@@ -1193,6 +1204,7 @@
   };
   dispose.pause=()=>pauseScene();
   dispose.resume=()=>{if(!sceneReady){paused=false;return;}resumeScene();};
+  dispose.selectRole=roleId=>activeSelectWorldRole(roleId);
   return dispose;
   }
   window.mountCrewWorldScene=mountWorld;
