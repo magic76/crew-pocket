@@ -439,3 +439,51 @@
 @media(prefers-reduced-motion:reduce){
   .world-label,.world-role-peek,.world-collaboration-link{animation:none!important;transition:none!important}
 }
+
+/* A single activity entrypoint replaces independent floating attention/history buttons. */
+.world-attention-open,.world-handoffs-open{display:none!important}
+.world-activity-open[hidden]{display:none!important}
+.world-activity-open{
+  position:absolute;z-index:8;right:10px;
+  top:calc(var(--crew-shared-header-height,96px) + 61px);
+  display:flex;align-items:center;gap:7px;min-height:36px;
+  border:1px solid #9cc4e388;border-radius:12px;
+  background:#102943de;color:#e8f4ff;padding:0 11px;
+  box-shadow:0 6px 18px #08152a80;font-size:11px;font-weight:750;
+  backdrop-filter:blur(10px);
+}
+.world-activity-open[data-alert="true"]{border-color:#e5b66d;color:#ffe6bb}
+.world-activity-open span:last-child:not([hidden]){
+  display:inline-grid;place-items:center;min-width:18px;height:18px;
+  border-radius:99px;background:#e0ae68;color:#332310;font-size:10px;
+}
+.crew-world-modal .world-attention-panel,
+.crew-world-modal .world-handoffs-panel{
+  top:calc(var(--crew-shared-header-height,96px) + 105px);
+  right:10px;left:auto;width:min(345px,calc(100% - 20px));
+  max-height:min(48dvh,380px);z-index:11;
+}
+.world-attention-heading,.world-handoffs-heading{gap:6px}
+.world-attention-heading button#world-activity-to-handoffs,
+.world-handoffs-heading button#world-activity-to-attention{
+  width:auto;min-width:0;padding:0 9px;font-size:10px;white-space:nowrap;
+}
+.world-handoffs-heading>div{flex:1;min-width:0}
+.world-flight-notice{max-width:min(285px,calc(100% - 20px));min-height:34px;padding:5px 8px}
+.world-flight-notice-text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.world-flight-notice-plane{width:23px;height:23px;font-size:16px}
+@media(max-width:540px){
+  .world-activity-open{right:9px}
+  .crew-world-modal .world-attention-panel,
+  .crew-world-modal .world-handoffs-panel{right:9px;left:auto;max-height:42dvh}
+}
+/* Three semantic levels: overview=project/activity, district=role/state, near=detail. */
+.world-stage-frame #world-stage[data-zoom-tier="overview"] .world-label-detail,
+.world-stage-frame #world-stage[data-zoom-tier="overview"] .world-label-context,
+.world-stage-frame #world-stage[data-zoom-tier="district"] .world-label-detail{display:none!important}
+.world-stage-frame #world-stage[data-zoom-tier="overview"] .world-label{
+  padding:4px 7px;min-width:0;
+}
+.world-stage-frame #world-stage[data-zoom-tier="near"] .world-label{
+  max-width:min(205px,48vw);
+}
