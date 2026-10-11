@@ -173,15 +173,12 @@ body.crew-world-active #context-health-toast{z-index:10050!important}
   flex:none;min-height:36px;padding:0 9px;border-radius:10px;
   border:1px solid #88c1d96e;color:#e3f6ff;background:#214f6e;font-size:11px;font-weight:700;
 }
-.crew-world-command-head #crew-world-command-context,
-.crew-world-command-head #crew-world-command-full{
+.crew-world-command-head #crew-world-command-context{
   flex:none;min-height:36px;padding:0 9px;border-radius:10px;
   border:1px solid #88c1d96e;color:#e3f6ff;background:#214f6e;font-size:11px;font-weight:700;
 }
-.crew-world-command-head #crew-world-command-context:disabled,
-.crew-world-command-head #crew-world-command-full:disabled{opacity:.42;cursor:wait}
-.crew-world-command-head #crew-world-command-context:focus-visible,
-.crew-world-command-head #crew-world-command-full:focus-visible{
+.crew-world-command-head #crew-world-command-context:disabled{opacity:.42;cursor:wait}
+.crew-world-command-head #crew-world-command-context:focus-visible{
   outline:2px solid #76d8ff;outline-offset:2px;
 }
 .crew-world-result-peek[hidden]{display:none!important}
@@ -253,8 +250,7 @@ body.crew-world-active #context-health-toast{z-index:10050!important}
   .crew-world-command-head #crew-world-command-state{display:none}
   .crew-world-command-head{gap:5px!important;padding:7px 8px!important}
   .crew-world-command-head #crew-world-command-read,
-  .crew-world-command-head #crew-world-command-context,
-  .crew-world-command-head #crew-world-command-full{padding:0 7px;font-size:10px}
+  .crew-world-command-head #crew-world-command-context{padding:0 7px;font-size:10px}
   .crew-world-command-head #crew-world-command-retry{min-height:36px;padding:0 6px;font-size:10px}
   .crew-world-role-spinner{width:12px;height:12px}
   .crew-world-command-head #crew-world-command-state{display:none}
