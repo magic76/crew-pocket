@@ -1779,7 +1779,7 @@
         <div id="world-labels" aria-label="Crew Role 對話回覆"></div>
         <div id="world-loading" role="status">正在建立 3D 世界…</div>
       </div>
-      <svg id="world-collaboration-links" class="world-collaboration-links" aria-label="近期已記錄角色協作關係" aria-hidden="true"></svg>
+      <svg id="world-collaboration-links" class="world-collaboration-links" aria-label="最近 45 秒已記錄的角色訊息活動" aria-hidden="true"></svg>
     </div>
     <div id="world-status-strip" class="world-status-strip" role="status" aria-live="polite">讀取小隊狀態中…</div>
     <button id="world-attention-open" class="world-attention-open" type="button" aria-expanded="false"
@@ -1801,10 +1801,10 @@
       <span id="world-flight-notice-text" class="world-flight-notice-text">已記錄角色訊息</span>
       <span class="world-flight-notice-action">查看 ›</span>
     </button>
-    <button id="world-handoffs-open" class="world-handoffs-open" type="button" aria-controls="world-handoffs-panel" aria-expanded="false" hidden>協作紀錄</button>
+    <button id="world-handoffs-open" class="world-handoffs-open" type="button" aria-controls="world-handoffs-panel" aria-expanded="false" title="地圖連線只顯示最近 45 秒的協作；這裡可查看歷史訊息" hidden>協作紀錄</button>
     <section id="world-handoffs-panel" class="world-handoffs-panel" aria-label="已保存的角色間訊息" hidden>
       <div class="world-handoffs-heading">
-        <div><strong>最近協作</strong><small>虛線表示已記錄訊息，非送達／已讀／完成</small></div>
+        <div><strong>協作紀錄</strong><small>虛線只顯示 45 秒內已記錄的訊息；舊訊息仍可在此查看，不代表送達／已讀／完成</small></div>
         <button id="world-handoffs-close" type="button" aria-label="關閉協作紀錄">✕</button>
       </div>
       <button id="world-handoffs-filter" class="world-handoffs-filter" type="button" aria-pressed="false">只看目前 Role</button>
