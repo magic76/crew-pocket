@@ -217,7 +217,8 @@ assert.match(engine,/worldExtent/);
 assert.match(engine,/districtPins/);
 assert.match(engine,/world-district-pin/);
 assert.match(css,/world-district-pin/);
-assert.match(launcher,/worldDashboardButton/);
+assert.match(launcher,/updateHomeView\('map'\)/);
+assert.ok(main.includes('id="crew-home-view-toggle"'));
 
 assert.match(html,/id="world-chat-open"/);
 assert.doesNotMatch(html,/id="world-chat-sheet"|id="world-chat-submit"/);
