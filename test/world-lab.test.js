@@ -287,8 +287,10 @@ assert.equal((main.match(/id="crew-chat-main-header"/g)||[]).length,1,
   'the original Chat header remains a single DOM node');
 assert.ok(main.includes('id="crew-world-command-context"'),
   'Context is available on the persistent Role command dock');
-assert.ok(main.includes('id="crew-world-command-full"'),
-  'full in-map Chat reading is available from the command dock');
+assert.ok(!main.includes('id="crew-world-command-full"'),
+  'no redundant full-read control occupies the mobile command dock');
+assert.ok(main.includes('id="crew-world-chat-expand"'),
+  'the original floating reader still owns full-screen Chat expansion');
 assert.equal((main.match(/id="context-pill"/g)||[]).length,1,
   'the original Context control remains the single entry to its state');
 assert.equal((main.match(/id="context-modal"/g)||[]).length,1,
@@ -339,8 +341,10 @@ assert.ok(launcher.includes("document.getElementById('context-pill')?.click()"),
   'Context delegates to original Context Health');
 assert.ok(launcher.includes("window.getCurrentRoleId?.()===selectedRoleId"),
   'Context/full actions reject stale or still-switching Role target');
-assert.ok(launcher.includes("panel.classList.add('expanded')"),
-  'full conversation opens the original Chat in-map, not a second renderer');
+assert.ok(launcher.includes("panel.classList.toggle('expanded')"),
+  'full conversation expands the original Chat panel, not a second renderer');
+assert.ok(launcher.includes("commandRead.textContent=reading?'收合':'對話'"),
+  'one command entry clearly changes between reading and collapsing');
 assert.ok(worldShell.includes('body.crew-world-active #context-modal{z-index:10030!important}'),
   'Context is accessible over map without entering focus mode');
 assert.ok(worldShell.includes('body.crew-world-active #crew-home-header-host{display:block!important}'),
