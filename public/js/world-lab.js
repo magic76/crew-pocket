@@ -275,6 +275,8 @@
         (entry.speech.hidden?'':' · 最新回覆：'+entry.speech.textContent));
     });
     chat?.sync();
+    const focusState=document.getElementById('crew-world-focus-state');
+    if(focusState)focusState.textContent=liveStates[role.state]||'未知';
     roster.forEach((button,i)=>button.setAttribute('aria-pressed',String(i===selected)));
   }
   function cameraSync(){
@@ -331,7 +333,9 @@
     }
     if(completed.roleId){
       const role=roles.find(r=>r.id===completed.roleId);
-      if(role&&isLive&&window.CrewWorldHost?.openChat){
+      if(role&&isLive&&window.CrewWorldHost?.isRoleFocused?.(role.id)){
+        // Focus mode already owns this Role's compact composer.
+      }else if(role&&isLive&&window.CrewWorldHost?.openChat){
         void window.CrewWorldHost.openChat(role.id);
       }else if(role){
         notify('已靠近 '+role.short+' · 示範地圖不會發送訊息');
@@ -348,6 +352,7 @@
     selected=index;updateInfo();
     if(center)roster[index]?.scrollIntoView?.({inline:'center',block:'nearest'});
     window.CrewWorldHost?.onSelectedRole?.(roles[index].id,roles[index].name);
+    if(center)window.CrewWorldHost?.focusRole?.(roles[index].id,roles[index].name);
     if(center){
       const role=roles[index];
       if(explore&&visitor&&navigation){
@@ -579,6 +584,7 @@
     });
   }
   listen(document.getElementById('world-reset'),'click',()=>{
+    window.CrewWorldHost?.exitFocus?.();
     panTo(0,-1.8,1);notify('返回全景');
   });
   function setZoom(value){
