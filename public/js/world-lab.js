@@ -457,7 +457,7 @@
     // Expire links without waiting for the next successful API poll. On a
     // stalled/offline connection, the canvas frame still clears old arcs.
     nextLinkExpiryAt=events.length
-      ?Math.min(...events.map(event=>event.createdAt+45000)):0;
+      ?Math.min(...events.map(event=>event.createdAt+planner.COLLABORATION_LINK_WINDOW_MS)):0;
     for(const event of events){
       if(!memberById.has(event.fromRoleId)||!memberById.has(event.toRoleId))continue;
       const path=document.createElementNS('http://www.w3.org/2000/svg','path');
