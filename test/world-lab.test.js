@@ -320,8 +320,8 @@ assert.ok(engine.includes("contextMark.hidden=!pressure"),
   'unknown Context values never show a warning badge');
 assert.ok(engine.includes("contextForRole(roles[selected].id)"),
   'selected Role Context action uses only selected identity');
-assert.ok(engine.includes("command.dataset.contextTone=pressure?.tone||''"),
-  'existing Context action receives amber/red warning, not a duplicate dialog');
+assert.ok(engine.includes("command.dataset.contextTone=detail?.known?detail.tone:'unknown'"),
+  'existing Context action receives verified status rather than an invented 0%');
 assert.ok(worldShell.includes('#crew-world-command-context[data-context-tone="critical"]'),
   'critical Context warns in original command dock');
 assert.ok(css.includes('[data-context-tone="critical"] .world-label-context'),
