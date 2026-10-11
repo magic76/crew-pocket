@@ -6,7 +6,8 @@ const vm=require('node:vm');
 
 class Node {
   constructor(id,doc){this.id=id;this.doc=doc;this.parentNode=null;this.children=[];
-    this.hidden=['crew-world-modal','crew-world-chat-panel'].includes(id);
+    this.hidden=['crew-world-modal','crew-world-chat-panel',
+      'crew-world-role-spinner','crew-world-command-retry'].includes(id);
     this.events=new Map();this.textContent='';this.className='';this.value='';
     this.style={values:{},setProperty(k,v){this.values[k]=v;},removeProperty(k){delete this.values[k];}};
     this.classList={set:new Set(),add(...keys){for(const k of keys)this.set.add(k);},
@@ -23,7 +24,9 @@ class Node {
     const i=p.children.indexOf(this);node.parentNode?.removeChild(node);
     p.children[i]=node;node.parentNode=p;this.parentNode=null;}
   addEventListener(name,fn){const set=this.events.get(name)||[];set.push(fn);this.events.set(name,set);}
-  trigger(name){for(const fn of this.events.get(name)||[])fn({key:'',preventDefault(){}});}
+  trigger(name,payload={}){for(const fn of this.events.get(name)||[])fn({
+    key:'',preventDefault(){},...payload
+  });}
   setAttribute(k,v){this[k]=v;}
   focus(){this.doc.activeElement=this;}
   click(){if(!this.disabled)this.trigger('click');}
@@ -40,6 +43,7 @@ async function tick(){await new Promise(resolve=>setImmediate(resolve));}
     'context-pill','world-reset',
     'crew-world-command-role','crew-world-command-state','crew-world-command-read',
     'crew-world-command-context','crew-world-command-full',
+    'crew-world-role-spinner','crew-world-command-retry','send-btn',
     'crew-world-result-peek','crew-world-result-peek-kind','crew-world-result-peek-text',
     'prompt-input'];
   const nodes=Object.fromEntries(ids.map(id=>[id,new Node(id,doc)]));
@@ -51,16 +55,26 @@ async function tick(){await new Promise(resolve=>setImmediate(resolve));}
   originalComposer.appendChild(nodes['chat-composer-footer']);
   let mountCount=0,disposeCount=0,pauseCount=0,resumeCount=0,roleNavigations=[];
   let contextOpenCount=0,collaborationVisit=null;
+  let blockedNavigation=null,failNavigationId=null,clockIndex=0;
+  const scheduled=new Map();
+  const advanceSwitchTimers=()=>{
+    const due=[...scheduled.entries()].filter(([,task])=>task.ms===200);
+    for(const [id,task] of due){scheduled.delete(id);task.fn();}
+  };
   nodes['context-pill'].addEventListener('click',()=>contextOpenCount++);
   let width=810;
   const win={
     innerHeight:810,visualViewport:{offsetTop:0,height:810,addEventListener(){}},
     addEventListener(){},requestAnimationFrame(fn){fn();},
+    setTimeout(fn,ms){const id=++clockIndex;scheduled.set(id,{fn,ms});return id;},
+    clearTimeout(id){scheduled.delete(id);},
     mountCrewWorldScene(){mountCount++;const dispose=()=>disposeCount++;
       dispose.pause=()=>pauseCount++;dispose.resume=()=>resumeCount++;return dispose;},
     getCrewCockpitSnapshot(){return{roles:[{id:'pocket',name:'Pocket'},{id:'teacher',name:'Teacher'}]};},
     getCurrentRoleId(){return roleNavigations.at(-1);},
     async openCrewCockpitRole(id){
+      if(blockedNavigation&&blockedNavigation.roleId===id)await blockedNavigation.promise;
+      if(failNavigationId===id)throw Error('Role navigation failed');
       roleNavigations.push(id);doc.body.dataset.primaryTab='chat';
       // Match the existing Role navigation's actual behavior: history restore
       // clears the native textarea before the commander restores its draft.
@@ -187,5 +201,67 @@ async function tick(){await new Promise(resolve=>setImmediate(resolve));}
     'a saved event selects recipient-scoped original collaboration without sending anything');
   assert.strictEqual(nodes['messages-container'].parentNode,originalMessages);
   assert.strictEqual(nodes['chat-composer-footer'].parentNode,originalComposer);
+  // Rapid Role switches must not create spinner flicker or dim the composer.
+  assert.equal(nodes['crew-world-role-spinner'].hidden,true);
+  assert.equal(nodes['send-btn'].disabled,false);
+  assert.equal(scheduled.size,0,'quick initial navigation cancels delayed spinner');
+  // A slow switch still permits editing the draft and selecting another
+  // character; only sending and stale conversation-reading are guarded.
+  let resolveSlow;
+  blockedNavigation={roleId:'pocket',promise:new Promise(resolve=>{resolveSlow=resolve;})};
+  nodes['prompt-input'].value='原本草稿';
+  nodes['crew-world-command-role'].value='pocket';
+  nodes['crew-world-command-role'].trigger('change');
+  await tick();
+  assert.equal(nodes['crew-world-role-spinner'].hidden,true,
+    'no spinner is painted before the 200ms threshold');
+  assert.equal(nodes['send-btn'].disabled,true,
+    'native send click is blocked until intended Role is confirmed');
+  assert.equal(nodes['crew-world-command-context'].disabled,true);
+  assert.equal(nodes['crew-world-command-full'].disabled,true);
+  assert.equal(nodes['crew-world-command-read'].disabled,true);
+  assert.equal(nodes['crew-world-command-role'].disabled,false,
+    'Role picker stays interactive while a history request is pending');
+  nodes['prompt-input'].value='載入時繼續編輯';
+  nodes['prompt-input'].trigger('input');
+  let prevented=false,interrupted=false;
+  nodes['prompt-input'].trigger('keydown',{
+    key:'Enter',ctrlKey:true,preventDefault(){prevented=true;},
+    stopImmediatePropagation(){interrupted=true;}
+  });
+  assert.equal(prevented,true,'Ctrl+Enter cannot send to the previous Role');
+  assert.equal(interrupted,true,'stop the existing app keydown send handler');
+  advanceSwitchTimers();
+  assert.equal(nodes['crew-world-role-spinner'].hidden,false,
+    'slow navigation shows only inline Role spinner');
+  assert.equal(nodes['crew-world-command-state'].textContent,'切換中…');
+  resolveSlow();blockedNavigation=null;
+  await tick();await tick();
+  assert.equal(nodes['crew-world-role-spinner'].hidden,true);
+  assert.equal(nodes['send-btn'].disabled,false);
+  assert.equal(nodes['prompt-input'].value,'載入時繼續編輯',
+    'even edits typed during a slow history load survive');
+  assert.equal(nodes['crew-world-command-context'].disabled,false);
+
+  // Failed navigation exposes retry; it never enables send for the stale Role.
+  failNavigationId='teacher';
+  nodes['crew-world-command-role'].value='teacher';
+  nodes['crew-world-command-role'].trigger('change');
+  await tick();await tick();
+  assert.equal(nodes['crew-world-command-retry'].hidden,false);
+  assert.equal(nodes['crew-world-command-state'].textContent,'角色未就緒');
+  assert.equal(nodes['send-btn'].disabled,true);
+  failNavigationId=null;
+  nodes['crew-world-command-retry'].click();
+  await tick();await tick();
+  assert.equal(nodes['crew-world-command-retry'].hidden,true);
+  assert.equal(nodes['send-btn'].disabled,false);
+  assert.equal(nodes['crew-world-command-context'].disabled,false);
+  assert.equal(nodes['crew-world-role-spinner'].hidden,true);
+  nodes['crew-home-dashboard-btn'].click();
+  assert.equal(nodes['send-btn'].disabled,false,
+    'switch safety lock is released when leaving World');
+  assert.strictEqual(nodes['chat-composer-footer'].parentNode,originalComposer);
+  console.log('Non-blocking Role switch: fast/slow, draft safety, keyboard guard, failure retry OK');
   console.log('Crew World modeless portal: original Context, full reading, navigation and one Chat DOM passed');
 })().catch(error=>{console.error(error);process.exitCode=1;});
