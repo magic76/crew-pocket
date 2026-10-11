@@ -172,8 +172,8 @@
     modal.classList.remove('is-role-focused');
     if(focusBar)focusBar.hidden=true;
     if(focusContext)focusContext.disabled=true;
-    selectVersion++; // Ignore an unfinished Role navigation.
-    // The global commander stays available in overview, without a second input.
+    // The global commander stays available in overview, including an
+    // already-pending Role switch. Only closing World invalidates it.
     if(!panel.hidden)showCompactChat();
   }
   function showCompactChat(){
@@ -313,7 +313,8 @@
       // Restore the unsent draft only after the intended Role is verified.
       if(promptInput&&commandDraft&&!promptInput.value){
         promptInput.value=commandDraft;
-        promptInput.dispatchEvent?.(new Event('input',{bubbles:true}));
+        if(typeof Event==='function')
+          promptInput.dispatchEvent?.(new Event('input',{bubbles:true}));
       }
       messages.scrollTop=messages.scrollHeight;
       if(focusContext)focusContext.disabled=focusedRoleId!==roleId;
@@ -387,6 +388,26 @@
   focusContext?.addEventListener('click',()=>{
     if(!focusedRoleId||panel.hidden||window.getCurrentRoleId?.()!==focusedRoleId)return;
     document.getElementById('context-pill')?.click();
+  });
+  commandRole?.addEventListener('change',()=>{
+    const id=commandRole.value;
+    if(!liveRole(id)||modal.hidden)return;
+    if(stopWorld?.selectRole)stopWorld.selectRole(id);
+    else onSelectedRole(id,liveRole(id).name);
+  });
+  commandRead?.addEventListener('click',()=>{
+    if(panel.hidden){if(selectedRoleId)void openChat(selectedRoleId,{compact:false});return;}
+    if(panel.classList.contains('compact'))toggleExpand();
+    else collapseChat();
+  });
+  peek?.addEventListener('click',()=>{
+    if(!panel.hidden&&panel.classList.contains('compact')){
+      toggleExpand();
+      messages.scrollTop=messages.scrollHeight;
+    }
+  });
+  promptInput?.addEventListener('input',()=>{
+    if(!modal.hidden&&!switchingRole)commandDraft=promptInput.value;
   });
   hideButton.addEventListener('click',collapseChat);
   expandButton.addEventListener('click',toggleExpand);
