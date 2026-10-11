@@ -430,7 +430,7 @@ assert.ok(events.traceableEvents(evidenceForTests,['a','b','c','d'],12,linkNow).
   'the saved collaboration history remains available after the line expires');
 assert.ok(engine.includes("shownHandoffs(),roles[selected].id,false,3,Date.now()"),
   'drawing reevaluates message age at every saved-event refresh');
-assert.match(engine,/resize\(\);\s*\/\/ The scene may have been paused longer than the connection TTL/[\s\S]*?renderCollaborationLinks\(\)/,
+assert.match(engine,/resize\(\);\s*\/\/ The scene may have been paused longer than the connection TTL[\s\S]*?renderCollaborationLinks\(\)/,
   'World resuming after a long pause must remove expired lines before fetching');
 for(const id of ['world-attention-open','world-attention-count','world-attention-panel',
   'world-attention-list','world-role-peek','world-role-peek-name',
