@@ -46,6 +46,33 @@
       kind:item.kind==='reply'?'reply':'handoff',createdAt:item.createdAt
     }));
   }
+  // P12 attention is only an observation of known Runtime counts and newly
+  // seen response signatures. Never infer failed tasks, unread receipts or
+  // an event from the initial baseline.
+  function attentionItems(roles,freshReplies,now=Date.now()){
+    if(!Array.isArray(roles))return[];
+    return roles.map((role,index)=>{
+      const count=Number.isSafeInteger(role?.attention)&&role.attention>0
+        ?Math.min(role.attention,999):0;
+      const candidate=freshReplies instanceof Map?freshReplies.get(role?.id):null;
+      const age=now-Number(candidate?.at);
+      const reply=candidate&&typeof candidate.signature==='string'&&
+        candidate.signature.length>0&&Number.isFinite(age)&&age>=0&&age<300000
+        ?candidate:null;
+      return{role,index,reply,count};
+    }).filter(item=>item.role?.id&&(item.count>0||item.reply));
+  }
+  // P14 arcs use only the traceable, already-validated event metadata.
+  // The optional selected Role filter does not create or modify messages.
+  function collaborationConnections(rows,roleId,onlySelected=false,limit=3){
+    const max=Math.max(0,Math.min(6,Math.floor(Number(limit)||0)));
+    return (Array.isArray(rows)?rows:[]).filter(event=>event&&
+      typeof event.id==='string'&&event.id&&
+      typeof event.fromRoleId==='string'&&typeof event.toRoleId==='string'&&
+      event.fromRoleId!==event.toRoleId&&
+      (!onlySelected||event.fromRoleId===roleId||event.toRoleId===roleId))
+      .slice(0,max);
+  }
   // A packet of light can travel only along bridges that physically exist.
   // Nodes are *districts*, not Roles. Same-district messages stay local.
   function roadRoute(roads,fromDistrict,toDistrict){
@@ -115,5 +142,5 @@
       y:start.y+(end.y-start.y)*e+Math.sin(Math.PI*t)*rise
     };
   }
-  return{observe,traceableEvents,roadRoute,roadPulse,paperFlightDuration,paperFlightPoint};
+  return{observe,traceableEvents,attentionItems,collaborationConnections,roadRoute,roadPulse,paperFlightDuration,paperFlightPoint};
 });
