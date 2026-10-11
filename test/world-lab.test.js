@@ -95,11 +95,12 @@ for(const r of allSixteen){
 }
 for(const members of groups.values()){
   assert.ok(members.length<=3);
-  assert.equal(new Set(members.map(r=>r.x)).size,members.length,
-    'each person in district stands at an individual position');
+  assert.equal(new Set(members.map(r=>r.x.toFixed(4)+','+r.z.toFixed(4))).size,
+    members.length,'every member occupies a distinct point along the rotated frontage');
 }
-assert.ok(sampleWindow.WorldLabKit.mapExtent(allSixteen)<20,
-  'sixteen agents fit in the compact inner ring rather than an expanding 16-island circle');
+assert.ok(sampleWindow.WorldLabKit.mapExtent(allSixteen)>20&&
+  sampleWindow.WorldLabKit.mapExtent(allSixteen)<45,
+  'sixteen agents keep six separated workshops on organic branches');
 const mixed=sampleWindow.WorldLabKit.makeLiveRoles([
   ...Array.from({length:4},(_,i)=>({roleId:'t'+i,projectId:'teacher'})),
   ...Array.from({length:5},(_,i)=>({roleId:'p'+i,projectId:'pocket'})),
@@ -110,7 +111,9 @@ assert.equal(new Set(mixed.map(r=>r.districtId)).size,5,
 const forty=sampleWindow.WorldLabKit.makeLiveRoles(Array.from({length:40},(_,i)=>({roleId:'agent-'+i})));
 assert.equal(forty.length,sampleWindow.WorldLabKit.MAX_WORLD_ROLES);
 assert.equal(sampleWindow.WorldLabKit.MEMBERS_PER_DISTRICT,3);
-assert.ok(sampleWindow.WorldLabKit.mapExtent(forty)<28);
+assert.ok(sampleWindow.WorldLabKit.mapExtent(forty)>28&&
+  sampleWindow.WorldLabKit.mapExtent(forty)<65,
+  'up to 36 Roles form safely separated groups around a compact plaza');
 
 assert.equal(sampleWindow.WorldLabKit.makeLiveRoles([]).length,0);
 

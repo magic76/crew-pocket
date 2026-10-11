@@ -72,14 +72,12 @@
   scene.add(sunlight,new T.HemisphereLight(0xc5e6ff,0x4f527d,1.12));
   const actors=kit.create(scene,roles);
   const roadVisuals=actors.roadVisuals||[];
-  const townLots=[...districts.map(members=>({
-    id:members[0].districtId||members[0].id,
-    x:members[0].islandX,z:members[0].islandZ,
-    col:members[0].townCol,row:members[0].townRow
-  }))];
+  // This is the same immutable lot/frontage geometry used for mesh rotation
+  // and Role standing positions. Navigation never invents parallel roads.
+  const townLots=navigation?.uniqueLots(roles)||[];
   const firstLot=townLots[0];
   const visitor=firstLot&&navigation&&kit.createPlayer
-    ?kit.createPlayer(scene,{x:firstLot.x,z:firstLot.z+navigation.FRONT_Z}):null;
+    ?kit.createPlayer(scene,{x:roles[0].x,z:roles[0].z}):null;
   let visitorDistrict=firstLot?.id||null;
   let walking=null,queuedDestination=null,explore=true,followPlayer=false;
   const exploreToggle=document.getElementById('world-explore-toggle');
@@ -306,7 +304,7 @@
       notify('已排入下一個目的地');return false;
     }
     const route=navigation.planWalk({
-      lots:townLots,
+      lots:townLots,roads:roadVisuals,
       from:{x:visitor.root.position.x,z:visitor.root.position.z},
       to:{x:destination.x,z:destination.z},
       fromDistrict:visitorDistrict,toDistrict:destination.districtId
@@ -343,7 +341,7 @@
   function roleDestination(role){
     const lot=townLots.find(n=>n.id===(role.districtId||role.id));
     if(!lot)return null;
-    return {districtId:lot.id,x:role.x,z:lot.z+navigation.FRONT_Z};
+    return {districtId:lot.id,x:role.x,z:role.z};
   }
   function select(index,center=false){
     if(index<0||index>=actors.length)return;
@@ -647,6 +645,13 @@
     const intersection=ray.ray.intersectPlane(
       new T.Plane(new T.Vector3(0,1,0),-.37),new T.Vector3());
     if(!intersection)return;
+    // The central square and actual street junctions are walkable places,
+    // not merely decoration surrounding the Project buildings.
+    const junction=navigation.nearestStreetNode?.(intersection,roadVisuals,2.25);
+    if(junction){
+      startWalk({districtId:junction.id,x:junction.x,z:junction.z});
+      return;
+    }
     const lot=navigation.nearestLot(intersection,townLots);
     if(!lot)return;
     const spot=navigation.nearestWalkSpot(intersection,lot);

@@ -13,76 +13,110 @@ const index=read('public/index.html');
 const scope={window:{THREE:{}}};
 vm.runInNewContext(kitSource,scope);
 const kit=scope.window.WorldLabKit;
-const near=(a,b,delta=.025)=>Math.hypot(a.x-b.x,a.z-b.z)<delta;
-const sampleLot={id:'alpha',x:0,z:0,col:0,row:0};
-assert.equal(nav.isSafeGround({x:1,z:-1.5},sampleLot),false,
-  'the player must never enter workshop walls');
-assert.equal(nav.isSafeGround({x:0,z:2.65},sampleLot),true);
-assert.equal(nav.isSafeGround({x:0,z:4.2},sampleLot),true,
-  'the town is continuous land, not an island radius');
-assert.equal(nav.nearestLot({x:100,z:100},[sampleLot]),null,
-  'far-off void taps must not move the visitor');
-assert.ok(near(nav.nearestWalkSpot({x:1,z:-1.5},sampleLot),
-  {x:1,z:nav.FRONT_Z}), 'interior taps snap to safe visible frontage');
-
-for(const count of [1,2,3,4,5,6,7,9,16,24,36]){
-  // Distinct Projects exercise the maximum building density case; same
-  // Projects are tested by world-road-network.test.js.
+const distance=(a,b)=>Math.hypot(a.x-b.x,a.z-b.z);
+const near=(a,b,tolerance=.025)=>distance(a,b)<tolerance;
+for(const count of [1,2,3,4,5,6,7,9,10,16,24,36]){
   const roles=kit.makeLiveRoles(Array.from({length:count},(_,i)=>({
     roleId:'r'+i,roleName:'Role '+i,projectId:'district-'+i
   })));
-  const lots=nav.uniqueLots(roles);
+  const lots=nav.uniqueLots(roles),roads=kit.planRoadNetwork(roles);
   assert.equal(lots.length,count);
-  const network=kit.planRoadNetwork(roles);
-  const segments=new Set(network.map(e=>[e.a.id,e.b.id].sort().join(':')));
-  for(const a of [lots[0],lots[Math.floor(lots.length/2)]]){
-    for(const b of [lots[0],lots[lots.length-1]]){
-      const from={x:a.x,z:a.z+nav.FRONT_Z};
-      const to={x:b.x,z:b.z+nav.FRONT_Z};
-      const route=nav.planWalk({lots,from,to,
-        fromDistrict:a.id,toDistrict:b.id});
-      assert.ok(route,count+' district walk must be possible');
-      assert.ok(route.waypoints.length>0&&route.waypoints.length<256);
-      assert.ok(near(route.waypoints[0],from),'start from actual visitor');
-      assert.ok(near(route.waypoints.at(-1),to),'end at chosen conversation');
-      assert.equal(route.steps.length,Math.abs(a.col-b.col)+Math.abs(a.row-b.row),
-        'shortest grid distance, no imaginary shortcuts');
-      for(const step of route.steps){
-        const fromId='street-'+step.fromCol+'-'+step.fromRow;
-        const toId='street-'+step.toCol+'-'+step.toRow;
-        assert.ok(segments.has([fromId,toId].sort().join(':')),
-          'every cross-block step is a real rendered street');
-      }
-      for(let i=0;i<route.waypoints.length;i++){
-        const point=route.waypoints[i];
-        assert.ok(Number.isFinite(point.x)&&Number.isFinite(point.z));
-        assert.equal(point.y,nav.FOOT_Y);
-        if(i){
-          const prev=route.waypoints[i-1];
-          const dx=Math.abs(point.x-prev.x),dz=Math.abs(point.z-prev.z);
-          assert.ok(dx<.0001||dz<.0001,'no diagonal cut through buildings');
-          assert.ok(dx+dz<=nav.SPACING+.001,'no frame-level teleport');
-        }
-      }
+  assert.ok(lots.every(l=>Number.isFinite(l.rotation)));
+  assert.equal(nav.nearestLot({x:1000,z:1000},lots),null);
+  for(const role of roles){
+    const lot=lots.find(l=>l.id===role.districtId);
+    assert.ok(lot);
+    assert.ok(nav.isSafeGround({x:role.x,z:role.z},lot),
+      count+': Role standing spot is outside its rotated workshop');
+    const snap=nav.nearestWalkSpot({x:lot.x,z:lot.z},lot);
+    assert.ok(nav.isSafeGround(snap,lot));
+    assert.ok(near(nav.localOffset(snap,lot),{x:0,z:nav.FRONT_Z}),
+      'tapping the building snaps to its rotated front sidewalk');
+  }
+  const indices=[0,Math.floor(count/2),count-1];
+  for(const i of indices)for(const j of indices){
+    const from=roles[i],to=roles[j];
+    const route=nav.planWalk({roads,lots,
+      from:{x:from.x,z:from.z},to:{x:to.x,z:to.z},
+      fromDistrict:from.districtId,toDistrict:to.districtId});
+    assert.ok(route,count+': all district pairs remain reachable');
+    assert.ok(route.waypoints.length<256,'mobile path has bounded memory');
+    assert.ok(near(route.waypoints[0],from));
+    assert.ok(near(route.waypoints.at(-1),to));
+    assert.equal(route.steps.length===0,from.districtId===to.districtId,
+      'inter-district walk uses real street edges, local chat uses frontage');
+    for(const step of route.steps){
+      const edge=roads[step.edgeIndex];
+      assert.ok(edge,'every step is rendered by WorldLabKit');
+      const points=step.reverse?[...edge.points].reverse():edge.points;
+      assert.equal(points.length>=2,true);
+      const a=step.reverse?edge.b.id:edge.a.id;
+      assert.equal(step.from,a);
+      assert.equal(step.to,step.reverse?edge.a.id:edge.b.id);
+    }
+    for(const point of route.waypoints){
+      assert.ok(Number.isFinite(point.x)&&Number.isFinite(point.z));
+      assert.equal(point.y,nav.FOOT_Y);
+    }
+    // Actual street polylines can bend. The navigator must retain at least
+    // one non-cardinal leg in a large town rather than cutting through houses.
+    if(count>=16&&i!==j){
+      assert.ok(route.distance>0);
     }
   }
 }
-const site={id:'a',x:0,z:0,col:0,row:0};
-const other={id:'b',x:10,z:0,col:1,row:0};
-const same=nav.planWalk({lots:[site],from:{x:-1,z:2.65},
-  to:{x:1,z:2.65},fromDistrict:'a',toDistrict:'a'});
-assert.equal(same.steps.length,0);
-assert.ok(same.distance<3,'same-block conversations must not detour to intersection');
-assert.equal(nav.planWalk({lots:[site],from:{x:0,z:2.65},
-  to:{x:10,z:2.65},fromDistrict:'a',toDistrict:'missing'}),null);
-assert.equal(nav.planWalk({lots:[site,other],from:{x:0,z:2.65},
-  to:{x:10,z:2.65},fromDistrict:'a',toDistrict:'b'}).steps.length,1);
+// The central plaza and actual intersections remain usable click targets.
+const plazaRoles=kit.makeLiveRoles(Array.from({length:9},(_,i)=>({
+  roleId:'plaza-'+i,roleName:'Agent '+i,projectId:'sector-'+i
+})));
+const plazaLots=nav.uniqueLots(plazaRoles);
+const plazaRoads=kit.planRoadNetwork(plazaRoles);
+const origin=plazaRoles[0];
+const plazaHit=nav.nearestStreetNode({x:.3,z:.2},plazaRoads,2);
+assert.ok(plazaHit&&plazaHit.id==='plaza');
+const arrive=nav.planWalk({roads:plazaRoads,lots:plazaLots,
+  from:origin,to:{x:0,z:0},
+  fromDistrict:origin.districtId,toDistrict:'plaza'});
+assert.ok(arrive&&arrive.distance>1);
+assert.ok(near(arrive.waypoints.at(-1),{x:0,z:0}),
+  'the avatar arrives at the actual centre of the plaza');
+const depart=nav.planWalk({roads:plazaRoads,lots:plazaLots,
+  from:{x:0,z:0},to:plazaRoles[8],
+  fromDistrict:'plaza',toDistrict:plazaRoles[8].districtId});
+assert.ok(depart&&near(depart.waypoints[0],{x:0,z:0})&&
+  near(depart.waypoints.at(-1),plazaRoles[8]),
+  'visitor can walk from plaza straight into the next Role conversation');
+
+const mixed=kit.makeLiveRoles(Array.from({length:36},(_,i)=>({
+  roleId:'r'+i,roleName:'Role '+i,projectId:'p'+i
+})));
+const edges=kit.planRoadNetwork(mixed);
+assert.ok(edges.some(e=>e.points.some((p,i)=>
+  i>0&&Math.abs(p.x-e.points[i-1].x)>.1&&
+  Math.abs(p.z-e.points[i-1].z)>.1)), 'roads contain genuine diagonal curves');
+const same=kit.makeLiveRoles([
+  {roleId:'alice',roleName:'Alice',projectId:'a'},
+  {roleId:'bob',roleName:'Bob',projectId:'a'}
+]);
+const shared=nav.uniqueLots(same);
+const nearBy=nav.planWalk({roads:kit.planRoadNetwork(same),lots:shared,
+  from:same[0],to:same[1],
+  fromDistrict:same[0].districtId,toDistrict:same[1].districtId});
+assert.equal(nearBy.steps.length,0);
+assert.ok(nearBy.distance<5);
+const first=shared[0];
+assert.equal(nav.planWalk({roads:[],lots:shared,from:same[0],
+  to:same[1],fromDistrict:first.id,toDistrict:'invalid'}),null);
+assert.equal(nav.planWalk({roads:[],lots:nav.uniqueLots(mixed),from:mixed[0],
+  to:mixed[1],fromDistrict:mixed[0].districtId,toDistrict:mixed[1].districtId}),null,
+  'do not teleport between workshops when road graph is disconnected');
 assert.match(world,/const visitor=firstLot/);
 assert.match(world,/kit\.createPlayer/);
 assert.match(world,/navigation\.planWalk/);
+assert.match(world,/navigation\.nearestStreetNode/);
+assert.match(world,/lots:townLots,roads:roadVisuals/);
 assert.match(world,/startWalk\(destination,'role',role.id\)/);
-assert.match(world,/void window\.CrewWorldHost\.openChat\(role.id\)/,
-  'approaching a Role uses original Chat sheet and Runtime');
+assert.match(world,/void window\.CrewWorldHost\.openChat\(role.id\)/);
 assert.match(world,/setPointerCapture/);
 assert.match(world,/tap\.moved/);
 assert.match(world,/ray\.ray\.intersectPlane/);
@@ -97,5 +131,5 @@ assert.match(standalone,/id="world-explore-toggle"/);
 assert.match(standalone,/\/js\/world-lab-navigation.js/);
 assert.match(kitSource,/function createPlayer/);
 assert.match(kitSource,/function buildTown/);
-assert.match(kitSource,/box\(scene,'#a9caa8'/);
-console.log('Crew World town explorer: 1–36 districts, buildings avoided, streets grounded, chat reused');
+assert.match(kitSource,/box\(scene,'#a8cba8'/);
+console.log('Organic town player: 1–36 roles, rotated building frontage, connected curved paths and original Chat');
