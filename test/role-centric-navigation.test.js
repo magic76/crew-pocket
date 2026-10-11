@@ -10,7 +10,8 @@ const app = fs.readFileSync(path.join(root, 'public', 'js', 'app.js'), 'utf8');
 
 // Role is the primary visible identity, not a secondary conversation setting.
 assert.ok(html.includes('id="role-nav-list"'));
-assert.ok(html.includes('YOUR AI CREW'));
+assert.ok(html.includes('cockpit-roster-heading')&&html.includes('小隊成員'),
+  'current Role-first home identifies the crew roster');
 assert.ok(html.includes('id="drawer-new-role-btn"'));
 assert.ok(html.includes('id="crew-role-detail-modal"'));
 assert.ok(html.includes('id="crew-room-summary"'));
