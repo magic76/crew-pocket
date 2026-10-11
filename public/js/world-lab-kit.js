@@ -54,7 +54,9 @@
   function districtPosition(index,count){
     const branches=branchCount(count),branch=index%branches,depth=Math.floor(index/branches);
     const lane=lanePoint(branch,depth,branches);
-    const side=(branch+depth)%2===0?1:-1;
+    // Alternate per *distance band*, not per neighboring avenue: opposite
+    // sides on adjacent 60° spokes can otherwise overlap at the plaza.
+    const side=depth%2===0?1:-1;
     const lateral=5.9+.35*Math.sin(index*1.71);
     const x=lane.x+lane.vx*side*lateral,z=lane.z+lane.vz*side*lateral;
     const towards={x:lane.x-x,z:lane.z-z};
