@@ -30,12 +30,6 @@
       <span id="world-flight-notice-text" class="world-flight-notice-text">已記錄角色訊息</span>
       <span class="world-flight-notice-action">查看 ›</span>
     </button>
-    <!-- Runtime-verified Role state only; tool-level steps remain in original Chat. -->
-    <div id="world-focus-activity" class="world-focus-activity" role="status" aria-live="polite" hidden>
-      <span id="world-focus-activity-dot" class="world-focus-activity-dot" aria-hidden="true"></span>
-      <span id="world-focus-activity-text" class="world-focus-activity-text">狀態未同步</span>
-      <button id="world-focus-activity-open" type="button">查看對話</button>
-    </div>
     <button id="world-handoffs-open" class="world-handoffs-open" type="button" aria-controls="world-handoffs-panel" aria-expanded="false" hidden>協作紀錄</button>
     <section id="world-handoffs-panel" class="world-handoffs-panel" aria-label="已保存的角色間訊息" hidden>
       <div class="world-handoffs-heading">
@@ -58,14 +52,14 @@
         <div class="world-portrait" id="world-portrait">P</div>
         <div><span class="world-caption">SELECTED AGENT</span><h2 id="world-role-name">Pocket Developer</h2><p id="world-role-state">正在等待示範動作</p></div>
         <div class="world-info-actions">
-          <button type="button" id="world-info-quick-focus" aria-label="聚焦選中角色">聚焦</button>
+          <button type="button" id="world-info-quick-focus" aria-label="鏡頭靠近選中角色">靠近</button>
           <button type="button" id="world-info-toggle" aria-expanded="true" aria-controls="world-role-description">詳情</button>
         </div>
       </div>
       <p class="world-context-health" id="world-role-context" aria-live="polite">Context · 展開詳情後讀取</p>
       <p class="world-description" id="world-role-description">選擇人物，體驗同一套 Low-poly 骨架在不同 Role 上的效果。</p>
       <div class="world-action-row">
-        <button type="button" id="world-focus">聚焦人物</button>
+        <button type="button" id="world-focus">鏡頭靠近</button>
         <button type="button" id="world-work">示範工作</button>
         <button type="button" id="world-handoff">示範交接</button>
         <button type="button" id="world-chat-open" hidden>在 Crew Pocket 中聊天</button>
