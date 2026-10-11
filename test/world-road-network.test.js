@@ -13,12 +13,24 @@ function check(roles,title){
   const lots=navigation.uniqueLots(roles),roads=kit.planRoadNetwork(roles);
   assert.ok(lots.length>=1&&lots.length<=36);
   assert.equal(roles.length>=lots.length,true);
+  const groundSide=kit.townGroundSide(lots);
+  assert.ok(Number.isFinite(groundSide)&&groundSide>0,
+    title+': finite physical terrain size');
+  const groundHalf=groundSide/2;
+  for(const lot of lots){
+    assert.ok(Math.abs(lot.x)+6<groundHalf&&Math.abs(lot.z)+6<groundHalf,
+      title+': buildings stay inside the square ground on both axes');
+  }
   // A central plaza, branched gently curving avenues, and each building's
   // own real curb connection replace the former rectangular street grid.
   assert.ok(roads.some(e=>e.a.id==='plaza'),title+': connected plaza');
   const graph=new Map();
   for(const edge of roads){
     assert.ok(edge.length>0&&Array.isArray(edge.points)&&edge.points.length>=2);
+    for(const point of edge.points){
+      assert.ok(Math.abs(point.x)<groundHalf&&Math.abs(point.z)<groundHalf,
+        title+': navigable streets fit within the square ground');
+    }
     assert.ok(distance(edge.points[0],edge.a)<1e-8);
     assert.ok(distance(edge.points.at(-1),edge.b)<1e-8);
     const measured=edge.points.reduce((sum,p,i)=>i?sum+distance(p,edge.points[i-1]):0,0);
@@ -89,6 +101,11 @@ check(kit.roles,'standalone');
 assert.equal(navigation.uniqueLots(kit.makeLiveRoles(Array.from({length:16},(_,i)=>({
   roleId:'agent-'+i,roleName:'Agent '+i,projectId:'project'
 })))).length,6);
+assert.match(source,/function townGroundSide\(/);
+assert.match(source,/box\(scene,'#748b80',side,\.70,side/);
+assert.match(source,/box\(scene,'#a8cba8',side,\.22,side/);
+assert.equal(kit.townGroundSide([{x:8,z:32}]),kit.townGroundSide([{x:32,z:8}]),
+  'the town square is independent of which axis holds the most distant house');
 assert.match(source,/function districtPosition\(/);
 assert.match(source,/function lanePoint\(/);
 assert.match(source,/function buildTown\(/);
