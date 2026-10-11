@@ -645,6 +645,13 @@
     const intersection=ray.ray.intersectPlane(
       new T.Plane(new T.Vector3(0,1,0),-.37),new T.Vector3());
     if(!intersection)return;
+    // The central square and actual street junctions are walkable places,
+    // not merely decoration surrounding the Project buildings.
+    const junction=navigation.nearestStreetNode?.(intersection,roadVisuals,2.25);
+    if(junction){
+      startWalk({districtId:junction.id,x:junction.x,z:junction.z});
+      return;
+    }
     const lot=navigation.nearestLot(intersection,townLots);
     if(!lot)return;
     const spot=navigation.nearestWalkSpot(intersection,lot);
