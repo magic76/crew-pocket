@@ -65,6 +65,28 @@ for(const count of [1,2,3,4,5,6,7,9,10,16,24,36]){
     }
   }
 }
+// The central plaza and actual intersections remain usable click targets.
+const plazaRoles=kit.makeLiveRoles(Array.from({length:9},(_,i)=>({
+  roleId:'plaza-'+i,roleName:'Agent '+i,projectId:'sector-'+i
+})));
+const plazaLots=nav.uniqueLots(plazaRoles);
+const plazaRoads=kit.planRoadNetwork(plazaRoles);
+const origin=plazaRoles[0];
+const plazaHit=nav.nearestStreetNode({x:.3,z:.2},plazaRoads,2);
+assert.ok(plazaHit&&plazaHit.id==='plaza');
+const arrive=nav.planWalk({roads:plazaRoads,lots:plazaLots,
+  from:origin,to:{x:0,z:0},
+  fromDistrict:origin.districtId,toDistrict:'plaza'});
+assert.ok(arrive&&arrive.distance>1);
+assert.ok(near(arrive.waypoints.at(-1),{x:0,z:0}),
+  'the avatar arrives at the actual centre of the plaza');
+const depart=nav.planWalk({roads:plazaRoads,lots:plazaLots,
+  from:{x:0,z:0},to:plazaRoles[8],
+  fromDistrict:'plaza',toDistrict:plazaRoles[8].districtId});
+assert.ok(depart&&near(depart.waypoints[0],{x:0,z:0})&&
+  near(depart.waypoints.at(-1),plazaRoles[8]),
+  'visitor can walk from plaza straight into the next Role conversation');
+
 const mixed=kit.makeLiveRoles(Array.from({length:36},(_,i)=>({
   roleId:'r'+i,roleName:'Role '+i,projectId:'p'+i
 })));
@@ -91,6 +113,7 @@ assert.equal(nav.planWalk({roads:[],lots:nav.uniqueLots(mixed),from:mixed[0],
 assert.match(world,/const visitor=firstLot/);
 assert.match(world,/kit\.createPlayer/);
 assert.match(world,/navigation\.planWalk/);
+assert.match(world,/navigation\.nearestStreetNode/);
 assert.match(world,/lots:townLots,roads:roadVisuals/);
 assert.match(world,/startWalk\(destination,'role',role.id\)/);
 assert.match(world,/void window\.CrewWorldHost\.openChat\(role.id\)/);
