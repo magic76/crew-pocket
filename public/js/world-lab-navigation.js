@@ -38,6 +38,18 @@
     }
     return chosen;
   }
+  function nearestStreetNode(point,roads,maxDistance=2.4){
+    if(!finite(point)||!Array.isArray(roads))return null;
+    let best=maxDistance,chosen=null;
+    const seen=new Set();
+    for(const edge of roads)for(const node of [edge?.a,edge?.b]){
+      if(!node?.id||seen.has(node.id)||!finite(node))continue;
+      seen.add(node.id);
+      const d=distance(point,node);
+      if(d<=best){best=d;chosen=node;}
+    }
+    return chosen;
+  }
   function localOffset(point,lot){
     const dx=point.x-lot.x,dz=point.z-lot.z,r=lot.rotation||0;
     return{x:Math.cos(r)*dx-Math.sin(r)*dz,
@@ -63,7 +75,15 @@
     const sites=lots||islands||[];
     if(!finite(from)||!finite(to)||!fromDistrict||!toDistrict)return null;
     const byId=new Map(sites.map(l=>[l.id,l]));
-    const start=byId.get(fromDistrict),finish=byId.get(toDistrict);
+    const networkNodes=new Map();
+    for(const edge of roads){
+      if(edge?.a?.id)networkNodes.set(edge.a.id,edge.a);
+      if(edge?.b?.id)networkNodes.set(edge.b.id,edge.b);
+    }
+    // Plaza/intersection nodes are valid ground destinations too, not
+    // artificial buildings. A visitor can later walk FROM a plaza as well.
+    const start=byId.get(fromDistrict)||networkNodes.get(fromDistrict);
+    const finish=byId.get(toDistrict)||networkNodes.get(toDistrict);
     if(!start||!finish)return null;
     const waypoints=[{x:from.x,z:from.z,y:FOOT_Y,districtId:fromDistrict}];
     const push=(point,districtId)=>{
@@ -113,8 +133,14 @@
       cursor=step.from;
     }
     steps.reverse();
-    const startCurb={x:start.frontX,z:start.frontZ};
-    const finishCurb={x:finish.frontX,z:finish.frontZ};
+    const startCurb={
+      x:Number.isFinite(start.frontX)?start.frontX:start.x,
+      z:Number.isFinite(start.frontZ)?start.frontZ:start.z
+    };
+    const finishCurb={
+      x:Number.isFinite(finish.frontX)?finish.frontX:finish.x,
+      z:Number.isFinite(finish.frontZ)?finish.frontZ:finish.z
+    };
     if(!finite(startCurb)||!finite(finishCurb))return null;
     push(startCurb,fromDistrict);
     for(const step of steps){
@@ -128,7 +154,7 @@
     const total=waypoints.reduce((v,p,i)=>i?v+distance(p,waypoints[i-1]):0,0);
     return{waypoints,steps,distance:total};
   }
-  return{FRONT_Z,FOOT_Y,MAX_POINTS,uniqueLots,nearestLot,
+  return{FRONT_Z,FOOT_Y,MAX_POINTS,uniqueLots,nearestLot,nearestStreetNode,
     locateIsland:nearestLot,isSafeGround,nearestWalkSpot,localOffset,
     frontPoint,planWalk};
 });
