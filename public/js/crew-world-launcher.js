@@ -40,7 +40,7 @@
   let preferredHomeView='map';
   let bootstrapRolePending=false,initialSceneRole=null;
   let selectVersion=0,previousTab=null,restoreTab=false,openVersion=0;
-  let sceneScripts=null;
+  let sceneScripts=null,sceneRefreshPending=false;
   let requestedRole=null,roleSwitchQueue=Promise.resolve(),switchingRole=false,commandDraft='';
   let switchFailed=false,switchTimer=null,sendLockHeld=false,sendWasDisabled=false;
   let rolesSignature='',previewObserver=null,previewFrame=0;
@@ -118,7 +118,7 @@
       kind='最新回覆';
       value=latest.querySelector('.msg-content')?.textContent||latest.textContent||'';
     }
-    const compact=String(value).replace(/\s+/g,' ').trim().slice(0,155);
+    const compact=String(value).replace(/\s+/g,' ').trim().slice(0,105);
     peek.hidden=!compact;
     if(compact){peekKind.textContent=kind;peekText.textContent=compact;}
   }
@@ -296,6 +296,18 @@
         loading.hidden=false;
       }
     }
+  }
+  function refreshSceneRoles(){
+    // Only rebuild the visual scene. Never replace the original conversation,
+    // provider stream, Role command draft, or the shared navigation.
+    if(modal.hidden||!stopWorld||sceneRefreshPending)return;
+    sceneRefreshPending=true;
+    const camera=stopWorld.getCameraState?.()||null;
+    const selectedId=selectedRoleId||camera?.selectedId||null;
+    try{
+      stopWorld();stopWorld=null;
+      stopWorld=window.mountCrewWorldScene?.({...camera,selectedId})||null;
+    }finally{sceneRefreshPending=false;}
   }
   function openChat(roleId=selectedRoleId,{compact=false}={}){
     if(modal.hidden||!roleId||!window.openCrewCockpitRole||!liveRole(roleId))
@@ -516,5 +528,5 @@
   });
   // Exposed only to the scene in this same document, not cross-frame messages.
   window.CrewWorldHost={open,close,restoreHomeView,deferInitialRole,onBootstrapReady,
-    hideChat,openChat,openFullChat,onSelectedRole,openCollaboration};
+    hideChat,openChat,openFullChat,onSelectedRole,openCollaboration,refreshSceneRoles};
 })();
