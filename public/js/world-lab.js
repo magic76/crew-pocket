@@ -379,7 +379,7 @@
       }
     }
     for(const [index,entry] of labels.entries()){
-      const role=roles[index],reply=activeReply(role.id);
+      const role=roles[index],reply=synced&&isLive?activeReply(role.id):null;
       const count=synced&&isLive?role.attention:0;
       entry.attentionMark.hidden=!(count||reply);
       entry.attentionMark.textContent=reply?'↩':String(count);
@@ -465,6 +465,10 @@
   });
   function showHandoffs(open){
     if(!handoffsPanel)return;
+    if(open&&attentionPanel){
+      attentionPanel.hidden=true;
+      attentionOpenButton?.setAttribute('aria-expanded','false');
+    }
     handoffsPanel.hidden=!open;
     handoffsOpen?.setAttribute('aria-expanded',String(open));
     if(open)renderHandoffs();
