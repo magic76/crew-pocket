@@ -1,0 +1,25 @@
+name: Claude Provider Regression
+
+on:
+  pull_request:
+    paths:
+      - "lib/providers/claude.js"
+      - "lib/providers/index.js"
+      - "tests/claude-provider.test.js"
+      - ".github/workflows/claude-provider.yml"
+  workflow_dispatch:
+
+jobs:
+  claude-provider:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Validate Claude Provider syntax
+        run: |
+          node --check lib/providers/claude.js
+          node --check tests/claude-provider.test.js
+      - name: Run isolated fake-CLI lifecycle tests
+        run: node --test tests/claude-provider.test.js
