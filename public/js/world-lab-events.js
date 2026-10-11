@@ -147,5 +147,5 @@
       y:start.y+(end.y-start.y)*e+Math.sin(Math.PI*t)*rise
     };
   }
-  return{observe,traceableEvents,attentionItems,collaborationConnections,roadRoute,roadPulse,paperFlightDuration,paperFlightPoint};
+  return{observe,traceableEvents,attentionItems,collaborationConnections,COLLABORATION_LINK_WINDOW_MS,roadRoute,roadPulse,paperFlightDuration,paperFlightPoint};
 });
