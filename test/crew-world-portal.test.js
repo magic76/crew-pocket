@@ -4,6 +4,20 @@ const fs=require('node:fs');
 const path=require('node:path');
 const vm=require('node:vm');
 
+/* Map and Dashboard intentionally share ONE header, but only the map makes
+   it an overlay. Guard against opaque bars and duplicate World counters. */
+const hudCss=fs.readFileSync(path.join(__dirname,'../public/css/crew-world-launcher.css'),'utf8');
+const worldJs=fs.readFileSync(path.join(__dirname,'../public/js/world-lab.js'),'utf8');
+assert.match(hudCss,/body\.crew-world-active #crew-home-header-host\{[\s\S]*?position:fixed/);
+assert.match(hudCss,/body\.crew-world-active #crew-home-header\{[\s\S]*?background:transparent!important/);
+assert.match(hudCss,/body\.crew-world-active \.crew-world-modal:not\(\[hidden\]\)\{inset:0\}/);
+assert.match(hudCss,/body\.crew-world-active \.crew-home-view-toggle button,[\s\S]*?pointer-events:auto/);
+assert.match(hudCss,/body\.crew-world-active \.crew-home-top,[\s\S]*?pointer-events:none/);
+assert.match(hudCss,/\.crew-world-modal \.world-quick-tools\{\s*top:calc\(var\(--crew-shared-header-height/);
+assert.doesNotMatch(worldJs,/addStatus\(working\+' 工作中'/);
+assert.doesNotMatch(worldJs,/addStatus\(roles\.length\+' 位 Role'/);
+assert.match(worldJs,/syncContextWarnings\(\);\s*renderAttention\(\)/);
+
 class Node {
   constructor(id,doc){this.id=id;this.doc=doc;this.parentNode=null;this.children=[];
     this.hidden=['crew-world-modal','crew-world-chat-panel',

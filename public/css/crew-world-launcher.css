@@ -266,15 +266,65 @@ body.crew-world-active #context-health-toast{z-index:10050!important}
   .crew-world-result-peek,.crew-world-chat-panel{animation:none!important}
 }
 
-/* The original Role Chat is active under the World portal (P10).
-   Hide ONLY that Chat-specific header: keep the shared Dashboard/Map navigation
-   visible and interactive in overview and focused Role mode. */
+/* The original Chat header stays hidden, but the SAME Dashboard/Map
+   navigation floats above a full-bleed World. The header shell must never
+   steal gestures from the 3D canvas: only its actual controls receive taps. */
 body.crew-world-active > #crew-chat-main-header{display:none!important}
-body.crew-world-active #crew-home-header-host{display:block!important}
-/* The World occupies the space BELOW the measured shared navigation rather
-   than covering it; this also prevents an extra top bar in Role focus. */
-body.crew-world-active .crew-world-modal:not([hidden]){
-  inset:var(--crew-shared-header-height,calc(env(safe-area-inset-top,0px) + 96px)) 0 0;
+body.crew-world-active #crew-home-header-host{
+  display:block!important;position:fixed;top:0;left:0;right:0;
+  z-index:10000;pointer-events:none;background:transparent;
+}
+body.crew-world-active #crew-home-header{
+  padding:10px 10px 8px;overflow:visible;
+  background:transparent!important;border:0;box-shadow:none;
+  pointer-events:none;
+}
+body.crew-world-active .crew-home-top,
+body.crew-world-active .crew-home-status-row{pointer-events:none}
+body.crew-world-active .crew-home-view-toggle,
+body.crew-world-active .crew-home-view-toggle button,
+body.crew-world-active .crew-home-actions button{pointer-events:auto}
+body.crew-world-active .crew-home-view-toggle{
+  width:118px;background:#0e233fc4;border:1px solid #b8d6ec69;
+  box-shadow:0 6px 22px #06122361;
+  backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+}
+body.crew-world-active .crew-home-view-toggle::before{
+  background:#7b84f044;box-shadow:inset 0 0 0 1px #9baaff88;
+}
+body.crew-world-active .crew-home-view-toggle button{color:#d6e4f6}
+body.crew-world-active .crew-home-view-toggle button.is-active{color:#c4caff}
+body.crew-world-active .crew-home-actions button{
+  border:1px solid #b5d1e969!important;border-radius:12px!important;
+  background:#102943c9!important;color:#f0f7ff!important;
+  box-shadow:0 6px 18px #06122361;
+  backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+}
+body.crew-world-active .crew-home-actions #drawer-new-role-btn{
+  border-color:#a2a5ffbf!important;background:#414a9bdd!important;color:white!important;
+}
+body.crew-world-active .crew-home-status-row .crew-summary-item{
+  border:1px solid #bad7e66b;background:#102943ca;
+  color:#e9f4ff;box-shadow:0 5px 18px #0612234d;
+  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+}
+body.crew-world-active #cockpit-status-line:not([hidden]){
+  pointer-events:none;background:#102943d9;border-radius:10px;
+  padding:4px 7px;color:#dceafa;
+}
+/* The canvas starts at the viewport edge, including behind the HUD.
+   Dashboard still retains the normal opaque, in-flow header. */
+body.crew-world-active .crew-world-modal:not([hidden]){inset:0}
+@media(max-width:540px){
+  body.crew-world-active #crew-home-header{padding:7px 9px 6px}
+  body.crew-world-active .crew-home-view-toggle{width:112px}
+}
+@media(prefers-reduced-transparency:reduce){
+  body.crew-world-active .crew-home-view-toggle,
+  body.crew-world-active .crew-home-actions button,
+  body.crew-world-active .crew-home-status-row .crew-summary-item{
+    backdrop-filter:none;-webkit-backdrop-filter:none;background:#122b47f5!important;
+  }
 }
 /* World controls live in one tiny overview corner. P10 already replaces the
    duplicate Role roster; gestures replace the zoom +/- buttons. */
@@ -296,4 +346,44 @@ body.crew-world-active .crew-world-modal:not([hidden]){
 @media(max-width:540px){
   .crew-world-modal .world-quick-tools{top:calc(env(safe-area-inset-top,0px) + 8px);right:9px;gap:6px}
   .crew-world-modal .world-quick-tools > button{width:39px;min-width:39px;height:39px}
+}
+
+/* Keep World-only tools outside the shared HUD, never underneath it.
+   These offsets follow the measured two-row navigation on every device. */
+.crew-world-modal .world-quick-tools{
+  top:calc(var(--crew-shared-header-height,96px) + 10px);
+}
+.crew-world-modal .world-status-strip{
+  top:calc(var(--crew-shared-header-height,96px) + 58px);
+  left:10px;right:auto;max-width:calc(100% - 134px);
+  justify-content:flex-start;
+}
+.crew-world-modal .world-status-strip:empty{display:none}
+.crew-world-modal .world-handoffs-open{
+  top:calc(var(--crew-shared-header-height,96px) + 60px);
+  right:10px;min-height:34px;padding:0 10px;
+  border-radius:11px;background:#102943d7;
+  font-size:11px;letter-spacing:.1px;
+  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+}
+.crew-world-modal .world-handoffs-panel{
+  top:calc(var(--crew-shared-header-height,96px) + 102px);right:10px;
+}
+.crew-world-modal .world-attention-open{
+  top:calc(var(--crew-shared-header-height,96px) + 105px);left:10px;
+}
+.crew-world-modal .world-attention-panel{
+  top:calc(var(--crew-shared-header-height,96px) + 151px);left:10px;
+}
+.crew-world-modal .world-flight-notice{
+  top:calc(var(--crew-shared-header-height,96px) + 112px);left:10px;
+}
+.crew-world-modal .world-app:has(.world-flight-notice:not([hidden])) .world-handoffs-open{
+  top:calc(var(--crew-shared-header-height,96px) + 165px);
+}
+.crew-world-modal .world-app:has(.world-flight-notice:not([hidden])) .world-handoffs-panel{
+  top:calc(var(--crew-shared-header-height,96px) + 207px);
+}
+.crew-world-modal .world-app:has(.world-flight-notice:not([hidden])) .world-attention-open{
+  top:calc(var(--crew-shared-header-height,96px) + 165px);
 }

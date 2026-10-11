@@ -215,10 +215,12 @@ assert.ok(!main.includes('id="world-exit-map"'),
   'remove redundant map Dashboard exit in favor of the common nav toggle');
 assert.ok(worldShell.includes('body.crew-world-active > #crew-chat-main-header{display:none!important}'),
   'both World modes hide the original Role Chat header while P10 is active');
-assert.ok(worldShell.includes('body.crew-world-active #crew-home-header-host{display:block!important}'),
-  'shared Dashboard/Map nav remains visible and interactive throughout World');
-assert.ok(worldShell.includes('inset:var(--crew-shared-header-height,calc(env(safe-area-inset-top,0px) + 96px)) 0 0;'),
-  'World viewport begins below the same measured header in both modes');
+assert.ok(worldShell.includes('body.crew-world-active #crew-home-header-host{'),
+  'shared Dashboard/Map nav remains mounted throughout World');
+assert.ok(worldShell.includes('display:block!important;position:fixed;top:0;left:0;right:0;'),
+  'shared controls float above the World instead of reserving a header band');
+assert.ok(worldShell.includes('body.crew-world-active .crew-world-modal:not([hidden]){inset:0}'),
+  'World canvas must extend underneath the transparent navigation');
 assert.ok(!worldShell.includes('.crew-world-modal.is-role-focused{inset:0}'),
   'Role focus cannot cover the shared navigation');
 assert.ok(!worldShell.includes('body.crew-world-focused #crew-home-header-host{display:none!important}'),
@@ -378,7 +380,7 @@ assert.ok(launcher.includes("commandRead.textContent=reading?'收合':'對話'")
   'one command entry clearly changes between reading and collapsing');
 assert.ok(worldShell.includes('body.crew-world-active #context-modal{z-index:10030!important}'),
   'Context is accessible over map without entering focus mode');
-assert.ok(worldShell.includes('body.crew-world-active #crew-home-header-host{display:block!important}'),
+assert.ok(worldShell.includes('body.crew-world-active #crew-home-header-host{'),
   'the shared Dashboard/Map navigation always stays visible');
 assert.ok(worldShell.includes('.crew-world-chat-panel.compact .crew-world-chat-messages-slot'),
   'one original Chat composer remains compact while camera moves');

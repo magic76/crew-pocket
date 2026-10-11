@@ -482,7 +482,11 @@
     handoffsOpen.hidden=!isLive||!window.CrewWorldHost;
     if(handoffsOpen.hidden){handoffsPanel.hidden=true;return;}
     const rows=shownHandoffs();
-    handoffsOpen.textContent='協作紀錄'+(evidenceVerified&&evidenceRows.length?' · '+evidenceRows.length:'');
+    // Compact icon/count control leaves more of the living map visible.
+    const handoffCount=evidenceVerified?String(evidenceRows.length):'—';
+    handoffsOpen.textContent='↗ '+handoffCount;
+    handoffsOpen.title='協作紀錄'+(evidenceVerified?' · '+handoffCount:' · 尚未同步');
+    handoffsOpen.setAttribute('aria-label','查看'+handoffsOpen.title);
     const signature=(evidenceVerified?'verified':'unknown')+':'+rows.map(row=>row.id).join('|')+
       ':'+String(onlySelectedHandoffs)+':'+roles[selected].id;
     if(signature===evidenceSignature)return;
@@ -663,13 +667,8 @@
       };
       if(!isLive)addStatus('示範 · 非即時','unknown');
       else if(!synced)addStatus('Runtime 未同步','unknown');
-      else{
-        const working=roles.filter(role=>role.state==='working').length;
-        const attention=roles.reduce((sum,role)=>sum+(role.attention||0),0);
-        addStatus(working+' 工作中','working');
-        if(attention)addStatus(attention+' 待處理','waiting');
-        addStatus(roles.length+' 位 Role','neutral');
-      }
+      // Counts already live in the shared floating header. Only warnings
+      // belong on the map; syncContextWarnings adds verified Context alerts.
     }
     for(const pin of districtPins){
       const working=pin.members.filter(r=>r.state==='working').length;
