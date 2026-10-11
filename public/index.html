@@ -1775,10 +1775,20 @@
        There is only one messages-container, one composer, and one Chat Runtime. -->
   <section id="crew-world-modal" class="crew-world-modal" role="dialog" aria-modal="true" aria-label="Crew World 3D 小隊世界" hidden>
   <div id="world-app" class="world-app">
-    <div id="world-stage" aria-label="可縮放、平移的 3D Crew World 場景">
-      <div id="world-districts" aria-label="專案工作區域"></div>
-      <div id="world-labels" aria-label="Crew Role 對話回覆"></div>
-      <div id="world-loading" role="status">正在建立 3D 世界…</div>
+    <div id="crew-world-focus-bar" class="crew-world-focus-bar" hidden>
+      <button type="button" id="crew-world-focus-back" aria-label="返回地圖總覽">← 總覽</button>
+      <div class="crew-world-focus-identity">
+        <strong id="crew-world-focus-name">Role</strong>
+        <small id="crew-world-focus-state">待命</small>
+      </div>
+      <button type="button" id="crew-world-focus-full" aria-label="閱讀角色完整對話">完整對話</button>
+    </div>
+    <div class="world-stage-frame">
+      <div id="world-stage" aria-label="可縮放、平移的 3D Crew World 場景">
+        <div id="world-districts" aria-label="專案工作區域"></div>
+        <div id="world-labels" aria-label="Crew Role 對話回覆"></div>
+        <div id="world-loading" role="status">正在建立 3D 世界…</div>
+      </div>
     </div>
     <header class="world-header">
       <button type="button" id="world-back" class="world-back" aria-label="返回 Crew Pocket 小隊">←</button>

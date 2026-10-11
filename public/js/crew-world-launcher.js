@@ -17,11 +17,16 @@
   const expandButton=document.getElementById('crew-world-chat-expand');
   const chatButton=document.getElementById('world-chat-open');
   const roleName=document.getElementById('crew-world-chat-role-name');
+  const focusBar=document.getElementById('crew-world-focus-bar');
+  const focusBack=document.getElementById('crew-world-focus-back');
+  const focusName=document.getElementById('crew-world-focus-name');
+  const focusFull=document.getElementById('crew-world-focus-full');
   if(!opener||!modal||!worldDashboardButton||!panel||!messagesSlot||!composerSlot||
      !messages||!composer||!hideButton||!expandButton)return;
   let restoreMessages=null,restoreComposer=null;
   let stopWorld=null,previousFocus=null,selectedRoleId=null,selectedRoleName='';
   let selectVersion=0,previousTab=null,restoreTab=false,openVersion=0;
+  let focusedRoleId=null;
   let sceneScripts=null;
   function loadScript(src){
     return new Promise((resolve,reject)=>{
@@ -67,15 +72,54 @@
     panel.style.setProperty('--crew-keyboard-rise',Math.round(bottom)+'px');
     panel.style.setProperty('--crew-visible-height',
       Math.floor(vv?.height||window.innerHeight)+'px');
+    panel.classList.toggle('keyboard-open',bottom>100);
   }
   function hideChat(){
-    panel.hidden=true;panel.classList.remove('expanded');
+    panel.hidden=true;panel.classList.remove('expanded','compact','keyboard-open');
     expandButton.textContent='展開';
+    expandButton.setAttribute('aria-pressed','false');
+    hideButton.textContent='收合';
     putChatBack();
     // We preserve the active Role and its stream, only move DOM visibility.
     window.requestAnimationFrame(()=>{
       document.getElementById('world-stage')?.focus?.({preventScroll:true});
     });
+  }
+  function exitFocus(){
+    if(!focusedRoleId)return;
+    focusedRoleId=null;
+    modal.classList.remove('is-role-focused');
+    if(focusBar)focusBar.hidden=true;
+    selectVersion++; // Ignore an unfinished Role navigation.
+    hideChat();
+  }
+  function showCompactChat(){
+    if(panel.hidden)return;
+    panel.classList.remove('expanded');
+    panel.classList.add('compact');
+    expandButton.textContent='展開';
+    expandButton.setAttribute('aria-pressed','false');
+    hideButton.textContent='收合';
+    updateKeyboard();
+  }
+  function focusRole(roleId,name){
+    if(modal.hidden||!roleId)return;
+    const changed=focusedRoleId!==roleId;
+    focusedRoleId=roleId;
+    modal.classList.add('is-role-focused');
+    if(focusBar)focusBar.hidden=false;
+    if(focusName)focusName.textContent=name||roleId;
+    const sameActiveChat=!panel.hidden&&window.getCurrentRoleId?.()===roleId;
+    if(changed&&!sameActiveChat)hideChat();
+    if(sameActiveChat){
+      showCompactChat(); // Reuse the already mounted Role Chat synchronously.
+    }else{
+      void openChat(roleId,{compact:true});
+    }
+  }
+  function collapseChat(){
+    if(focusedRoleId)showCompactChat();
+    else hideChat();
   }
   function updateHomeView(mode){
     const dashboard=mode==='dashboard';
@@ -91,7 +135,7 @@
   function close(){
     if(modal.hidden)return;
     selectVersion++;openVersion++;
-    hideChat();
+    if(focusedRoleId)exitFocus();else hideChat();
     stopWorld?.();stopWorld=null;
     modal.hidden=true;
     updateHomeView('dashboard');
@@ -117,6 +161,9 @@
     previousFocus=document.activeElement;
     restoreTab=true;
     modal.hidden=false;
+    focusedRoleId=null;
+    modal.classList.remove('is-role-focused');
+    if(focusBar)focusBar.hidden=true;
     updateHomeView('map');
     document.body.classList.add('crew-world-active');
     const loading=document.getElementById('world-loading');
@@ -132,7 +179,7 @@
         loading.textContent='無法載入 3D 世界，請重新開啟。'+(error.message||'');
     }
   }
-  async function openChat(roleId=selectedRoleId){
+  async function openChat(roleId=selectedRoleId,{compact=false}={}){
     if(modal.hidden||!roleId||!window.openCrewCockpitRole)return;
     const snapshot=window.getCrewCockpitSnapshot?.();
     if(!snapshot?.roles?.some(role=>role.id===roleId))return;
@@ -150,7 +197,12 @@
     roleName.textContent=selectedRoleName;
     putChatInPanel();
     panel.hidden=false;
-    updateKeyboard();
+    panel.classList.remove('expanded','compact');
+    expandButton.textContent='展開';
+    expandButton.setAttribute('aria-pressed','false');
+    hideButton.textContent='收合';
+    if(compact&&focusedRoleId===roleId)showCompactChat();
+    else updateKeyboard();
     messages.scrollTop=messages.scrollHeight;
   }
   function openFullChat(roleId=selectedRoleId){
@@ -166,16 +218,25 @@
   }
   function toggleExpand(){
     if(panel.hidden)return;
-    const expanded=panel.classList.toggle('expanded');
-    expandButton.textContent=expanded?'縮小':'展開';
-    expandButton.setAttribute('aria-pressed',String(expanded));
+    if(panel.classList.contains('compact')){
+      panel.classList.remove('compact');
+      panel.classList.remove('expanded');
+      expandButton.textContent='全螢幕';
+      expandButton.setAttribute('aria-pressed','false');
+    }else{
+      const expanded=panel.classList.toggle('expanded');
+      expandButton.textContent=expanded?'縮小':(focusedRoleId?'全螢幕':'展開');
+      expandButton.setAttribute('aria-pressed',String(expanded));
+    }
     updateKeyboard();
   }
   opener.addEventListener('click',open);
   dashboardButton?.addEventListener('click',()=>updateHomeView('dashboard'));
   worldDashboardButton?.addEventListener('click',close);
   worldMapButton?.addEventListener('click',()=>updateHomeView('map'));
-  hideButton.addEventListener('click',hideChat);
+  focusBack?.addEventListener('click',()=>document.getElementById('world-reset')?.click());
+  focusFull?.addEventListener('click',()=>openFullChat(focusedRoleId));
+  hideButton.addEventListener('click',collapseChat);
   expandButton.addEventListener('click',toggleExpand);
   chatButton?.addEventListener('click',()=>{void openChat();});
   window.addEventListener('resize',updateKeyboard);
@@ -184,9 +245,13 @@
   document.addEventListener('keydown',event=>{
     if(event.key==='Escape'&&!modal.hidden){
       event.preventDefault();
-      if(!panel.hidden)hideChat();else close();
+      if(!panel.hidden&&!panel.classList.contains('compact'))collapseChat();
+      else if(focusedRoleId)document.getElementById('world-reset')?.click();
+      else close();
     }
   });
   // Exposed only to the scene in this same document, not cross-frame messages.
-  window.CrewWorldHost={open,close,hideChat,openChat,openFullChat,onSelectedRole};
+  window.CrewWorldHost={open,close,hideChat,openChat,openFullChat,onSelectedRole,
+    focusRole,exitFocus,isRoleFocused:id=>focusedRoleId===id,
+    isFocusActive:()=>Boolean(focusedRoleId)};
 })();

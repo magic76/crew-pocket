@@ -118,6 +118,10 @@ assert.ok(sampleWindow.WorldLabKit.mapExtent(forty)>28&&
 assert.equal(sampleWindow.WorldLabKit.makeLiveRoles([]).length,0);
 
 assert.match(css,/touch-action:none/);
+assert.ok(html.includes('class="world-stage-frame"'));
+assert.ok(css.includes('container-type:size'));
+assert.ok(css.includes('aspect-ratio:1 / 1'));
+assert.ok(css.includes('width:min(100cqw,100cqh)'));
 assert.match(css,/safe-area-inset-bottom/);
 assert.match(css,/prefers-reduced-motion/);
 const main=read('public/index.html');
@@ -132,6 +136,10 @@ assert.match(main,/\/js\/crew-world-launcher.js/);
 assert.doesNotMatch(main,/<script src="\/js\/world-lab.js"/);
 assert.doesNotMatch(main,/<script src="\/vendor\/three.min.js"/);
 assert.match(main,/id="world-stage"/);
+assert.ok(main.includes('class="world-stage-frame"'));
+assert.ok(main.includes('id="crew-world-focus-bar"'));
+assert.ok(main.includes('id="crew-world-focus-back"'));
+assert.ok(main.includes('id="crew-world-focus-full"'));
 assert.match(main,/id="crew-world-chat-messages-slot"/);
 assert.match(main,/id="crew-world-chat-composer-slot"/);
 assert.doesNotMatch(main,/<iframe|id="crew-world-frame"/i);
@@ -142,6 +150,14 @@ assert.equal((main.match(/id="chat-composer-footer"/g)||[]).length,1,
 assert.doesNotMatch(main,/<script src="\/js\/world-lab-chat.js"/);
 const launcher=read('public/js/crew-world-launcher.js');
 execFileSync(process.execPath,['--check',path.join(root,'public/js/crew-world-launcher.js')]);
+assert.ok(launcher.includes('function focusRole('));
+assert.ok(launcher.includes('function exitFocus('));
+assert.ok(launcher.includes('isFocusActive:'));
+assert.ok(engine.includes('CrewWorldHost?.focusRole?.('));
+assert.ok(engine.includes('CrewWorldHost?.exitFocus?.('));
+const worldShellCss=read('public/css/crew-world-launcher.css');
+assert.ok(worldShellCss.includes('.crew-world-modal.is-role-focused'));
+assert.ok(worldShellCss.includes('.crew-world-chat-panel.compact'));
 assert.match(launcher,/ensureScene/);
 assert.match(launcher,/loadScript\('\/vendor\/three.min.js'\)/);
 assert.match(launcher,/loadScript\('\/js\/world-lab.js'\)/);

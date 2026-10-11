@@ -120,3 +120,68 @@ body.crew-world-active{overscroll-behavior:none}
  .crew-world-chat-composer-slot > #chat-composer-footer{padding:5px 7px calc(4px + env(safe-area-inset-bottom,0px))}
 }
 @media(prefers-reduced-motion:reduce){.crew-world-modal .world-info{transition:none}}
+
+
+/* Role focus: the square town stays visible, rather than hiding behind Chat. */
+.crew-world-focus-bar[hidden]{display:none!important}
+.crew-world-focus-bar{
+  display:flex;align-items:center;gap:10px;grid-row:1;min-width:0;
+  padding:6px 0;color:#eff6ff;
+}
+.crew-world-focus-identity{min-width:0;flex:1;display:flex;flex-direction:column;gap:3px}
+.crew-world-focus-identity strong{font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.crew-world-focus-identity small{font-size:11px;color:#9addc9}
+.crew-world-focus-bar button{
+  flex:none;min-height:40px;padding:0 10px;
+  background:#1c2c45;border:1px solid #7795bd73;border-radius:12px;
+  color:#edf5ff;font-size:12px;font-weight:750;
+}
+.crew-world-focus-bar button:focus-visible{outline:2px solid #80d8f8;outline-offset:2px}
+.crew-world-modal.is-role-focused{
+  display:flex;flex-direction:column;
+}
+.crew-world-modal.is-role-focused > .world-app{
+  flex:1 1 auto;width:100%;height:auto;min-height:0;
+  grid-template-rows:auto minmax(0,1fr) auto;
+  padding:calc(env(safe-area-inset-top,0px) + 5px) 12px 7px;
+  gap:7px;
+}
+.crew-world-modal.is-role-focused .world-header,
+.crew-world-modal.is-role-focused .world-hint,
+.crew-world-modal.is-role-focused .world-info{display:none!important}
+.crew-world-modal.is-role-focused .world-stage-frame{grid-row:2}
+.crew-world-modal.is-role-focused #world-stage{width:min(calc(100vw - 24px),40dvh)}
+@supports (width:1cqh){
+  .crew-world-modal.is-role-focused #world-stage{width:min(100cqw,100cqh)}
+}
+.crew-world-modal.is-role-focused .world-bottom{
+  grid-row:3;justify-content:flex-end;
+}
+.crew-world-modal.is-role-focused .world-roster{display:none!important}
+.crew-world-modal.is-role-focused .world-controls{margin-left:auto}
+.crew-world-modal.is-role-focused .crew-world-chat-panel.compact:not([hidden]){
+  position:relative;inset:auto;flex:none;
+  width:100%;max-width:none;height:auto;min-height:0;max-height:min(42dvh,320px);
+  border-radius:16px 16px 0 0;margin:0;
+  box-shadow:0 -7px 24px #040e1c66;
+}
+.crew-world-chat-panel.compact .crew-world-chat-messages-slot{display:none!important}
+.crew-world-chat-panel.compact .crew-world-chat-top{min-height:36px;padding:4px 12px}
+.crew-world-chat-panel.compact .crew-world-chat-identity small{display:none}
+.crew-world-chat-panel.compact #crew-world-chat-hide{display:none}
+.crew-world-chat-panel.compact #input-helper-row{display:none!important}
+.crew-world-chat-panel.compact #chat-composer-footer{padding:5px 9px calc(5px + env(safe-area-inset-bottom,0px))}
+.crew-world-modal.is-role-focused .crew-world-chat-panel:not(.compact):not([hidden]){
+  height:min(52dvh,calc(var(--crew-visible-height,100dvh) - 10px));
+}
+.crew-world-modal.is-role-focused .crew-world-chat-panel.expanded:not([hidden]){
+  height:min(100dvh,calc(var(--crew-visible-height,100dvh) - 5px));
+}
+.crew-world-modal.is-role-focused .crew-world-chat-panel.compact.keyboard-open:not([hidden]){
+  position:absolute;bottom:var(--crew-keyboard-rise,0px);
+  left:0;right:0;
+}
+@media (max-width:375px){
+  .crew-world-focus-bar{gap:6px}
+  .crew-world-focus-bar button{padding:0 8px;font-size:11px}
+}
