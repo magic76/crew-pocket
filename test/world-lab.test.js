@@ -67,8 +67,8 @@ assert.ok(engine.includes('closeDistrictPicker();'),
   'tapping unused ground only dismisses a temporary member picker');
 assert.ok(engine.includes("event.type==='pointerup'"),
   'cancelled gestures cannot accidentally select a Role');
-assert.ok(engine.includes('isFocusActive?.()'),
-  'single-tap selection exits another Role focus before changing the target');
+assert.ok(!engine.includes('isFocusActive?.()'),
+  'single tap directly selects a Role without switching modes');
 assert.match(engine,/fetch\('\/api\/context\/compaction-plan\?'/,
   'Context Health uses the existing authorized read endpoint');
 assert.ok(engine.includes('if(!document.getElementById('),
@@ -217,8 +217,8 @@ assert.ok(!kit.includes('function createPlayer('),
 assert.ok(engine.includes("panTo(role.islandX,role.islandZ,width<700?2.65:2.0)"),
   'double-tap Role focus pans smoothly with no walking delay');
 assert.ok(html.includes('id="world-roster"'),'standalone debug lab may keep its Role roster');
-assert.ok(worldShell.includes('.crew-world-modal.is-role-focused .world-quick-tools{display:none!important}'),
-  'focused Role keeps only its dedicated back-to-overview control');
+assert.ok(!worldShell.includes('is-role-focused'),
+  'overview and close-up use the same map controls');
 assert.ok(!engine.includes('toolsMenu'),
   'no obsolete exploration-menu state survives in the map');
 assert.ok(engine.includes("panTo(0,-1.8,overviewZoom);notify('返回全景')"),
@@ -255,13 +255,14 @@ assert.ok(main.includes('class="world-info is-collapsed"'),
 assert.ok(css.includes('.world-info.is-collapsed .world-action-row'),
   'secondary Role actions stay in the expandable detail sheet');
 assert.ok(main.includes('class="world-stage-frame"'));
-assert.ok(main.includes('id="crew-world-focus-bar"'));
-assert.ok(main.includes('id="crew-world-focus-back"'));
-assert.ok(main.includes('id="crew-world-focus-full"'));
+assert.ok(!main.includes('id="crew-world-focus-bar"'),
+  'remove duplicated focus toolbar completely');
 assert.equal((main.match(/id="crew-chat-main-header"/g)||[]).length,1,
   'the original Chat header remains a single DOM node');
-assert.ok(main.includes('id="crew-world-focus-context"'),
-  'the focused toolbar has a Context Health shortcut');
+assert.ok(main.includes('id="crew-world-command-context"'),
+  'Context is available on the persistent Role command dock');
+assert.ok(main.includes('id="crew-world-command-full"'),
+  'full in-map Chat reading is available from the command dock');
 assert.equal((main.match(/id="context-pill"/g)||[]).length,1,
   'the original Context control remains the single entry to its state');
 assert.equal((main.match(/id="context-modal"/g)||[]).length,1,
@@ -302,38 +303,28 @@ assert.equal((main.match(/id="chat-composer-footer"/g)||[]).length,1,
 assert.doesNotMatch(main,/<script src="\/js\/world-lab-chat.js"/);
 
 execFileSync(process.execPath,['--check',path.join(root,'public/js/crew-world-launcher.js')]);
-assert.ok(launcher.includes('function focusRole('));
-assert.ok(launcher.includes('function exitFocus('));
-assert.ok(launcher.includes("document.body.classList.add('crew-world-focused')"),
-  'entering Role focus must opt into immersive chrome');
-assert.ok((launcher.match(/document.body.classList.remove\('crew-world-focused'\)/g)||[]).length>=3,
-  'leaving focus, closing World, and opening fresh World all restore standard chrome');
+
+assert.doesNotMatch(launcher,/function focusRole\(|function exitFocus\(|crew-world-focused|focusedRoleId/,
+  'no second focus state or focus-mode header class remains');
+assert.doesNotMatch(engine,/CrewWorldHost\?\.(?:focusRole|exitFocus|isFocusActive|isRoleFocused)/,
+  '3D scene uses direct camera movement instead of the old focus state');
 assert.ok(launcher.includes("document.getElementById('context-pill')?.click()"),
-  'the focused Context button delegates to existing Context Health');
-assert.ok(launcher.includes("window.getCurrentRoleId?.()!==focusedRoleId"),
-  'Context must not open against a stale prior Role');
-assert.ok(launcher.includes("if(focusContext)focusContext.disabled=!sameActiveChat"),
-  'Context stays disabled while a different Role conversation is loading');
-assert.ok(launcher.includes('isFocusActive:'));
-assert.ok(engine.includes('CrewWorldHost?.focusRole?.('));
-assert.ok(engine.includes('CrewWorldHost?.exitFocus?.('));
-const worldShellCss=read('public/css/crew-world-launcher.css');
-assert.ok(worldShellCss.includes('.crew-world-modal.is-role-focused'));
-assert.ok(worldShellCss.includes('body.crew-world-active > #crew-chat-main-header{display:none!important}'),
-  'World hides the Chat header in overview and focus');
-assert.ok(worldShellCss.includes('body.crew-world-active #crew-home-header-host{display:block!important}'),
-  'both World modes retain the exact shared Dashboard navigation');
-assert.ok(worldShellCss.includes("top:7px;\n  min-height:48px;padding:5px 3px;"),
-  'focused toolbar starts below the preserved nav without double safe-area padding');
-assert.ok(worldShellCss.includes('body.crew-world-focused #context-modal{z-index:10030!important}'),
-  'Context Health opens above the full-screen World canvas');
-assert.ok(worldShellCss.includes('body.crew-world-focused #context-compact-preview-modal'),
-  'a Context compact preview remains accessible above immersive World');
-assert.ok(worldShellCss.includes('position:absolute;inset:auto 0 0;z-index:12'),
-  'focused compact chat overlays the full-height map');
-assert.ok(!worldShellCss.includes('grid-template-rows:auto minmax(0,1fr) auto'),
-  'focused map is no longer limited to a grid row');
-assert.ok(worldShellCss.includes('.crew-world-chat-panel.compact'));
+  'Context delegates to original Context Health');
+assert.ok(launcher.includes("window.getCurrentRoleId?.()===selectedRoleId"),
+  'Context/full actions reject stale or still-switching Role target');
+assert.ok(launcher.includes("panel.classList.add('expanded')"),
+  'full conversation opens the original Chat in-map, not a second renderer');
+assert.ok(worldShell.includes('body.crew-world-active #context-modal{z-index:10030!important}'),
+  'Context is accessible over map without entering focus mode');
+assert.ok(worldShell.includes('body.crew-world-active #crew-home-header-host{display:block!important}'),
+  'the shared Dashboard/Map navigation always stays visible');
+assert.ok(worldShell.includes('.crew-world-chat-panel.compact .crew-world-chat-messages-slot'),
+  'one original Chat composer remains compact while camera moves');
+assert.ok(!worldShell.includes('crew-world-focus-bar'));
+assert.match(engine,/if\(double\)\{select\(index,true\);return;\}/,
+  'double tap only changes camera target');
+assert.match(engine,/panTo\(0,-1\.8,overviewZoom\);notify\('返回全景'\)/,
+  'reset changes camera position without losing selected Role');
 assert.match(launcher,/ensureScene/);
 assert.match(launcher,/loadScript\('\/vendor\/three.min.js'\)/);
 assert.match(launcher,/loadScript\('\/js\/world-lab.js'\)/);
@@ -430,16 +421,15 @@ assert.deepEqual(events.roadRoute([{a:{id:'a'},b:{id:'b'}}],'a','b'),[0],
   'recorded digital signal uses an existing bridge rather than old hub trajectory');
 assert.equal(events.roadPulse([0],0,500,1000)>.6,true);
 for(const document of [main,html]){
-  for(const id of ['world-focus-activity','world-focus-activity-text',
-    'world-focus-activity-open','world-handoffs-open','world-handoffs-panel','world-handoffs-list']){
+  for(const id of ['world-handoffs-open','world-handoffs-panel','world-handoffs-list']){
     assert.ok(document.includes('id="'+id+'"'),id+' exists in both map experiences');
   }
 }
-assert.ok(css.includes('.world-focus-activity[hidden]'));
-assert.ok(css.includes('.crew-world-modal:not(.is-role-focused) .world-focus-activity'),
-  'an overview or resumed World must not retain the old focused activity ribbon');
-assert.ok(engine.includes("window.CrewWorldHost?.exitFocus?.();\n    refreshFocusActivity();"),
-  'returning to overview immediately hides the previously selected Role activity');
+
+assert.ok(!main.includes('id="world-focus-activity"')&&!html.includes('id="world-focus-activity"'),
+  'the additional focus-only activity ribbon is removed');
+assert.ok(!css.includes('world-focus-activity'),
+  'no obsolete ribbon styles survive');
 assert.ok(css.includes('.world-handoffs-panel[hidden]'));
 for(const doc of [main,html]){
   assert.ok(doc.includes('id="world-flight-notice"'),
@@ -450,17 +440,15 @@ assert.ok(css.includes('.world-flight-notice[hidden]'),
   'flight cue remains hidden without a verified new message');
 assert.ok(css.includes('.world-app:has(.world-flight-notice:not([hidden])) .world-handoffs-open'),
   'message cue and collaboration button never cover each other');
-assert.ok(css.includes('.crew-world-modal.is-role-focused:has(.crew-world-chat-panel.keyboard-open:not([hidden])) .world-flight-notice'),
-  'the flight cue cannot obstruct mobile keyboard interaction');
-assert.match(engine,/function refreshFocusActivity\(\)/);
-assert.ok(engine.includes("window.CrewWorldHost?.isRoleFocused?.(role.id)"),
-  'the activity ribbon only appears for the focused real Role');
-assert.ok(engine.includes("if(synced){"),
-  'verified status gates activity labels');
+assert.ok(css.includes('.crew-world-modal:has(.crew-world-chat-panel.keyboard-open:not([hidden])) .world-flight-notice'),
+  'the flight cue cannot obstruct mobile keyboard interaction in any camera state');
+
+assert.ok(!engine.includes('refreshFocusActivity')&&!engine.includes('isRoleFocused'),
+  'no P7 ribbon is gated behind a removed mode');
 assert.ok(engine.includes("已停止執行 · 結果需查看對話確認"),
-  'stopping work never claims successful completion');
-assert.ok(engine.includes("window.CrewWorldHost?.expandFocusedChat?.()"),
-  'new reply expands the single existing Chat DOM');
+  'recent execution stop remains honestly visible on P13 Role peek');
+assert.ok(engine.includes("rolePeekBody.textContent=message.slice(0,155)"),
+  'Role peek stays read-only and grounded in actual activity');
 assert.ok(engine.includes("planner.traceableEvents?.(data.events"),
   'only saved message records are listed');
 assert.ok(engine.includes("evidenceVerified=false;evidenceRows=[]"),

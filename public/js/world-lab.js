@@ -320,9 +320,6 @@
   });
   // P7 and P8 are read-only projections of verified Runtime and saved
   // message events. No inferred tool progress, delivery or task success.
-  const focusActivity=document.getElementById('world-focus-activity');
-  const focusActivityText=document.getElementById('world-focus-activity-text');
-  const focusActivityOpen=document.getElementById('world-focus-activity-open');
   const handoffsOpen=document.getElementById('world-handoffs-open');
   const handoffsPanel=document.getElementById('world-handoffs-panel');
   const handoffsClose=document.getElementById('world-handoffs-close');
@@ -424,45 +421,15 @@
       ?labels[selected].speech.textContent
       :role.state==='working'&&role.workTitle
         ?'執行中：'+role.workTitle
-        :role.attention>0?'Runtime 待處理 '+role.attention+' 項':'';
-    rolePeek.hidden=!isLive||!synced||!message||Boolean(window.CrewWorldHost?.isFocusActive?.());
+        :role.attention>0?'Runtime 待處理 '+role.attention+' 項'
+        :stoppedAt.has(role.id)&&Date.now()-stoppedAt.get(role.id)<45000
+          ?'已停止執行 · 結果需查看對話確認':'';
+    rolePeek.hidden=!isLive||!synced||!message;
     if(!rolePeek.hidden){
       rolePeekName.textContent=role.name;
       rolePeekBody.textContent=message.slice(0,155);
     }
   }
-  function refreshFocusActivity(){
-    if(!focusActivity||!focusActivityText)return;
-    const role=roles[selected],focused=window.CrewWorldHost?.isRoleFocused?.(role.id);
-    focusActivity.hidden=!isLive||!focused;
-    if(focusActivity.hidden)return;
-    let tone='unknown',detail='Runtime 狀態未同步';
-    const fresh=freshReplies.get(role.id);
-    if(synced){
-      if(fresh&&Date.now()-fresh.at<300000){
-        tone='reply';detail='已記錄新回覆 · 點擊查看原本對話';
-      }else if(role.state==='working'){
-        tone='working';detail='正在執行 · '+(role.workTitle||'詳細步驟請查看對話');
-      }else if(role.state==='waiting'){
-        tone='waiting';detail=role.attention
-          ?'待處理 '+role.attention+' 項 · 查看原本對話':'等待處理';
-      }else if(stoppedAt.has(role.id)&&Date.now()-stoppedAt.get(role.id)<45000){
-        tone='idle';detail='已停止執行 · 結果需查看對話確認';
-      }else{
-        tone='idle';detail=role.state==='new'?'尚無工作':'目前待命';
-      }
-    }
-    focusActivity.dataset.tone=tone;
-    focusActivityText.textContent=detail;
-    if(focusActivityOpen)focusActivityOpen.textContent=tone==='reply'?'查看回覆':'查看對話';
-  }
-  listen(focusActivityOpen,'click',()=>{
-    const role=roles[selected];
-    freshReplies.delete(role.id);
-    window.CrewWorldHost?.expandFocusedChat?.();
-    refreshFocusActivity();
-    renderAttention();refreshRolePeek();
-  });
   function showHandoffs(open){
     if(!handoffsPanel)return;
     if(open&&attentionPanel){
@@ -611,8 +578,6 @@
     lastRoleTap=double?null:{id,at:now};
     closeDistrictPicker();
     if(double){select(index,true);return;}
-    if(window.CrewWorldHost?.isFocusActive?.())
-      window.CrewWorldHost.exitFocus?.();
     select(index,false);
     panTo(roles[index].islandX,roles[index].islandZ,width<700?2.2:1.9);
     showContextIfExpanded();
@@ -671,13 +636,10 @@
         (entry.speech.hidden?'':' · 最新回覆：'+entry.speech.textContent));
     });
     chat?.sync();
-    const focusState=document.getElementById('crew-world-focus-state');
-    if(focusState)focusState.textContent=liveStates[role.state]||'未知';
     roster.forEach((button,i)=>button?.setAttribute('aria-pressed',String(i===selected)));
     actors[selected].root.add(selectionHalo,focusHalo);
     if(contextLine&&document.getElementById('world-info')?.classList.contains('is-collapsed'))
       contextLine.textContent='Context · 展開詳情後讀取';
-    refreshFocusActivity();
     renderAttention();
     refreshRolePeek();
     renderHandoffs();
@@ -707,8 +669,7 @@
     selected=index;contextRequestId++;updateInfo();
     if(center)roster[index]?.scrollIntoView?.({inline:'center',block:'nearest'});
     window.CrewWorldHost?.onSelectedRole?.(roles[index].id,roles[index].name);
-    if(center)window.CrewWorldHost?.focusRole?.(roles[index].id,roles[index].name);
-    refreshFocusActivity();
+    // Double tap is a closer camera target, not a second UI mode.
     if(attentionPanel&&!attentionPanel.hidden){
       attentionPanel.hidden=true;
       attentionOpenButton?.setAttribute('aria-expanded','false');
@@ -751,7 +712,7 @@
   listen(quickFocus,'click',()=>document.getElementById('world-focus')?.click());
   syncInfoDisclosure();
   listen(document.getElementById('world-focus'),'click',()=>{
-    select(selected,true);notify('已聚焦 '+roles[selected].short);
+    select(selected,true);notify('鏡頭靠近 '+roles[selected].short);
   });
   listen(document.getElementById('world-work'),'click',()=>{
     const a=actors[selected];a.mode='working';a.expires=performance.now()+6500;
@@ -875,7 +836,6 @@
           entry.speech.textContent=compact.length>240?compact.slice(0,239)+'…':compact;
           entry.speech.title=text;
           freshReplies.set(role.id,{at:Date.now(),signature});
-          refreshFocusActivity();
           renderAttention();refreshRolePeek();
           entry.speech.hidden=false;
           refreshRolePeek();
@@ -949,8 +909,6 @@
   }
   listen(document.getElementById('world-reset'),'click',()=>{
     showHandoffs(false);
-    window.CrewWorldHost?.exitFocus?.();
-    refreshFocusActivity();
     panTo(0,-1.8,overviewZoom);notify('返回全景');
   });
   function setZoom(value){

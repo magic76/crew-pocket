@@ -27,22 +27,24 @@
   const peek=document.getElementById('crew-world-result-peek');
   const peekKind=document.getElementById('crew-world-result-peek-kind');
   const peekText=document.getElementById('crew-world-result-peek-text');
-  const focusBar=document.getElementById('crew-world-focus-bar');
-  const focusBack=document.getElementById('crew-world-focus-back');
-  const focusName=document.getElementById('crew-world-focus-name');
-  const focusFull=document.getElementById('crew-world-focus-full');
-  const focusContext=document.getElementById('crew-world-focus-context');
+  const commandContext=document.getElementById('crew-world-command-context');
+  const commandFull=document.getElementById('crew-world-command-full');
   if(!opener||!dashboardButton||!toggle||!headerHost||!homeHeader||!modal||!panel||!messagesSlot||!composerSlot||
      !messages||!composer||!hideButton||!expandButton)return;
   let restoreMessages=null,restoreComposer=null;
   let stopWorld=null,previousFocus=null,selectedRoleId=null,selectedRoleName='';
   let selectVersion=0,previousTab=null,restoreTab=false,openVersion=0;
-  let focusedRoleId=null;
   let sceneScripts=null;
   let requestedRole=null,roleSwitchQueue=Promise.resolve(),switchingRole=false,commandDraft='';
   let rolesSignature='',previewObserver=null,previewFrame=0;
   const roleSnapshot=()=>window.getCrewCockpitSnapshot?.();
   function liveRole(id){return roleSnapshot()?.roles?.find(role=>role.id===id)||null;}
+  function syncCommandActions(){
+    const ready=!modal.hidden&&!panel.hidden&&!switchingRole&&Boolean(selectedRoleId)&&
+      Boolean(liveRole(selectedRoleId))&&window.getCurrentRoleId?.()===selectedRoleId;
+    if(commandContext)commandContext.disabled=!ready;
+    if(commandFull)commandFull.disabled=!ready;
+  }
   function updateCommandRole(){
     if(!commandRole)return;
     const rows=roleSnapshot()?.roles||[];
@@ -62,6 +64,7 @@
     if(commandState)commandState.textContent=rows.length
       ?switchingRole?'切換中…':panel.hidden?'準備指令框…':'可以輸入指令'
       :'尚無可用 Role';
+    syncCommandActions();
   }
   function updatePreview(){
     if(!peek||!peekKind||!peekText||modal.hidden||panel.hidden)return;
@@ -157,21 +160,11 @@
     hideButton.textContent='收合';
     stopPreview();
     putChatBack();
+    syncCommandActions();
     // We preserve the active Role and its stream, only move DOM visibility.
     window.requestAnimationFrame(()=>{
       document.getElementById('world-stage')?.focus?.({preventScroll:true});
     });
-  }
-  function exitFocus(){
-    if(!focusedRoleId)return;
-    focusedRoleId=null;
-    document.body.classList.remove('crew-world-focused');
-    modal.classList.remove('is-role-focused');
-    if(focusBar)focusBar.hidden=true;
-    if(focusContext)focusContext.disabled=true;
-    // The global commander stays available in overview, including an
-    // already-pending Role switch. Only closing World invalidates it.
-    if(!panel.hidden)showCompactChat();
   }
   function showCompactChat(){
     if(panel.hidden)return;
@@ -181,24 +174,6 @@
     expandButton.setAttribute('aria-pressed','false');
     hideButton.textContent='收合';
     updateKeyboard();
-  }
-  function focusRole(roleId,name){
-    if(modal.hidden||!roleId)return;
-    const changed=focusedRoleId!==roleId;
-    focusedRoleId=roleId;
-    // Only focus mode suppresses the normal Chat and Crew headers. The
-    // current Role Chat itself remains mounted (same composer and stream).
-    document.body.classList.add('crew-world-focused');
-    modal.classList.add('is-role-focused');
-    if(focusBar)focusBar.hidden=false;
-    if(focusName)focusName.textContent=name||roleId;
-    const sameActiveChat=!panel.hidden&&window.getCurrentRoleId?.()===roleId;
-    if(focusContext)focusContext.disabled=!sameActiveChat;
-    if(sameActiveChat){
-      showCompactChat(); // Reuse the already mounted Role Chat synchronously.
-    }else if(requestedRole!==roleId){
-      void openChat(roleId,{compact:true});
-    }
   }
   function collapseChat(){
     if(!panel.hidden)showCompactChat();
@@ -218,10 +193,8 @@
   function close(){
     if(modal.hidden)return;
     selectVersion++;openVersion++;
-    if(focusedRoleId)exitFocus();
     hideChat();
     requestedRole=null;switchingRole=false;selectVersion++;
-    document.body.classList.remove('crew-world-focused');
     stopWorld?.pause?.();
     modal.hidden=true;
     updateHomeView('dashboard');
@@ -247,14 +220,9 @@
     previousFocus=document.activeElement;
     restoreTab=true;
     document.body.classList.add('crew-world-active');
-    document.body.classList.remove('crew-world-focused');
-    if(focusContext)focusContext.disabled=true;
     updateCommandRole();
     syncHeaderHeight();
     modal.hidden=false;
-    focusedRoleId=null;
-    modal.classList.remove('is-role-focused');
-    if(focusBar)focusBar.hidden=true;
     updateHomeView('map');
     const loading=document.getElementById('world-loading');
     if(loading&&!stopWorld){loading.hidden=false;loading.textContent='正在載入 3D 場景…';}
@@ -315,8 +283,8 @@
           promptInput.dispatchEvent?.(new Event('input',{bubbles:true}));
       }
       messages.scrollTop=messages.scrollHeight;
-      if(focusContext)focusContext.disabled=focusedRoleId!==roleId;
       updatePreview();
+      syncCommandActions();
       return true;
     });
     roleSwitchQueue=navigate;
@@ -327,6 +295,7 @@
       requestedRole=null;
       if(!ok&&commandState)commandState.textContent='角色未就緒，請重試';
       else updateCommandRole();
+      syncCommandActions();
     });
     return navigate;
   }
@@ -337,13 +306,6 @@
     // reply links, delivery receipts). The World owns no parallel messages.
     close();
     window.openCrewCollaboration?.(roleId,eventId);
-  }
-  function expandFocusedChat(){
-    if(!focusedRoleId||panel.hidden||window.getCurrentRoleId?.()!==focusedRoleId)return;
-    panel.classList.remove('compact','expanded');
-    expandButton.textContent='全螢幕';
-    expandButton.setAttribute('aria-pressed','false');
-    updateKeyboard();
   }
   function openFullChat(roleId=selectedRoleId){
     if(!roleId)return;
@@ -370,7 +332,7 @@
       expandButton.setAttribute('aria-pressed','false');
     }else{
       const expanded=panel.classList.toggle('expanded');
-      expandButton.textContent=expanded?'縮小':(focusedRoleId?'全螢幕':'展開');
+      expandButton.textContent=expanded?'縮小':'展開';
       expandButton.setAttribute('aria-pressed',String(expanded));
     }
     updateKeyboard();
@@ -379,13 +341,23 @@
   dashboardButton.addEventListener('click',()=>{if(!modal.hidden)close();else updateHomeView('dashboard');});
   settingsButton?.addEventListener('click',()=>{if(!modal.hidden)close();});
   addRoleButton?.addEventListener('click',()=>{if(!modal.hidden)close();});
-  focusBack?.addEventListener('click',()=>document.getElementById('world-reset')?.click());
-  focusFull?.addEventListener('click',()=>openFullChat(focusedRoleId));
-  // Delegate to the original Context Health UI. The button stays disabled
-  // until this same Role has finished loading, so it cannot show stale data.
-  focusContext?.addEventListener('click',()=>{
-    if(!focusedRoleId||panel.hidden||window.getCurrentRoleId?.()!==focusedRoleId)return;
+  // Both actions stay attached to the ORIGINAL active Role Chat. Switching
+  // target cannot open stale Context or another Role's conversation.
+  commandContext?.addEventListener('click',()=>{
+    syncCommandActions();
+    if(commandContext.disabled)return;
     document.getElementById('context-pill')?.click();
+  });
+  commandFull?.addEventListener('click',()=>{
+    syncCommandActions();
+    if(commandFull.disabled)return;
+    // P11's same DOM becomes the full reading surface *inside* World.
+    panel.classList.remove('compact');
+    panel.classList.add('expanded');
+    expandButton.textContent='縮小';
+    expandButton.setAttribute('aria-pressed','true');
+    updateKeyboard();
+    messages.scrollTop=messages.scrollHeight;
   });
   commandRole?.addEventListener('change',()=>{
     const id=commandRole.value;
@@ -420,12 +392,10 @@
     if(event.key==='Escape'&&!modal.hidden){
       event.preventDefault();
       if(!panel.hidden&&!panel.classList.contains('compact'))collapseChat();
-      else if(focusedRoleId)document.getElementById('world-reset')?.click();
       else close();
     }
   });
   // Exposed only to the scene in this same document, not cross-frame messages.
   window.CrewWorldHost={open,close,hideChat,openChat,openFullChat,onSelectedRole,
-    focusRole,exitFocus,openCollaboration,expandFocusedChat,isRoleFocused:id=>focusedRoleId===id,
-    isFocusActive:()=>Boolean(focusedRoleId)};
+    openCollaboration};
 })();
