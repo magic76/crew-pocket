@@ -248,12 +248,16 @@
     document.body.classList.remove('crew-world-active');
     guardSend(false);
     if(switchRetry)switchRetry.hidden=true;
-    // Leave the underlying active Role untouched; restore the tab from which
-    // the optional map was opened, without touching ongoing generations.
+    // Role navigation can temporarily put Chat behind the map. Restore the
+    // original Crew page synchronously before opening Settings or Dashboard:
+    // history.back() is asynchronous and otherwise races a Settings pushState.
     if(restoreTab&&previousTab==='crew'&&document.body.dataset.primaryTab==='chat'){
-      // Calling the existing primary-tab action is safer than direct dataset
-      // mutation, because it also updates navigation and original chat state.
-      document.getElementById('crew-back-home-btn')?.click();
+      if(typeof window.syncPrimaryTabChrome==='function'){
+        window.history?.replaceState?.({
+          ...(window.history.state||{}),crewPage:'crew',crewOverlay:null
+        },'');
+        window.syncPrimaryTabChrome('crew');
+      }else document.getElementById('crew-back-home-btn')?.click();
     }
     restoreTab=false;previousTab=null;
     const focus=previousFocus;previousFocus=null;
