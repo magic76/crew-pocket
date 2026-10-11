@@ -171,3 +171,33 @@
 /* The canvas remains full-bleed. Only the Three.js town geometry is square. */
 .world-stage-frame{position:absolute;inset:0;min-width:0;min-height:0}
 .world-stage-frame #world-stage{position:absolute;inset:0;width:100%;height:100%}
+
+
+/* The selected Role is a lightweight map caption, not a second dashboard. */
+.world-info-head > div:nth-child(2){flex:1;min-width:0}
+.world-info #world-role-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.world-info-actions{display:flex;flex:none;align-items:center;gap:5px}
+.world-info-actions button{
+  min-height:34px;padding:0 9px;border:1px solid #8fc3e45e;
+  border-radius:10px;background:#203e5bd9;color:#eff9ff;
+  font-size:11px;font-weight:750;
+}
+.world-info-actions #world-info-quick-focus{background:#27799e;border-color:#79c9eb}
+.world-info-actions button:focus-visible{outline:2px solid #b9f2ff;outline-offset:2px}
+.world-info.is-collapsed{
+  width:min(410px,calc(100% - 22px));padding:9px 11px;border-radius:16px;
+}
+.world-info.is-collapsed .world-portrait{
+  width:38px;height:38px;border-radius:12px;font-size:16px;
+}
+.world-info.is-collapsed .world-info-head{gap:9px}
+.world-info.is-collapsed .world-caption,
+.world-info.is-collapsed .world-description,
+.world-info.is-collapsed .world-action-row{display:none!important}
+.world-info.is-collapsed #world-role-name{font-size:13px;margin:0 0 2px}
+.world-info.is-collapsed #world-role-state{font-size:10px;margin:0}
+@media(max-width:375px){
+  .world-info-actions button{padding:0 7px;font-size:10px}
+  .world-info.is-collapsed .world-portrait{width:34px;height:34px}
+  .world-info.is-collapsed .world-info-head{gap:6px}
+}
