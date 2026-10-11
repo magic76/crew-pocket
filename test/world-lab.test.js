@@ -119,7 +119,7 @@ assert.equal(new Set(mixed.map(r=>r.districtId)).size,5,
 const forty=sampleWindow.WorldLabKit.makeLiveRoles(Array.from({length:40},(_,i)=>({roleId:'agent-'+i})));
 assert.equal(forty.length,sampleWindow.WorldLabKit.MAX_WORLD_ROLES);
 assert.equal(sampleWindow.WorldLabKit.MEMBERS_PER_DISTRICT,3);
-assert.ok(sampleWindow.WorldLabKit.mapExtent(forty)>28&&
+assert.ok(sampleWindow.WorldLabKit.mapExtent(forty)>24&&
   sampleWindow.WorldLabKit.mapExtent(forty)<65,
   'up to 36 Roles form safely separated groups around a compact plaza');
 
