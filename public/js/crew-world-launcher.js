@@ -109,9 +109,10 @@
     modal.classList.add('is-role-focused');
     if(focusBar)focusBar.hidden=false;
     if(focusName)focusName.textContent=name||roleId;
-    if(changed)hideChat();
-    if(!panel.hidden&&window.getCurrentRoleId?.()===roleId){
-      showCompactChat();
+    const sameActiveChat=!panel.hidden&&window.getCurrentRoleId?.()===roleId;
+    if(changed&&!sameActiveChat)hideChat();
+    if(sameActiveChat){
+      showCompactChat(); // Reuse the already mounted Role Chat synchronously.
     }else{
       void openChat(roleId,{compact:true});
     }
