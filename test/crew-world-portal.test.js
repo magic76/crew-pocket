@@ -36,7 +36,7 @@ async function tick(){await new Promise(resolve=>setImmediate(resolve));}
   const doc={activeElement:null,body:{dataset:{primaryTab:'crew'},classList:{
     set:new Set(),add(k){this.set.add(k);},remove(k){this.set.delete(k);}
   }},events:new Map()};
-  const ids=['crew-world-open-btn','crew-home-dashboard-btn','crew-home-view-toggle','crew-home-header','crew-home-header-host','crew-world-modal',
+  const ids=['crew-world-open-btn','crew-home-dashboard-btn','crew-open-settings-btn','crew-home-view-toggle','crew-home-header','crew-home-header-host','crew-world-modal',
     'crew-world-chat-panel','crew-world-chat-messages-slot','crew-world-chat-composer-slot',
     'messages-container','chat-composer-footer','crew-world-chat-hide','crew-world-chat-expand',
     'world-chat-open','crew-world-chat-role-name','crew-back-home-btn','world-stage',
@@ -54,6 +54,7 @@ async function tick(){await new Promise(resolve=>setImmediate(resolve));}
   originalMessages.appendChild(nodes['messages-container']);
   originalComposer.appendChild(nodes['chat-composer-footer']);
   let mountCount=0,disposeCount=0,pauseCount=0,resumeCount=0,roleNavigations=[];
+  let historyRestores=0;
   let contextOpenCount=0,collaborationVisit=null;
   let blockedNavigation=null,failNavigationId=null,clockIndex=0;
   const scheduled=new Map();
@@ -64,6 +65,11 @@ async function tick(){await new Promise(resolve=>setImmediate(resolve));}
   nodes['context-pill'].addEventListener('click',()=>contextOpenCount++);
   let width=810;
   const win={
+    history:{
+      state:{crewPage:'crew'},
+      replaceState(state){this.state=state;historyRestores++;}
+    },
+    syncPrimaryTabChrome(tab){doc.body.dataset.primaryTab=tab;},
     innerHeight:810,visualViewport:{offsetTop:0,height:810,addEventListener(){}},
     addEventListener(){},requestAnimationFrame(fn){fn();},
     setTimeout(fn,ms){const id=++clockIndex;scheduled.set(id,{fn,ms});return id;},
@@ -285,8 +291,14 @@ async function tick(){await new Promise(resolve=>setImmediate(resolve));}
     'returning from another page must respect an explicit Dashboard choice');
   nodes['crew-world-open-btn'].click();
   await tick();await tick();
-  win.CrewWorldHost.close();
+  const previousRestores=historyRestores;
+  nodes['crew-open-settings-btn'].click();
   assert.equal(nodes['crew-world-modal'].hidden,true);
+  assert.equal(doc.body.dataset.primaryTab,'crew',
+    'Settings opens from the Crew route, not the hidden Role Chat page');
+  assert.ok(historyRestores>previousRestores,
+    'closing World restores Crew history synchronously before Settings can push');
+  assert.equal(win.history.state.crewPage,'crew');
   win.CrewWorldHost.restoreHomeView();
   assert.equal(nodes['crew-world-modal'].hidden,false,
     'returning to Crew restores map when it was the most recent home surface');
