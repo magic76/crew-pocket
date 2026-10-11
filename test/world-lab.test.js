@@ -392,8 +392,8 @@ assert.ok(worldShell.includes('body.crew-world-active #crew-home-header-host{'),
 assert.ok(worldShell.includes('.crew-world-chat-panel.compact .crew-world-chat-messages-slot'),
   'one original Chat composer remains compact while camera moves');
 assert.ok(!worldShell.includes('crew-world-focus-bar'));
-assert.match(engine,/if\(double\)\{select\(index,true\);return;\}/,
-  'double tap only changes camera target');
+assert.ok(engine.includes('function roleVisibleInCamera(role)')&&engine.includes('revealRole(index,Boolean(double))'),
+  'single tap preserves framing when already visible; double tap deliberately focuses');
 assert.match(engine,/panTo\(0,-1\.8,overviewZoom\);notify\('返回全景'\)/,
   'reset changes camera position without losing selected Role');
 assert.match(launcher,/ensureScene/);
@@ -563,3 +563,16 @@ assert.doesNotMatch(main,/\/js\/world-lab-chat.js/);
 assert.match(launcher,/window\.openCrewCockpitRole/);
 assert.match(engine,/CrewWorldHost\.openFullChat/);
 console.log('world-lab isolated 3D demo tests: ok');
+
+// Command center incremental contracts: real Role actions, single Chat owner,
+// and observed-only Runtime timeline (no synthetic completion messages).
+assert.ok(engine.includes('function openRoleMenu(index,clientX,clientY)'));
+assert.ok(engine.includes("roleMenu.setAttribute('aria-label','角色快捷操作')"));
+assert.ok(engine.includes("window.CrewWorldHost?.openChat?.(role.id,{compact:false})"));
+assert.ok(engine.includes("document.getElementById('crew-world-command-context')?.click()"));
+assert.ok(engine.includes('function rememberRuntimeEvent(role,label)'));
+assert.ok(engine.includes('if(synced&&item&&previous!==\'unknown\''));
+assert.ok(engine.includes('已離開執行中 · 結果請查看對話'));
+assert.doesNotMatch(engine,/rememberRuntimeEvent\(actor\.role,\s*['"](?:完成|成功)/);
+assert.ok(main.includes('id="world-runtime-feed"'));
+assert.ok(css.includes('.world-runtime-feed[hidden]'));

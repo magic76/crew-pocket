@@ -1,3 +1,15 @@
+## Map-first command center increment (2026-10-12)
+
+- Selecting an in-frame Role preserves the camera and zoom; only off-screen selections pan. Double tap / Focus intentionally zooms. The existing original Chat composer remains the sole message sender.
+- Role nameplates support right click or long press (touch) for the same authoritative Chat, Focus, Context Health and saved Collaboration actions. No parallel submit path or new provider calls.
+- Selected, fresh-reply, critical-Context, verified-attention and working labels are prioritized in that order. Project pins yield when they'd overlap a higher priority label.
+- Floating activity and flight notices use the shared header safe-area offset and make room for each other on narrow phones.
+- Existing building lamps reflect verified working Roles; waiting beacons are more legible without claiming work completion.
+- The Activity panel now shows at most 16 **in-session, polling-observed** Runtime transitions. It starts with a baseline: no replay of older status, no completion inference when work stops. Entries link to the original Role Chat. Status still refreshes through the current 7-second polling cycle, so this is *not* a push event stream.
+- Android WebView long-press, pan/pinch, keyboard, and label collision smoke tests remain necessary.
+
+---
+
 ## Crew World — Organic Workshop Village (2026-10)
 
 The former perfectly rectangular block plan is replaced by an **organic,
