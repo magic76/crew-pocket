@@ -16,8 +16,10 @@ assert.ok(pm.y>from.y+2,'cross-island arc visibly clears water and buildings');
 assert.ok(pm.x>from.x&&pm.x<to.x,'arc flies between actual roles');
 assert.equal(events.paperFlightPoint(from,to,-1).x,from.x);
 assert.equal(events.paperFlightPoint(from,to,8).x,to.x);
-assert.ok(events.paperFlightDuration(from,to)>=820);
-assert.ok(events.paperFlightDuration(from,to)<=1650);
+assert.ok(events.paperFlightDuration(from,to)>=2050);
+assert.ok(events.paperFlightDuration(from,to)<=3200);
+assert.ok(events.paperFlightDuration(from,to)>2000,
+  'saved message animation remains visible for at least two seconds');
 assert.ok(events.paperFlightDuration({x:0,y:1,z:0},{x:1,y:1,z:0})<
   events.paperFlightDuration(from,to),'short same-island flights are quicker');
 for(const n of [3,6,16,36]){
@@ -73,19 +75,43 @@ const kit=win.WorldLabKit;
 const scene=new Group();
 const outgoing=kit.createPaperPlane(scene,'handoff');
 const returning=kit.createPaperPlane(scene,'reply');
-assert.equal(scene.children.length,8,'two planes each allocate one body and three trail beads');
-assert.equal(outgoing.trails.length,3);
-assert.equal(outgoing.root.children.length,2,'origami has wings and a fold spine');
-assert.notEqual(outgoing.root.children[0].material.color,returning.root.children[0].material.color,
+assert.equal(scene.children.length,10,'two planes each allocate one body and four trail beads');
+assert.equal(outgoing.trails.length,4);
+assert.equal(outgoing.root.children.length,3,'origami has a high-contrast edge, wings and fold spine');
+assert.ok(outgoing.root.children[0].material.color!==outgoing.root.children[1].material.color,
+  'the silhouette has darker contrast than the paper wings');
+assert.ok(outgoing.trails[0].geometry instanceof SphereGeometry);
+assert.equal(outgoing.trails[0].geometry.disposed,false);
+assert.notEqual(outgoing.root.children[1].material.color,returning.root.children[1].material.color,
   'reply flights must look different from outgoing messages');
 kit.disposePaperPlane(scene,outgoing);
-assert.equal(scene.children.length,4,'expired flight removes all of its GPU objects');
+assert.equal(scene.children.length,5,'expired flight removes all of its GPU objects');
 assert.ok(outgoing.root.children[0].geometry.disposed);
 assert.ok(outgoing.trails.every(trail=>trail.geometry.disposed&&trail.material.disposed));
 kit.disposePaperPlane(scene,returning);
 assert.equal(scene.children.length,0,'all paper-airplane resources are released');
 
 assert.match(world,/const MAX_ACTIVE_PLANES=3/);
+assert.ok(source.includes('const outlineTriangles=[]'),
+  'larger planes get a contrasting under-edge rather than expensive bloom');
+assert.ok(source.includes("const bead=new T.Mesh("),
+  'trails remain bounded primitive meshes');
+assert.ok(world.includes('worldUnitsPerPixel*42/1.37'),
+  'plane display size adapts to camera zoom and phone resolution');
+assert.ok(world.includes("bead.material.opacity=(.68-j*.12)"),
+  'four trail beads must stay clearly visible while flying');
+assert.ok(world.includes("showDepartureCue(flight,now)"),
+  'sender gets a brief record-creation pulse');
+assert.ok(world.includes("showPulseCue(flight.to,flight.kind,now)"),
+  'destination animation is a visual arrival cue only');
+assert.ok(world.includes("flightNoticeState.eventId=eventId"),
+  'notice is tied only to the actual saved message');
+assert.ok(world.includes("if(id)openEvidence(id)"),
+  'notice opens existing authorized evidence without sending a message');
+assert.ok(world.includes("if(flightNoticeState.until)flightNoticeState.until+=duration"),
+  'pausing the scene freezes the notice countdown too');
+assert.ok(world.includes("hideFlightNotice();"),
+  'stale notifications are disposed on sync failure or scene teardown');
 assert.match(world,/const MAX_PENDING_MESSAGES=6/);
 assert.match(world,/pendingTransitions\.shift\(\)/);
 assert.match(world,/launchPaperPlane\(actor,recipient,now,event.kind,event.id\)/,

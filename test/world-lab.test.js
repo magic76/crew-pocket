@@ -310,6 +310,17 @@ assert.ok(css.includes('.crew-world-modal:not(.is-role-focused) .world-focus-act
 assert.ok(engine.includes("window.CrewWorldHost?.exitFocus?.();\n    refreshFocusActivity();"),
   'returning to overview immediately hides the previously selected Role activity');
 assert.ok(css.includes('.world-handoffs-panel[hidden]'));
+for(const doc of [main,html]){
+  assert.ok(doc.includes('id="world-flight-notice"'),
+    'real-message paper-flight cue is present in both hosted and standalone 3D');
+  assert.ok(doc.includes('id="world-flight-notice-text"'));
+}
+assert.ok(css.includes('.world-flight-notice[hidden]'),
+  'flight cue remains hidden without a verified new message');
+assert.ok(css.includes('.world-app:has(.world-flight-notice:not([hidden])) .world-handoffs-open'),
+  'message cue and collaboration button never cover each other');
+assert.ok(css.includes('.crew-world-modal.is-role-focused:has(.crew-world-chat-panel.keyboard-open:not([hidden])) .world-flight-notice'),
+  'the flight cue cannot obstruct mobile keyboard interaction');
 assert.match(engine,/function refreshFocusActivity\(\)/);
 assert.ok(engine.includes("window.CrewWorldHost?.isRoleFocused?.(role.id)"),
   'the activity ribbon only appears for the focused real Role');

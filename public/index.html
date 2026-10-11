@@ -1794,6 +1794,13 @@
       </div>
     </div>
     <div id="world-status-strip" class="world-status-strip" role="status" aria-live="polite">讀取小隊狀態中…</div>
+    <!-- Real saved messages only; this is a flight cue, NOT delivery proof. -->
+    <button id="world-flight-notice" class="world-flight-notice" type="button"
+      aria-label="查看剛記錄的角色協作訊息" hidden>
+      <span class="world-flight-notice-plane" aria-hidden="true">✈</span>
+      <span id="world-flight-notice-text" class="world-flight-notice-text">已記錄角色訊息</span>
+      <span class="world-flight-notice-action">查看 ›</span>
+    </button>
     <!-- Runtime-verified Role state only; tool-level steps remain in original Chat. -->
     <div id="world-focus-activity" class="world-focus-activity" role="status" aria-live="polite" hidden>
       <span id="world-focus-activity-dot" class="world-focus-activity-dot" aria-hidden="true"></span>
