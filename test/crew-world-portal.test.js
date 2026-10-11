@@ -91,8 +91,9 @@ async function tick(){await new Promise(resolve=>setImmediate(resolve));}
   nodes['world-reset'].addEventListener('click',()=>overviewClicks++);
   const file=fs.readFileSync(path.join(__dirname,'..','public/js/crew-world-launcher.js'),'utf8');
   vm.runInNewContext(file,{window:win,document:doc,console});
-  nodes['crew-world-open-btn'].click();
-  assert.equal(nodes['crew-world-modal'].hidden,false);
+  win.CrewWorldHost.restoreHomeView();
+  assert.equal(nodes['crew-world-modal'].hidden,false,
+    'Crew Home launches directly into the World after bootstrap');
   assert.strictEqual(nodes['crew-home-header'].parentNode,nodes['crew-home-header-host']);
   assert.equal(nodes['crew-home-view-toggle'].dataset.view,'map');
   assert.equal(nodes['crew-world-open-btn']['aria-pressed'],'true');
@@ -164,6 +165,9 @@ async function tick(){await new Promise(resolve=>setImmediate(resolve));}
   assert.strictEqual(nodes['messages-container'].parentNode,originalMessages);
   assert.strictEqual(nodes['chat-composer-footer'].parentNode,originalComposer);
   assert.equal(doc.body.dataset.primaryTab,'crew','return to original home tab');
+  win.CrewWorldHost.restoreHomeView();
+  assert.equal(nodes['crew-world-modal'].hidden,true,
+    'explicit Dashboard choice survives restoring Crew Home this session');
   nodes['crew-world-open-btn'].click();
   await tick();await tick();
   assert.equal(mountCount,1,'reopening resumes the existing scene');
@@ -270,6 +274,25 @@ async function tick(){await new Promise(resolve=>setImmediate(resolve));}
   assert.equal(nodes['send-btn'].disabled,false,
     'switch safety lock is released when leaving World');
   assert.strictEqual(nodes['chat-composer-footer'].parentNode,originalComposer);
+  // A manual return to the map becomes the preferred Crew Home view again.
+  nodes['crew-world-open-btn'].click();
+  await tick();await tick();
+  assert.equal(nodes['crew-world-modal'].hidden,false);
+  doc.body.dataset.primaryTab='settings';
+  win.CrewWorldHost.restoreHomeView();
+  assert.equal(nodes['crew-world-modal'].hidden,false,
+    'switching tabs must not remount an already-open map');
+  win.CrewWorldHost.close();
+  assert.equal(nodes['crew-world-modal'].hidden,true);
+  win.CrewWorldHost.restoreHomeView();
+  assert.equal(nodes['crew-world-modal'].hidden,true,
+    'map does not open in a non-Crew tab');
+  doc.body.dataset.primaryTab='crew';
+  win.CrewWorldHost.restoreHomeView();
+  await tick();await tick();
+  assert.equal(nodes['crew-world-modal'].hidden,false,
+    'returning from Settings restores map without changing Dashboard preference');
+  win.CrewWorldHost.close();
   console.log('Non-blocking Role switch: fast/slow, draft safety, keyboard guard, failure retry OK');
   console.log('Crew World modeless portal: original Context, full reading, navigation and one Chat DOM passed');
 })().catch(error=>{console.error(error);process.exitCode=1;});
