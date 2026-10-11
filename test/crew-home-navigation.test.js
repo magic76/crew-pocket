@@ -10,7 +10,13 @@ const ui = read('public/js/ui.js');
 const css = read('public/css/crew-home.css');
 const graph = read('public/js/mission-graph.js');
 
-assert.ok(html.includes('<body data-primary-tab="crew"'), 'Crew Home is the first view');
+assert.ok(html.includes('<body data-primary-tab="crew"'), 'Crew remains the primary router destination');
+assert.ok(html.includes('id="crew-home-view-toggle"')&&html.includes('data-view="map"'),
+  '3D World is initially the selected Crew Home view');
+assert.ok(html.indexOf('id="crew-world-open-btn"') < html.indexOf('id="crew-home-dashboard-btn"'),
+  'map is the primary action and Dashboard is secondary');
+assert.ok(html.includes('id="crew-home-dashboard-btn"'),
+  'Dashboard stays available as an explicit secondary view');
 assert.ok(html.includes('id="drawer" class="crew-home-view hidden'), 'compatibility anchor is a primary view, not an aside');
 assert.equal(html.includes('<aside id="drawer"'), false, 'no sidebar as primary view');
 assert.equal(html.includes('id="drawer-overlay"'), false, 'no modal-like overlay');
@@ -28,8 +34,14 @@ assert.ok(html.includes('id="crew-open-settings-btn"'));
 assert.ok(html.includes('id="crew-settings-back-btn"'));
 assert.equal(html.includes('id="primary-bottom-nav"'), false);
 assert.ok(app.includes("setPrimaryTab('crew', { hapticFeedback: false, recordHistory: false })"),
-  'startup must select Crew Home without requiring a Role Conversation');
+  'startup keeps the Crew router destination without forcing a Chat page');
 assert.ok(app.includes("drawer?.classList.toggle('hidden', primaryTab !== 'crew')"));
+assert.ok(app.includes('finishCrewHomeBootstrap()'),
+  'map mount waits for the Role and Conversation startup state');
+assert.ok(app.includes("window.CrewWorldHost?.restoreHomeView?.()"),
+  'returning from Settings or Chat resumes the preferred home view');
+assert.ok(read('public/css/crew-world-launcher.css').includes('.crew-home-view-toggle[data-view="dashboard"]::before'),
+  'dashboard selection slides the thumb right after the map-first reorder');
 assert.ok(app.includes("chatComposerFooter?.classList.toggle('hidden', primaryTab !== 'chat')"));
 assert.ok(app.includes("crewBackHomeBtn?.addEventListener('click'"));
 assert.ok(app.includes("crewOpenSettingsBtn?.addEventListener('click'"));
