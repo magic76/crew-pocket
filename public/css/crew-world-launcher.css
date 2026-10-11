@@ -178,6 +178,12 @@ body.crew-world-active #context-health-toast{z-index:10050!important}
   border:1px solid #88c1d96e;color:#e3f6ff;background:#214f6e;font-size:11px;font-weight:700;
 }
 .crew-world-command-head #crew-world-command-context:disabled{opacity:.42;cursor:wait}
+.crew-world-command-head #crew-world-command-context[data-context-tone="warning"]{
+  border-color:#e8bc6a;color:#ffe4a8;background:#62401e;
+}
+.crew-world-command-head #crew-world-command-context[data-context-tone="critical"]{
+  border-color:#fd8b85;color:#ffe3e0;background:#6e3035;
+}
 .crew-world-command-head #crew-world-command-context:focus-visible{
   outline:2px solid #76d8ff;outline-offset:2px;
 }
@@ -292,14 +298,7 @@ body.crew-world-active .crew-world-modal:not([hidden]){
   backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
   cursor:pointer;
 }
-.crew-world-modal .world-info{
-  bottom:calc(env(safe-area-inset-bottom,0px) + 158px);
-}
-.crew-world-modal .world-info:has(.world-description:not([hidden])){max-height:min(43dvh,310px);overflow-y:auto}
-/* Don't place the selected-role caption on top of the floating original chat. */
-.crew-world-modal:has(.crew-world-chat-panel:not(.compact):not([hidden])) .world-info{display:none!important}
 @media(max-width:540px){
   .crew-world-modal .world-quick-tools{top:calc(env(safe-area-inset-top,0px) + 8px);right:9px;gap:6px}
   .crew-world-modal .world-quick-tools > button{width:39px;min-width:39px;height:39px}
-  .crew-world-modal .world-info{bottom:calc(env(safe-area-inset-bottom,0px) + 156px)}
 }
