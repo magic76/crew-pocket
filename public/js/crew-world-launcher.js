@@ -251,5 +251,6 @@
   });
   // Exposed only to the scene in this same document, not cross-frame messages.
   window.CrewWorldHost={open,close,hideChat,openChat,openFullChat,onSelectedRole,
-    focusRole,exitFocus,isRoleFocused:id=>Boolean(focusedRoleId&&focusedRoleId===id)};
+    focusRole,exitFocus,isRoleFocused:id=>focusedRoleId===id,
+    isFocusActive:()=>Boolean(focusedRoleId)};
 })();
