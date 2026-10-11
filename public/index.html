@@ -1788,6 +1788,14 @@
         <div id="world-loading" role="status">正在建立 3D 世界…</div>
       </div>
     </div>
+    <div id="world-status-strip" class="world-status-strip" role="status" aria-live="polite">讀取小隊狀態中…</div>
+    <section id="world-district-picker" class="world-district-picker" role="dialog" aria-label="選擇工作室成員" hidden>
+      <div class="world-district-picker-head">
+        <strong id="world-district-picker-name">工作室成員</strong>
+        <button id="world-district-picker-close" type="button" aria-label="關閉成員選單">✕</button>
+      </div>
+      <div id="world-district-picker-list" class="world-district-picker-list"></div>
+    </section>
     <section id="world-info" class="world-info is-collapsed" aria-live="polite">
       <div class="world-info-head">
         <div class="world-portrait" id="world-portrait">P</div>
@@ -1797,6 +1805,7 @@
           <button type="button" id="world-info-toggle" aria-expanded="false" aria-controls="world-role-description">詳情</button>
         </div>
       </div>
+      <p class="world-context-health" id="world-role-context" aria-live="polite">Context · 展開詳情後讀取</p>
       <p class="world-description" id="world-role-description">選擇人物，體驗同一套 Low-poly 骨架在不同 Role 上的效果。</p>
       <div class="world-action-row">
         <button type="button" id="world-focus">聚焦人物</button>
