@@ -23,7 +23,10 @@
   const commandRole=document.getElementById('crew-world-command-role');
   const commandState=document.getElementById('crew-world-command-state');
   const commandRead=document.getElementById('crew-world-command-read');
+  const switchSpinner=document.getElementById('crew-world-role-spinner');
+  const switchRetry=document.getElementById('crew-world-command-retry');
   const promptInput=document.getElementById('prompt-input');
+  const sendButton=document.getElementById('send-btn');
   const peek=document.getElementById('crew-world-result-peek');
   const peekKind=document.getElementById('crew-world-result-peek-kind');
   const peekText=document.getElementById('crew-world-result-peek-text');
@@ -36,7 +39,29 @@
   let selectVersion=0,previousTab=null,restoreTab=false,openVersion=0;
   let sceneScripts=null;
   let requestedRole=null,roleSwitchQueue=Promise.resolve(),switchingRole=false,commandDraft='';
+  let switchFailed=false,switchTimer=null,sendLockHeld=false,sendWasDisabled=false;
   let rolesSignature='',previewObserver=null,previewFrame=0;
+  function stopSwitchTimer(){
+    if(switchTimer!==null){window.clearTimeout(switchTimer);switchTimer=null;}
+    if(switchSpinner)switchSpinner.hidden=true;
+  }
+  function guardSend(guard){
+    if(!sendButton)return;
+    if(guard&&!sendLockHeld){
+      sendWasDisabled=Boolean(sendButton.disabled);
+      sendLockHeld=true;
+    }
+    if(sendLockHeld){
+      sendButton.disabled=guard||sendWasDisabled;
+      if(!guard)sendLockHeld=false;
+    }
+  }
+  function restoreWorldDraft(){
+    if(!promptInput||!commandDraft||promptInput.value)return;
+    promptInput.value=commandDraft;
+    if(typeof Event==='function')
+      promptInput.dispatchEvent?.(new Event('input',{bubbles:true}));
+  }
   const roleSnapshot=()=>window.getCrewCockpitSnapshot?.();
   function liveRole(id){return roleSnapshot()?.roles?.find(role=>role.id===id)||null;}
   function syncCommandActions(){
@@ -44,6 +69,9 @@
       Boolean(liveRole(selectedRoleId))&&window.getCurrentRoleId?.()===selectedRoleId;
     if(commandContext)commandContext.disabled=!ready;
     if(commandFull)commandFull.disabled=!ready;
+    if(commandRead)commandRead.disabled=!ready;
+    if(peek)peek.disabled=!ready;
+    guardSend(!modal.hidden&&!ready);
   }
   function updateCommandRole(){
     if(!commandRole)return;
@@ -62,8 +90,11 @@
     if(selectedRoleId&&rows.some(role=>role.id===selectedRoleId))
       commandRole.value=selectedRoleId;
     if(commandState)commandState.textContent=rows.length
-      ?switchingRole?'切換中…':panel.hidden?'準備指令框…':'可以輸入指令'
+      ?switchFailed?'角色未就緒':switchingRole
+        ?switchSpinner&&!switchSpinner.hidden?'切換中…':''
+        :panel.hidden?'準備指令框…':'可以輸入指令'
       :'尚無可用 Role';
+    if(switchRetry)switchRetry.hidden=!switchFailed||!rows.length;
     syncCommandActions();
   }
   function updatePreview(){
@@ -193,8 +224,9 @@
   function close(){
     if(modal.hidden)return;
     selectVersion++;openVersion++;
+    stopSwitchTimer();
     hideChat();
-    requestedRole=null;switchingRole=false;selectVersion++;
+    requestedRole=null;switchingRole=false;switchFailed=false;selectVersion++;
     stopWorld?.pause?.();
     modal.hidden=true;
     updateHomeView('dashboard');
@@ -202,6 +234,8 @@
     panel.style.removeProperty('--crew-visible-height');
     selectedRoleId=null;selectedRoleName='';rolesSignature='';
     document.body.classList.remove('crew-world-active');
+    guardSend(false);
+    if(switchRetry)switchRetry.hidden=true;
     // Leave the underlying active Role untouched; restore the tab from which
     // the optional map was opened, without touching ongoing generations.
     if(restoreTab&&previousTab==='crew'&&document.body.dataset.primaryTab==='chat'){
@@ -251,10 +285,19 @@
       return Promise.resolve(false);
     const version=++selectVersion;
     if(!switchingRole)commandDraft=promptInput?.value||'';
-    requestedRole=roleId;switchingRole=true;
+    requestedRole=roleId;switchingRole=true;switchFailed=false;
+    stopSwitchTimer();
     if(peek)peek.hidden=true; // Never show prior Role results during a switch.
     panel.classList.add('role-switching');
     updateCommandRole();
+    // Fast Role switches do not flash any progress UI. Only a slow switch
+    // gets a small spinner beside the still-interactive Role picker.
+    switchTimer=window.setTimeout(()=>{
+      switchTimer=null;
+      if(modal.hidden||!switchingRole||version!==selectVersion)return;
+      if(switchSpinner)switchSpinner.hidden=false;
+      updateCommandRole();
+    },200);
     // Serialize navigation. A superseded Role must never mount a stale
     // composer or overwrite the user's unsent global command draft.
     const navigate=roleSwitchQueue.catch(()=>{}).then(async()=>{
@@ -277,11 +320,7 @@
       }
       // selectRole / loadConversationHistory can clear the original textarea.
       // Restore the unsent draft only after the intended Role is verified.
-      if(promptInput&&commandDraft&&!promptInput.value){
-        promptInput.value=commandDraft;
-        if(typeof Event==='function')
-          promptInput.dispatchEvent?.(new Event('input',{bubbles:true}));
-      }
+      restoreWorldDraft();
       messages.scrollTop=messages.scrollHeight;
       updatePreview();
       syncCommandActions();
@@ -291,11 +330,13 @@
     void navigate.then(ok=>{
       if(version!==selectVersion||modal.hidden)return;
       switchingRole=false;
+      switchFailed=!ok;
+      stopSwitchTimer();
       panel.classList.remove('role-switching');
       requestedRole=null;
-      if(!ok&&commandState)commandState.textContent='角色未就緒，請重試';
-      else updateCommandRole();
-      syncCommandActions();
+      // A failed navigation must not discard an in-progress unsent draft.
+      restoreWorldDraft();
+      updateCommandRole();
     });
     return navigate;
   }
@@ -308,7 +349,8 @@
     window.openCrewCollaboration?.(roleId,eventId);
   }
   function openFullChat(roleId=selectedRoleId){
-    if(!roleId)return;
+    if(!roleId||(!modal.hidden&&(switchingRole||switchFailed||
+      window.getCurrentRoleId?.()!==roleId)))return;
     restoreTab=false;
     close();
     window.openCrewCockpitRole?.(roleId);
@@ -365,20 +407,35 @@
     if(stopWorld?.selectRole)stopWorld.selectRole(id);
     else onSelectedRole(id,liveRole(id).name);
   });
+  switchRetry?.addEventListener('click',()=>{
+    if(modal.hidden||switchingRole||!switchFailed||!liveRole(selectedRoleId))return;
+    void openChat(selectedRoleId,{compact:true});
+  });
   commandRead?.addEventListener('click',()=>{
+    if(switchingRole||switchFailed)return;
     if(panel.hidden){if(selectedRoleId)void openChat(selectedRoleId,{compact:false});return;}
     if(panel.classList.contains('compact'))toggleExpand();
     else collapseChat();
   });
   peek?.addEventListener('click',()=>{
+    if(switchingRole||switchFailed)return;
     if(!panel.hidden&&panel.classList.contains('compact')){
       toggleExpand();
       messages.scrollTop=messages.scrollHeight;
     }
   });
   promptInput?.addEventListener('input',()=>{
-    if(!modal.hidden&&!switchingRole)commandDraft=promptInput.value;
+    if(!modal.hidden)commandDraft=promptInput.value;
   });
+  // Native button and Ctrl/Cmd+Enter are both guarded. Keep the textarea
+  // enabled so an existing draft remains editable while Role history loads.
+  promptInput?.addEventListener('keydown',event=>{
+    if(modal.hidden||(!switchingRole&&!switchFailed))return;
+    if(event.key==='Enter'&&(event.ctrlKey||event.metaKey)){
+      event.preventDefault();
+      event.stopImmediatePropagation?.();
+    }
+  },true);
   hideButton.addEventListener('click',collapseChat);
   expandButton.addEventListener('click',toggleExpand);
   chatButton?.addEventListener('click',()=>{void openChat();});
