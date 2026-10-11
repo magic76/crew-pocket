@@ -305,6 +305,10 @@ for(const document of [main,html]){
   }
 }
 assert.ok(css.includes('.world-focus-activity[hidden]'));
+assert.ok(css.includes('.crew-world-modal:not(.is-role-focused) .world-focus-activity'),
+  'an overview or resumed World must not retain the old focused activity ribbon');
+assert.ok(engine.includes("window.CrewWorldHost?.exitFocus?.();\n    refreshFocusActivity();"),
+  'returning to overview immediately hides the previously selected Role activity');
 assert.ok(css.includes('.world-handoffs-panel[hidden]'));
 assert.match(engine,/function refreshFocusActivity\(\)/);
 assert.ok(engine.includes("window.CrewWorldHost?.isRoleFocused?.(role.id)"),
