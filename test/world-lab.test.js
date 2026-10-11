@@ -424,8 +424,10 @@ assert.deepEqual(events.collaborationConnections(evidenceForTests,'a',false,3,li
   ['m3','m7'],'previous arcs expire while later-timestamped messages remain eligible');
 assert.deepEqual(events.collaborationConnections(evidenceForTests,'a',false,3,linkNow+61000),[],
   'after 60s all lines disappear without requiring any new message');
-assert.deepEqual(events.collaborationConnections(evidenceForTests,'a',true,3,linkNow+55000),[],
-  'selected Role filter must never preserve an expired line');
+assert.deepEqual(events.collaborationConnections(evidenceForTests,'a',true,3,linkNow+55000).map(item=>item.id),
+  ['m7'],'selected Role filter retains only an event that is still within its own 60s window');
+assert.deepEqual(events.collaborationConnections(evidenceForTests,'a',true,3,linkNow+61000),[],
+  'selected Role arcs expire once the last matching event crosses the TTL');
 assert.ok(events.traceableEvents(evidenceForTests,['a','b','c','d'],12,linkNow).some(item=>item.id==='m5'),
   'the saved collaboration history remains available after the line expires');
 assert.ok(engine.includes("shownHandoffs(),roles[selected].id,false,3,Date.now()"),
