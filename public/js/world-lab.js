@@ -266,13 +266,16 @@
     speech.hidden=true;
     const attentionMark=document.createElement('span');
     attentionMark.className='world-label-alert';attentionMark.hidden=true;
-    button.append(attentionMark,speech,title,state,detail);listen(button,'click',()=>handleRoleTap(index));
+    const contextMark=document.createElement('span');
+    contextMark.className='world-label-context';contextMark.hidden=true;
+    button.append(attentionMark,speech,title,state,detail,contextMark);
+    listen(button,'click',()=>handleRoleTap(index));
     listen(speech,'click',event=>{
       event.preventDefault();event.stopPropagation();
       hideSpeech(index,true);
     });
     button.style.setProperty('--world-role-color',role.color);
-    labelsHost.appendChild(button);return{button,state,detail,speech,attentionMark};
+    labelsHost.appendChild(button);return{button,state,detail,speech,attentionMark,contextMark};
   });
   // Standalone 3D Lab retains its debug roster; the hosted map deliberately
   // has no duplicate Role strip beside the persistent P10 commander.
@@ -591,9 +594,63 @@
   const actionRow=document.querySelector('.world-action-row');
   // Real usage emphasizes talking and opening conversations; demo controls
   // remain available only in offline art-preview mode.
-  document.getElementById('world-work').hidden=isLive;
-  document.getElementById('world-handoff').hidden=isLive;
+  const demoWork=document.getElementById('world-work');
+  const demoHandoff=document.getElementById('world-handoff');
+  if(demoWork)demoWork.hidden=isLive;
+  if(demoHandoff)demoHandoff.hidden=isLive;
   if(actionRow)actionRow.style.gridTemplateColumns='repeat(3,minmax(0,1fr))';
+  // Context pressure belongs to each real Role's window, not to the
+  // removed selected-Role details bar. Unknown data never becomes 0%.
+  function contextForRole(roleId){
+    if(!isLive||!synced)return null;
+    const store=window.CrewContextUsage;
+    if(!store)return null;
+    const detail=store.describe(store.get(roleId));
+    return detail.known&&(detail.tone==='warning'||detail.tone==='critical')
+      ?detail:null;
+  }
+  function syncContextWarnings(){
+    let elevated=0,critical=0;
+    for(let i=0;i<labels.length;i++){
+      const {button,contextMark}=labels[i];
+      const pressure=contextForRole(roles[i].id);
+      const tone=pressure?.tone||'';
+      contextMark.hidden=!pressure;
+      contextMark.textContent=pressure?'Context '+pressure.label:'';
+      button.dataset.contextTone=tone;
+      const suffix=pressure?' · Context '+pressure.label+(pressure.tone==='critical'?'，即將達上限':'，接近上限'):'';
+      button.title=(button.dataset.baseTitle||roles[i].name)+suffix;
+      button.setAttribute('aria-label',(button.dataset.baseAria||roles[i].name)+suffix);
+      if(pressure){elevated++;if(tone==='critical')critical++;}
+    }
+    if(statusStrip){
+      statusStrip.querySelector('[data-context-warning-count]')?.remove();
+      if(elevated){
+        const pill=document.createElement('span');
+        pill.dataset.contextWarningCount=String(elevated);
+        pill.dataset.tone=critical?'context-critical':'context-warning';
+        pill.textContent=critical
+          ?critical+' 位 Context 即將達上限'
+          :elevated+' 位 Context 偏高';
+        statusStrip.appendChild(pill);
+      }
+    }
+    const command=document.getElementById('crew-world-command-context');
+    if(command){
+      const pressure=contextForRole(roles[selected].id);
+      command.dataset.contextTone=pressure?.tone||'';
+      const info=pressure?'Context '+pressure.label+' · '+pressure.detail:'查看目前角色 Context Health';
+      command.title=info;
+      command.setAttribute('aria-label',info);
+    }
+  }
+  if(isLive&&window.CrewContextUsage){
+    listen(window,'crew:context-usage-updated',syncContextWarnings);
+    void window.CrewContextUsage.load();
+    trackedInterval(()=>{
+      if(!paused&&!document.hidden)void window.CrewContextUsage.load();
+    },30000);
+  }
   function updateInfo(){
     if(statusStrip){
       statusStrip.replaceChildren();
@@ -619,10 +676,13 @@
         (!synced?'狀態未同步':working?working+' 工作中':waiting?waiting+' 待處理':'待命');
     }
     const actor=actors[selected],role=actor.role;
-    document.getElementById('world-role-name').textContent=role.name;
-    document.getElementById('world-role-state').textContent=status(actor);
-    document.getElementById('world-role-description').textContent=role.description;
-    portrait.textContent=role.initial;portrait.style.background=role.coat;
+    const roleName=document.getElementById('world-role-name');
+    const roleState=document.getElementById('world-role-state');
+    const roleDescription=document.getElementById('world-role-description');
+    if(roleName)roleName.textContent=role.name;
+    if(roleState)roleState.textContent=status(actor);
+    if(roleDescription)roleDescription.textContent=role.description;
+    if(portrait){portrait.textContent=role.initial;portrait.style.background=role.coat;}
     labels.forEach((entry,i)=>{
       const head=headStatus(actors[i]);
       entry.button.dataset.selected=String(i===selected);
@@ -631,15 +691,16 @@
       entry.button.dataset.tone=head.tone;
       entry.state.textContent=head.state;
       entry.detail.textContent=head.detail;
-      entry.button.title=roles[i].name+' · '+head.state+(head.detail?' · '+head.detail:'');
-      entry.button.setAttribute('aria-label',roles[i].name+' · '+head.state+
-        (entry.speech.hidden?'':' · 最新回覆：'+entry.speech.textContent));
+      entry.button.dataset.baseTitle=roles[i].name+' · '+head.state+(head.detail?' · '+head.detail:'');
+      entry.button.dataset.baseAria=roles[i].name+' · '+head.state+
+        (entry.speech.hidden?'':' · 最新回覆：'+entry.speech.textContent);
     });
     chat?.sync();
     roster.forEach((button,i)=>button?.setAttribute('aria-pressed',String(i===selected)));
     actors[selected].root.add(selectionHalo,focusHalo);
     if(contextLine&&document.getElementById('world-info')?.classList.contains('is-collapsed'))
       contextLine.textContent='Context · 展開詳情後讀取';
+    syncContextWarnings();
     renderAttention();
     refreshRolePeek();
     renderHandoffs();
@@ -1089,8 +1150,9 @@
     const placements=labels.map(({button,speech},index)=>{
       const projected=actors[index].root.position.clone().add(new T.Vector3(0,3.3,0)).project(camera);
       const x=(projected.x+1)/2*width,y=(-projected.y+1)/2*height;
-      const active=roles[index].state==='working'||!speech.hidden;
-      const priority=active?(!speech.hidden?0:1):
+      const active=roles[index].state==='working'||!speech.hidden||
+        Boolean(contextForRole(roles[index].id));
+      const priority=active?(!speech.hidden?0:contextForRole(roles[index].id)?.tone==='critical'?0:1):
         index===selected?2:
         roles[index].state==='working'?2:roles[index].state==='waiting'?3:4;
       return {button,index,x,y,priority,depth:projected.z,active};
