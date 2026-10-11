@@ -2,7 +2,8 @@
 (() => {
   'use strict';
   function mountWorld(){
-  let disposed=false,teardown=null,raf=0;
+  let disposed=false,paused=false,pausedAt=0,sceneReady=false,teardown=null,raf=0;
+  let pauseScene=()=>{},resumeScene=()=>{};
   const cleanups=[];
   function listen(target,event,handler,options){
     if(!target)return;
@@ -449,10 +450,10 @@
     window.parent.postMessage({type:'crew-world-close'},location.origin);
   });
   async function synchronize(){
-    if(!isLive||document.hidden)return;
+    if(!isLive||paused||document.hidden)return;
     try{
       const next=await loadStatus();
-      if(disposed)return;
+      if(disposed||paused)return;
       const byId=new Map(next.map(item=>[item.roleId,item]));
       actors.forEach((actor,index)=>{
         const item=byId.get(actor.role.id);
@@ -494,7 +495,7 @@
   }
   let speechRequest=false;
   async function refreshSpeechBubbles(){
-    if(!isLive||document.hidden||speechRequest)return;
+    if(!isLive||paused||document.hidden||speechRequest)return;
     speechRequest=true;
     try{
       await Promise.all(roles.map(async(role,index)=>{
@@ -504,7 +505,7 @@
           });
           if(!response.ok)return;
           const data=await response.json();
-          if(disposed||data.success!==true||data.roleId!==role.id)return;
+          if(disposed||paused||data.success!==true||data.roleId!==role.id)return;
           const entry=labels[index];
           const text=typeof data.message?.text==='string'?data.message.text.trim():'';
           if(!text){entry.speech.textContent='';entry.speech.hidden=true;return;}
@@ -539,14 +540,14 @@
   let seenEvents=null,eventRequest=false;
   const pendingTransitions=[];
   async function observeHandoffs(){
-    if(!isLive||!synced||!planner||document.hidden||eventRequest)return;
+    if(!isLive||paused||!synced||!planner||document.hidden||eventRequest)return;
     eventRequest=true;
     try{
       const response=await fetch('/api/crew-room-events',{cache:'no-store',credentials:'same-origin'});
       if(!response.ok)throw new Error('No Room event metadata');
       const data=await response.json();
       if(data.success!==true||!Array.isArray(data.events))throw new Error('Room events invalid');
-      if(disposed)return;
+      if(disposed||paused)return;
       const result=planner.observe(data.events,seenEvents,roles.map(role=>role.id),Date.now());
       seenEvents=result.seenIds;
       for(const event of result.arrivals){
@@ -581,12 +582,12 @@
     // First fetch is a baseline only; subsequent newly saved events trigger motion.
     void observeHandoffs();
     void refreshSpeechBubbles();
-    trackedInterval(()=>{if(!disposed&&!document.hidden)void synchronize();},7000);
-    trackedInterval(()=>{if(!disposed&&!document.hidden)void observeHandoffs();},3200);
-    trackedInterval(()=>{if(!disposed&&!document.hidden)void refreshSpeechBubbles();},9000);
+    trackedInterval(()=>{if(!disposed&&!paused&&!document.hidden)void synchronize();},7000);
+    trackedInterval(()=>{if(!disposed&&!paused&&!document.hidden)void observeHandoffs();},3200);
+    trackedInterval(()=>{if(!disposed&&!paused&&!document.hidden)void refreshSpeechBubbles();},9000);
     listen(document,'visibilitychange',()=>{
       if(document.hidden){seenEvents=null;pendingTransitions.length=0;}
-      else{void synchronize();void observeHandoffs();void refreshSpeechBubbles();}
+      else if(!paused){void synchronize();void observeHandoffs();void refreshSpeechBubbles();}
     });
   }
   listen(document.getElementById('world-reset'),'click',()=>{
@@ -688,7 +689,7 @@
 
   let elapsed=0,last=performance.now();
   function frame(now){
-    if(disposed)return;
+    if(disposed||paused)return;
     raf=requestAnimationFrame(frame);
     const delta=Math.min((now-last)/1000,.06);last=now;
     if(document.hidden)return;
@@ -779,7 +780,28 @@
   }
   updateInfo();
   window.CrewWorldHost?.onSelectedRole?.(roles[selected].id,roles[selected].name);
-  resize();frame(performance.now());
+  sceneReady=true;
+  pauseScene=()=>{
+    if(disposed||paused)return;
+    paused=true;pausedAt=performance.now();
+    if(raf)cancelAnimationFrame(raf);
+    raf=0;
+  };
+  resumeScene=()=>{
+    if(disposed||!paused)return;
+    const now=performance.now(),duration=Math.max(0,now-pausedAt);
+    paused=false;last=now;
+    if(focus)focus.start+=duration;
+    actors.forEach(actor=>{if(actor.mode!=='idle')actor.expires+=duration;});
+    activePlanes.forEach(flight=>{flight.startedAt+=duration;});
+    activeRoadSignals.forEach(signal=>{signal.startedAt+=duration;});
+    arrivalFlashes.forEach(cue=>{cue.startedAt+=duration;});
+    resize();
+    if(document.hidden)return;
+    raf=requestAnimationFrame(frame);
+    if(isLive){void synchronize();void observeHandoffs();void refreshSpeechBubbles();}
+  };
+  resize();if(!paused)frame(performance.now());
   teardown=()=>{
     for(const flight of activePlanes)kit.disposePaperPlane?.(scene,flight.plane);
     activePlanes.length=0;
@@ -806,10 +828,13 @@
   };
   }
   void start().catch(()=>{if(!disposed)fail('無法建立 3D 世界，請重新開啟頁面。');});
-  return ()=>{
+  const dispose=()=>{
     disposed=true;teardown?.();teardown=null;
     for(const cleanup of cleanups.splice(0).reverse())cleanup();
   };
+  dispose.pause=()=>{paused=true;pauseScene();};
+  dispose.resume=()=>{if(!sceneReady){paused=false;return;}resumeScene();};
+  return dispose;
   }
   window.mountCrewWorldScene=mountWorld;
   if(document.body?.firstElementChild?.id==='world-app')mountWorld();

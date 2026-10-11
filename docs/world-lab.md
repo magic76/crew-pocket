@@ -80,7 +80,7 @@ and the original Chat tab stay available.
 
 ## Mobile usage
 
-1. Open **AI 小隊 → 地圖** using the Dashboard / 地圖 segmented toggle.
+1. Use the shared top bar: Dashboard / 地圖 toggle on the left, refresh / settings / add on the right.
 2. Drag to pan, pinch to zoom; tap a Role and select **開啟聊天**.
 3. The world shows a bottom sheet holding the **original messages-container
    and chat-composer-footer DOM nodes**. It uses the existing Role conversation,
@@ -88,8 +88,9 @@ and the original Chat tab stay available.
 4. Select **收合** to see the world again; the active Role keeps working.
    **展開** opens a near-full-screen chat sheet on the world.
 5. Select **前往對話** to return to the normal full Chat view.
-6. Switch back with **Dashboard**, ✕ or ←. Chat nodes are returned to their original
-   positions; Role and stream state is not restarted or cloned.
+6. Switch back with **Dashboard**. The shared two-row header stays fixed above both views;
+   the 3D scene pauses while Dashboard is visible and resumes with its camera and selection intact.
+   Chat nodes return to their original positions; Role and stream state is not restarted or cloned.
 
 Android IME positioning uses the **single** window.visualViewport, and only
 one set of chat inputs and listeners exists. Confirm Gboard on a real device.
@@ -99,7 +100,8 @@ This separate page is now **visual-only** and has no second Chat implementation.
 
 ## Architecture
 
-- `public/js/crew-world-launcher.js`: manages optional world opening,
+- `public/js/crew-world-launcher.js`: keeps the shared two-row header anchored and
+  manages optional world opening,
   lazy-loads local Three.js (~600 KB) and world modules only on first access,
   original Chat DOM move/restore with placeholders, Role navigation via
   `window.openCrewCockpitRole`, and the floating sheet.
@@ -126,9 +128,10 @@ context, memory, credentials or workspace is shared.
 
 ## Lifecycle and safety
 
-- Opening creates one WebGLRenderer; closing cancels RAF, intervals and timers,
-  disconnects ResizeObserver, removes DOM listeners, disposes geometries,
-  materials, renderer and forces the WebGL context to be released.
+- Opening creates one WebGLRenderer. Switching to Dashboard pauses rendering and
+  status polling while preserving the scene, camera and selected Role. The scene
+  is disposed only when the page is unloaded; pause time does not consume active
+  work animations.
 - The same original Chat DOM is **moved**, not cloned. Its input and listeners,
   including stop and attachments, survive show/hide.
 - The selected Role must be present in the host snapshot. Role navigation is

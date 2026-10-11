@@ -31,23 +31,26 @@ async function tick(){await new Promise(resolve=>setImmediate(resolve));}
   const doc={activeElement:null,body:{dataset:{primaryTab:'crew'},classList:{
     set:new Set(),add(k){this.set.add(k);},remove(k){this.set.delete(k);}
   }},events:new Map()};
-  const ids=['crew-world-open-btn','crew-home-dashboard-btn','crew-world-dashboard-btn','crew-world-map-btn','crew-world-modal',
+  const ids=['crew-world-open-btn','crew-home-dashboard-btn','crew-home-view-toggle','crew-home-header','crew-home-header-host','crew-world-modal',
     'crew-world-chat-panel','crew-world-chat-messages-slot','crew-world-chat-composer-slot',
     'messages-container','chat-composer-footer','crew-world-chat-hide','crew-world-chat-expand',
     'world-chat-open','crew-world-chat-role-name','crew-back-home-btn','world-stage',
     'crew-world-focus-bar','crew-world-focus-back','crew-world-focus-name',
     'crew-world-focus-full','world-reset'];
   const nodes=Object.fromEntries(ids.map(id=>[id,new Node(id,doc)]));
+  nodes['crew-home-header-host'].appendChild(nodes['crew-home-header']);
+  nodes['crew-home-header'].appendChild(nodes['crew-home-view-toggle']);
   const base=new Node('base',doc),originalMessages=new Node('messages-parent',doc),
     originalComposer=new Node('composer-parent',doc);
   originalMessages.appendChild(nodes['messages-container']);
   originalComposer.appendChild(nodes['chat-composer-footer']);
-  let mountCount=0,disposeCount=0,roleNavigations=[];
+  let mountCount=0,disposeCount=0,pauseCount=0,resumeCount=0,roleNavigations=[];
   let width=810;
   const win={
     innerHeight:810,visualViewport:{offsetTop:0,height:810,addEventListener(){}},
     addEventListener(){},requestAnimationFrame(fn){fn();},
-    mountCrewWorldScene(){mountCount++;return()=>disposeCount++;},
+    mountCrewWorldScene(){mountCount++;const dispose=()=>disposeCount++;
+      dispose.pause=()=>pauseCount++;dispose.resume=()=>resumeCount++;return dispose;},
     getCrewCockpitSnapshot(){return{roles:[{id:'pocket',name:'Pocket'},{id:'teacher',name:'Teacher'}]};},
     getCurrentRoleId(){return roleNavigations.at(-1);},
     async openCrewCockpitRole(id){roleNavigations.push(id);doc.body.dataset.primaryTab='chat';}
@@ -61,9 +64,10 @@ async function tick(){await new Promise(resolve=>setImmediate(resolve));}
   vm.runInNewContext(file,{window:win,document:doc,console});
   nodes['crew-world-open-btn'].click();
   assert.equal(nodes['crew-world-modal'].hidden,false);
+  assert.strictEqual(nodes['crew-home-header'].parentNode,nodes['crew-home-header-host']);
+  assert.equal(nodes['crew-home-view-toggle'].dataset.view,'map');
   assert.equal(nodes['crew-world-open-btn']['aria-pressed'],'true');
   assert.equal(nodes['crew-home-dashboard-btn']['aria-pressed'],'false');
-  assert.equal(nodes['crew-world-map-btn']['aria-pressed'],'true');
   await tick();
   assert.equal(mountCount,1);
   win.CrewWorldHost.onSelectedRole('pocket','Pocket');
@@ -106,16 +110,20 @@ async function tick(){await new Promise(resolve=>setImmediate(resolve));}
   assert.strictEqual(nodes['chat-composer-footer'].parentNode,originalComposer,
     'returning to overview restores the sole composer');
   assert.equal(nodes['crew-world-modal'].hidden,false,'returning to overview keeps map open');
-  nodes['crew-world-dashboard-btn'].click();
+  nodes['crew-home-dashboard-btn'].click();
   assert.equal(nodes['crew-world-open-btn']['aria-pressed'],'false');
   assert.equal(nodes['crew-home-dashboard-btn']['aria-pressed'],'true');
-  assert.equal(disposeCount,1,'closing world must dispose one WebGL instance');
+  assert.equal(pauseCount,1,'switching to Dashboard pauses the existing world');
+  assert.strictEqual(nodes['crew-home-header'].parentNode,nodes['crew-home-header-host']);
   assert.strictEqual(nodes['messages-container'].parentNode,originalMessages);
   assert.strictEqual(nodes['chat-composer-footer'].parentNode,originalComposer);
   assert.equal(doc.body.dataset.primaryTab,'crew','return to original home tab');
   nodes['crew-world-open-btn'].click();
   await tick();
-  nodes['crew-world-dashboard-btn'].click();
-  assert.equal(disposeCount,2,'reopening and closing must not leak scene');
-  console.log('Crew World portal: one Chat DOM, Role navigation, collapse and GPU cleanup passed');
+  assert.equal(mountCount,1,'reopening resumes the existing scene');
+  assert.equal(resumeCount,1,'reopening resumes the paused world');
+  nodes['crew-home-dashboard-btn'].click();
+  assert.equal(pauseCount,2,'Dashboard switch pauses the scene again');
+  assert.equal(disposeCount,0,'Dashboard switches preserve the scene for reuse');
+  console.log('Crew World portal: shared navigation, one Chat DOM, and scene pause/resume passed');
 })().catch(error=>{console.error(error);process.exitCode=1;});

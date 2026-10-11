@@ -5,8 +5,11 @@
   'use strict';
   const opener=document.getElementById('crew-world-open-btn');
   const dashboardButton=document.getElementById('crew-home-dashboard-btn');
-  const worldDashboardButton=document.getElementById('crew-world-dashboard-btn');
-  const worldMapButton=document.getElementById('crew-world-map-btn');
+  const settingsButton=document.getElementById('crew-open-settings-btn');
+  const addRoleButton=document.getElementById('drawer-new-role-btn');
+  const toggle=document.getElementById('crew-home-view-toggle');
+  const headerHost=document.getElementById('crew-home-header-host');
+  const homeHeader=document.getElementById('crew-home-header');
   const modal=document.getElementById('crew-world-modal');
   const panel=document.getElementById('crew-world-chat-panel');
   const messagesSlot=document.getElementById('crew-world-chat-messages-slot');
@@ -21,7 +24,7 @@
   const focusBack=document.getElementById('crew-world-focus-back');
   const focusName=document.getElementById('crew-world-focus-name');
   const focusFull=document.getElementById('crew-world-focus-full');
-  if(!opener||!modal||!worldDashboardButton||!panel||!messagesSlot||!composerSlot||
+  if(!opener||!dashboardButton||!toggle||!headerHost||!homeHeader||!modal||!panel||!messagesSlot||!composerSlot||
      !messages||!composer||!hideButton||!expandButton)return;
   let restoreMessages=null,restoreComposer=null;
   let stopWorld=null,previousFocus=null,selectedRoleId=null,selectedRoleName='';
@@ -123,20 +126,21 @@
   }
   function updateHomeView(mode){
     const dashboard=mode==='dashboard';
+    toggle.dataset.view=dashboard?'dashboard':'map';
     dashboardButton?.setAttribute('aria-pressed',String(dashboard));
     opener.setAttribute('aria-pressed',String(!dashboard));
     dashboardButton?.classList.toggle('is-active',dashboard);
     opener.classList.toggle('is-active',!dashboard);
-    worldDashboardButton?.setAttribute('aria-pressed',String(dashboard));
-    worldMapButton?.setAttribute('aria-pressed',String(!dashboard));
-    worldDashboardButton?.classList.toggle('is-active',dashboard);
-    worldMapButton?.classList.toggle('is-active',!dashboard);
+  }
+  function syncHeaderHeight(){
+    const height=headerHost.getBoundingClientRect?.().height||headerHost.offsetHeight||0;
+    if(height>0)document.documentElement.style.setProperty('--crew-shared-header-height',Math.ceil(height)+'px');
   }
   function close(){
     if(modal.hidden)return;
     selectVersion++;openVersion++;
     if(focusedRoleId)exitFocus();else hideChat();
-    stopWorld?.();stopWorld=null;
+    stopWorld?.pause?.();
     modal.hidden=true;
     updateHomeView('dashboard');
     panel.style.removeProperty('--crew-keyboard-rise');
@@ -160,20 +164,22 @@
     previousTab=document.body.dataset.primaryTab||null;
     previousFocus=document.activeElement;
     restoreTab=true;
+    document.body.classList.add('crew-world-active');
+    syncHeaderHeight();
     modal.hidden=false;
     focusedRoleId=null;
     modal.classList.remove('is-role-focused');
     if(focusBar)focusBar.hidden=true;
     updateHomeView('map');
-    document.body.classList.add('crew-world-active');
     const loading=document.getElementById('world-loading');
-    if(loading){loading.hidden=false;loading.textContent='正在載入 3D 場景…';}
-    worldDashboardButton.focus({preventScroll:true});
+    if(loading&&!stopWorld){loading.hidden=false;loading.textContent='正在載入 3D 場景…';}
+    opener.focus({preventScroll:true});
     updateKeyboard();
     try{
       await ensureScene();
       if(modal.hidden||openVersion!==version)return;
-      stopWorld=window.mountCrewWorldScene?.()||null;
+      if(stopWorld)stopWorld.resume?.();
+      else stopWorld=window.mountCrewWorldScene?.()||null;
     }catch(error){
       if(!modal.hidden&&openVersion===version&&loading)
         loading.textContent='無法載入 3D 世界，請重新開啟。'+(error.message||'');
@@ -231,15 +237,18 @@
     updateKeyboard();
   }
   opener.addEventListener('click',open);
-  dashboardButton?.addEventListener('click',()=>updateHomeView('dashboard'));
-  worldDashboardButton?.addEventListener('click',close);
-  worldMapButton?.addEventListener('click',()=>updateHomeView('map'));
+  dashboardButton.addEventListener('click',()=>{if(!modal.hidden)close();else updateHomeView('dashboard');});
+  settingsButton?.addEventListener('click',()=>{if(!modal.hidden)close();});
+  addRoleButton?.addEventListener('click',()=>{if(!modal.hidden)close();});
   focusBack?.addEventListener('click',()=>document.getElementById('world-reset')?.click());
   focusFull?.addEventListener('click',()=>openFullChat(focusedRoleId));
   hideButton.addEventListener('click',collapseChat);
   expandButton.addEventListener('click',toggleExpand);
   chatButton?.addEventListener('click',()=>{void openChat();});
   window.addEventListener('resize',updateKeyboard);
+  window.addEventListener('resize',syncHeaderHeight);
+  if(window.ResizeObserver){const observer=new window.ResizeObserver(syncHeaderHeight);observer.observe(homeHeader);}
+  syncHeaderHeight();
   window.visualViewport?.addEventListener('resize',updateKeyboard);
   window.visualViewport?.addEventListener('scroll',updateKeyboard);
   document.addEventListener('keydown',event=>{

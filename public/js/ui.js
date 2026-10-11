@@ -948,16 +948,12 @@ function renderRoleNavigation() {
   const roles = availableRoles.length ? availableRoles : [];
   const statuses = crewStatusVerified ? roles.map(role => crewStatusForRole(role.id)).filter(Boolean) : [];
   const workingCount = statuses.filter(status => status.state === 'working').length;
-  const attentionCount = statuses.reduce((sum, status) => sum + Number(status.attentionCount || 0), 0);
   if (crewRoomSummary) {
-    crewRoomSummary.innerHTML = crewStatusVerified
-      ? [
-        '<span class="crew-summary-item" data-kind="working">' + workingCount + ' 工作中</span>',
-        attentionCount ? '<span class="crew-summary-item" data-kind="attention">' + attentionCount + ' 待處理</span>' : '',
-        '<span class="crew-summary-item" data-kind="roles">' + roles.length + ' 位成員</span>'
-      ].filter(Boolean).join('')
-      : '<span class="crew-summary-item" data-kind="roles">' + roles.length +
-        ' 位成員</span><span>Runtime 狀態尚未同步</span>';
+    crewRoomSummary.innerHTML = [
+      '<span class="crew-summary-item" data-kind="roles">' + roles.length + ' 位成員</span>',
+      '<span class="crew-summary-item" data-kind="working">' +
+        (crewStatusVerified ? workingCount : '—') + ' 工作中</span>'
+    ].join('');
   }
 
   const stateName = state => ({

@@ -115,7 +115,7 @@
         </div>
       </div>
     </div>
-    
+
     <div class="relative flex items-center gap-1 sm:gap-1.5 shrink-0">
       <div id="model-context-control" class="flex min-w-0 items-center overflow-hidden rounded-lg border border-slate-700/80 bg-slate-900/90">
         <button id="model-selector-btn" class="flex min-w-0 items-center gap-1 px-1.5 py-1 text-left text-[9px] text-slate-300 transition hover:bg-slate-800 hover:text-white active:scale-95" title="點擊切換 AI 模型與思考強度">
@@ -496,18 +496,12 @@
 
       </section>
 
-  <!-- MAIN CHAT CONTAINER -->
-  <div id="crew-main-layout" class="relative flex-1 flex min-h-0 w-full max-w-full overflow-hidden">
-    
-    <!-- Primary Crew Home: Role selection is the app's default destination. -->
-    <section id="drawer" class="crew-home-view hidden min-h-0 min-w-0 flex-1 flex-col overflow-hidden" aria-label="AI 小隊首頁">
-      <section id="role-nav-view" class="flex min-h-0 flex-1 flex-col">
-        <div class="crew-home-header">
+  <div id="crew-home-header-host">
+    <div id="crew-home-header" class="crew-home-header">
           <div class="crew-home-top">
-            <div>
-              <p class="crew-home-kicker">YOUR AI CREW · COMMAND CENTER</p>
-              <h1>AI 小隊</h1>
-              <p class="crew-home-subtitle">掌握每位 Agent 的真實狀態，點擊角色繼續工作。</p>
+            <div id="crew-home-view-toggle" class="crew-home-view-toggle" role="group" aria-label="首頁檢視模式" data-view="dashboard">
+              <button id="crew-home-dashboard-btn" type="button" aria-label="Dashboard" title="Dashboard" aria-pressed="true" class="is-active"><span class="crew-home-toggle-icon" aria-hidden="true">▦</span></button>
+              <button id="crew-world-open-btn" type="button" aria-label="地圖" title="地圖" aria-pressed="false"><span class="crew-home-toggle-icon" aria-hidden="true">◇</span></button>
             </div>
             <div class="crew-home-actions">
               <button id="cockpit-refresh-btn" type="button" aria-label="重新同步小隊狀態" title="重新同步小隊狀態">↻</button>
@@ -517,13 +511,17 @@
           </div>
           <div class="crew-home-status-row">
             <div id="crew-room-summary" class="crew-home-summary" aria-live="polite">載入小隊狀態…</div>
-            <div class="crew-home-view-toggle" role="group" aria-label="首頁檢視模式">
-              <button id="crew-home-dashboard-btn" type="button" aria-label="Dashboard" title="Dashboard" aria-pressed="true" class="is-active"><span class="crew-home-toggle-icon" aria-hidden="true">▦</span></button>
-              <button id="crew-world-open-btn" type="button" aria-label="地圖" title="地圖" aria-pressed="false"><span class="crew-home-toggle-icon" aria-hidden="true">◇</span></button>
-            </div>
           </div>
-          <div id="cockpit-status-line" class="crew-home-sync" role="status">Runtime 尚未同步</div>
-        </div>
+          <div id="cockpit-status-line" class="crew-home-sync" role="status" hidden>Runtime 尚未同步</div>
+    </div>
+  </div>
+
+  <!-- MAIN CHAT CONTAINER -->
+  <div id="crew-main-layout" class="relative flex-1 flex min-h-0 w-full max-w-full overflow-hidden">
+
+    <!-- Primary Crew Home: Role selection is the app's default destination. -->
+    <section id="drawer" class="crew-home-view hidden min-h-0 min-w-0 flex-1 flex-col overflow-hidden" aria-label="AI 小隊首頁">
+      <section id="role-nav-view" class="flex min-h-0 flex-1 flex-col">
         <div id="cockpit-scroll" class="min-h-0 flex-1 overflow-y-auto overscroll-contain">
           <div id="crew-attention-panel" aria-label="待處理的角色訊息"></div>
           <div class="cockpit-roster-heading">
@@ -1790,16 +1788,6 @@
         <div id="world-loading" role="status">正在建立 3D 世界…</div>
       </div>
     </div>
-    <header class="world-header">
-      <button type="button" id="world-back" class="world-back" aria-label="返回 Crew Pocket 小隊">←</button>
-      <div class="world-brand"><span class="world-kicker">CREW POCKET / EXPERIMENT 01</span><h1>Crew World <span>3D LAB</span></h1></div>
-      <div class="crew-world-view-toggle" role="group" aria-label="首頁檢視模式">
-        <button id="crew-world-dashboard-btn" type="button" aria-pressed="false">▦ Dashboard</button>
-        <button id="crew-world-map-btn" type="button" aria-pressed="true" class="is-active">◇ 地圖</button>
-      </div>
-      <span class="world-demo-pill">獨立示範 · 非即時狀態</span>
-    </header>
-    <div class="world-hint">依專案分區 · 拖曳移動 · 雙指縮放 · 點角色進行聊天</div>
     <section id="world-info" class="world-info" aria-live="polite">
       <div class="world-info-head">
         <div class="world-portrait" id="world-portrait">P</div>
