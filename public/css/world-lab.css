@@ -268,6 +268,7 @@
 
 /* P7: a grounded activity ribbon, never a fake tool progress bar. */
 .world-focus-activity[hidden],.world-handoffs-open[hidden],.world-handoffs-panel[hidden]{display:none!important}
+.crew-world-modal:not(.is-role-focused) .world-focus-activity{display:none!important}
 .world-focus-activity{
   position:absolute;z-index:8;
   top:calc(env(safe-area-inset-top,0px) + 69px);
