@@ -201,3 +201,67 @@
   .world-info.is-collapsed .world-portrait{width:34px;height:34px}
   .world-info.is-collapsed .world-info-head{gap:6px}
 }
+
+/* Interactive map uses a thin read-only status strip, not a second dashboard. */
+.world-status-strip{
+  position:absolute;top:calc(env(safe-area-inset-top,0px) + 112px);
+  right:12px;max-width:calc(100% - 24px);z-index:5;
+  display:flex;gap:7px;align-items:center;justify-content:flex-end;
+  flex-wrap:wrap;pointer-events:none;
+}
+.world-status-strip span{
+  padding:5px 9px;border-radius:999px;font-size:10px;font-weight:730;
+  border:1px solid #b3d5ef45;background:#0b233bd9;color:#def1ff;
+  backdrop-filter:blur(7px);white-space:nowrap;
+}
+.world-status-strip [data-tone="working"]{border-color:#55d6b28c;color:#b7ffdf}
+.world-status-strip [data-tone="waiting"]{border-color:#edc0808c;color:#ffe3b4}
+.world-status-strip [data-tone="unknown"]{color:#b8c7dc}
+.world-context-health{
+  margin:8px 0 0!important;font-size:10px!important;color:#9dc8d8!important;
+}
+.world-info.is-collapsed .world-context-health{display:none!important}
+.world-district-picker[hidden]{display:none!important}
+.world-district-picker{
+  position:absolute;z-index:7;right:12px;
+  bottom:calc(env(safe-area-inset-bottom,0px) + 98px);
+  width:min(330px,calc(100% - 24px));max-height:min(46dvh,320px);
+  display:flex;flex-direction:column;
+  border:1px solid #8cbbd57d;border-radius:17px;
+  background:#101f33f5;color:#e9f5ff;
+  box-shadow:0 16px 38px #061324bd;backdrop-filter:blur(12px);
+}
+.world-district-picker-head{
+  padding:10px 12px;display:flex;justify-content:space-between;
+  align-items:center;gap:12px;border-bottom:1px solid #9bd1e930;
+}
+.world-district-picker-head strong{font-size:13px}
+.world-district-picker-head button{
+  min-width:36px;min-height:36px;border:1px solid #a7c7da60;
+  border-radius:10px;background:#ffffff12;color:inherit;
+}
+.world-district-picker-list{
+  overflow-y:auto;overscroll-behavior:contain;min-height:0;padding:6px;
+}
+.world-district-picker-list button{
+  width:100%;min-height:45px;margin:2px 0;padding:8px 10px;
+  display:flex;align-items:center;gap:10px;text-align:left;
+  border:1px solid transparent;border-radius:11px;background:#ffffff08;color:#e6f4ff;
+}
+.world-district-picker-list button:active,
+.world-district-picker-list button:focus-visible{border-color:#93d8ea;background:#27617d66}
+.world-district-picker-list .world-member-dot{
+  width:9px;height:9px;border-radius:50%;flex:none;background:var(--world-role-color);
+}
+.world-district-picker-list .world-member-text{flex:1;min-width:0}
+.world-district-picker-list strong{display:block;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.world-district-picker-list small{font-size:10px;color:#b8cee1}
+.world-app:has(.world-district-picker:not([hidden])) .world-info{display:none}
+@media(max-width:600px){
+  .world-status-strip{top:calc(env(safe-area-inset-top,0px) + 71px);right:10px;gap:4px}
+  .world-status-strip span{padding:4px 7px;font-size:9px}
+  .world-district-picker{left:10px;right:10px;width:auto;bottom:calc(env(safe-area-inset-bottom,0px) + 88px)}
+}
+@media(prefers-reduced-motion:reduce){
+  .world-status-strip,.world-district-picker{transition:none}
+}
