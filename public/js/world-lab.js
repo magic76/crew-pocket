@@ -212,7 +212,12 @@
       side:T.DoubleSide,depthWrite:false}));
   selectionHalo.rotation.x=-Math.PI/2;
   selectionHalo.position.y=.065;
-  actors[0].root.add(selectionHalo);
+  const focusHalo=new T.Mesh(new T.RingGeometry(1.55,1.69,40),
+    new T.MeshBasicMaterial({color:'#9de8ff',transparent:true,opacity:reduced?.30:.24,
+      side:T.DoubleSide,depthWrite:false}));
+  focusHalo.rotation.x=-Math.PI/2;
+  focusHalo.position.y=.07;
+  actors[selected].root.add(selectionHalo,focusHalo);
   const labelsHost=document.getElementById('world-labels');
   const districtsHost=document.getElementById('world-districts');
   const districtPins=districts.map((members,districtIndex)=>{
@@ -259,13 +264,15 @@
     const detail=document.createElement('span');detail.className='world-label-detail';
     const speech=document.createElement('span');speech.className='world-speech-bubble';
     speech.hidden=true;
-    button.append(speech,title,state,detail);listen(button,'click',()=>handleRoleTap(index));
+    const attentionMark=document.createElement('span');
+    attentionMark.className='world-label-alert';attentionMark.hidden=true;
+    button.append(attentionMark,speech,title,state,detail);listen(button,'click',()=>handleRoleTap(index));
     listen(speech,'click',event=>{
       event.preventDefault();event.stopPropagation();
       hideSpeech(index,true);
     });
     button.style.setProperty('--world-role-color',role.color);
-    labelsHost.appendChild(button);return{button,state,detail,speech};
+    labelsHost.appendChild(button);return{button,state,detail,speech,attentionMark};
   });
   // Standalone 3D Lab retains its debug roster; the hosted map deliberately
   // has no duplicate Role strip beside the persistent P10 commander.
@@ -323,6 +330,107 @@
   const stoppedAt=new Map(),freshReplies=new Map();
   let evidenceRows=[],evidenceVerified=false,evidenceSignature='';
   const memberById=new Map(roles.map(role=>[role.id,role]));
+  const attentionOpenButton=document.getElementById('world-attention-open');
+  const attentionCount=document.getElementById('world-attention-count');
+  const attentionPanel=document.getElementById('world-attention-panel');
+  const attentionList=document.getElementById('world-attention-list');
+  const attentionClose=document.getElementById('world-attention-close');
+  const rolePeek=document.getElementById('world-role-peek');
+  const rolePeekName=document.getElementById('world-role-peek-name');
+  const rolePeekBody=document.getElementById('world-role-peek-body');
+  const linkSvg=document.getElementById('world-collaboration-links');
+  const filterHandoffs=document.getElementById('world-handoffs-filter');
+  let onlySelectedHandoffs=false,attentionSignature='',linkSignature='';
+  let linkPaths=[];
+  const activeReply=roleId=>{
+    const reply=freshReplies.get(roleId);
+    return reply&&Date.now()-reply.at<300000?reply:null;
+  };
+  function concernRoles(){
+    if(!isLive||!synced)return[];
+    return roles.map((role,index)=>({role,index,reply:activeReply(role.id)}))
+      .filter(item=>item.role.attention>0||item.reply);
+  }
+  function renderAttention(){
+    const concerns=concernRoles();
+    const signature=concerns.map(({role,reply})=>role.id+':'+role.attention+':'+(reply?.signature||'')).join('|');
+    if(attentionOpenButton){
+      attentionOpenButton.hidden=!concerns.length;
+      attentionOpenButton.setAttribute('aria-label',concerns.length+' 位角色需要關注');
+      if(attentionCount)attentionCount.textContent=String(concerns.length);
+    }
+    if(attentionPanel&&(!concerns.length||!synced)){
+      attentionPanel.hidden=true;
+      attentionOpenButton?.setAttribute('aria-expanded','false');
+    }
+    if(attentionList&&signature!==attentionSignature){
+      attentionSignature=signature;
+      attentionList.replaceChildren();
+      for(const {role,index,reply} of concerns){
+        const button=document.createElement('button');
+        button.type='button';button.dataset.roleIndex=String(index);
+        const title=document.createElement('strong');title.textContent=role.name;
+        const detail=document.createElement('small');
+        detail.textContent=[reply?'本次觀察到新回覆':null,
+          role.attention>0?'Runtime 待處理 '+role.attention+' 項':null].filter(Boolean).join(' · ');
+        const text=document.createElement('span');text.append(title,detail);
+        button.append(text,document.createTextNode('查看 ›'));
+        attentionList.appendChild(button);
+      }
+    }
+    for(const [index,entry] of labels.entries()){
+      const role=roles[index],reply=activeReply(role.id);
+      const count=synced&&isLive?role.attention:0;
+      entry.attentionMark.hidden=!(count||reply);
+      entry.attentionMark.textContent=reply?'↩':String(count);
+      entry.attentionMark.title=reply?'新回覆（本次觀察）':'Runtime 待處理 '+count+' 項';
+      entry.button.dataset.attention=String(Boolean(count||reply));
+    }
+  }
+  function openAttentionRole(index){
+    if(!isLive||!synced||index<0||index>=roles.length)return;
+    const role=roles[index];
+    if(!(role.attention>0||activeReply(role.id)))return;
+    if(attentionPanel)attentionPanel.hidden=true;
+    attentionOpenButton?.setAttribute('aria-expanded','false');
+    select(index,false);
+    panTo(role.islandX,role.islandZ,width<700?2.25:1.85);
+    // Reuse existing Chat on this Role. Showing an event is not marking it read.
+    void window.CrewWorldHost?.openChat?.(role.id,{compact:false});
+  }
+  listen(attentionOpenButton,'click',()=>{
+    if(!attentionPanel||attentionOpenButton.hidden)return;
+    attentionPanel.hidden=!attentionPanel.hidden;
+    attentionOpenButton.setAttribute('aria-expanded',String(!attentionPanel.hidden));
+    if(!attentionPanel.hidden)showHandoffs(false);
+  });
+  listen(attentionClose,'click',()=>{
+    if(attentionPanel)attentionPanel.hidden=true;
+    attentionOpenButton?.setAttribute('aria-expanded','false');
+  });
+  listen(attentionList,'click',event=>{
+    const button=event.target.closest?.('button[data-role-index]');
+    if(button&&attentionList.contains(button))openAttentionRole(Number(button.dataset.roleIndex));
+  });
+  listen(rolePeek,'click',()=>{
+    if(rolePeek?.hidden||!isLive||!synced)return;
+    void window.CrewWorldHost?.openChat?.(roles[selected].id,{compact:false});
+  });
+  function refreshRolePeek(){
+    if(!rolePeek||!rolePeekName||!rolePeekBody)return;
+    const role=roles[selected];
+    const reply=activeReply(role.id);
+    const message=reply&&!labels[selected].speech.hidden
+      ?labels[selected].speech.textContent
+      :role.state==='working'&&role.workTitle
+        ?'執行中：'+role.workTitle
+        :role.attention>0?'Runtime 待處理 '+role.attention+' 項':'';
+    rolePeek.hidden=!isLive||!synced||!message||Boolean(window.CrewWorldHost?.isFocusActive?.());
+    if(!rolePeek.hidden){
+      rolePeekName.textContent=role.name;
+      rolePeekBody.textContent=message.slice(0,155);
+    }
+  }
   function refreshFocusActivity(){
     if(!focusActivity||!focusActivityText)return;
     const role=roles[selected],focused=window.CrewWorldHost?.isRoleFocused?.(role.id);
