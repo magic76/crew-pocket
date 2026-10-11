@@ -118,6 +118,12 @@ assert.ok(sampleWindow.WorldLabKit.mapExtent(forty)>28&&
 assert.equal(sampleWindow.WorldLabKit.makeLiveRoles([]).length,0);
 
 assert.match(css,/touch-action:none/);
+
+assert.match(html,/class="world-stage-frame"[\\s\\S]*?id="world-stage"/);
+assert.match(css,/\\.world-stage-frame\\s*\\{[^}]*container-type:size/s);
+assert.match(css,/\\.world-app #world-stage\\s*\\{[^}]*aspect-ratio:1 \\/ 1/s);
+assert.match(css,/width:min\\(100cqw,100cqh\\)/);
+
 assert.match(css,/safe-area-inset-bottom/);
 assert.match(css,/prefers-reduced-motion/);
 const main=read('public/index.html');
@@ -132,6 +138,7 @@ assert.match(main,/\/js\/crew-world-launcher.js/);
 assert.doesNotMatch(main,/<script src="\/js\/world-lab.js"/);
 assert.doesNotMatch(main,/<script src="\/vendor\/three.min.js"/);
 assert.match(main,/id="world-stage"/);
+assert.match(main,/class="world-stage-frame"[\\s\\S]*?id="world-stage"/);
 assert.match(main,/id="crew-world-chat-messages-slot"/);
 assert.match(main,/id="crew-world-chat-composer-slot"/);
 assert.doesNotMatch(main,/<iframe|id="crew-world-frame"/i);
