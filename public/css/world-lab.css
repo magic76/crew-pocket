@@ -487,3 +487,13 @@
 .world-stage-frame #world-stage[data-zoom-tier="near"] .world-label{
   max-width:min(205px,48vw);
 }
+
+/* Unified tray takes precedence over transient flight notices: no stacked overlays. */
+.world-app:has(.world-attention-panel:not([hidden])) .world-flight-notice,
+.world-app:has(.world-handoffs-panel:not([hidden])) .world-flight-notice{display:none!important}
+.crew-world-modal .world-app:has(.world-flight-notice:not([hidden])) .world-handoffs-panel,
+.crew-world-modal .world-app:has(.world-flight-notice:not([hidden])) .world-attention-panel{
+  top:calc(var(--crew-shared-header-height,96px) + 105px);right:10px;left:auto;
+}
+.world-app #world-loading[data-empty="true"]::before{display:none!important}
+.world-app #world-loading[data-empty="true"]{background:#101b32db}
