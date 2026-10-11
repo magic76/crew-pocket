@@ -401,17 +401,37 @@ assert.deepEqual(alerts.map(item=>item.role.id),['a','b'],
 assert.equal(alerts[0].count,2);
 assert.equal(alerts[1].reply.signature,'r-2');
 assert.deepEqual(events.attentionItems(null,new Map(),alertNow),[]);
-// P14: only saved directed Role edges; filter keeps actual identities/IDs.
+// P14: a connection indicates ACTUAL RECENT activity, not a permanent
+// relationship derived from the last six saved messages. The evidence tray
+// still keeps older saved messages available for inspection.
+const linkNow=1_800_000;
 const evidenceForTests=[
-  {id:'m1',fromRoleId:'a',toRoleId:'b',kind:'handoff'},
-  {id:'m2',fromRoleId:'c',toRoleId:'a',kind:'reply'},
-  {id:'m3',fromRoleId:'c',toRoleId:'d',kind:'handoff'},
-  {id:'m4',fromRoleId:'a',toRoleId:'a',kind:'handoff'}
+  {id:'m1',fromRoleId:'a',toRoleId:'b',kind:'handoff',createdAt:linkNow-6000},
+  {id:'m2',fromRoleId:'c',toRoleId:'a',kind:'reply',createdAt:linkNow-59500},
+  {id:'m3',fromRoleId:'c',toRoleId:'d',kind:'handoff',createdAt:linkNow-3000},
+  {id:'m4',fromRoleId:'a',toRoleId:'a',kind:'handoff',createdAt:linkNow-1000},
+  {id:'m5',fromRoleId:'a',toRoleId:'b',kind:'handoff',createdAt:linkNow-7200000},
+  {id:'m6',fromRoleId:'a',toRoleId:'b',kind:'handoff',createdAt:linkNow-60000},
+  {id:'m7',fromRoleId:'a',toRoleId:'b',kind:'handoff',createdAt:linkNow+1000},
+  {id:'m8',fromRoleId:'a',toRoleId:'b',kind:'handoff'}
 ];
-assert.deepEqual(events.collaborationConnections(evidenceForTests,'a',true,3).map(item=>item.id),
-  ['m1','m2'],'selected-role view excludes unrelated and self-events');
-assert.deepEqual(events.collaborationConnections(evidenceForTests,'a',false,2).map(item=>item.id),
-  ['m1','m2'],'visual arcs remain bounded');
+assert.equal(events.COLLABORATION_LINK_MAX_AGE_MS,60000);
+assert.deepEqual(events.collaborationConnections(evidenceForTests,'a',true,3,linkNow).map(item=>item.id),
+  ['m1','m2'],'selected-role arcs require a verified timestamp within 60s');
+assert.deepEqual(events.collaborationConnections(evidenceForTests,'a',false,2,linkNow).map(item=>item.id),
+  ['m1','m2'],'visual arcs remain bounded even with many saved events');
+assert.deepEqual(events.collaborationConnections(evidenceForTests,'a',false,3,linkNow+55000).map(item=>item.id),
+  ['m3'],'previous arcs expire even when stored events do not change');
+assert.deepEqual(events.collaborationConnections(evidenceForTests,'a',false,3,linkNow+61000),[],
+  'after 60s all lines disappear without requiring any new message');
+assert.deepEqual(events.collaborationConnections(evidenceForTests,'a',true,3,linkNow+55000),[],
+  'selected Role filter must never preserve an expired line');
+assert.ok(events.traceableEvents(evidenceForTests,['a','b','c','d'],12,linkNow).some(item=>item.id==='m5'),
+  'the saved collaboration history remains available after the line expires');
+assert.ok(engine.includes("shownHandoffs(),roles[selected].id,false,3,Date.now()"),
+  'drawing reevaluates message age at every saved-event refresh');
+assert.match(engine,/resize\(\);\s*\/\/ The scene may have been paused longer than the connection TTL/[\s\S]*?renderCollaborationLinks\(\)/,
+  'World resuming after a long pause must remove expired lines before fetching');
 for(const id of ['world-attention-open','world-attention-count','world-attention-panel',
   'world-attention-list','world-role-peek','world-role-peek-name',
   'world-role-peek-body','world-collaboration-links','world-handoffs-filter']){
