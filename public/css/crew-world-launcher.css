@@ -196,13 +196,10 @@ body.crew-world-active{overscroll-behavior:none}
 /* No zoom controls floating over the compact composer while typing. */
 .crew-world-modal.is-role-focused:has(.crew-world-chat-panel.keyboard-open:not([hidden])) .world-bottom{display:none}
 
-/* Immersive Role focus: hide the ORIGINAL Chat/Crew chrome without moving or
-   cloning it. Leaving focus or opening full Chat restores both immediately. */
-body.crew-world-focused > #crew-chat-main-header,
-body.crew-world-focused #crew-home-header-host{display:none!important}
-.crew-world-modal.is-role-focused{inset:0}
+/* Focus uses the same Dashboard/Map navigation as overview.
+   The ORIGINAL Chat header remains hidden by crew-world-active below. */
 .crew-world-modal.is-role-focused .crew-world-focus-bar{
-  top:calc(env(safe-area-inset-top,0px) + 7px);
+  top:7px;
   min-height:48px;padding:5px 3px;
   background:linear-gradient(90deg,#10233ce3,#152b43c0);
   border:1px solid #9ac3ed3d;border-radius:15px;
@@ -316,25 +313,16 @@ body.crew-world-focused #context-health-toast{z-index:10050!important}
   .crew-world-result-peek,.crew-world-chat-panel{animation:none!important}
 }
 
-/* P10 keeps the original Chat active behind World. Hide BOTH underlying
-   page headers for the entire map lifecycle, not only focused Role mode. */
-body.crew-world-active > #crew-chat-main-header,
-body.crew-world-active #crew-home-header-host{display:none!important}
-body.crew-world-active .crew-world-modal:not([hidden]){inset:0}
-/* The overview has its own escape hatch now; don't strand the user on a
-   fullscreen map after suppressing the Dashboard/Map switch. */
-.crew-world-modal .world-exit-map{
-  position:absolute;z-index:8;
-  top:calc(env(safe-area-inset-top,0px) + 8px);left:10px;
-  display:grid;place-items:center;min-height:40px;
-  padding:0 12px;border:1px solid #91bede8a;border-radius:13px;
-  color:#f0f9ff;background:#142e46ed;box-shadow:0 6px 17px #06142770;
-  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
-  font-size:12px;font-weight:750;
+/* The original Role Chat is active under the World portal (P10).
+   Hide ONLY that Chat-specific header: keep the shared Dashboard/Map navigation
+   visible and interactive in overview and focused Role mode. */
+body.crew-world-active > #crew-chat-main-header{display:none!important}
+body.crew-world-active #crew-home-header-host{display:block!important}
+/* The World occupies the space BELOW the measured shared navigation rather
+   than covering it; this also prevents an extra top bar in Role focus. */
+body.crew-world-active .crew-world-modal:not([hidden]){
+  inset:var(--crew-shared-header-height,calc(env(safe-area-inset-top,0px) + 96px)) 0 0;
 }
-.crew-world-modal.is-role-focused .world-exit-map{display:none!important}
-.crew-world-modal .world-exit-map:focus-visible{outline:2px solid #91e0ff;outline-offset:2px}
-@media(max-width:540px){.crew-world-modal .world-exit-map{left:9px;min-height:39px}}
 /* World controls live in one tiny overview corner. P10 already replaces the
    duplicate Role roster; gestures replace the zoom +/- buttons. */
 .crew-world-modal .world-quick-tools{

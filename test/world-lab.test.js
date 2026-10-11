@@ -183,17 +183,20 @@ const worldShell=read('public/css/crew-world-launcher.css');
 // Only the standalone art lab keeps its debug control strip. The actual
 // Crew Pocket map has a compact utility corner and the P10 Role commander.
 assert.ok(!main.includes('id="world-roster"'),'no duplicate Role strip in hosted map');
-assert.ok(main.includes('id="world-exit-map"'),'full-screen map has its own Dashboard exit');
-assert.ok(worldShell.includes('body.crew-world-active > #crew-chat-main-header'),
-  'P10 may activate Chat without exposing its duplicate top header');
-assert.ok(worldShell.includes('body.crew-world-active #crew-home-header-host'),
-  'the old Dashboard header stays hidden while World is active');
-assert.ok(worldShell.includes('body.crew-world-active .crew-world-modal:not([hidden]){inset:0}'),
-  'both overview and Role focus use the full available viewport');
-assert.ok(worldShell.includes('.crew-world-modal.is-role-focused .world-exit-map{display:none!important}'),
-  'Role focus shows its own back control without another duplicate');
-assert.ok(launcher.includes("worldExitMap?.addEventListener('click',()=>dashboardButton.click())"),
-  'return to Dashboard delegates to the existing original tab lifecycle');
+assert.ok(!main.includes('id="world-exit-map"'),
+  'remove redundant map Dashboard exit in favor of the common nav toggle');
+assert.ok(worldShell.includes('body.crew-world-active > #crew-chat-main-header{display:none!important}'),
+  'both World modes hide the original Role Chat header while P10 is active');
+assert.ok(worldShell.includes('body.crew-world-active #crew-home-header-host{display:block!important}'),
+  'shared Dashboard/Map nav remains visible and interactive throughout World');
+assert.ok(worldShell.includes('inset:var(--crew-shared-header-height,calc(env(safe-area-inset-top,0px) + 96px)) 0 0;'),
+  'World viewport begins below the same measured header in both modes');
+assert.ok(!worldShell.includes('.crew-world-modal.is-role-focused{inset:0}'),
+  'Role focus cannot cover the shared navigation');
+assert.ok(!worldShell.includes('body.crew-world-focused #crew-home-header-host{display:none!important}'),
+  'Role focus must never suppress the Dashboard / Map nav');
+assert.ok(!launcher.includes('worldExitMap'),
+  'Dashboard switching happens through the existing common nav toggle');
 assert.ok(!main.includes('id="world-zoom-in"'),'touch pinch replaces hosted zoom+');
 assert.ok(!main.includes('id="world-zoom-out"'),'touch pinch replaces hosted zoom-');
 assert.ok(!main.includes('<footer class="world-bottom">'),'no hosted bottom control row');
@@ -305,14 +308,12 @@ assert.ok(engine.includes('CrewWorldHost?.focusRole?.('));
 assert.ok(engine.includes('CrewWorldHost?.exitFocus?.('));
 const worldShellCss=read('public/css/crew-world-launcher.css');
 assert.ok(worldShellCss.includes('.crew-world-modal.is-role-focused'));
-assert.ok(worldShellCss.includes('body.crew-world-focused > #crew-chat-main-header'),
-  'only focused World suppresses the standard Chat header');
-assert.ok(worldShellCss.includes('body.crew-world-focused #crew-home-header-host'),
-  'only focused World suppresses the Crew dashboard header');
-assert.ok(worldShellCss.includes('.crew-world-modal.is-role-focused{inset:0}'),
-  'focused 3D viewport uses the entire phone screen');
-assert.ok(worldShellCss.includes("top:calc(env(safe-area-inset-top,0px) + 7px)"),
-  'focused toolbar respects safe-area inset');
+assert.ok(worldShellCss.includes('body.crew-world-active > #crew-chat-main-header{display:none!important}'),
+  'World hides the Chat header in overview and focus');
+assert.ok(worldShellCss.includes('body.crew-world-active #crew-home-header-host{display:block!important}'),
+  'both World modes retain the exact shared Dashboard navigation');
+assert.ok(worldShellCss.includes("top:7px;\n  min-height:48px;padding:5px 3px;"),
+  'focused toolbar starts below the preserved nav without double safe-area padding');
 assert.ok(worldShellCss.includes('body.crew-world-focused #context-modal{z-index:10030!important}'),
   'Context Health opens above the full-screen World canvas');
 assert.ok(worldShellCss.includes('body.crew-world-focused #context-compact-preview-modal'),

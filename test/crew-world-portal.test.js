@@ -39,7 +39,7 @@ async function tick(){await new Promise(resolve=>setImmediate(resolve));}
     'world-chat-open','crew-world-chat-role-name','crew-back-home-btn','world-stage',
     'crew-world-focus-bar','crew-world-focus-back','crew-world-focus-name',
     'crew-world-focus-full','crew-world-focus-context','context-pill','world-reset',
-    'world-exit-map','world-tools-menu',
+    'world-tools-menu',
     'crew-world-command-role','crew-world-command-state','crew-world-command-read',
     'crew-world-result-peek','crew-world-result-peek-kind','crew-world-result-peek-text',
     'prompt-input'];
@@ -112,7 +112,9 @@ async function tick(){await new Promise(resolve=>setImmediate(resolve));}
   assert.equal(nodes['crew-world-focus-bar'].hidden,false);
   assert.equal(nodes['crew-world-focus-name'].textContent,'Teacher');
   assert.equal(doc.body.classList.set.has('crew-world-focused'),true,
-    'immersive focus hides the ordinary Chat and Crew headers');
+    'Role-focused mode still distinguishes its own map toolbar');
+  assert.strictEqual(nodes['crew-home-view-toggle'].parentNode,nodes['crew-home-header'],
+    'focused Role keeps the Dashboard/Map navigation in its original header');
   assert.equal(nodes['crew-world-focus-context'].disabled,false,
     'Context is enabled only for the active mounted Role');
   nodes['crew-world-focus-context'].click();
@@ -134,15 +136,15 @@ async function tick(){await new Promise(resolve=>setImmediate(resolve));}
   assert.equal(nodes['crew-world-modal'].classList.contains('is-role-focused'),false);
   assert.equal(nodes['crew-world-focus-bar'].hidden,true);
   assert.equal(doc.body.classList.set.has('crew-world-focused'),false,
-    'overview restores ordinary headers');
+    'overview exits the Role-specific focus toolbar without replacing shared nav');
   assert.equal(nodes['crew-world-focus-context'].disabled,true,
     'no stale Role context shortcut after focus closes');
   assert.strictEqual(nodes['chat-composer-footer'].parentNode,nodes['crew-world-chat-composer-slot'],
     'returning to overview keeps the persistent single composer docked');
   assert.equal(nodes['crew-world-modal'].hidden,false,'returning to overview keeps map open');
-  // The full-screen map has its own exit; no underlying header controls
-  // may be needed to return to Dashboard.
-  nodes['world-exit-map'].click();
+  // Return through the SAME visible nav used by Dashboard (not a second
+  // World-specific exit button).
+  nodes['crew-home-dashboard-btn'].click();
   assert.equal(nodes['crew-world-open-btn']['aria-pressed'],'false');
   assert.equal(nodes['crew-home-dashboard-btn']['aria-pressed'],'true');
   assert.equal(pauseCount,1,'switching to Dashboard pauses the existing world');
