@@ -31,7 +31,7 @@
   if(!stage)return ()=>{};
   const fail=msg=>{if(loading)loading.textContent=msg;};
   if(!window.THREE || !window.WorldLabKit){fail('缺少本地 3D 資源，請更新 Crew Runtime。');return;}
-  const T=window.THREE, kit=window.WorldLabKit, planner=window.WorldLabEvents, navigation=window.WorldLabNavigation;
+  const T=window.THREE, kit=window.WorldLabKit, planner=window.WorldLabEvents;
   async function loadStatus() {
     const response=await fetch('/api/crew-status',{cache:'no-store',credentials:'same-origin'});
     if(!response.ok)throw new Error('Crew status request failed');
@@ -94,35 +94,6 @@
     const id=actor.role.districtId||actor.role.id;
     if(!workshopGroups.has(id))workshopGroups.set(id,[]);
     workshopGroups.get(id).push(actor);
-  });
-  const roadVisuals=actors.roadVisuals||[];
-  // This is the same immutable lot/frontage geometry used for mesh rotation
-  // and Role standing positions. Navigation never invents parallel roads.
-  const townLots=navigation?.uniqueLots(roles)||[];
-  const firstLot=townLots[0];
-  const visitor=firstLot&&navigation&&kit.createPlayer
-    ?kit.createPlayer(scene,{x:roles[0].x,z:roles[0].z}):null;
-  let visitorDistrict=firstLot?.id||null;
-  let walking=null,queuedDestination=null,explore=true,followPlayer=false;
-  const exploreToggle=document.getElementById('world-explore-toggle');
-  const toolsMenu=document.getElementById('world-tools-menu');
-  const hint=stage.closest('.world-app')?.querySelector('.world-hint');
-  function updateExploreUI(){
-    if(exploreToggle){
-      exploreToggle.setAttribute('aria-pressed',String(explore));
-      exploreToggle.textContent=explore?'探索中':'瀏覽中';
-      exploreToggle.disabled=Boolean(walking);
-    }
-    if(hint)hint.textContent=explore
-      ?'點角色走近聊天 · 點街道移動 · 拖曳地圖 · 雙指縮放'
-      :'點角色定位 · 拖曳地圖 · 雙指縮放';
-  }
-  updateExploreUI();
-  listen(exploreToggle,'click',()=>{
-    if(walking)return;
-    explore=!explore;
-    followPlayer=false;updateExploreUI();
-    if(toolsMenu)toolsMenu.open=false;
   });
   const activePlanes=[];
   const arrivalFlashes=[];
@@ -243,9 +214,6 @@
   selectionHalo.position.y=.065;
   actors[0].root.add(selectionHalo);
   const labelsHost=document.getElementById('world-labels');
-  const visitorLabel=document.createElement('span');
-  visitorLabel.className='world-player-label';visitorLabel.textContent='你';
-  if(visitor)labelsHost?.appendChild(visitorLabel);
   const districtsHost=document.getElementById('world-districts');
   const districtPins=districts.map((members,districtIndex)=>{
     const marker=document.createElement('button');
@@ -579,54 +547,6 @@
     focus={start:performance.now(),fromX:view.x,fromZ:view.z,toX:x,toZ:z,
       fromZoom:zoom,toZoom:newZoom};
   }
-  function startWalk(destination,kind='ground',roleId=null){
-    if(!visitor||!navigation||!destination)return false;
-    if(walking){
-      queuedDestination={destination,kind,roleId};
-      notify('已排入下一個目的地');return false;
-    }
-    const route=navigation.planWalk({
-      lots:townLots,roads:roadVisuals,
-      from:{x:visitor.root.position.x,z:visitor.root.position.z},
-      to:{x:destination.x,z:destination.z},
-      fromDistrict:visitorDistrict,toDistrict:destination.districtId
-    });
-    if(!route||route.waypoints.length<1){
-      notify('這裡沒有可行走的步道，請改點其他街道');return false;
-    }
-    const sameSpot=route.distance<.22;
-    walking={points:route.waypoints,index:1,kind,roleId,districtId:destination.districtId};
-    focus=null;followPlayer=true;
-    zoom=Math.max(zoom,width<700?1.55:1.85);
-    updateExploreUI();
-    if(sameSpot)finishWalk();
-    return true;
-  }
-  function finishWalk(){
-    if(!walking)return;
-    const completed=walking;
-    visitorDistrict=completed.districtId;
-    walking=null;updateExploreUI();
-    if(queuedDestination){
-      const next=queuedDestination;queuedDestination=null;
-      startWalk(next.destination,next.kind,next.roleId);return;
-    }
-    if(completed.roleId){
-      const role=roles.find(r=>r.id===completed.roleId);
-      if(role&&isLive&&window.CrewWorldHost?.isFocusActive?.()){
-        // Focus mode already owns this Role's compact composer.
-      }else if(role&&isLive&&window.CrewWorldHost?.openChat){
-        void window.CrewWorldHost.openChat(role.id);
-      }else if(role){
-        notify('已靠近 '+role.short+' · 示範地圖不會發送訊息');
-      }
-    }
-  }
-  function roleDestination(role){
-    const lot=townLots.find(n=>n.id===(role.districtId||role.id));
-    if(!lot)return null;
-    return {districtId:lot.id,x:role.x,z:role.z};
-  }
   function select(index,center=false){
     if(index<0||index>=actors.length)return;
     selected=index;contextRequestId++;updateInfo();
@@ -635,58 +555,19 @@
     if(center)window.CrewWorldHost?.focusRole?.(roles[index].id,roles[index].name);
     refreshFocusActivity();
     if(center){
+      // Selection moves only the camera. There is no user-controlled avatar,
+      // simulated travel or delayed Role Chat transition.
       const role=roles[index];
-      if(explore&&visitor&&navigation){
-        const destination=roleDestination(role);
-        if(destination)startWalk(destination,'role',role.id);
-        // On the hosted map, focus remains on the selected Role while the
-        // visitor travels. Free exploration still follows the visitor.
-        if(window.CrewWorldHost){
-          followPlayer=false;
-          panTo(role.islandX,role.islandZ,width<700?2.65:2.0);
-        }
-      }else panTo(role.islandX,role.islandZ,width<700?2.65:2.0);
+      panTo(role.islandX,role.islandZ,width<700?2.65:2.0);
     }
   }
   activeSelectWorldRole=roleId=>{
-    if(toolsMenu)toolsMenu.open=false;
     const idx=roles.findIndex(role=>role.id===roleId);
     if(idx<0)return false;
     select(idx,false);
     panTo(roles[idx].islandX,roles[idx].islandZ,width<700?1.85:1.55);
     return true;
   };
-  function advanceVisitor(delta,now){
-    if(!walking||!visitor)return;
-    let remaining=Math.min(.06,delta)*11.5;
-    while(remaining>0&&walking&&walking.index<walking.points.length){
-      const target=walking.points[walking.index];
-      const root=visitor.root;
-      const dx=target.x-root.position.x,dz=target.z-root.position.z;
-      const length=Math.hypot(dx,dz);
-      if(length<=.025){walking.index++;continue;}
-      const step=Math.min(length,remaining);
-      root.position.x+=dx/length*step;root.position.z+=dz/length*step;
-      root.rotation.y=Math.atan2(dx,dz);
-      remaining-=step;
-      if(step>=length-.001)walking.index++;
-    }
-    const moving=Boolean(walking);
-    const phase=now*.012;
-    visitor.legs.forEach(({mesh,side})=>{
-      mesh.rotation.x=moving&&!reduced?Math.sin(phase)*side*.56:0;
-    });
-    visitor.arms.forEach((arm,index)=>{
-      arm.rotation.x=moving&&!reduced?Math.sin(phase)*(.36*(index?1:-1)):0;
-    });
-    visitor.body.position.y=moving&&!reduced?Math.abs(Math.sin(phase))*.055:0;
-    if(walking&&walking.index>=walking.points.length)finishWalk();
-    if(followPlayer){
-      view.x=T.MathUtils.lerp(view.x,visitor.root.position.x,.12);
-      view.z=T.MathUtils.lerp(view.z,visitor.root.position.z,.12);
-      cameraSync();
-    }
-  }
   const toast=document.getElementById('world-toast');
   let toastTimer;
   function notify(message){
@@ -907,8 +788,6 @@
   }
   listen(document.getElementById('world-reset'),'click',()=>{
     showHandoffs(false);
-    if(toolsMenu)toolsMenu.open=false;
-    followPlayer=false;
     window.CrewWorldHost?.exitFocus?.();
     refreshFocusActivity();
     panTo(0,-1.8,overviewZoom);notify('返回全景');
@@ -926,8 +805,7 @@
   const fingers=new Map();
   let pinch=0,tap=null;
   listen(stage,'pointerdown',event=>{
-    if(toolsMenu?.open)toolsMenu.open=false;
-    if(event.target.closest?.('.world-label, .world-district-pin, .world-player-label'))return;
+    if(event.target.closest?.('.world-label, .world-district-pin'))return;
     stage.setPointerCapture?.(event.pointerId);
     fingers.set(event.pointerId,{x:event.clientX,y:event.clientY});
     if(fingers.size===1)tap={x:event.clientX,y:event.clientY,at:performance.now(),moved:false};
@@ -948,7 +826,6 @@
     if(fingers.size!==1)return;
     if(tap&&Math.hypot(event.clientX-tap.x,event.clientY-tap.y)>6)tap.moved=true;
     if(tap?.moved){
-      followPlayer=false;
       stage.classList.add('dragging');
       const unit=(camera.top-camera.bottom)/height;
       const right=new T.Vector3().setFromMatrixColumn(camera.matrixWorld,0);
@@ -985,29 +862,6 @@
       else if(members.length===1)handleRoleTap(roles.findIndex(role=>role.id===members[0].id));
       return;
     }
-    closeDistrictPicker();
-    if(!explore){
-      window.CrewWorldHost?.exitFocus?.();
-      panTo(0,-1.8,overviewZoom);return;
-    }
-    if(!visitor||!navigation)return;
-    // Ground-only tap. The nearest workshop's connected frontage provides
-    // a reachable walking target; roofs never become player destinations.
-    const intersection=ray.ray.intersectPlane(
-      new T.Plane(new T.Vector3(0,1,0),-.37),new T.Vector3());
-    if(!intersection)return;
-    // The central square and actual street junctions are walkable places,
-    // not merely decoration surrounding the Project buildings.
-    const junction=navigation.nearestStreetNode?.(intersection,roadVisuals,2.25);
-    if(junction){
-      startWalk({districtId:junction.id,x:junction.x,z:junction.z});
-      return;
-    }
-    const lot=navigation.nearestLot(intersection,townLots);
-    if(!lot)return;
-    const spot=navigation.nearestWalkSpot(intersection,lot);
-    if(!spot)return;
-    startWalk({districtId:lot.id,x:spot.x,z:spot.z});
   }
   function pointerEnd(event){
     if(event.type==='pointerup'&&fingers.size===1&&fingers.has(event.pointerId)&&tap&&!tap.moved&&
@@ -1052,7 +906,6 @@
     }
     updateFlights(now);
     if(isLive)runRecordedHandoff(now);
-    advanceVisitor(delta,now);
     actors.forEach((actor,index)=>{
       if(now>=actor.expires&&actor.mode!=='idle'){
         actor.mode='idle';actor.handoff=null;
@@ -1108,15 +961,6 @@
         ?(reduced?.28:.20+Math.sin(elapsed*1.3)*.06):0;
     }
     if(!reduced)selectionHalo.scale.setScalar(1+.045*Math.sin(now*.003));
-    if(visitor){
-      const projected=visitor.root.position.clone().add(new T.Vector3(0,3.6,0)).project(camera);
-      const x=(projected.x+1)/2*width,y=(-projected.y+1)/2*height;
-      const marginY=Math.min(110,height*.18);
-      const visible=projected.z>=-1&&projected.z<=1&&x>18&&x<width-18&&
-        y>marginY&&y<height-marginY;
-      visitorLabel.style.display=visible?'':'none';
-      if(visible){visitorLabel.style.left=x+'px';visitorLabel.style.top=y+'px';}
-    }
     // At overview zoom, hide waiting/idle badges even in small crews. Only
     // active work and a newly received reply should add labels to the map.
     const overview=zoom<1.65;

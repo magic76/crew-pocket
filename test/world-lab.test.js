@@ -61,8 +61,10 @@ assert.match(engine,/members.length>1\)showDistrictPicker\(members\)/,
 assert.match(engine,/function handleRoleTap\(index\)/);
 assert.match(engine,/now-lastRoleTap.at<340/,
   'double tap is a separate focus action');
-assert.match(engine,/if\(!explore\)\{/,
-  'empty ground in browse mode does not start walking');
+assert.doesNotMatch(engine,/if\(!explore\)|startWalk\(|advanceVisitor\(|\.nearestWalkSpot\(/,
+  'empty ground does not start a walk or change view mode');
+assert.ok(engine.includes('closeDistrictPicker();'),
+  'tapping unused ground only dismisses a temporary member picker');
 assert.ok(engine.includes("event.type==='pointerup'"),
   'cancelled gestures cannot accidentally select a Role');
 assert.ok(engine.includes('isFocusActive?.()'),
@@ -200,16 +202,25 @@ assert.ok(!launcher.includes('worldExitMap'),
 assert.ok(!main.includes('id="world-zoom-in"'),'touch pinch replaces hosted zoom+');
 assert.ok(!main.includes('id="world-zoom-out"'),'touch pinch replaces hosted zoom-');
 assert.ok(!main.includes('<footer class="world-bottom">'),'no hosted bottom control row');
-for(const id of ['world-reset','world-tools-menu','world-explore-toggle']){
+for(const id of ['world-reset']){
   assert.ok(main.includes('id="'+id+'"'),'hosted toolbar preserves '+id);
 }
 assert.ok(main.includes('aria-label="回到世界全景"'),'overview reset remains accessible');
-assert.ok(main.includes('aria-label="更多地圖操作"'),'explore remains in secondary menu');
+assert.ok(!main.includes('aria-label="更多地圖操作"'),
+  'there is no empty secondary menu when player navigation is removed');
+assert.ok(!main.includes('world-explore-toggle'),
+  'human-controlled exploration no longer appears in the map');
+assert.ok(!html.includes('world-explore-toggle'),
+  'standalone demo also omits the old exploration mode');
+assert.ok(!kit.includes('function createPlayer('),
+  'the human visitor mesh is no longer constructed at all');
+assert.ok(engine.includes("panTo(role.islandX,role.islandZ,width<700?2.65:2.0)"),
+  'double-tap Role focus pans smoothly with no walking delay');
 assert.ok(html.includes('id="world-roster"'),'standalone debug lab may keep its Role roster');
 assert.ok(worldShell.includes('.crew-world-modal.is-role-focused .world-quick-tools{display:none!important}'),
   'focused Role keeps only its dedicated back-to-overview control');
-assert.ok(engine.includes("if(toolsMenu?.open)toolsMenu.open=false"),
-  'touching the map dismisses the secondary menu');
+assert.ok(!engine.includes('toolsMenu'),
+  'no obsolete exploration-menu state survives in the map');
 assert.ok(engine.includes("panTo(0,-1.8,overviewZoom);notify('返回全景')"),
   'the small overview button uses the original smooth reset');
 assert.ok(engine.includes('const roster=rosterHost?roles.map('),
