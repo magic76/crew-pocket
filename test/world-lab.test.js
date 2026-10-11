@@ -220,6 +220,7 @@ assert.equal((main.match(/id="context-modal"/g)||[]).length,1,
   'no duplicate Context Health dialog is introduced');
 assert.match(main,/id="crew-world-chat-messages-slot"/);
 assert.match(main,/id="crew-world-chat-composer-slot"/);
+const launcher=read('public/js/crew-world-launcher.js');
 assert.match(main,/id="crew-world-command-role"/);
 assert.match(main,/id="crew-world-command-read"/);
 assert.match(main,/id="crew-world-result-peek"/);
@@ -251,7 +252,7 @@ assert.equal((main.match(/id="messages-container"/g)||[]).length,1,
 assert.equal((main.match(/id="chat-composer-footer"/g)||[]).length,1,
   'one original Chat composer');
 assert.doesNotMatch(main,/<script src="\/js\/world-lab-chat.js"/);
-const launcher=read('public/js/crew-world-launcher.js');
+
 execFileSync(process.execPath,['--check',path.join(root,'public/js/crew-world-launcher.js')]);
 assert.ok(launcher.includes('function focusRole('));
 assert.ok(launcher.includes('function exitFocus('));
