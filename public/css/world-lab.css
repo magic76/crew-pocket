@@ -429,7 +429,9 @@
 }
 .world-role-peek-action{align-self:flex-end;font-size:10px;color:#8be1f8;font-weight:750}
 .crew-world-modal:has(.crew-world-chat-panel:not(.compact):not([hidden])) .world-role-peek,
-.crew-world-modal:has(.crew-world-chat-panel.keyboard-open:not([hidden])) .world-role-peek{
+.crew-world-modal:has(.crew-world-chat-panel.keyboard-open:not([hidden])) .world-role-peek,
+.world-app:has(.world-attention-panel:not([hidden])) .world-role-peek,
+.world-app:has(.world-handoffs-panel:not([hidden])) .world-role-peek{
   display:none!important;
 }
 
@@ -451,8 +453,11 @@
 }
 .world-handoffs-filter[aria-pressed="true"]{border-color:#8bd2ec;background:#285d79;color:#fff}
 @media(max-width:540px){
-  .world-attention-open{top:calc(env(safe-area-inset-top,0px) + 66px);left:9px}
-  .world-attention-panel{top:calc(env(safe-area-inset-top,0px) + 111px);left:9px;width:calc(100% - 18px);max-height:35dvh}
+  .world-attention-open{top:calc(env(safe-area-inset-top,0px) + 110px);left:9px}
+  .world-attention-panel{top:calc(env(safe-area-inset-top,0px) + 155px);left:9px;width:calc(100% - 18px);max-height:35dvh}
+  /* Saved-message notice takes priority briefly; keep alert panel usable
+     but do not stack two floating buttons over the same phone viewport. */
+  .world-app:has(.world-flight-notice:not([hidden])) .world-attention-open{visibility:hidden}
   .world-role-peek{width:min(190px,53vw);padding:7px 9px}
 }
 @media(prefers-reduced-motion:reduce){
