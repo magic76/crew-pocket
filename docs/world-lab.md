@@ -1,3 +1,42 @@
+## Crew World — Organic Workshop Village (2026-10)
+
+The former perfectly rectangular block plan is replaced by an **organic,
+deterministic village with a central round plaza**. This replaces the
+earlier town geometry but preserves the existing Role identity and Runtime.
+
+- **Six distinct building silhouettes**: pitched-roof cottage, taller
+  townhouse, glass academy, low corner shop, observatory turret, and modern
+  asymmetric studio. Each also has project-themed accessory details and
+  a reproducible color palette. Multiple workshops of the same Project
+  can use different building forms.
+- **Naturally oriented doors and Roles**: every workshop is rotated to face
+  its nearby avenue / approach. The 1–3 Roles are transformed with the
+  building, so they remain visibly outside its front entrance. A small,
+  stable angular variation prevents cloned building orientations.
+- **Road structure**: gently bending radial avenues emerge from the
+  open central plaza; a curved inner loop connects their first junctions.
+  Each workshop has a short frontage path connected to the avenue. This
+  intentionally avoids the previous right-angle grid and avoids putting
+  the ring roadway through the first buildings.
+- The street graph returned by `planRoadNetwork()` includes the *actual
+  rendered polyline points*. The player navigator uses a shortest-path
+  graph walk over those same edges and follows their bends exactly.
+  Empty ground taps snap to nearby safe rotated workshop frontages.
+- Dynamic 1–36 Role layouts use a bounded 2–6 avenue plan, with workspaces
+  staggered by distance band on both sides. Tests check that workshop lots
+  don't overlap even at 36 Roles. No extra provider/model calls.
+- The player still walks to the **existing** Role Chat sheet. Paper-airplane
+  signals, verified Runtime work indicators, idle gestures and reaction
+  animations are retained. Houses never trigger fictitious task execution.
+- This PR changes only Three.js geometry and pure navigation; no new
+  third-party libraries, remote images or Runtime writes.
+- New street and gameplay tests check disconnected routes, exact alignment
+  of pedestrian waypoints with rendered street segments, rotated doors,
+  house spacing and 1–36 Role counts. **Android WebView visual/touch
+  smoke testing remains necessary**.
+
+---
+
 ## Crew World 2.0 — Continuous Miniature Town (2026-10)
 
 The old disconnected **floating islands and over-water bridge network are
