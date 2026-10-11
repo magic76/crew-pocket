@@ -4,71 +4,81 @@ const fs=require('node:fs');
 const path=require('node:path');
 const vm=require('node:vm');
 const source=fs.readFileSync(path.join(__dirname,'../public/js/world-lab-kit.js'),'utf8');
-const nav=require('../public/js/world-lab-navigation.js');
-const sandbox={window:{THREE:{}}};
-vm.runInNewContext(source,sandbox);
-const kit=sandbox.window.WorldLabKit;
-
-function checkTown(roles,name){
-  const lots=nav.uniqueLots(roles);
-  const expected=nav.dimensions(lots.length);
-  assert.equal(kit.mapExtent(roles)>0,true);
-  assert.ok(lots.length>0);
-  const positions=new Set();
+const navigation=require('../public/js/world-lab-navigation.js');
+const scope={window:{THREE:{}}};
+vm.runInNewContext(source,scope);
+const kit=scope.window.WorldLabKit;
+function distance(a,b){return Math.hypot(a.x-b.x,a.z-b.z);}
+function check(roles,title){
+  const lots=navigation.uniqueLots(roles),roads=kit.planRoadNetwork(roles);
+  assert.ok(lots.length>=1&&lots.length<=36);
+  assert.equal(roles.length>=lots.length,true);
+  // A central plaza, branched gently curving avenues, and each building's
+  // own real curb connection replace the former rectangular street grid.
+  assert.ok(roads.some(e=>e.a.id==='plaza'),title+': connected plaza');
+  const graph=new Map();
+  for(const edge of roads){
+    assert.ok(edge.length>0&&Array.isArray(edge.points)&&edge.points.length>=2);
+    assert.ok(distance(edge.points[0],edge.a)<1e-8);
+    assert.ok(distance(edge.points.at(-1),edge.b)<1e-8);
+    const measured=edge.points.reduce((sum,p,i)=>i?sum+distance(p,edge.points[i-1]):0,0);
+    assert.ok(Math.abs(measured-edge.length)<1e-7);
+    for(const [a,b] of [[edge.a.id,edge.b.id],[edge.b.id,edge.a.id]]){
+      if(!graph.has(a))graph.set(a,[]);
+      graph.get(a).push(b);
+    }
+  }
+  const seen=new Set(['plaza']),queue=['plaza'];
+  while(queue.length){
+    const id=queue.shift();
+    for(const next of graph.get(id)||[]){
+      if(!seen.has(next)){seen.add(next);queue.push(next);}
+    }
+  }
   for(const lot of lots){
-    const key=lot.x+','+lot.z;
-    assert.ok(!positions.has(key),name+': two buildings may not share a lot');
-    positions.add(key);
-    assert.ok(Number.isInteger(lot.col)&&Number.isInteger(lot.row));
-    const cell=nav.lotPosition(lot.col+lot.row*expected.cols,lots.length);
-    assert.equal(lot.x,cell.x);
-    assert.equal(lot.z,cell.z);
+    assert.ok(seen.has(lot.id),title+': '+lot.id+' must be reachable');
+    assert.ok(Number.isFinite(lot.rotation)&&Number.isFinite(lot.frontX));
+    assert.ok(distance(lot,{x:lot.frontX,z:lot.frontZ})>3.25,
+      'door curb stays outside the building envelope');
+    const ux=lot.roadX-lot.x,uz=lot.roadZ-lot.z;
+    assert.ok(ux*(lot.frontX-lot.x)+uz*(lot.frontZ-lot.z)>0,
+      'every rotated house entrance faces its actual access street');
+    assert.equal(roads.filter(e=>e.b.id===lot.id).length,1,
+      'each workshop connects to the street network exactly once');
   }
-  const roads=kit.planRoadNetwork(roles);
-  const navRoads=nav.streetEdges(lots);
-  const expectedEdges=expected.cols*(expected.rows-1)+
-    (expected.cols-1)*expected.rows;
-  assert.equal(roads.length,expectedEdges,name+': complete grid street graph');
-  assert.equal(navRoads.length,expectedEdges,name+': navigator and geometry share topology');
-  const keys=new Set(roads.map(e=>[e.a.id,e.b.id].sort().join(':')));
-  assert.equal(keys.size,roads.length,'no duplicated streets');
-  for(let i=0;i<roads.length;i++){
-    const road=roads[i],match=navRoads[i];
-    assert.equal(road.a.id,match.a.id);
-    assert.equal(road.b.id,match.b.id);
-    assert.equal(road.a.x,match.a.x);
-    assert.equal(road.b.z,match.b.z);
-    assert.equal(road.length,nav.SPACING);
-    assert.ok(road.a.x===road.b.x||road.a.z===road.b.z,
-      name+': each visible street is strictly horizontal or vertical');
-    assert.ok(!('shore' in road.a)&&!('shore' in road.b),
-      name+': town is not an island bridge network');
+  for(let i=0;i<lots.length;i++)for(let j=i+1;j<lots.length;j++){
+    assert.ok(distance(lots[i],lots[j])>=7.8,
+      title+': no colliding buildings '+lots[i].id+' / '+lots[j].id);
   }
-  assert.equal(nav.streetLines(lots).length,expected.cols+expected.rows,
-    'the grass town contains every street centerline');
+  if(lots.length>=9){
+    assert.ok(roads.some(e=>e.points.length>2),
+      'the loop near the square needs curved street segments');
+    const rotations=new Set(lots.map(l=>Math.round(l.rotation*10)));
+    assert.ok(rotations.size>=3,'workshops face multiple different directions');
+  }
 }
-for(const n of [1,2,3,4,5,6,7,9,10,16,24,36]){
-  const records=Array.from({length:n},(_,i)=>({
-    roleId:'agent-'+i,roleName:'Agent '+i,projectId:'app'
-  }));
-  checkTown(kit.makeLiveRoles(records),n+' same-project Roles');
+for(const count of [1,2,3,4,5,6,7,9,10,16,24,36]){
+  check(kit.makeLiveRoles(Array.from({length:count},(_,i)=>({
+    roleId:'agent-'+i,roleName:'Agent '+i,projectId:'project'
+  }))),count+' same-project');
 }
-for(const n of [6,11,16,24,36]){
-  const records=Array.from({length:n},(_,i)=>({
+for(const count of [3,6,9,10,16,24,36]){
+  check(kit.makeLiveRoles(Array.from({length:count},(_,i)=>({
     roleId:'agent-'+i,roleName:'Agent '+i,projectId:'project-'+i
-  }));
-  checkTown(kit.makeLiveRoles(records),n+' distinct-project Roles');
+  }))),count+' mixed-project');
 }
-checkTown(kit.roles,'standalone town preview');
-const grouped=kit.makeLiveRoles(Array.from({length:16},(_,i)=>({
-  roleId:'a'+i,roleName:'Role '+i,projectId:'same'
-})));
-assert.equal(nav.uniqueLots(grouped).length,6,
-  'same-project Role grouping preserves max three people per studio');
+check(kit.roles,'standalone');
+assert.equal(navigation.uniqueLots(kit.makeLiveRoles(Array.from({length:16},(_,i)=>({
+  roleId:'agent-'+i,roleName:'Agent '+i,projectId:'project'
+})))).length,6);
+assert.match(source,/function districtPosition\(/);
+assert.match(source,/function lanePoint\(/);
 assert.match(source,/function buildTown\(/);
 assert.match(source,/function districtBuilding\(/);
-assert.match(source,/const TOWN_SPACING=10/);
-assert.doesNotMatch(source,/function island\(scene|function bridge\(scene|const HUB=\{/,
-  'remove every free-standing island and cross-water bridge');
-assert.match(source,/actors\.roadVisuals=planRoadNetwork\(roleDefs\)/);
-console.log('World town layout: continuous floor and connected streets for 1–36 Roles passed');
+assert.match(source,/variant===0/);
+assert.match(source,/variant===5|else\{ \/\/ studio with asymmetric/);
+assert.match(source,/group\.rotation\.y=role\.townRotation\|\|0/);
+assert.doesNotMatch(source,/for\(let col=0;col<cols;col\+\+\)/);
+assert.doesNotMatch(source,/function island\(scene|function bridge\(scene/);
+assert.match(source,/actors\.roadVisuals=roads/);
+console.log('Organic Crew World: curved plaza loop, connected real lanes, rotating diverse workshops, safe 1–36 Role spacing');
