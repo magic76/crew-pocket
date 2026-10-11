@@ -344,12 +344,12 @@
   let linkPaths=[];
   const activeReply=roleId=>{
     const reply=freshReplies.get(roleId);
-    return reply&&Date.now()-reply.at<300000?reply:null;
+    const age=Date.now()-Number(reply?.at);
+    return reply&&typeof reply.signature==='string'&&age>=0&&age<300000?reply:null;
   };
   function concernRoles(){
     if(!isLive||!synced)return[];
-    return roles.map((role,index)=>({role,index,reply:activeReply(role.id)}))
-      .filter(item=>item.role.attention>0||item.reply);
+    return planner?.attentionItems?.(roles,freshReplies,Date.now())||[];
   }
   function renderAttention(){
     const concerns=concernRoles();
@@ -476,7 +476,8 @@
   }
   function renderCollaborationLinks(){
     if(!linkSvg)return;
-    const events=shownHandoffs().slice(0,3);
+    const events=planner?.collaborationConnections?.(
+      shownHandoffs(),roles[selected].id,false,3)||[];
     const signature=events.map(event=>event.id).join('|')+':'+
       (onlySelectedHandoffs?roles[selected].id:'all');
     if(signature===linkSignature)return;
@@ -704,6 +705,10 @@
     window.CrewWorldHost?.onSelectedRole?.(roles[index].id,roles[index].name);
     if(center)window.CrewWorldHost?.focusRole?.(roles[index].id,roles[index].name);
     refreshFocusActivity();
+    if(attentionPanel&&!attentionPanel.hidden){
+      attentionPanel.hidden=true;
+      attentionOpenButton?.setAttribute('aria-expanded','false');
+    }
     if(center){
       // Selection moves only the camera. There is no user-controlled avatar,
       // simulated travel or delayed Role Chat transition.
@@ -869,6 +874,7 @@
           refreshFocusActivity();
           renderAttention();refreshRolePeek();
           entry.speech.hidden=false;
+          refreshRolePeek();
           const head=headStatus(actors[index]);
           entry.button.setAttribute('aria-label',role.name+' · '+head.state+' · 最新回覆：'+entry.speech.textContent);
           const oldTimer=speechTimers.get(role.id);
