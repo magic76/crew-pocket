@@ -40,7 +40,9 @@
   // painted here AND supplied to WorldLabNavigation for actual player travel.
   const TOWN_SPACING=8.7;
   const FRONT_Z=2.65;
-  const branchCount=count=>Math.min(6,Math.max(2,Math.ceil(Math.max(1,count)/4)));
+  // Distribute small crews around the plaza rather than along two opposing streets.
+  // Larger crews continue growing in depth along at most six curved spokes.
+  const branchCount=count=>Math.min(6,Math.max(2,Math.max(1,count)));
   function lanePoint(branch,depth,branches){
     const angle=-Math.PI/2+2*Math.PI*branch/branches+
       .095*Math.sin(branch*2.4+.5);
@@ -146,27 +148,55 @@
   function buildTown(scene,lots,roads){
     if(!lots.length)return;
     const side=townGroundSide(lots);
-    box(scene,'#748b80',side,.70,side,0,-.43,0);
-    box(scene,'#a8cba8',side,.22,side,0,.24,0);
+    box(scene,'#36574e',side,.70,side,0,-.43,0);
+    box(scene,'#568e72',side,.22,side,0,.24,0);
+    // Local park clusters give the square land scale and color without changing
+    // the pathfinding graph. Keep all props outside walkable roads and lots.
+    const keepClear=(x,z)=>{
+      if(lots.some(lot=>Math.hypot(x-lot.x,z-lot.z)<7.2))return false;
+      return !roads.some(edge=>edge.points.some((point,i)=>{
+        if(!i)return false;
+        const from=edge.points[i-1],dx=point.x-from.x,dz=point.z-from.z;
+        const t=Math.max(0,Math.min(1,((x-from.x)*dx+(z-from.z)*dz)/(dx*dx+dz*dz||1)));
+        return Math.hypot(x-from.x-t*dx,z-from.z-t*dz)<3.0;
+      }));
+    };
+    const half=side/2;
+    const clearings=[
+      [-.63,-.62],[-.64,.61],[.62,-.64],[.64,.62],
+      [-.29,-.70],[.31,.72],[-.69,.22],[.69,-.27]
+    ];
+    clearings.forEach(([nx,nz],index)=>{
+      const x=nx*half,z=nz*half;
+      if(!keepClear(x,z))return;
+      // Shallow meadow tiles never cover roads; trees remain grounded.
+      cylinder(scene,index%2?'#467b61':'#669b77',2.25,2.6,.022,x,.367,z,9);
+      for(let i=0;i<3;i++){
+        const theta=i*2.37+index*.61,px=x+Math.cos(theta)*1.15,pz=z+Math.sin(theta)*1.12;
+        if(!keepClear(px,pz))continue;
+        cylinder(scene,'#80674e',.16,.20,.94,px,.80,pz,7);
+        sphere(scene,i%2?'#3c8765':'#4c936e',.78,px,1.62,pz,.90,1.12,.90);
+      }
+    });
     // Road surfaces follow actual navigation polylines, including bends
     // and the curved ring. Small round joints prevent visual corner gaps.
     for(const edge of roads){
       for(let i=1;i<edge.points.length;i++){
-        roadSegment(scene,edge.points[i-1],edge.points[i],1.95,'#d9c3a8');
-        roadSegment(scene,edge.points[i-1],edge.points[i],1.38,'#f3e1bf',.412);
+        roadSegment(scene,edge.points[i-1],edge.points[i],1.95,'#977f69');
+        roadSegment(scene,edge.points[i-1],edge.points[i],1.38,'#cdb79a',.412);
       }
       for(let i=1;i<edge.points.length-1;i++){
-        cylinder(scene,'#f3e1bf',.76,.76,.032,edge.points[i].x,.418,edge.points[i].z,12);
+        cylinder(scene,'#cdb79a',.76,.76,.032,edge.points[i].x,.418,edge.points[i].z,12);
       }
     }
     for(const edge of roads){
       for(const node of [edge.a,edge.b]){
-        cylinder(scene,'#f3e1bf',.85,.85,.032,node.x,.417,node.z,12);
+        cylinder(scene,'#cdb79a',.85,.85,.032,node.x,.417,node.z,12);
       }
     }
     // Distinct curved-edge public square, kept free for walking.
     cylinder(scene,'#bfa995',4.25,4.25,.037,0,.415,0,24);
-    cylinder(scene,'#e2d0b4',3.95,3.95,.04,0,.44,0,24);
+    cylinder(scene,'#cab495',3.95,3.95,.04,0,.44,0,24);
     const ring=part(scene,new T.TorusGeometry(3.35,.06,5,32),'#fbefdb',0,.470,0);
     ring.rotation.x=-Math.PI/2;
     for(let i=0;i<6;i++){
@@ -180,8 +210,8 @@
       group.position.set(lot.x,0,lot.z);
       group.rotation.y=lot.rotation;
       scene.add(group);
-      box(group,'#e8ddc9',6.8,.034,.78,0,.387,FRONT_Z);
-      box(group,'#ead9c0',1.0,.03,.94,0,.397,3.18);
+      box(group,'#bdab94',6.8,.034,.78,0,.387,FRONT_Z);
+      box(group,'#d1b9a0',1.0,.03,.94,0,.397,3.18);
     }
     // Peripheral greenery preserves the tiny-town feel without obstructing
     // either the avenue centre-lines or the visible Role entrances.
@@ -189,9 +219,9 @@
       const group=new T.Group();
       group.position.set(lot.x,0,lot.z);group.rotation.y=lot.rotation;scene.add(group);
       cylinder(group,'#987c65',.12,.14,.64,-3.33,.64,-1.3,7);
-      sphere(group,'#77b59c',.64,-3.33,1.16,-1.3);
+      sphere(group,'#397e60',.64,-3.33,1.16,-1.3);
       cylinder(group,'#987c65',.09,.11,.52,3.3,.58,-1.55,7);
-      sphere(group,'#6fa589',.50,3.3,1.08,-1.55);
+      sphere(group,'#4d956f',.50,3.3,1.08,-1.55);
     }
   }
   // Six genuinely different silhouettes, not the same box recolored.
