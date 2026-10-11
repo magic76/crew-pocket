@@ -296,7 +296,11 @@
     const contextMark=document.createElement('span');
     contextMark.className='world-label-context';contextMark.hidden=true;
     button.append(attentionMark,speech,title,state,detail,contextMark);
-    listen(button,'click',()=>{if(roleMenu?.hidden!==false)handleRoleTap(index);});
+    listen(button,'click',()=>{
+      // Consume only the synthetic click immediately following this label's long press.
+      if(!roleMenu.hidden&&menuRoleIndex===index&&performance.now()-menuOpenedAt<650)return;
+      closeRoleMenu();handleRoleTap(index);
+    });
     listen(speech,'click',event=>{
       event.preventDefault();event.stopPropagation();
       hideSpeech(index,true);
@@ -318,12 +322,12 @@
     roleMenu.appendChild(button);
   });
   stage.appendChild(roleMenu);
-  let menuRoleIndex=-1;
+  let menuRoleIndex=-1,menuOpenedAt=0;
   function closeRoleMenu(){roleMenu.hidden=true;menuRoleIndex=-1;}
   function openRoleMenu(index,clientX,clientY){
     if(!isLive||!window.CrewWorldHost||index<0||index>=roles.length)return;
     closeDistrictPicker();
-    menuRoleIndex=index;select(index,false);
+    menuRoleIndex=index;menuOpenedAt=performance.now();select(index,false);
     const rect=stage.getBoundingClientRect();
     roleMenu.hidden=false;
     const menuWidth=roleMenu.offsetWidth||174,menuHeight=roleMenu.offsetHeight||164;

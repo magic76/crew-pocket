@@ -556,3 +556,8 @@
 .world-runtime-feed-list time{grid-column:2;grid-row:1;font-size:10px;color:#90b9d4;font-variant-numeric:tabular-nums}
 .world-attention-panel:has(.world-runtime-feed:not([hidden])) .world-attention-list:empty{display:none}
 @media(max-width:540px){.world-runtime-feed-list{max-height:18dvh}}
+
+/* Let short screens scroll the bounded verified event feed without hiding its actions. */
+.world-attention-panel:has(.world-runtime-feed:not([hidden])){
+  overflow-y:auto;overscroll-behavior:contain;
+}

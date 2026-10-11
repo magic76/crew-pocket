@@ -249,8 +249,9 @@ assert.ok(!html.includes('world-explore-toggle'),
   'standalone demo also omits the old exploration mode');
 assert.ok(!kit.includes('function createPlayer('),
   'the human visitor mesh is no longer constructed at all');
-assert.ok(engine.includes("panTo(role.islandX,role.islandZ,width<700?2.65:2.0)"),
-  'double-tap Role focus pans smoothly with no walking delay');
+assert.ok(engine.includes('revealRole(index,Boolean(double))')&&
+  engine.includes('panTo(role.islandX,role.islandZ,closer?(width<700?2.65:2.0):zoom)'),
+  'double-tap Role focus is opt-in while single tap preserves visible framing');
 assert.ok(html.includes('id="world-roster"'),'standalone debug lab may keep its Role roster');
 assert.ok(!worldShell.includes('is-role-focused'),
   'overview and close-up use the same map controls');
