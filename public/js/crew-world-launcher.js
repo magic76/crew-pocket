@@ -38,6 +38,7 @@
   // The map is the primary home surface on each cold start. Preserve an
   // explicit Dashboard choice while navigating to Chat, Settings or overlays.
   let preferredHomeView='map';
+  let bootstrapRolePending=false,initialSceneRole=null;
   let selectVersion=0,previousTab=null,restoreTab=false,openVersion=0;
   let sceneScripts=null;
   let requestedRole=null,roleSwitchQueue=Promise.resolve(),switchingRole=false,commandDraft='';
@@ -370,6 +371,20 @@
   }
   function onSelectedRole(id,name){
     if(!liveRole(id))return;
+    // On cold launch the provider history may still be restoring the actual
+    // Role. Never navigate into an arbitrary map Role before that completes.
+    if(bootstrapRolePending){
+      selectedRoleId=id;selectedRoleName=name||liveRole(id).name||id;
+      updateCommandRole();
+      return;
+    }
+    if(initialSceneRole&&id!==initialSceneRole){
+      const aligned=stopWorld?.selectRole?.(initialSceneRole);
+      initialSceneRole=null;
+      if(aligned)return;
+    }else if(id===initialSceneRole){
+      initialSceneRole=null;
+    }
     const changed=selectedRoleId!==id;
     selectedRoleId=id;selectedRoleName=name||liveRole(id).name||id;
     updateCommandRole();
@@ -392,6 +407,32 @@
     }
     updateKeyboard();
     syncReadAction();
+  }
+  function deferInitialRole(){
+    bootstrapRolePending=true;
+  }
+  function onBootstrapReady(){
+    if(!bootstrapRolePending)return;
+    bootstrapRolePending=false;
+    if(modal.hidden)return;
+    const activeId=window.getCurrentRoleId?.();
+    const active=liveRole(activeId);
+    if(active){
+      // Reuse the conversation and its message DOM already restored by
+      // app.js. No duplicate loadConversationHistory/Role navigation.
+      initialSceneRole=active.id;
+      selectedRoleId=active.id;selectedRoleName=active.name||active.id;
+      roleName.textContent=selectedRoleName;
+      putChatInPanel();
+      panel.hidden=false;
+      showCompactChat();
+      updateCommandRole();
+      const aligned=stopWorld?.selectRole?.(active.id);
+      if(aligned)initialSceneRole=null;
+      updatePreview();syncCommandActions();
+    }else if(selectedRoleId&&liveRole(selectedRoleId)){
+      void openChat(selectedRoleId,{compact:true});
+    }
   }
   function restoreHomeView(){
     // Called after the primary-page router restores Crew, including WebView
@@ -470,6 +511,6 @@
     }
   });
   // Exposed only to the scene in this same document, not cross-frame messages.
-  window.CrewWorldHost={open,close,restoreHomeView,hideChat,openChat,openFullChat,onSelectedRole,
-    openCollaboration};
+  window.CrewWorldHost={open,close,restoreHomeView,deferInitialRole,onBootstrapReady,
+    hideChat,openChat,openFullChat,onSelectedRole,openCollaboration};
 })();
