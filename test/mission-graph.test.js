@@ -106,6 +106,11 @@ async function run() {
       addEventListener(type, fn) { this.listeners[type] = fn; }
     };
   }
+  let jumpedTo=null;
+  elements['mission-event-m2']={
+    classList:{add(value){assert.equal(value,'mission-evidence-highlight');}},
+    scrollIntoView(){jumpedTo='m2';}
+  };
   const dialog = element('mission-graph');
   const body = element('mission-graph-body');
   const meta = element('mission-graph-summary');
@@ -144,6 +149,14 @@ async function run() {
   assert.doesNotMatch(body.innerHTML, /<script>/);
   assert.match(body.innerHTML, /data-mission-jump="m1"/);
   assert.equal(meta.textContent, '3 則最近訊息');
+  window.CrewMissionGraph.inspectRole('role-a','m2');
+  await new Promise(resolve => setTimeout(resolve, 1));
+  assert.equal(jumpedTo,'m2',
+    'the existing evidence graph jumps to the exact saved message when linked from World');
+  window.CrewMissionGraph.inspectRole('role-a','../invalid');
+  await new Promise(resolve => setTimeout(resolve, 1));
+  assert.equal(jumpedTo,'m2','invalid evidence IDs cannot control navigation');
+
   dialog.listeners.click({ target: { closest: selector => selector === '[data-mission-open-role]'
     ? { dataset: { missionOpenRole: 'role-b' } } : null } });
   assert.equal(visited, 'role-b');
