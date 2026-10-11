@@ -79,13 +79,13 @@ const arrive=nav.planWalk({roads:plazaRoads,lots:plazaLots,
   fromDistrict:origin.districtId,toDistrict:'plaza'});
 assert.ok(arrive&&arrive.distance>1);
 assert.ok(near(arrive.waypoints.at(-1),{x:0,z:0}),
-  'the avatar arrives at the actual centre of the plaza');
+  'road topology connects the actual centre of the plaza');
 const depart=nav.planWalk({roads:plazaRoads,lots:plazaLots,
   from:{x:0,z:0},to:plazaRoles[8],
   fromDistrict:'plaza',toDistrict:plazaRoles[8].districtId});
 assert.ok(depart&&near(depart.waypoints[0],{x:0,z:0})&&
   near(depart.waypoints.at(-1),plazaRoles[8]),
-  'visitor can walk from plaza straight into the next Role conversation');
+  'road topology retains connected district frontage for future use');
 
 const mixed=kit.makeLiveRoles(Array.from({length:36},(_,i)=>({
   roleId:'r'+i,roleName:'Role '+i,projectId:'p'+i
@@ -110,26 +110,28 @@ assert.equal(nav.planWalk({roads:[],lots:shared,from:same[0],
 assert.equal(nav.planWalk({roads:[],lots:nav.uniqueLots(mixed),from:mixed[0],
   to:mixed[1],fromDistrict:mixed[0].districtId,toDistrict:mixed[1].districtId}),null,
   'do not teleport between workshops when road graph is disconnected');
-assert.match(world,/const visitor=firstLot/);
-assert.match(world,/kit\.createPlayer/);
-assert.match(world,/navigation\.planWalk/);
-assert.match(world,/navigation\.nearestStreetNode/);
-assert.match(world,/lots:townLots,roads:roadVisuals/);
-assert.match(world,/startWalk\(destination,'role',role.id\)/);
-assert.match(world,/void window\.CrewWorldHost\.openChat\(role.id\)/);
+// Role-centric world: roads remain scenery and district topology, but a
+// human visitor no longer exists. Navigation is not loaded in the Web view.
+assert.doesNotMatch(world,/const visitor=|advanceVisitor|startWalk|followPlayer|WorldLabNavigation|\.planWalk\(/,
+  'the hosted map contains no player or walking runtime');
+assert.doesNotMatch(world,/world-player-label|world-explore-toggle|walking|queuedDestination/,
+  'there are no phantom player UI or queued walks');
+assert.doesNotMatch(kitSource,/function createPlayer\(|createPlayer,/,
+  'the scene kit does not allocate a human avatar');
+assert.doesNotMatch(launcher,/loadScript\('\/js\/world-lab-navigation.js'\)/,
+  'the hosted map does not load unnecessary walking navigation');
+assert.doesNotMatch(index,/id="world-explore-toggle"|id="world-tools-menu"/,
+  'no obsolete explorer mode in the hosted map');
+assert.doesNotMatch(standalone,/id="world-explore-toggle"|\/js\/world-lab-navigation.js/,
+  'the standalone demo also omits player mode and its script');
 assert.match(world,/setPointerCapture/);
 assert.match(world,/tap\.moved/);
-assert.match(world,/ray\.ray\.intersectPlane/);
-assert.match(world,/followPlayer=false;/);
+assert.doesNotMatch(world,/ray\.ray\.intersectPlane/,
+  'clicking empty pavement cannot create a false travel command');
 assert.match(world,/workHalo\.material\.opacity=working/);
 assert.match(world,/flight\.recipient\.reactionUntil=now/);
 assert.match(world,/const idleGesture=/);
 assert.doesNotMatch(world,/fetch\('\/api\/role-submit|method:\s*'POST'/);
-assert.match(launcher,/loadScript\('\/js\/world-lab-navigation.js'\)/);
-assert.match(index,/id="world-explore-toggle"/);
-assert.match(standalone,/id="world-explore-toggle"/);
-assert.match(standalone,/\/js\/world-lab-navigation.js/);
-assert.match(kitSource,/function createPlayer/);
 assert.match(kitSource,/function buildTown/);
 assert.match(kitSource,/box\(scene,'#568e72'/);
-console.log('Organic town player: 1–36 roles, rotated building frontage, connected curved paths and original Chat');
+console.log('Organic town: 1–36 roles, connected roads, no visitor avatar or walk runtime');
