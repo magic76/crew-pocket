@@ -131,5 +131,5 @@ assert.match(standalone,/id="world-explore-toggle"/);
 assert.match(standalone,/\/js\/world-lab-navigation.js/);
 assert.match(kitSource,/function createPlayer/);
 assert.match(kitSource,/function buildTown/);
-assert.match(kitSource,/box\(scene,'#a8cba8'/);
+assert.match(kitSource,/box\(scene,'#568e72'/);
 console.log('Organic town player: 1–36 roles, rotated building frontage, connected curved paths and original Chat');
