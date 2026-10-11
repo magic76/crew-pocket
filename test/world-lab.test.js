@@ -280,17 +280,21 @@ for(const document of [main,html]){
   assert.ok(document.includes('id="world-district-picker"'));
   assert.ok(document.includes('id="world-district-picker-list"'));
   assert.ok(document.includes('id="world-status-strip"'));
-  assert.ok(document.includes('id="world-role-context"'));
 }
 assert.ok(css.includes('.world-district-picker[hidden]'));
-assert.ok(css.includes('.world-info.is-collapsed .world-context-health'));
-
-assert.ok(main.includes('id="world-info-toggle"'));
-assert.ok(main.includes('id="world-info-quick-focus"'));
-assert.ok(main.includes('class="world-info is-collapsed"'),
-  'the hosted map starts with a compact Role card');
-assert.ok(css.includes('.world-info.is-collapsed .world-action-row'),
-  'secondary Role actions stay in the expandable detail sheet');
+assert.ok(html.includes('id="world-role-context"'),
+  'standalone 3D Lab still supports its diagnostic role details');
+for(const id of ['world-info','world-info-toggle','world-info-quick-focus',
+  'world-role-name','world-role-state','world-role-context']){
+  assert.ok(!main.includes('id="'+id+'"'),
+    'hosted World removes the redundant selected-Role card: '+id);
+}
+assert.ok(html.includes('id="world-info-toggle"'),
+  'standalone 3D Lab retains separate demo-only controls');
+assert.ok(!worldShell.includes('.crew-world-modal .world-info{'),
+  'no dead World-portal card layout rules remain');
+assert.ok(css.includes('.world-label-context'),
+  'Context warnings live in existing Role nameplates');
 assert.ok(main.includes('class="world-stage-frame"'));
 assert.ok(!main.includes('id="crew-world-focus-bar"'),
   'remove duplicated focus toolbar completely');
@@ -298,6 +302,22 @@ assert.equal((main.match(/id="crew-chat-main-header"/g)||[]).length,1,
   'the original Chat header remains a single DOM node');
 assert.ok(main.includes('id="crew-world-command-context"'),
   'Context is available on the persistent Role command dock');
+assert.ok(main.includes('/js/crew-context-usage.js'),
+  'shared read-only per-Role Context warnings are loaded before World');
+assert.ok(engine.includes("window.CrewContextUsage.load()"),
+  'Context warning data is cached and refreshed only while World is visible');
+assert.ok(engine.includes("contextMark.hidden=!pressure"),
+  'unknown Context values never show a warning badge');
+assert.ok(engine.includes("contextForRole(roles[selected].id)"),
+  'selected Role Context action uses only selected identity');
+assert.ok(engine.includes("command.dataset.contextTone=pressure?.tone||''"),
+  'existing Context action receives amber/red warning, not a duplicate dialog');
+assert.ok(worldShell.includes('#crew-world-command-context[data-context-tone="critical"]'),
+  'critical Context warns in original command dock');
+assert.ok(css.includes('[data-context-tone="critical"] .world-label-context'),
+  'critical Context visually distinguishes role nameplates');
+assert.ok(engine.includes("pill.dataset.contextWarningCount=String(elevated)"),
+  'overview reports the count in the existing status strip, not another bar');
 assert.ok(!main.includes('id="crew-world-command-full"'),
   'no redundant full-read control occupies the mobile command dock');
 assert.ok(main.includes('id="crew-world-chat-expand"'),
