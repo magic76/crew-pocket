@@ -338,7 +338,7 @@
   const linkSvg=document.getElementById('world-collaboration-links');
   const filterHandoffs=document.getElementById('world-handoffs-filter');
   let onlySelectedHandoffs=false,attentionSignature='',linkSignature='';
-  let linkPaths=[];
+  let linkPaths=[],nextLinkExpiryAt=0;
   const activeReply=roleId=>{
     const reply=freshReplies.get(roleId);
     const age=Date.now()-Number(reply?.at);
@@ -448,12 +448,16 @@
   function renderCollaborationLinks(){
     if(!linkSvg)return;
     const events=planner?.collaborationConnections?.(
-      shownHandoffs(),roles[selected].id,false,3)||[];
+      shownHandoffs(),roles[selected].id,false,3,Date.now())||[];
     const signature=events.map(event=>event.id).join('|')+':'+
       (onlySelectedHandoffs?roles[selected].id:'all');
     if(signature===linkSignature)return;
     linkSignature=signature;
     linkSvg.replaceChildren();linkPaths=[];
+    // Expire links without waiting for the next successful API poll. On a
+    // stalled/offline connection, the canvas frame still clears old arcs.
+    nextLinkExpiryAt=events.length
+      ?Math.min(...events.map(event=>event.createdAt+45000)):0;
     for(const event of events){
       if(!memberById.has(event.fromRoleId)||!memberById.has(event.toRoleId))continue;
       const path=document.createElementNS('http://www.w3.org/2000/svg','path');
@@ -462,7 +466,7 @@
       const title=document.createElementNS('http://www.w3.org/2000/svg','title');
       title.textContent=memberById.get(event.fromRoleId).name+' → '+
         memberById.get(event.toRoleId).name+' · 已記錄'+(event.kind==='reply'?'回覆':'訊息')+
-        '，不代表送達';
+        ' · 最近協作紀錄，不代表送達';
       path.appendChild(title);
       linkSvg.appendChild(path);linkPaths.push({event,path});
     }
@@ -488,7 +492,7 @@
     if(!evidenceVerified||!rows.length){
       const note=document.createElement('p');
       note.textContent=!evidenceVerified?'協作資料尚未同步':
-        onlySelectedHandoffs?'目前 Role 沒有已保存的近期協作':'目前沒有已保存的角色訊息';
+        onlySelectedHandoffs?'目前 Role 沒有已保存的協作紀錄':'目前沒有已保存的角色訊息';
       handoffsList.appendChild(note);return;
     }
     for(const event of rows){
@@ -1117,7 +1121,11 @@
       rolePeek.style.display=visible?'':'none';
       if(visible){rolePeek.style.left=x+'px';rolePeek.style.top=(y+17)+'px';}
     }
-    // P14 only draws edges from saved, verified Role-to-Role events.
+    // P14 is a short-lived activity cue, never a permanent relationship.
+    // Re-evaluate expiry even when event polling stalls or the device resumes
+    // after its tab was hidden.
+    if(linkSvg&&nextLinkExpiryAt&&Date.now()>=nextLinkExpiryAt)
+      renderCollaborationLinks();
     if(linkSvg&&linkPaths.length){
       linkSvg.setAttribute('viewBox','0 0 '+width+' '+height);
       for(const {event,path} of linkPaths){
