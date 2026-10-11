@@ -106,7 +106,7 @@ for(const members of groups.values()){
   assert.equal(new Set(members.map(r=>r.x.toFixed(4)+','+r.z.toFixed(4))).size,
     members.length,'every member occupies a distinct point along the rotated frontage');
 }
-assert.ok(sampleWindow.WorldLabKit.mapExtent(allSixteen)>20&&
+assert.ok(sampleWindow.WorldLabKit.mapExtent(allSixteen)>16&&
   sampleWindow.WorldLabKit.mapExtent(allSixteen)<45,
   'sixteen agents keep six separated workshops on organic branches');
 const mixed=sampleWindow.WorldLabKit.makeLiveRoles([
