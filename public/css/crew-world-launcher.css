@@ -117,8 +117,6 @@ body[data-primary-tab="crew"] #crew-world-chat-panel #chat-composer-footer{
 }
 .crew-world-chat-panel #chat-composer-footer .max-w-2xl{max-width:100%}
 body.crew-world-active{overscroll-behavior:none}
-.crew-world-modal .world-info{transition:opacity .18s ease}
-.crew-world-modal:has(.crew-world-chat-panel:not([hidden])) .world-info,
 .crew-world-modal:has(.crew-world-chat-panel:not([hidden])) .world-bottom{
   opacity:.26;pointer-events:none;
 }
@@ -132,7 +130,6 @@ body.crew-world-active{overscroll-behavior:none}
  .crew-home-view-toggle::before{transition:none}
  .crew-world-modal:not([hidden]){animation:none}
  .crew-world-modal #world-loading:not([hidden])::before{animation:none}
- .crew-world-modal .world-info{transition:none}
 }
 
 
@@ -238,11 +235,9 @@ body.crew-world-active #context-health-toast{z-index:10050!important}
   position:absolute;inset:auto 0 var(--crew-keyboard-rise,0px);
   width:100%;max-width:720px;margin:auto;
 }
-.crew-world-modal:has(.crew-world-chat-panel:not([hidden])) .world-info,
 .crew-world-modal:has(.crew-world-chat-panel:not([hidden])) .world-bottom{
   opacity:1;pointer-events:auto;
 }
-.crew-world-modal .crew-world-chat-panel:not(.compact):not([hidden]) ~ .world-info{pointer-events:auto}
 @media(max-width:540px){
   .crew-world-modal .crew-world-chat-panel:not(.compact):not(.expanded):not([hidden]){
     left:6px;right:6px;width:calc(100% - 12px);
