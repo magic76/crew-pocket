@@ -858,6 +858,7 @@
   listen(document.getElementById('world-reset'),'click',()=>{
     showHandoffs(false);
     window.CrewWorldHost?.exitFocus?.();
+    refreshFocusActivity();
     panTo(0,-1.8,overviewZoom);notify('返回全景');
   });
   function setZoom(value){
