@@ -407,3 +407,7 @@ body.crew-world-active .crew-world-modal:not([hidden]){inset:0}
 .crew-world-result-peek{min-height:35px;padding:7px 11px}
 .crew-world-result-peek-kind{max-width:22%}
 .crew-world-modal .world-status-strip{pointer-events:none}
+
+/* Keep the shared top navigation visually above world tooltips and quick menus. */
+body.crew-world-active .crew-home-header,
+body.crew-world-active #crew-home-header{isolation:isolate}

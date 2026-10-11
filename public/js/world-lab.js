@@ -296,13 +296,78 @@
     const contextMark=document.createElement('span');
     contextMark.className='world-label-context';contextMark.hidden=true;
     button.append(attentionMark,speech,title,state,detail,contextMark);
-    listen(button,'click',()=>handleRoleTap(index));
+    listen(button,'click',()=>{if(roleMenu?.hidden!==false)handleRoleTap(index);});
     listen(speech,'click',event=>{
       event.preventDefault();event.stopPropagation();
       hideSpeech(index,true);
     });
     button.style.setProperty('--world-role-color',role.color);
     labelsHost.appendChild(button);return{button,state,detail,speech,attentionMark,contextMark};
+  });
+  const roleMenu=document.createElement('div');
+  roleMenu.className='world-role-menu';roleMenu.hidden=true;
+  roleMenu.setAttribute('role','group');
+  roleMenu.setAttribute('aria-label','角色快捷操作');
+  const roleMenuActions=[
+    ['chat','開啟對話'],['focus','聚焦角色'],
+    ['context','Context Health'],['collaboration','協作紀錄']
+  ];
+  roleMenuActions.forEach(([key,label])=>{
+    const button=document.createElement('button');
+    button.type='button';button.dataset.roleAction=key;button.textContent=label;
+    roleMenu.appendChild(button);
+  });
+  stage.appendChild(roleMenu);
+  let menuRoleIndex=-1;
+  function closeRoleMenu(){roleMenu.hidden=true;menuRoleIndex=-1;}
+  function openRoleMenu(index,clientX,clientY){
+    if(!isLive||!window.CrewWorldHost||index<0||index>=roles.length)return;
+    closeDistrictPicker();
+    menuRoleIndex=index;select(index,false);
+    const rect=stage.getBoundingClientRect();
+    roleMenu.hidden=false;
+    const menuWidth=roleMenu.offsetWidth||174,menuHeight=roleMenu.offsetHeight||164;
+    roleMenu.style.left=Math.max(8,Math.min(rect.width-menuWidth-8,clientX-rect.left+8))+'px';
+    roleMenu.style.top=Math.max(8,Math.min(rect.height-menuHeight-8,clientY-rect.top+8))+'px';
+    roleMenu.querySelector('button')?.focus({preventScroll:true});
+  }
+  listen(roleMenu,'click',event=>{
+    const button=event.target.closest?.('button[data-role-action]');
+    if(!button||menuRoleIndex<0)return;
+    const index=menuRoleIndex,role=roles[index],action=button.dataset.roleAction;
+    closeRoleMenu();
+    if(action==='focus')revealRole(index,true);
+    else if(action==='chat')void window.CrewWorldHost?.openChat?.(role.id,{compact:false});
+    else if(action==='context')document.getElementById('crew-world-command-context')?.click();
+    else if(action==='collaboration'){
+      onlySelectedHandoffs=true;
+      filterHandoffs?.setAttribute('aria-pressed','true');
+      evidenceSignature='';linkSignature='';showHandoffs(true);
+    }
+  });
+  listen(window,'keydown',event=>{
+    if(event.key==='Escape'&&!roleMenu.hidden)closeRoleMenu();
+  });
+  labels.forEach(({button},index)=>{
+    listen(button,'contextmenu',event=>{
+      event.preventDefault();event.stopPropagation();
+      openRoleMenu(index,event.clientX,event.clientY);
+    });
+    let holdTimer=0,origin=null;
+    const cancel=()=>{if(holdTimer)clearTimeout(holdTimer);holdTimer=0;origin=null;};
+    listen(button,'pointerdown',event=>{
+      cancel();if(event.button!==0||event.pointerType==='mouse')return;
+      origin={x:event.clientX,y:event.clientY};
+      holdTimer=setTimeout(()=>{
+        holdTimer=0;openRoleMenu(index,origin.x,origin.y);origin=null;
+      },500);
+    });
+    listen(button,'pointermove',event=>{
+      if(origin&&Math.hypot(event.clientX-origin.x,event.clientY-origin.y)>8)cancel();
+    });
+    listen(button,'pointerup',cancel);
+    listen(button,'pointercancel',cancel);
+    cleanups.push(cancel);
   });
   // Standalone 3D Lab retains its debug roster; the hosted map deliberately
   // has no duplicate Role strip beside the persistent P10 commander.
@@ -633,15 +698,30 @@
       void loadSelectedContext();
   };
   let lastRoleTap=null;
+  // Selecting an already-visible Role must not reframe the whole map.
+  // Explicit double-tap / Focus remains the opt-in close-up gesture.
+  function roleVisibleInCamera(role){
+    if(!role)return false;
+    cameraSync();
+    const p=new T.Vector3(role.x,2.2,role.z).project(camera);
+    const sx=(p.x+1)*width/2,sy=(1-p.y)*height/2;
+    const top=Math.min(height*.36,Math.max(106,height*.18));
+    const bottom=Math.min(height*.39,Math.max(142,height*.22));
+    return p.z>=-1&&p.z<=1&&sx>56&&sx<width-56&&sy>top&&sy<height-bottom;
+  }
+  function revealRole(index,closer=false){
+    const role=roles[index];
+    if(!closer&&roleVisibleInCamera(role))return;
+    panTo(role.islandX,role.islandZ,closer?(width<700?2.65:2.0):zoom);
+  }
   function handleRoleTap(index){
     if(index<0||index>=roles.length)return;
     const now=performance.now(),id=roles[index].id;
     const double=lastRoleTap&&lastRoleTap.id===id&&now-lastRoleTap.at<340;
     lastRoleTap=double?null:{id,at:now};
-    closeDistrictPicker();
-    if(double){select(index,true);return;}
+    closeDistrictPicker();closeRoleMenu();
     select(index,false);
-    panTo(roles[index].islandX,roles[index].islandZ,width<700?2.2:1.9);
+    revealRole(index,Boolean(double));
     showContextIfExpanded();
   }
   const portrait=document.getElementById('world-portrait');
@@ -798,17 +878,15 @@
     // Double tap is a closer camera target, not a second UI mode.
     if(attentionPanel&&!attentionPanel.hidden)showAttention(false);
     if(center){
-      // Selection moves only the camera. There is no user-controlled avatar,
-      // simulated travel or delayed Role Chat transition.
-      const role=roles[index];
-      panTo(role.islandX,role.islandZ,width<700?2.65:2.0);
+      // This is the explicit close-up action; ordinary selections do not zoom.
+      revealRole(index,true);
     }
   }
   activeSelectWorldRole=roleId=>{
     const idx=roles.findIndex(role=>role.id===roleId);
     if(idx<0)return false;
     select(idx,false);
-    panTo(roles[idx].islandX,roles[idx].islandZ,width<700?1.85:1.55);
+    revealRole(idx);
     return true;
   };
   const toast=document.getElementById('world-toast');
@@ -1049,7 +1127,8 @@
   const fingers=new Map();
   let pinch=0,tap=null;
   listen(stage,'pointerdown',event=>{
-    if(event.target.closest?.('.world-label, .world-district-pin'))return;
+    if(event.target.closest?.('.world-label, .world-district-pin, .world-role-menu'))return;
+    closeRoleMenu();
     stage.setPointerCapture?.(event.pointerId);
     fingers.set(event.pointerId,{x:event.clientX,y:event.clientY});
     if(fingers.size===1)tap={x:event.clientX,y:event.clientY,at:performance.now(),moved:false};
@@ -1224,8 +1303,9 @@
       const x=(projected.x+1)/2*width,y=(-projected.y+1)/2*height;
       const active=roles[index].state==='working'||roles[index].attention>0||!speech.hidden||
         Boolean(contextForRole(roles[index].id));
-      const priority=!speech.hidden||contextForRole(roles[index].id)?.tone==='critical'?0:
-        roles[index].attention>0?1:roles[index].state==='working'?2:index===selected?3:4;
+      const priority=index===selected?0:!speech.hidden?1:
+        contextForRole(roles[index].id)?.detail?.tone==='critical'?2:
+        roles[index].attention>0?3:roles[index].state==='working'?4:5;
       return {button,index,x,y,priority,depth:projected.z,active};
     }).sort((a,b)=>a.priority-b.priority);
     const occupied=[];
@@ -1236,10 +1316,12 @@
         y<topMargin||y>height-bottomMargin;
       const lowPriority=(overview&&!active&&index!==selected)||
         (!overview&&!near&&roles.length>18&&!active&&index!==selected);
-      const collides=occupied.some(point=>Math.abs(point.x-x)<(near?112:96)&&Math.abs(point.y-y)<(near?51:40));
+      const widthHint=Math.min(near?205:155,Math.max(88,roles[index].short.length*12+30));
+      const collides=occupied.some(point=>
+        Math.abs(point.x-x)<(point.w+widthHint)/2+8&&Math.abs(point.y-y)<(near?57:43));
       const visible=!out&&!lowPriority&&!collides;
       button.style.display=visible?'':'none';
-      if(visible){occupied.push({x,y});button.style.left=x+'px';button.style.top=y+'px';}
+      if(visible){occupied.push({x,y,w:widthHint});button.style.left=x+'px';button.style.top=y+'px';}
     }
     // P13 compact response card follows the actual selected Role. It is
     // read-only; opening it delegates to the existing Role Chat.
@@ -1277,7 +1359,9 @@
         x>35&&x<width-35&&y>Math.min(115,height*.2)&&
         y<height-Math.min(120,height*.24);
       pin.marker.style.display=visible?'':'none';
-      if(visible){pin.marker.style.left=x+'px';pin.marker.style.top=y+'px';}
+      const blocked=occupied.some(point=>Math.abs(point.x-x)<(point.w+116)/2+10&&Math.abs(point.y-y)<54);
+      pin.marker.style.display=visible&&!blocked?'':'none';
+      if(visible&&!blocked){pin.marker.style.left=x+'px';pin.marker.style.top=y+'px';occupied.push({x,y,w:116});}
     }
     renderer.render(scene,camera);
   }
@@ -1319,6 +1403,7 @@
     for(const timer of speechTimers.values())clearTimeout(timer);
     cancelAnimationFrame(raf);
     for(const cleanup of cleanups.splice(0).reverse())cleanup();
+    roleMenu.remove();
     scene.traverse(object=>{
       object.geometry?.dispose?.();
       if(Array.isArray(object.material))object.material.forEach(m=>m?.dispose?.());
