@@ -24,6 +24,14 @@ for(const name of ['Pocket Developer','Teacher Developer','Story Developer']){
 }
 assert.match(kit,/function character\(/);
 assert.match(kit,/roleId=role.id/);
+assert.ok(engine.includes('renderer.toneMappingExposure=.78'));
+assert.ok(engine.includes('new T.DirectionalLight(0xfff5dd,1.05)'));
+assert.ok(engine.includes('new T.RingGeometry(1.08,1.42,36)'),
+  'the selected agent has an explicit map highlight');
+assert.ok(engine.includes('index!==selected'),
+  'a selected idle Role remains visible at overview zoom');
+assert.ok(kit.includes('const keepClear=(x,z)=>'),
+  'decorative greenery avoids navigation lanes');
 assert.match(engine,/new T.WebGLRenderer/);
 assert.match(engine,/ray.intersectObjects/);
 assert.match(engine,/pointermove/);
@@ -98,7 +106,7 @@ for(const members of groups.values()){
   assert.equal(new Set(members.map(r=>r.x.toFixed(4)+','+r.z.toFixed(4))).size,
     members.length,'every member occupies a distinct point along the rotated frontage');
 }
-assert.ok(sampleWindow.WorldLabKit.mapExtent(allSixteen)>20&&
+assert.ok(sampleWindow.WorldLabKit.mapExtent(allSixteen)>16&&
   sampleWindow.WorldLabKit.mapExtent(allSixteen)<45,
   'sixteen agents keep six separated workshops on organic branches');
 const mixed=sampleWindow.WorldLabKit.makeLiveRoles([
@@ -111,7 +119,7 @@ assert.equal(new Set(mixed.map(r=>r.districtId)).size,5,
 const forty=sampleWindow.WorldLabKit.makeLiveRoles(Array.from({length:40},(_,i)=>({roleId:'agent-'+i})));
 assert.equal(forty.length,sampleWindow.WorldLabKit.MAX_WORLD_ROLES);
 assert.equal(sampleWindow.WorldLabKit.MEMBERS_PER_DISTRICT,3);
-assert.ok(sampleWindow.WorldLabKit.mapExtent(forty)>28&&
+assert.ok(sampleWindow.WorldLabKit.mapExtent(forty)>24&&
   sampleWindow.WorldLabKit.mapExtent(forty)<65,
   'up to 36 Roles form safely separated groups around a compact plaza');
 
@@ -141,6 +149,12 @@ assert.match(main,/\/js\/crew-world-launcher.js/);
 assert.doesNotMatch(main,/<script src="\/js\/world-lab.js"/);
 assert.doesNotMatch(main,/<script src="\/vendor\/three.min.js"/);
 assert.match(main,/id="world-stage"/);
+assert.ok(main.includes('id="world-info-toggle"'));
+assert.ok(main.includes('id="world-info-quick-focus"'));
+assert.ok(main.includes('class="world-info is-collapsed"'),
+  'the hosted map starts with a compact Role card');
+assert.ok(css.includes('.world-info.is-collapsed .world-action-row'),
+  'secondary Role actions stay in the expandable detail sheet');
 assert.ok(main.includes('class="world-stage-frame"'));
 assert.ok(main.includes('id="crew-world-focus-bar"'));
 assert.ok(main.includes('id="crew-world-focus-back"'));

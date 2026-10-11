@@ -97,13 +97,25 @@ for(const count of [3,6,9,10,16,24,36]){
     roleId:'agent-'+i,roleName:'Agent '+i,projectId:'project-'+i
   }))),count+' mixed-project');
 }
+// A small crew should occupy different compass quadrants, not a diagonal road.
+const threeLots=navigation.uniqueLots(kit.makeLiveRoles(
+  Array.from({length:3},(_,i)=>({roleId:'spoke-'+i,projectId:'project-'+i}))
+));
+assert.equal(threeLots.length,3);
+assert.equal(new Set(threeLots.map(l=>l.branch)).size,3,
+  'three workspaces use three distinct streets around the plaza');
+const sixLots=navigation.uniqueLots(kit.makeLiveRoles(
+  Array.from({length:6},(_,i)=>({roleId:'ward-'+i,projectId:'project-'+i}))
+));
+assert.equal(new Set(sixLots.map(l=>l.branch)).size,6,
+  'six small workspaces encircle the square instead of two opposing lines');
 check(kit.roles,'standalone');
 assert.equal(navigation.uniqueLots(kit.makeLiveRoles(Array.from({length:16},(_,i)=>({
   roleId:'agent-'+i,roleName:'Agent '+i,projectId:'project'
 })))).length,6);
 assert.match(source,/function townGroundSide\(/);
-assert.match(source,/box\(scene,'#748b80',side,\.70,side/);
-assert.match(source,/box\(scene,'#a8cba8',side,\.22,side/);
+assert.match(source,/box\(scene,'#36574e',side,\.70,side/);
+assert.match(source,/box\(scene,'#568e72',side,\.22,side/);
 assert.equal(kit.townGroundSide([{x:8,z:32}]),kit.townGroundSide([{x:32,z:8}]),
   'the town square is independent of which axis holds the most distant house');
 assert.match(source,/function districtPosition\(/);

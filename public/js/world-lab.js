@@ -67,18 +67,18 @@
   renderer.shadowMap.type=T.PCFSoftShadowMap;
   renderer.outputEncoding=T.sRGBEncoding;
   renderer.toneMapping=T.ACESFilmicToneMapping;
-  renderer.toneMappingExposure=1.08;
+  renderer.toneMappingExposure=.78;
   stage.prepend(renderer.domElement);if(loading)loading.hidden=true;
   const scene=new T.Scene();
   const camera=new T.OrthographicCamera(-8,8,8,-8,.1,150);
-  const sunlight=new T.DirectionalLight(0xffffff,1.65);
+  const sunlight=new T.DirectionalLight(0xfff5dd,1.05);
   sunlight.position.set(-7,18,13);
   sunlight.castShadow=true;
   sunlight.shadow.mapSize.set(1024,1024);
   sunlight.shadow.camera.left=-24;sunlight.shadow.camera.right=24;
   sunlight.shadow.camera.top=24;sunlight.shadow.camera.bottom=-24;
   sunlight.shadow.bias=-.0005;
-  scene.add(sunlight,new T.HemisphereLight(0xc5e6ff,0x4f527d,1.12));
+  scene.add(sunlight,new T.HemisphereLight(0xc9e6ec,0x526459,.66));
   const actors=kit.create(scene,roles);
   const roadVisuals=actors.roadVisuals||[];
   // This is the same immutable lot/frontage geometry used for mesh rotation
@@ -183,7 +183,16 @@
   }
   const worldExtent=kit.mapExtent?.(roles)||15;
   const view=new T.Vector3(0,.7,-1.8),direction=new T.Vector3(16,21,25).normalize();
-  let width=1,height=1,zoom=1,selected=0,focus=null;
+  // Keep the occupied village legible on narrow screens. The larger square
+  // grass ground is intentionally allowed to extend beyond the camera.
+  const overviewZoom=roles.length<=12?1.32:1.12;
+  let width=1,height=1,zoom=overviewZoom,selected=0,focus=null;
+  const selectionHalo=new T.Mesh(new T.RingGeometry(1.08,1.42,36),
+    new T.MeshBasicMaterial({color:'#f7de8b',transparent:true,opacity:.82,
+      side:T.DoubleSide,depthWrite:false}));
+  selectionHalo.rotation.x=-Math.PI/2;
+  selectionHalo.position.y=.065;
+  actors[0].root.add(selectionHalo);
   const labelsHost=document.getElementById('world-labels');
   const visitorLabel=document.createElement('span');
   visitorLabel.className='world-player-label';visitorLabel.textContent='你';
@@ -287,10 +296,11 @@
     const focusState=document.getElementById('crew-world-focus-state');
     if(focusState)focusState.textContent=liveStates[role.state]||'未知';
     roster.forEach((button,i)=>button.setAttribute('aria-pressed',String(i===selected)));
+    actors[selected].root.add(selectionHalo);
   }
   function cameraSync(){
     const aspect=width/Math.max(1,height);
-    const span=Math.max(24.5,worldExtent*2.15);
+    const span=Math.max(23,worldExtent*2.05);
     const vertical=Math.max(14.8,span/aspect)/zoom;
     camera.left=-vertical*aspect/2;
     camera.right=vertical*aspect/2;
@@ -414,6 +424,21 @@
     clearTimeout(toastTimer);
     toastTimer=trackedTimeout(()=>toast.classList.remove('visible'),2400);
   }
+  const infoPanel=document.getElementById('world-info');
+  const infoToggle=document.getElementById('world-info-toggle');
+  const quickFocus=document.getElementById('world-info-quick-focus');
+  function syncInfoDisclosure(){
+    if(!infoToggle||!infoPanel)return;
+    const expanded=!infoPanel.classList.contains('is-collapsed');
+    infoToggle.setAttribute('aria-expanded',String(expanded));
+    infoToggle.textContent=expanded?'收合':'詳情';
+  }
+  listen(infoToggle,'click',()=>{
+    infoPanel.classList.toggle('is-collapsed');
+    syncInfoDisclosure();
+  });
+  listen(quickFocus,'click',()=>document.getElementById('world-focus')?.click());
+  syncInfoDisclosure();
   listen(document.getElementById('world-focus'),'click',()=>{
     select(selected,true);notify('已聚焦 '+roles[selected].short);
   });
@@ -600,7 +625,7 @@
   }
   listen(document.getElementById('world-reset'),'click',()=>{
     window.CrewWorldHost?.exitFocus?.();
-    panTo(0,-1.8,1);notify('返回全景');
+    panTo(0,-1.8,overviewZoom);notify('返回全景');
   });
   function setZoom(value){
     zoom=T.MathUtils.clamp(value,.65,4.5);cameraSync();
@@ -751,6 +776,7 @@
       actor.legs.forEach(({mesh})=>{mesh.rotation.x=0;});
       actor.workHalo.material.opacity=working?(reduced?.32:.22+Math.sin(elapsed*3+index)*.08):0;
     });
+    if(!reduced)selectionHalo.scale.setScalar(1+.045*Math.sin(now*.003));
     if(visitor){
       const projected=visitor.root.position.clone().add(new T.Vector3(0,3.6,0)).project(camera);
       const x=(projected.x+1)/2*width,y=(-projected.y+1)/2*height;
@@ -778,7 +804,7 @@
       const topMargin=Math.min(100,height*.18),bottomMargin=Math.min(115,height*.22);
       const out=depth<-1||depth>1||x<12||x>width-12||
         y<topMargin||y>height-bottomMargin;
-      const lowPriority=overview&&!active;
+      const lowPriority=overview&&!active&&index!==selected;
       const collides=occupied.some(point=>Math.abs(point.x-x)<112&&Math.abs(point.y-y)<50);
       const visible=!out&&!lowPriority&&!collides;
       button.style.display=visible?'':'none';
