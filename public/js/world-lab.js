@@ -601,19 +601,22 @@
   if(actionRow)actionRow.style.gridTemplateColumns='repeat(3,minmax(0,1fr))';
   // Context pressure belongs to each real Role's window, not to the
   // removed selected-Role details bar. Unknown data never becomes 0%.
+  const contextWarningByRole=new Map();
   function contextForRole(roleId){
-    if(!isLive||!synced)return null;
-    const store=window.CrewContextUsage;
-    if(!store)return null;
-    const detail=store.describe(store.get(roleId));
-    return detail.known&&(detail.tone==='warning'||detail.tone==='critical')
-      ?detail:null;
+    return contextWarningByRole.get(roleId)||null;
   }
   function syncContextWarnings(){
+    // The scene runs on requestAnimationFrame; format provider usage only on
+    // 25s refresh or a Runtime status change, never during camera projection.
+    contextWarningByRole.clear();
+    const store=isLive&&synced?window.CrewContextUsage:null;
     let elevated=0,critical=0;
     for(let i=0;i<labels.length;i++){
       const {button,contextMark}=labels[i];
-      const pressure=contextForRole(roles[i].id);
+      const detail=store?.describe(store.get(roles[i].id));
+      const pressure=detail?.known&&(detail.tone==='warning'||detail.tone==='critical')
+        ?detail:null;
+      if(pressure)contextWarningByRole.set(roles[i].id,pressure);
       const tone=pressure?.tone||'';
       contextMark.hidden=!pressure;
       contextMark.textContent=pressure?'Context '+pressure.label:'';
