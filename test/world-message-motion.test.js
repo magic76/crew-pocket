@@ -19,9 +19,27 @@ assert.equal(events.observe([old,fresh],observed.seenIds,['a','b'],now).arrivals
 assert.equal(events.observe([{...fresh,id:'invalid',fromRoleId:'other'}],
   observed.seenIds,['a','b'],now).arrivals.length,0);
 
+const trace=events.traceableEvents([
+  old,fresh,{...fresh,id:'duplicate',toRoleId:'not-in-crew'},
+  {...fresh,id:'self',toRoleId:'a'},
+  {...fresh,id:'invalid',createdAt:now+100000},
+  {...fresh,id:'new',createdAt:now-100}
+],['a','b'],3,now);
+assert.deepEqual(trace.map(x=>x.id),['new','old'],
+  'the evidence tray contains only unique, saved, known participant messages');
+assert.deepEqual(Object.keys(trace[0]).sort(),
+  ['createdAt','fromRoleId','id','kind','toRoleId'].sort(),
+  'metadata-only public tray must not contain content, delivery or context');
+assert.equal(trace[0].kind,'reply');
+assert.equal(events.traceableEvents([fresh],['a'],6,now).length,0,
+  'unknown recipient cannot be traced in a different crew');
+assert.match(sceneSource,/mesh.userData.handoffEventId=eventId/,
+  'paper planes reference their actual saved event ID');
+assert.match(sceneSource,/openEvidence\(hit.object.userData.handoffEventId\)/,
+  'tapping a flight opens evidence instead of simulating delivery');
 const point=events.paperFlightPoint({x:-10,y:3.25,z:0},{x:10,y:3.25,z:0},.5);
 assert.ok(point.y>3.25,'the digital message may fly over streets and buildings');
-assert.match(sceneSource,/launchPaperPlane\(actor,recipient,now,event.kind\)/,
+assert.match(sceneSource,/launchPaperPlane\(actor,recipient,now,event.kind,event.id\)/,
   'only previously saved Role events cause real-scene flights');
 assert.match(sceneSource,/planner\.paperFlightPoint\(flight.from,flight.to/);
 assert.match(sceneSource,/const MAX_ACTIVE_PLANES=3/);
