@@ -137,96 +137,19 @@ body.crew-world-active{overscroll-behavior:none}
 
 
 /* Role focus overlays a full-bleed map; the town ground itself is square. */
-.crew-world-focus-bar[hidden]{display:none!important}
-.crew-world-focus-bar{
-  position:absolute;z-index:9;top:8px;left:12px;right:12px;
-  display:flex;align-items:center;gap:10px;min-width:0;
-  padding:6px 0;color:#eff6ff;
-}
-.crew-world-focus-identity{min-width:0;flex:1;display:flex;flex-direction:column;gap:3px}
-.crew-world-focus-identity strong{font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.crew-world-focus-identity small{font-size:11px;color:#9addc9}
-.crew-world-focus-bar button{
-  flex:none;min-height:40px;padding:0 10px;
-  background:#1c2c45;border:1px solid #7795bd73;border-radius:12px;
-  color:#edf5ff;font-size:12px;font-weight:750;
-}
-.crew-world-focus-bar button:focus-visible{outline:2px solid #80d8f8;outline-offset:2px}
-.crew-world-modal.is-role-focused{display:block}
-.crew-world-modal.is-role-focused > .world-app{
-  position:relative;width:100%;height:100%;min-height:0;padding:0;
-}
-.crew-world-modal.is-role-focused .world-header,
-.crew-world-modal.is-role-focused .world-hint,
-.crew-world-modal.is-role-focused .world-info{display:none!important}
-.crew-world-modal.is-role-focused .world-bottom{
-  position:absolute;left:10px;right:10px;
-  bottom:calc(env(safe-area-inset-bottom,0px) + 132px);
-  justify-content:flex-end;
-}
-.crew-world-modal.is-role-focused .world-roster{display:none!important}
-.crew-world-modal.is-role-focused .world-controls{margin-left:auto}
-.crew-world-modal.is-role-focused .crew-world-chat-panel.compact:not([hidden]){
-  position:absolute;inset:auto 0 0;z-index:12;
-  width:100%;max-width:none;height:auto;min-height:0;max-height:min(42dvh,320px);
-  border-radius:16px 16px 0 0;margin:0;
-  box-shadow:0 -7px 24px #040e1c66;
-}
+/* Modeless map: Chat remains the same DOM in its compact command dock.
+   Role selection never switches overlay layouts or suppresses shared nav. */
 .crew-world-chat-panel.compact .crew-world-chat-messages-slot{display:none!important}
-.crew-world-chat-panel.compact .crew-world-chat-top{min-height:36px;padding:4px 12px}
-.crew-world-chat-panel.compact .crew-world-chat-identity small{display:none}
+.crew-world-chat-panel.compact .crew-world-chat-top{display:none!important}
 .crew-world-chat-panel.compact #crew-world-chat-hide{display:none}
 .crew-world-chat-panel.compact #input-helper-row{display:none!important}
-.crew-world-chat-panel.compact #chat-composer-footer{padding:5px 9px calc(5px + env(safe-area-inset-bottom,0px))}
-.crew-world-modal.is-role-focused .crew-world-chat-panel:not(.compact):not([hidden]){
-  height:min(52dvh,calc(var(--crew-visible-height,100dvh) - 10px));
+.crew-world-chat-panel.compact #chat-composer-footer{
+  padding:5px 9px calc(5px + env(safe-area-inset-bottom,0px));
 }
-.crew-world-modal.is-role-focused .crew-world-chat-panel.expanded:not([hidden]){
-  height:min(100dvh,calc(var(--crew-visible-height,100dvh) - 5px));
-}
-.crew-world-modal.is-role-focused .crew-world-chat-panel.compact.keyboard-open:not([hidden]){
-  position:absolute;bottom:var(--crew-keyboard-rise,0px);
-  left:0;right:0;
-}
-@media (max-width:375px){
-  .crew-world-focus-bar{gap:6px}
-  .crew-world-focus-bar button{padding:0 8px;font-size:11px}
-}
-
-/* No zoom controls floating over the compact composer while typing. */
-.crew-world-modal.is-role-focused:has(.crew-world-chat-panel.keyboard-open:not([hidden])) .world-bottom{display:none}
-
-/* Focus uses the same Dashboard/Map navigation as overview.
-   The ORIGINAL Chat header remains hidden by crew-world-active below. */
-.crew-world-modal.is-role-focused .crew-world-focus-bar{
-  top:7px;
-  min-height:48px;padding:5px 3px;
-  background:linear-gradient(90deg,#10233ce3,#152b43c0);
-  border:1px solid #9ac3ed3d;border-radius:15px;
-  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
-}
-.crew-world-modal.is-role-focused .world-status-strip{display:none!important}
-.crew-world-focus-bar #crew-world-focus-context{
-  flex:none;display:grid;place-items:center;width:40px;min-width:40px;
-  padding:0;border:1px solid #83b8d36e;background:#1b4356a6;
-}
-.crew-world-focus-bar #crew-world-focus-context:disabled{opacity:.38;cursor:wait}
-.crew-world-focus-bar #crew-world-focus-context svg{pointer-events:none}
-@media(max-width:375px){
-  .crew-world-modal.is-role-focused .crew-world-focus-bar{
-    left:7px;right:7px;gap:5px;padding:4px;
-  }
-  .crew-world-focus-identity strong{font-size:13px}
-  .crew-world-focus-bar #crew-world-focus-context{width:36px;min-width:36px}
-}
-/* Context Health uses the exact same original modal. Raise it above the
-   full-bleed World (z-index:9999), including its confirmation preview. */
-body.crew-world-focused #context-modal{z-index:10030!important}
-body.crew-world-focused #context-compact-preview-modal{z-index:10040!important}
-body.crew-world-focused #context-health-toast{z-index:10050!important}
-@media(prefers-reduced-motion:reduce){
-  .crew-world-modal.is-role-focused .crew-world-focus-bar{transition:none}
-}
+/* Original Context Health is above World even without any 'focus' mode. */
+body.crew-world-active #context-modal{z-index:10030!important}
+body.crew-world-active #context-compact-preview-modal{z-index:10040!important}
+body.crew-world-active #context-health-toast{z-index:10050!important}
 
 /* P10: use the original Chat composer as the persistent world command bar.
    One DOM input + one existing send handler, not an independent sender. */
@@ -249,6 +172,17 @@ body.crew-world-focused #context-health-toast{z-index:10050!important}
 .crew-world-command-head #crew-world-command-read{
   flex:none;min-height:36px;padding:0 9px;border-radius:10px;
   border:1px solid #88c1d96e;color:#e3f6ff;background:#214f6e;font-size:11px;font-weight:700;
+}
+.crew-world-command-head #crew-world-command-context,
+.crew-world-command-head #crew-world-command-full{
+  flex:none;min-height:36px;padding:0 9px;border-radius:10px;
+  border:1px solid #88c1d96e;color:#e3f6ff;background:#214f6e;font-size:11px;font-weight:700;
+}
+.crew-world-command-head #crew-world-command-context:disabled,
+.crew-world-command-head #crew-world-command-full:disabled{opacity:.42;cursor:wait}
+.crew-world-command-head #crew-world-command-context:focus-visible,
+.crew-world-command-head #crew-world-command-full:focus-visible{
+  outline:2px solid #76d8ff;outline-offset:2px;
 }
 .crew-world-result-peek[hidden]{display:none!important}
 .crew-world-result-peek{
@@ -302,6 +236,11 @@ body.crew-world-focused #context-health-toast{z-index:10050!important}
   .crew-world-command-head label{display:none}
   .crew-world-command-head #crew-world-command-state{max-width:22%;font-size:9px}
   .crew-world-command-head select{max-width:none}
+  .crew-world-command-head #crew-world-command-state{display:none}
+  .crew-world-command-head{gap:5px!important;padding:7px 8px!important}
+  .crew-world-command-head #crew-world-command-read,
+  .crew-world-command-head #crew-world-command-context,
+  .crew-world-command-head #crew-world-command-full{padding:0 7px;font-size:10px}
   .crew-world-modal .world-bottom{bottom:calc(env(safe-area-inset-bottom,0px) + 174px)}
 }
 .crew-world-modal:has(.crew-world-chat-panel:not([hidden])) .world-bottom{
@@ -340,7 +279,6 @@ body.crew-world-active .crew-world-modal:not([hidden]){
   backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
   cursor:pointer;
 }
-.crew-world-modal.is-role-focused .world-quick-tools{display:none!important}
 .crew-world-modal .world-info{
   bottom:calc(env(safe-area-inset-bottom,0px) + 158px);
 }
