@@ -49,6 +49,32 @@ assert.ok(engine.includes('isLive&&synced&&!working'),
 assert.ok(engine.includes('const wander=idle&&!reduced'),
   'idle motion is gentle and respects reduced-motion settings');
 assert.match(engine,/new T.WebGLRenderer/);
+assert.ok(kit.includes('mesh.userData.districtId=role.districtId||role.id'),
+  'workshop meshes have a real district hit target');
+assert.ok(kit.includes('mesh.userData.decorative=true'),
+  'decorative buildings cannot route to a Role');
+assert.ok(kit.includes('actors.pickableObjects='),
+  '3D scene provides a bounded pickable set');
+assert.match(engine,/function showDistrictPicker\(members\)/);
+assert.match(engine,/members.length>1\)showDistrictPicker\(members\)/,
+  'a shared workshop opens the full Role picker');
+assert.match(engine,/function handleRoleTap\(index\)/);
+assert.match(engine,/now-lastRoleTap.at<340/,
+  'double tap is a separate focus action');
+assert.match(engine,/if\(!explore\)\{/,
+  'empty ground in browse mode does not start walking');
+assert.ok(engine.includes("event.type==='pointerup'"),
+  'cancelled gestures cannot accidentally select a Role');
+assert.ok(engine.includes('isFocusActive?.()'),
+  'single-tap selection exits another Role focus before changing the target');
+assert.match(engine,/fetch\('\/api\/context\/compaction-plan\?'/,
+  'Context Health uses the existing authorized read endpoint');
+assert.ok(engine.includes('if(!document.getElementById('),
+  'Context Health is only requested with details expanded');
+assert.ok(engine.includes('liveRuntimeByRole=new Map('),
+  'Context identity stays scoped to the selected Runtime conversation');
+assert.ok(engine.includes('if(!synced)addStatus('),
+  'unknown Runtime state cannot be shown as verified');
 assert.match(engine,/ray.intersectObjects/);
 assert.match(engine,/pointermove/);
 assert.match(engine,/pinch/);
@@ -69,8 +95,8 @@ assert.match(engine,/const overview=zoom<1\.65/,
   'small crews also hide idle and waiting badges at overview zoom');
 assert.match(engine,/const active=roles\[index\]\.state==='working'\|\|!speech\.hidden/);
 assert.match(engine,/const lowPriority=overview&&!active/);
-assert.match(engine,/pin\.members\.some\(role=>role\.state==='working'\)/,
-  'overview project pins appear only while a member is working');
+assert.match(engine,/pin\.members\.some\(role=>role\.state==='working'\|\|role\.attention>0\)/,
+  'overview district pins appear only for verified work or attention');
 assert.doesNotMatch(engine,/fetch\('\/api\/(chat|role-submit|role-runtime|memories)'/);
 assert.doesNotMatch(engine,/method\s*:\s*['\"](?:POST|PUT|PATCH|DELETE)/);
 assert.match(engine,/crew-world-open-role/);
@@ -165,6 +191,15 @@ assert.match(main,/\/js\/crew-world-launcher.js/);
 assert.doesNotMatch(main,/<script src="\/js\/world-lab.js"/);
 assert.doesNotMatch(main,/<script src="\/vendor\/three.min.js"/);
 assert.match(main,/id="world-stage"/);
+for(const document of [main,html]){
+  assert.ok(document.includes('id="world-district-picker"'));
+  assert.ok(document.includes('id="world-district-picker-list"'));
+  assert.ok(document.includes('id="world-status-strip"'));
+  assert.ok(document.includes('id="world-role-context"'));
+}
+assert.ok(css.includes('.world-district-picker[hidden]'));
+assert.ok(css.includes('.world-info.is-collapsed .world-context-health'));
+
 assert.ok(main.includes('id="world-info-toggle"'));
 assert.ok(main.includes('id="world-info-quick-focus"'));
 assert.ok(main.includes('class="world-info is-collapsed"'),
