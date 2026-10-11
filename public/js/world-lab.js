@@ -779,9 +779,9 @@
       // Small home-front idle wander; the Role never walks between lots for
       // paper-plane deliveries, and stays within its standing area.
       const wander=idle&&!reduced;
-      actor.root.position.x=actor.role.x+(wander?.12*Math.sin(elapsed*.34+index*2.1):0);
-      actor.root.position.z=actor.role.z+(wander?.10*Math.cos(elapsed*.28+index*1.4):0);
-      actor.body.rotation.y=wander?.13*Math.sin(elapsed*.4+index*1.9):0;
+      actor.root.position.x=actor.role.x+(wander ? .12*Math.sin(elapsed*.34+index*2.1):0);
+      actor.root.position.z=actor.role.z+(wander ? .10*Math.cos(elapsed*.28+index*1.4):0);
+      actor.body.rotation.y=wander ? .13*Math.sin(elapsed*.4+index*1.9):0;
       actor.arms[0].rotation.x=reduced?0:reaction?-.86:
         signaling?Math.sin(phase)*.24:working?Math.sin(phase)*.34:
         idleGesture?-.36:0;
