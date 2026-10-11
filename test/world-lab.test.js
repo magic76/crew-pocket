@@ -119,9 +119,12 @@ assert.equal(sampleWindow.WorldLabKit.makeLiveRoles([]).length,0);
 
 assert.match(css,/touch-action:none/);
 assert.ok(html.includes('class="world-stage-frame"'));
-assert.ok(css.includes('container-type:size'));
-assert.ok(css.includes('aspect-ratio:1 / 1'));
-assert.ok(css.includes('width:min(100cqw,100cqh)'));
+assert.ok(css.includes('.world-stage-frame{position:absolute;inset:0'),
+  'map frame fills its entire available viewport');
+assert.ok(css.includes('#world-stage{position:absolute;inset:0;width:100%;height:100%}'),
+  'the 3D canvas remains full-bleed');
+assert.ok(!css.includes('aspect-ratio:1 / 1')&&!css.includes('100cqh'),
+  'a square town must not force the WebGL viewport to a square');
 assert.match(css,/safe-area-inset-bottom/);
 assert.match(css,/prefers-reduced-motion/);
 const main=read('public/index.html');
@@ -159,6 +162,10 @@ assert.ok(engine.includes('CrewWorldHost?.focusRole?.('));
 assert.ok(engine.includes('CrewWorldHost?.exitFocus?.('));
 const worldShellCss=read('public/css/crew-world-launcher.css');
 assert.ok(worldShellCss.includes('.crew-world-modal.is-role-focused'));
+assert.ok(worldShellCss.includes('position:absolute;inset:auto 0 0;z-index:12'),
+  'focused compact chat overlays the full-height map');
+assert.ok(!worldShellCss.includes('grid-template-rows:auto minmax(0,1fr) auto'),
+  'focused map is no longer limited to a grid row');
 assert.ok(worldShellCss.includes('.crew-world-chat-panel.compact'));
 assert.match(launcher,/ensureScene/);
 assert.match(launcher,/loadScript\('\/vendor\/three.min.js'\)/);
