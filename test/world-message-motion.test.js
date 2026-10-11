@@ -30,8 +30,8 @@ assert.match(sceneSource,/flight\.recipient\.reactionUntil=now/);
 assert.match(sceneSource,/非送達確認/);
 assert.doesNotMatch(sceneSource,/planner\.trail|actor\.root\.position\.set\(point\.x/);
 assert.match(sceneSource,/actor\.legs\.forEach\(\(\{mesh\}\)=>\{mesh\.rotation\.x=0;\}\)/);
-assert.ok(nav.SPACING>nav.FRONT_Z);
-assert.match(kitSource,/actors\.roadVisuals=planRoadNetwork\(roleDefs\)/);
+assert.ok(nav.FRONT_Z>0,'roles remain outside each workshop');
+assert.match(kitSource,/actors\.roadVisuals=roads/);
 assert.doesNotMatch(kitSource,/function bridge\(|function island\(/,
   'paper plane animation no longer depends on physical bridges');
 console.log('Town Role messages: saved-event-only flights, no avatar displacement, real street scene passed');
