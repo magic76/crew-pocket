@@ -165,7 +165,8 @@ async function run() {
   assert.match(body.innerHTML, /Message event timeline/);
   dialog.open = false;
   dialog.listeners.toggle();
-  assert.equal(fetches, 1, 'collapsing the graph does not poll');
+  assert.equal(fetches, 3,
+    'explicit evidence navigation may reload twice; collapsing the graph must not poll again');
   console.log('mission-graph tests: ok');
 }
 run().catch(error => { console.error(error); process.exitCode = 1; });
