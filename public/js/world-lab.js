@@ -3,6 +3,7 @@
   'use strict';
   function mountWorld(initialCamera=null){
   let disposed=false,paused=false,pausedAt=0,sceneReady=false,contextLost=false,teardown=null,raf=0;
+  let renderCollaborationLinks=()=>{};
   let pauseScene=()=>{
     if(disposed)return;
     if(!paused)pausedAt=performance.now();
@@ -610,7 +611,7 @@
     return evidenceRows.filter(event=>!onlySelectedHandoffs||
       event.fromRoleId===roles[selected].id||event.toRoleId===roles[selected].id);
   }
-  function renderCollaborationLinks(){
+  renderCollaborationLinks=()=>{
     if(!linkSvg)return;
     const events=planner?.collaborationConnections?.(
       shownHandoffs(),roles[selected].id,false,3,Date.now())||[];
@@ -633,7 +634,7 @@
       path.appendChild(title);
       linkSvg.appendChild(path);linkPaths.push({event,path});
     }
-  }
+  };
   listen(filterHandoffs,'click',()=>{
     onlySelectedHandoffs=!onlySelectedHandoffs;
     filterHandoffs?.setAttribute('aria-pressed',String(onlySelectedHandoffs));

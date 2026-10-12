@@ -6,7 +6,7 @@ body[data-primary-tab="crew"] #crew-home-header-host,
 body.crew-world-active #crew-home-header-host{display:block}
 #crew-home-header{
   flex:none;position:relative;isolation:isolate;overflow:hidden;
-  padding:0 12px 8px;
+  padding:10px 12px 8px;
   background:var(--cp-bg)!important;border-bottom:1px solid var(--cp-border);
 }
 .crew-home-top{display:flex;align-items:center;justify-content:space-between;gap:8px}
@@ -42,7 +42,7 @@ body.crew-world-active #crew-home-header-host{display:block}
   outline:2px solid var(--cp-accent);outline-offset:2px;
 }
 @media(max-width:540px){
- #crew-home-header{padding-left:10px;padding-right:10px}
+ #crew-home-header{padding:7px 10px 8px}
  .crew-home-view-toggle{width:120px}
  .crew-home-header .crew-home-actions button{width:38px!important;height:38px!important;min-width:38px!important;min-height:38px!important}
  .crew-home-status-row .crew-summary-item{padding:3px 6px;font-size:10px}
@@ -240,7 +240,7 @@ body.crew-world-active #context-health-toast{z-index:10050!important}
 }
 @media(max-width:540px){
   .crew-world-modal .crew-world-chat-panel:not(.compact):not(.expanded):not([hidden]){
-    left:6px;right:6px;width:calc(100% - 12px);
+    left:0;right:0;width:100%;max-width:none;
     height:min(56dvh,calc(var(--crew-visible-height,100dvh) - 12px));
     bottom:var(--crew-keyboard-rise,0px);
     border-radius:17px 17px 0 0;
