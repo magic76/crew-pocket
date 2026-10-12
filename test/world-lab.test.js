@@ -249,8 +249,9 @@ assert.ok(!html.includes('world-explore-toggle'),
   'standalone demo also omits the old exploration mode');
 assert.ok(!kit.includes('function createPlayer('),
   'the human visitor mesh is no longer constructed at all');
-assert.ok(engine.includes("panTo(role.islandX,role.islandZ,width<700?2.65:2.0)"),
-  'double-tap Role focus pans smoothly with no walking delay');
+assert.ok(engine.includes('revealRole(index,Boolean(double))')&&
+  engine.includes('panTo(role.islandX,role.islandZ,closer?(width<700?2.65:2.0):zoom)'),
+  'double-tap Role focus is opt-in while single tap preserves visible framing');
 assert.ok(html.includes('id="world-roster"'),'standalone debug lab may keep its Role roster');
 assert.ok(!worldShell.includes('is-role-focused'),
   'overview and close-up use the same map controls');
@@ -319,8 +320,8 @@ assert.ok(engine.includes("contextMark.hidden=!pressure"),
   'unknown Context values never show a warning badge');
 assert.ok(engine.includes("contextForRole(roles[selected].id)"),
   'selected Role Context action uses only selected identity');
-assert.ok(engine.includes("command.dataset.contextTone=pressure?.tone||''"),
-  'existing Context action receives amber/red warning, not a duplicate dialog');
+assert.ok(engine.includes("command.dataset.contextTone=detail?.known?detail.tone:'unknown'"),
+  'existing Context action receives verified status rather than an invented 0%');
 assert.ok(worldShell.includes('#crew-world-command-context[data-context-tone="critical"]'),
   'critical Context warns in original command dock');
 assert.ok(css.includes('[data-context-tone="critical"] .world-label-context'),
@@ -392,8 +393,8 @@ assert.ok(worldShell.includes('body.crew-world-active #crew-home-header-host{'),
 assert.ok(worldShell.includes('.crew-world-chat-panel.compact .crew-world-chat-messages-slot'),
   'one original Chat composer remains compact while camera moves');
 assert.ok(!worldShell.includes('crew-world-focus-bar'));
-assert.match(engine,/if\(double\)\{select\(index,true\);return;\}/,
-  'double tap only changes camera target');
+assert.ok(engine.includes('function roleVisibleInCamera(role)')&&engine.includes('revealRole(index,Boolean(double))'),
+  'single tap preserves framing when already visible; double tap deliberately focuses');
 assert.match(engine,/panTo\(0,-1\.8,overviewZoom\);notify\('返回全景'\)/,
   'reset changes camera position without losing selected Role');
 assert.match(launcher,/ensureScene/);
@@ -563,3 +564,16 @@ assert.doesNotMatch(main,/\/js\/world-lab-chat.js/);
 assert.match(launcher,/window\.openCrewCockpitRole/);
 assert.match(engine,/CrewWorldHost\.openFullChat/);
 console.log('world-lab isolated 3D demo tests: ok');
+
+// Command center incremental contracts: real Role actions, single Chat owner,
+// and observed-only Runtime timeline (no synthetic completion messages).
+assert.ok(engine.includes('function openRoleMenu(index,clientX,clientY)'));
+assert.ok(engine.includes("roleMenu.setAttribute('aria-label','角色快捷操作')"));
+assert.ok(engine.includes("window.CrewWorldHost?.openChat?.(role.id,{compact:false})"));
+assert.ok(engine.includes("document.getElementById('crew-world-command-context')?.click()"));
+assert.ok(engine.includes('function rememberRuntimeEvent(role,label)'));
+assert.ok(engine.includes('if(synced&&item&&previous!==\'unknown\''));
+assert.ok(engine.includes('已離開執行中 · 結果請查看對話'));
+assert.doesNotMatch(engine,/rememberRuntimeEvent\(actor\.role,\s*['"](?:完成|成功)/);
+assert.ok(main.includes('id="world-runtime-feed"'));
+assert.ok(css.includes('.world-runtime-feed[hidden]'));

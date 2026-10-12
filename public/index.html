@@ -1791,7 +1791,11 @@
     <section id="world-attention-panel" class="world-attention-panel" aria-label="真實待處理與新回覆" hidden>
       <div class="world-attention-heading"><strong>需要關注</strong><button id="world-activity-to-handoffs" type="button">協作紀錄 ›</button><button id="world-attention-close" type="button" aria-label="關閉提醒">✕</button></div>
       <div id="world-attention-list" class="world-attention-list"></div>
-      <p>只列出 Runtime 待處理數量與本次開啟後觀察到的新回覆，不推測失敗或已讀。</p>
+      <section id="world-runtime-feed" class="world-runtime-feed" aria-label="本次地圖的 Runtime 狀態變化" hidden>
+        <h3>本次觀察到的工作變化</h3>
+        <div id="world-runtime-feed-list" class="world-runtime-feed-list" role="list"></div>
+      </section>
+      <p>僅列出已同步的 Runtime 狀態變化與新回覆；離開工作中不代表已完成，歷史從本次開啟地圖開始。</p>
     </section>
     <!-- Real saved messages only; this is a flight cue, NOT delivery proof. -->
     <button id="world-flight-notice" class="world-flight-notice" type="button"
