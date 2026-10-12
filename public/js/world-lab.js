@@ -437,7 +437,7 @@
   const linkSvg=document.getElementById('world-collaboration-links');
   const filterHandoffs=document.getElementById('world-handoffs-filter');
   let onlySelectedHandoffs=false,attentionSignature='',linkSignature='';
-  let linkPaths=[];
+  let linkPaths=[],nextLinkExpiryAt=0;
   const activeReply=roleId=>{
     const reply=freshReplies.get(roleId);
     const age=Date.now()-Number(reply?.at);
@@ -613,7 +613,9 @@
   function renderCollaborationLinks(){
     if(!linkSvg)return;
     const events=planner?.collaborationConnections?.(
-      shownHandoffs(),roles[selected].id,false,3)||[];
+      shownHandoffs(),roles[selected].id,false,3,Date.now())||[];
+    nextLinkExpiryAt=events.length
+      ?Math.min(...events.map(event=>event.createdAt+planner.COLLABORATION_LINK_WINDOW_MS)):0;
     const signature=events.map(event=>event.id).join('|')+':'+
       (onlySelectedHandoffs?roles[selected].id:'all');
     if(signature===linkSignature)return;
@@ -1384,6 +1386,8 @@
       rolePeek.style.display=visible?'':'none';
       if(visible){rolePeek.style.left=x+'px';rolePeek.style.top=(y+17)+'px';}
     }
+    // Expire activity arcs on time even when event polling stalls.
+    if(linkSvg&&nextLinkExpiryAt&&Date.now()>=nextLinkExpiryAt)renderCollaborationLinks();
     // P14 only draws edges from saved, verified Role-to-Role events.
     if(linkSvg&&linkPaths.length){
       linkSvg.setAttribute('viewBox','0 0 '+width+' '+height);
@@ -1474,7 +1478,7 @@
     for(const cleanup of cleanups.splice(0).reverse())cleanup();
   };
   dispose.pause=()=>pauseScene();
-  dispose.resume=()=>{if(!sceneReady){paused=false;return;}resumeScene();};
+  dispose.resume=()=>{if(!sceneReady){paused=false;return;}resumeScene();renderCollaborationLinks();};
   dispose.selectRole=roleId=>activeSelectWorldRole(roleId);
    dispose.getCameraState=()=>snapshotCamera();
   return dispose;
