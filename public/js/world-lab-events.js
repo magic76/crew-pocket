@@ -227,14 +227,20 @@
   }
   // P14 arcs use only the traceable, already-validated event metadata.
   // The optional selected Role filter does not create or modify messages.
-  function collaborationConnections(rows,roleId,onlySelected=false,limit=3){
+  // Connections are recent activity cues, never permanent relationships.
+  // Historical evidence remains in traceableEvents independently.
+  const COLLABORATION_LINK_WINDOW_MS=MAX_AGE_MS;
+  function collaborationConnections(rows,roleId,onlySelected=false,limit=3,now=Date.now()){
     const max=Math.max(0,Math.min(6,Math.floor(Number(limit)||0)));
-    return (Array.isArray(rows)?rows:[]).filter(event=>event&&
-      typeof event.id==='string'&&event.id&&
-      typeof event.fromRoleId==='string'&&typeof event.toRoleId==='string'&&
-      event.fromRoleId!==event.toRoleId&&
-      (!onlySelected||event.fromRoleId===roleId||event.toRoleId===roleId))
-      .slice(0,max);
+    return (Array.isArray(rows)?rows:[]).filter(event=>{
+      if(!event||typeof event.id!=='string'||!event.id||
+        typeof event.fromRoleId!=='string'||typeof event.toRoleId!=='string'||
+        event.fromRoleId===event.toRoleId||!Number.isFinite(event.createdAt)||
+        event.createdAt<=0)return false;
+      const age=now-event.createdAt;
+      return age>=-MAX_FUTURE_MS&&age<COLLABORATION_LINK_WINDOW_MS&&
+        (!onlySelected||event.fromRoleId===roleId||event.toRoleId===roleId);
+    }).slice(0,max);
   }
   // A packet of light can travel only along bridges that physically exist.
   // Nodes are *districts*, not Roles. Same-district messages stay local.
@@ -305,5 +311,5 @@
       y:start.y+(end.y-start.y)*e+Math.sin(Math.PI*t)*rise
     };
   }
-  return{observe,traceableEvents,attentionItems,collaborationConnections,roadRoute,roadPulse,paperFlightDuration,paperFlightPoint};
+  return{observe,traceableEvents,attentionItems,collaborationConnections,COLLABORATION_LINK_WINDOW_MS,roadRoute,roadPulse,paperFlightDuration,paperFlightPoint};
 });
