@@ -432,15 +432,16 @@ assert.equal(alerts[0].count,2);
 assert.equal(alerts[1].reply.signature,'r-2');
 assert.deepEqual(events.attentionItems(null,new Map(),alertNow),[]);
 // P14: only saved directed Role edges; filter keeps actual identities/IDs.
+const linkNow=1800000000000;
 const evidenceForTests=[
-  {id:'m1',fromRoleId:'a',toRoleId:'b',kind:'handoff'},
-  {id:'m2',fromRoleId:'c',toRoleId:'a',kind:'reply'},
-  {id:'m3',fromRoleId:'c',toRoleId:'d',kind:'handoff'},
-  {id:'m4',fromRoleId:'a',toRoleId:'a',kind:'handoff'}
+  {id:'m1',fromRoleId:'a',toRoleId:'b',kind:'handoff',createdAt:linkNow-1500},
+  {id:'m2',fromRoleId:'c',toRoleId:'a',kind:'reply',createdAt:linkNow-1200},
+  {id:'m3',fromRoleId:'c',toRoleId:'d',kind:'handoff',createdAt:linkNow-200},
+  {id:'m4',fromRoleId:'a',toRoleId:'a',kind:'handoff',createdAt:linkNow-300}
 ];
-assert.deepEqual(events.collaborationConnections(evidenceForTests,'a',true,3).map(item=>item.id),
+assert.deepEqual(events.collaborationConnections(evidenceForTests,'a',true,3,linkNow).map(item=>item.id),
   ['m1','m2'],'selected-role view excludes unrelated and self-events');
-assert.deepEqual(events.collaborationConnections(evidenceForTests,'a',false,2).map(item=>item.id),
+assert.deepEqual(events.collaborationConnections(evidenceForTests,'a',false,2,linkNow).map(item=>item.id),
   ['m1','m2'],'visual arcs remain bounded');
 for(const id of ['world-attention-open','world-attention-count','world-attention-panel',
   'world-attention-list','world-activity-open','world-activity-label','world-activity-count',
