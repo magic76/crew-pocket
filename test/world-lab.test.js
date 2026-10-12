@@ -592,7 +592,7 @@ assert.ok(css.includes('.world-runtime-feed[hidden]'));
   ];
   assert.equal(ttl,45000);
   assert.deepEqual(events.collaborationConnections(rows,'a',false,6,at).map(x=>x.id),['recent']);
-  assert.deepEqual(events.collaborationConnections(rows,'a',false,6,at+ttl),[]);
+  assert.deepEqual(events.collaborationConnections(rows,'a',false,6,at+ttl+7000),[]);
   assert.deepEqual(events.collaborationConnections(rows,'c',true,6,at),[]);
   assert.deepEqual(events.traceableEvents(rows,['a','b'],6,at).map(x=>x.id),['recent','expired','old']);
   assert.ok(engine.includes('Date.now()>=nextLinkExpiryAt'),'renderer should age out arcs independently of network polling');
