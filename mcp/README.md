@@ -82,3 +82,36 @@ node --test
 With SDK dependencies installed, use a dedicated MCP Inspector client to
 check handshake / tool listing and call `crew_whoami`, `crew_recall`, and
 `crew_send_message` using a temporary test Role.
+
+## Phone verification (Pocket Web UI)
+
+Pocket's built-in Codex App Server **shares one process across many Roles**, so
+it does **not** attach the single-Role stdio MCP process to all threads.
+Instead it exposes the same six role-bound tool handlers as per-thread Codex
+**dynamic tools** (an experimental Codex protocol feature, not an MCP transport).
+This maintains the existing Role isolation without changing `~/.codex/config.toml`.
+
+1. Update Crew Pocket's **Web runtime** to the version containing this PR.
+   Do not install another APK, configure a global MCP server or clear old sessions.
+2. Open Crew Pocket in the phone browser and select **Codex**.
+3. Choose a Role and start **為目前 Role 開新工作**. Tools can be added on
+   **thread/start**; Codex may not acquire new tools on resume of an older thread.
+4. Send: **「請呼叫 crew_whoami，告訴我你的 Role ID，再用 crew_list_roles 找到其他角色。」**
+   When the session supports dynamic tools, a small **MCP** indicator appears
+   beneath the Role heading in the chat view.
+5. Ask the same Role to `crew_recall` an existing memory, then ask it to
+   `crew_propose_memory` a non-sensitive test observation.
+6. To test messaging, ask Role A to `crew_send_message` to Role B and inspect
+   Role B's Inbox. The message is **queued**, not automatic execution.
+7. For rollback, switch back to an existing thread; its history and tools
+   remain unchanged. Set `CREW_CODEX_ROLE_TOOLS=0` in the server environment
+   and restart when possible to disable new dynamic-tool registration entirely.
+
+Limitations:
+- Some embedded Codex builds may not support experimental `dynamicTools`.
+  In that case new sessions fall back to normal App Server execution and the
+  MCP indicator does not appear.
+- Previously created threads are not silently reset to acquire tools.
+- No user-facing memory candidate approval UI is provided in P0.
+- Tool handlers are bound to the server-resolved Role; the model cannot pick
+  another Role as its caller even by passing a misleading argument.
