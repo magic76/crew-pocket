@@ -55,6 +55,8 @@ const { defaultRoleMessageQueueStore, listRoleQueuedMessages, enqueueRoleMessage
 const { defaultMemoryProvider } = require('./lib/memory');
 const { defaultSkillRegistry } = require('./lib/skills/registry');
 const { DreamingManager } = require('./lib/memory/dreaming');
+const { CrewTaskRunner } = require('./lib/mcp/task-runner');
+const { defaultCrewTaskStore } = require('./lib/mcp/tasks');
 const {
   buildAgentContext,
   buildStaticContextContributions,
@@ -98,6 +100,13 @@ const { buildTurnResult } = require('./lib/turn-result');
 const { saveExecutionFeedback, enrichExecutionHistory } = require('./lib/execution-feedback');
 const { renderVisualAnswer } = require('./lib/visual-answer');
 
+
+const crewTaskRunner = new CrewTaskRunner({
+  taskStore: defaultCrewTaskStore,
+  getProvider,
+  getDefaultModel,
+  rootWorkspace: RUNTIME_HOME
+});
 
 const dreamingManager = new DreamingManager({
   memoryProvider: defaultMemoryProvider,
@@ -3366,6 +3375,7 @@ process.on('unhandledRejection', (reason) => {
 
 server.listen(PORT, HOST, () => {
   dreamingManager.start();
+  crewTaskRunner.start().catch(error => console.warn('[Crew Tasks] Startup failed:', error.message));
   console.log(`=================================================`);
   console.log(`🚀 Crew Pocket Web UI (Resident Pipe) at: http://${HOST}:${PORT}`);
   const runtimeSecurity = securityStatus();
