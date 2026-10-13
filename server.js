@@ -2473,6 +2473,7 @@ async function handleChatTurn(req, res, submittedBody = null) {
 
     await provider.startTurn({
       conversationId: conversation_id,
+      roleId: role?.id || DEFAULT_ROLE_ID,
       model: effectiveModel || model,
       // Keep effort stable on resumed threads unless the user changed it.
       effort: effort || savedSettings?.effort || undefined,
