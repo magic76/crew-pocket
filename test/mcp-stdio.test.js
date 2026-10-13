@@ -76,7 +76,7 @@ test('MCP stdio handshake, tool discovery, and bound whoami', { skip: !hasSdk },
   const names = list.result.tools.map(tool => tool.name);
   assert.deepEqual([...names].sort(), [
     'crew_whoami', 'crew_list_roles', 'crew_get_inbox', 'crew_send_message',
-    'crew_recall', 'crew_propose_memory'
+    'crew_recall', 'crew_propose_memory', 'crew_handoff', 'crew_get_task_status', 'crew_report_done'
   ].sort());
 
   const whoami = await request(3, 'tools/call', { name: 'crew_whoami', arguments: {} });
