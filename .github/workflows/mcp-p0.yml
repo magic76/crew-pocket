@@ -27,4 +27,4 @@ jobs:
       - name: Install isolated MCP dependencies
         run: npm install --prefix mcp --omit=dev --no-audit --no-fund
       - name: Run full Node test suite
-        run: node --test test/
+        run: node --test
