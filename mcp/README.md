@@ -76,7 +76,7 @@ admission to Memory. Keep this file private and back it up with Role data.
 node --check lib/mcp/agent-tools.js
 node --check lib/mcp/memory-candidates.js
 node --check mcp/server.mjs
-node --test test/
+node --test
 ```
 
 With SDK dependencies installed, use a dedicated MCP Inspector client to
