@@ -57,6 +57,7 @@ const { defaultSkillRegistry } = require('./lib/skills/registry');
 const { DreamingManager } = require('./lib/memory/dreaming');
 const { CrewTaskRunner } = require('./lib/mcp/task-runner');
 const { defaultCrewTaskStore } = require('./lib/mcp/tasks');
+const { defaultMemoryCandidateStore } = require('./lib/mcp/memory-candidates');
 const {
   buildAgentContext,
   buildStaticContextContributions,
@@ -1194,6 +1195,8 @@ async function handleRoles(req, res, parsedUrl) {
       const result = await deleteRoleLifecycle(roleId, {
         stopActiveRoleFn: stopActiveRoleWork
       });
+      await defaultCrewTaskStore.cancelRole(roleId);
+      await defaultMemoryCandidateStore.purgeRole(roleId);
       await dreamingManager.forgetRole(roleId);
       await defaultSkillRegistry.forgetRole(roleId);
       broadcastCrewStatusEvent('role-delete', roleId);
