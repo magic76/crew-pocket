@@ -20,7 +20,7 @@ async function fixture(t) {
     getRole: async id => roles.find(role => role.id === id) || null
   };
   const memoryProvider = new LocalMemoryProvider({ storagePath: path.join(tempDir, 'memories.json') });
-  const candidateStore = new MemoryCandidateStore({ storagePath: path.join(tempDir, 'candidates.json') });
+  const candidateStore = new MemoryCandidateStore({ storageDir: path.join(tempDir, 'candidates') });
   const messages = new CrewMessageStore({
     storagePath: path.join(tempDir, 'messages.json'),
     roleProvider
@@ -111,10 +111,11 @@ test('MCP memory proposals stage and deduplicate without modifying canonical mem
   const again = await a.crew_propose_memory(input);
   assert.equal(again.candidateId, first.candidateId);
   assert.equal(again.duplicate, true);
-  const stored = JSON.parse(await fs.readFile(path.join(fx.tempDir, 'candidates.json'), 'utf8'));
-  assert.equal(stored.candidates.length, 1);
-  assert.equal(stored.candidates[0].roleId, 'role-a');
-  assert.equal(stored.candidates[0].provenance.sources[0].id, 'abc123');
+  const names = await fs.readdir(path.join(fx.tempDir, 'candidates'));
+  assert.equal(names.length, 1);
+  const stored = JSON.parse(await fs.readFile(path.join(fx.tempDir, 'candidates', names[0]), 'utf8'));
+  assert.equal(stored.roleId, 'role-a');
+  assert.equal(stored.provenance.sources[0].id, 'abc123');
   assert.equal((await fx.memoryProvider.readAll()).length, 0);
   await assert.rejects(a.crew_propose_memory({ text: 'a'.repeat(2001) }), /max 2000/);
 });
