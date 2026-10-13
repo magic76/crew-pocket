@@ -24,10 +24,11 @@ jobs:
           node --check mcp/server.mjs
           node --check test/mcp-core.test.js
           node --check test/mcp-stdio.test.js
+          node --check test/mcp-codex-integration.test.js
       - name: Install isolated MCP dependencies
         run: npm install --prefix mcp --omit=dev --no-audit --no-fund
       - name: Run MCP and affected memory/role regressions
         run: |
-          node --test test/mcp-core.test.js test/mcp-stdio.test.js test/memory-provenance.test.js test/role-runtime.test.js
+          node --test test/mcp-*.test.js test/memory-provenance.test.js test/role-runtime.test.js
       # The broader repository suite requires jsdom and Android-specific paths.
       # It is not a portable Linux CI gate yet.
