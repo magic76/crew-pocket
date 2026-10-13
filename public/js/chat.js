@@ -3758,6 +3758,16 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
                   window.setConversationRoleDirect(data.role_id, data.project_id, currentWorkspace);
                 }
               }
+              // New Codex work can use the same Role-bound tool catalog as stdio MCP.
+              // Legacy threads retain their history but may not have new tools.
+              const mcpBadge = document.getElementById('crew-mcp-indicator');
+              if (mcpBadge && isStreamVisible()) {
+                const status = data.crew_mcp_status;
+                mcpBadge.classList.toggle('hidden', status !== 'ready');
+                mcpBadge.title = status === 'ready'
+                  ? '目前 Codex 工作已啟用 Crew MCP 工具'
+                  : '原有工作保留原生歷史；請為此 Role 開新工作來啟用 MCP';
+              }
               if (['SURGICAL_EDIT', 'DEBUG', 'BUILD'].includes(String(data.execution_mode || '').toUpperCase())) {
                 stickyExecution?.enable(`執行${executionModeLabel(data.execution_mode)}`);
               }
