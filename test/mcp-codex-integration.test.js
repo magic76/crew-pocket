@@ -16,11 +16,11 @@ function stubTransport() {
 
 test('Codex dynamic tools carry no model-selectable Role identity', () => {
   const tools = listCodexRoleTools();
-  assert.equal(tools.length, 6);
+  assert.equal(tools.length, 9);
   assert.equal(tools.some(tool => JSON.stringify(tool.inputSchema).includes('fromRoleId')), false);
   assert.equal(tools.some(tool => JSON.stringify(tool.inputSchema).includes('"roleId"')), false);
   assert.deepEqual(tools.map(t => t.name).sort(), [
-    'crew_whoami','crew_list_roles','crew_get_inbox','crew_send_message','crew_recall','crew_propose_memory'
+    'crew_whoami','crew_list_roles','crew_get_inbox','crew_send_message','crew_recall','crew_propose_memory','crew_handoff','crew_get_task_status','crew_report_done'
   ].sort());
 });
 
@@ -85,7 +85,7 @@ test('Codex new threads advertise role tools while old threads are not rewritten
     onAbort: () => {}
   });
   assert.equal(calls[0].method, 'thread/start');
-  assert.equal(calls[0].params.dynamicTools.length, 6);
+  assert.equal(calls[0].params.dynamicTools.length, 9);
   assert.equal(events[0].roleToolsStatus, 'ready');
   assert.equal(provider.roleToolsByThread.get('thread-new'), 'role-a');
   assert.equal(provider.getRoleToolStatus('thread-new').status, 'ready');

@@ -115,3 +115,71 @@ Limitations:
 - No user-facing memory candidate approval UI is provided in P0.
 - Tool handlers are bound to the server-resolved Role; the model cannot pick
   another Role as its caller even by passing a misleading argument.
+
+## P1 — Handoff, execution and feedback
+
+**After this PR**, the Web Server starts one persistent task worker (10-second
+polling). No additional APK, service port or MCP process is needed.
+
+- `crew_handoff({toRoleId, task, parentTaskId?, timeoutMinutes?})`: creates
+  durable work, returning `taskId` and status `queued`.
+- `crew_get_task_status({taskId})`: requester/recipient can read queued,
+  running, waiting_children, completed, failed, interrupted or expired.
+- `crew_report_done({taskId,summary})`: recipient submits a factual result
+  during its active task. The worker finalizes only after the provider turn ends.
+- Completed tasks appear in the requester's regular Crew Inbox as a
+  `task_result` message, without starting an automatic reply loop.
+- Recipient uses its own Codex conversation/Role context. A Role that has
+  never started a conversation is initialized with Codex on its first task.
+  Other active providers are not silently overridden.
+- **Delegated tasks are read-only inspections**, not autonomous code edits.
+  The worker requests an actual Codex `readOnly` sandbox with network access
+  disabled. Unsupported sandboxes result in an explicit failed task. It never
+  downgrades to full access. Editable/build/merge workflows are out of scope.
+- Queue caps, per-role busy checks, two-level nesting, cycle checks, deadlines,
+  restart interruption and idempotent delivery avoid accidental storms.
+- Records are in `~/.crew-pocket/mcp-tasks/` (or `CREW_MCP_TASK_DIR`).
+  Task status is a per-task file; reports use immutable files.
+
+A handoff is **not** a successful result. Ask the originating Role to poll
+`crew_get_task_status` and/or use `crew_get_inbox`. For nested handoffs,
+the parent waits for child results before final completion.
+
+## P2 — MCP candidates flow through Dreaming
+
+- `crew_propose_memory` still writes **only** to a candidate inbox.
+- The existing idle Dreaming manager batches candidates with ordinary Role
+  work events; it uses the configured Dreaming model, daily limit and idle
+  window (default 15 minutes).
+- The model treats reports as unverified source material. Consolidated lessons
+  are saved under Role-scoped `MODEL_INFERRED` provenance with original
+  candidate IDs and supplied evidence sources.
+- Existing similar memory is checked to avoid identical re-admission.
+- Review decisions are immutable sidecars under
+  `~/.crew-pocket/memory/mcp-candidates/reviews/`; statuses are
+  `pending`, `consolidated` or `discarded`.
+- `GET /api/dreaming` exposes candidate counts. The review status describes
+  model consolidation; it is **not independent factual verification**.
+- No extra Dreaming request is issued on each `crew_propose_memory` call.
+
+### Phone acceptance sequence
+
+1. Update/restart the Web runtime to this PR on a test installation and use
+   a new Codex conversation with the **MCP** indicator.
+2. Select two Roles. Role B should have a working Codex session, or it will
+   create a fresh Codex session when dispatched.
+3. In Role A send:
+   `請用 crew_handoff 派工作給 Role B：檢查目前專案的 README，有無明顯問題。這是唯讀任務。`
+4. Check `crew_get_task_status({taskId})` until `completed` or a concrete
+   error. Role A should receive a task-result Inbox message; no further
+   automatic Role-to-Role ping-pong should occur.
+5. Ask Role B to `crew_propose_memory` about a **non-sensitive** observation
+   with a valid evidence source. The proposal starts as `pending_review`.
+6. Check Dreaming status: candidate remains pending until the configured
+   idle window and quota permit a consolidation. After processing,
+   it is `consolidated` or `discarded`. If consolidated, a subsequent
+   `crew_recall` can find the resulting experience.
+
+Device-specific Codex runtime support, background process survival, and
+permission behavior still require Android testing. No runtime is restarted by
+the pull request itself.

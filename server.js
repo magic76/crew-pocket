@@ -55,6 +55,9 @@ const { defaultRoleMessageQueueStore, listRoleQueuedMessages, enqueueRoleMessage
 const { defaultMemoryProvider } = require('./lib/memory');
 const { defaultSkillRegistry } = require('./lib/skills/registry');
 const { DreamingManager } = require('./lib/memory/dreaming');
+const { CrewTaskRunner } = require('./lib/mcp/task-runner');
+const { defaultCrewTaskStore } = require('./lib/mcp/tasks');
+const { defaultMemoryCandidateStore } = require('./lib/mcp/memory-candidates');
 const {
   buildAgentContext,
   buildStaticContextContributions,
@@ -98,6 +101,13 @@ const { buildTurnResult } = require('./lib/turn-result');
 const { saveExecutionFeedback, enrichExecutionHistory } = require('./lib/execution-feedback');
 const { renderVisualAnswer } = require('./lib/visual-answer');
 
+
+const crewTaskRunner = new CrewTaskRunner({
+  taskStore: defaultCrewTaskStore,
+  getProvider,
+  getDefaultModel,
+  rootWorkspace: RUNTIME_HOME
+});
 
 const dreamingManager = new DreamingManager({
   memoryProvider: defaultMemoryProvider,
@@ -1185,6 +1195,8 @@ async function handleRoles(req, res, parsedUrl) {
       const result = await deleteRoleLifecycle(roleId, {
         stopActiveRoleFn: stopActiveRoleWork
       });
+      await defaultCrewTaskStore.cancelRole(roleId);
+      await defaultMemoryCandidateStore.purgeRole(roleId);
       await dreamingManager.forgetRole(roleId);
       await defaultSkillRegistry.forgetRole(roleId);
       broadcastCrewStatusEvent('role-delete', roleId);
@@ -3366,6 +3378,7 @@ process.on('unhandledRejection', (reason) => {
 
 server.listen(PORT, HOST, () => {
   dreamingManager.start();
+  crewTaskRunner.start().catch(error => console.warn('[Crew Tasks] Startup failed:', error.message));
   console.log(`=================================================`);
   console.log(`🚀 Crew Pocket Web UI (Resident Pipe) at: http://${HOST}:${PORT}`);
   const runtimeSecurity = securityStatus();

@@ -3,6 +3,10 @@ on:
   pull_request:
     paths:
       - 'lib/mcp/**'
+      - 'lib/memory/dreaming.js'
+      - 'lib/crew-messages.js'
+      - 'lib/crew-auto-response.js'
+      - 'server.js'
       - 'mcp/**'
       - 'test/mcp-*'
       - '.github/workflows/mcp-p0.yml'
@@ -23,6 +27,13 @@ jobs:
         run: |
           node --check lib/mcp/agent-tools.js
           node --check lib/mcp/memory-candidates.js
+          node --check lib/mcp/tasks.js
+          node --check lib/mcp/task-runner.js
+          node --check lib/memory/dreaming.js
+          node --check lib/crew-messages.js
+          node --check lib/crew-auto-response.js
+          node --check server.js
+          node --check test/mcp-p1-p2.test.js
           node --check mcp/server.mjs
           node --check test/mcp-core.test.js
           node --check test/mcp-stdio.test.js

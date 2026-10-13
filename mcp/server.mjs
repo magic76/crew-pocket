@@ -80,5 +80,13 @@ addTool('crew_propose_memory', 'Propose a Role memory candidate for later review
     })).max(5).optional()
   }), args => tools.crew_propose_memory(args));
 
+addTool('crew_handoff', 'Queue a delegated read-only task for another Role.',
+  z.object({ toRoleId: bounded(160), task: bounded(4000),
+    parentTaskId: bounded(80).optional(), timeoutMinutes: z.number().int().min(5).max(60).optional() }),
+  args => tools.crew_handoff(args));
+addTool('crew_get_task_status', 'Read the progress and result of a task you own or received.',
+  z.object({ taskId: bounded(80) }), args => tools.crew_get_task_status(args));
+addTool('crew_report_done', 'Submit findings for a running task assigned to your Role.',
+  z.object({ taskId: bounded(80), summary: bounded(2000) }), args => tools.crew_report_done(args));
 // stdout belongs exclusively to MCP JSON-RPC; do not console.log here.
 await serveStdio(() => server);
