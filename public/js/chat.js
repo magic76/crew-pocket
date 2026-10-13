@@ -1109,7 +1109,7 @@ function renderContextBreakdown(health) {
     if (value > 0) rows.push({ type, label, value });
   };
   add('conversation', 'Conversation');
-  add('tool', 'Tools');
+  add('tool', 'Tools（呼叫與回傳）');
   add('code', 'Code');
   add('memory', 'Memory');
   add('role', 'Role');
@@ -1117,10 +1117,12 @@ function renderContextBreakdown(health) {
   add('task', 'Task');
   add('document', 'Documents');
 
-  const otherSystem = (Number(grouped.system?.estimatedTokens) || 0) +
-    (Number(grouped.other?.estimatedTokens) || 0) +
-    (Number(health?.unattributedTokens) || 0);
-  if (otherSystem > 0) rows.push({ type: 'other-system', label: 'Other / system', value: otherSystem });
+  add('system', '可讀取的系統指令');
+  add('other', '注入資訊 / 其他');
+  add('skill', 'Skills');
+  add('work', 'Current work');
+  const unattributed = Number(health?.unattributedTokens) || 0;
+  if (unattributed > 0) rows.push({ type: 'unattributed', label: '未歸因差額（非系統用量）', value: unattributed });
 
   rows.sort((a, b) => b.value - a.value);
   if (!rows.length) {
@@ -1142,6 +1144,7 @@ function renderContextBreakdown(health) {
       <div class="h-1 overflow-hidden rounded-full bg-slate-800"><div class="h-full rounded-full bg-slate-500" style="width:${width}%"></div></div>
     </div>`;
   }).join('');
+  container.insertAdjacentHTML('beforeend', '<p class="mt-2 text-[10px] text-slate-500">分類為字元估算；未歸因差額包含不可讀取內容及估算誤差，不能視為系統指令的精確用量。</p>');
 }
 
 function renderContextContributionLists(health) {
@@ -1215,8 +1218,8 @@ function renderContextAdvanced(health) {
   const largest = document.getElementById('context-advanced-largest');
   const warningCodes = document.getElementById('context-advanced-warning-codes');
   const autoDebug = document.getElementById('context-advanced-auto');
-  if (source) source.textContent = `total: ${health?.totalUsage?.exact ? 'exact' : 'estimated'} · ${health?.totalUsage?.source || 'unknown'}; breakdown: estimated · heuristic`;
-  if (unattributed) unattributed.textContent = `other/system: ~${formatContextTokens(health?.unattributedTokens || 0)} · over-attributed: ~${formatContextTokens(health?.overAttributedTokens || 0)}`;
+  if (source) source.textContent = `total: ${health?.totalUsage?.exact ? 'exact' : 'estimated'} · ${health?.totalUsage?.source || 'unknown'}; breakdown: estimated · ${health?.breakdownEstimate?.scope || 'history'}${health?.breakdownEstimate?.complete === false ? ' · partial' : ''}`;
+  if (unattributed) unattributed.textContent = `unattributed: ~${formatContextTokens(health?.unattributedTokens || 0)} · over-attributed: ~${formatContextTokens(health?.overAttributedTokens || 0)}`;
   if (largest) largest.textContent = `largest compactable: ${health?.largestCompactableContribution ? contributionDisplayName(health.largestCompactableContribution) : '—'}`;
   if (warningCodes) warningCodes.textContent = `warnings: ${(health?.warnings || []).map(item => item.code).join(', ') || '—'}`;
   if (autoDebug) autoDebug.textContent = currentAutoCompact
@@ -1348,8 +1351,9 @@ function renderCompactionPlan(plan) {
     : '<div class="text-slate-600">—</div>';
 
   if (before) before.textContent = formatContextTokens(plan.estimatedBeforeTokens, !plan.beforeExact);
-  if (after) after.textContent = formatContextTokens(plan.estimatedAfterTokens, true);
-  if (savings) savings.textContent = `~${formatContextTokens(plan.estimatedSavingsTokens)}`;
+  const native = plan.execution === 'provider_native';
+  if (after) after.textContent = native ? '執行後確認' : formatContextTokens(plan.estimatedAfterTokens, true);
+  if (savings) savings.textContent = native ? '無法預測' : `~${formatContextTokens(plan.estimatedSavingsTokens)}`;
 }
 
 async function openSafeContextCompactionPreview() {
@@ -1416,11 +1420,14 @@ async function executeSafeContextCompaction() {
 
     const beforeText = formatContextTokens(beforeHealth?.totalUsage?.value || currentContextPlan.estimatedBeforeTokens, beforeHealth?.totalUsage?.exact !== true);
     const afterText = formatContextTokens(afterHealth?.totalUsage?.value ?? currentContextPlan.estimatedAfterTokens, afterHealth?.totalUsage?.exact !== true);
-    const saved = Math.max(0,
+    const pendingUsage = data.context_verification?.status === 'pending' ||
+      !Number.isFinite(Number(afterHealth?.totalUsage?.value)) || Number(afterHealth?.totalUsage?.value) <= 0;
+    const saved = pendingUsage ? 0 : Math.max(0,
       Number(beforeHealth?.totalUsage?.value || currentContextPlan.estimatedBeforeTokens) -
       Number(afterHealth?.totalUsage?.value ?? currentContextPlan.estimatedAfterTokens)
     );
-    let message = `Context compacted · ${beforeText} → ${afterText}`;
+    let message = pendingUsage ? 'Context 已精簡；實際用量等待下一輪 Provider 回報。'
+      : `Context compacted · ${beforeText} → ${afterText}`;
     if (saved > 0) message += ` · Saved ~${formatContextTokens(saved)}`;
     if (afterHealth?.status === 'warning' || afterHealth?.status === 'critical') {
       const largest = afterHealth?.largestCompactableContribution;

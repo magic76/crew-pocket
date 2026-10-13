@@ -35,7 +35,8 @@ const healthWithOther = analyzeContext({
   ]
 });
 assert.equal(healthWithOther.unattributedTokens, 11000);
-assert.ok(chat.includes('Other / system'));
+assert.ok(chat.includes('未歸因差額（非系統用量）'));
+assert.equal(chat.includes("label: 'Other / system'"), false);
 
 // Planner fixture for 8-15.
 const health = analyzeContext({

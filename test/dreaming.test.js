@@ -12,7 +12,8 @@ async function run() {
   const provider = {
     async summarizeMemoryEvents(input) {
       requests.push(input);
-      return [{ text: 'A durable implementation decision, verified only as a reported work outcome.' }];
+      return { workingSummary: 'Current goal: improve memory evidence handling; reported implementation awaits review.',
+        memories: [{ text: 'A durable implementation decision, verified only as a reported work outcome.' }], skills: [] };
     }
   };
   const manager = new DreamingManager({
@@ -37,8 +38,7 @@ async function run() {
     });
     assert.equal(await manager.recordTurn(sample(1)), true);
     assert.equal(await manager.recordTurn(sample(1)), false, 'identical event is deduplicated');
-    assert.equal(stored.get('working-role-pocket').kind, 'working');
-    assert.equal(stored.get('working-role-pocket').provenance.derivation, 'MODEL_INFERRED');
+    assert.equal(stored.has('working-role-pocket'), false, 'ordinary turns do not publish report snapshots');
     assert.equal((await manager.getStatus()).roles['role-pocket'].pending, 1);
     await manager.runDue();
     assert.equal(requests.length, 0, 'minimum events blocks Dreaming');
@@ -52,6 +52,8 @@ async function run() {
     assert.equal(requests[0].model, 'gpt-6-luna');
     assert.equal(requests[0].effort, 'low');
     assert.equal(requests[0].events.length, 2);
+    assert.equal(stored.get('working-role-pocket').kind, 'working');
+    assert.equal(stored.get('working-role-pocket').provenance.derivation, 'MODEL_INFERRED');
     const firstMemory = [...stored.values()].find(value => value.kind === 'experience');
     assert.ok(firstMemory);
     assert.equal(firstMemory.roleId, 'role-pocket');

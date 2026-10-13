@@ -713,7 +713,7 @@ function normalizeHistoryForContextHealth(history = {}) {
     ...history,
     messages: cleanMessages(history.messages),
     ...(Array.isArray(history.active_messages)
-      ? { active_messages: cleanMessages(history.active_messages) }
+      ? { active_messages: history.active_messages }
       : {})
   };
 }
@@ -2167,7 +2167,6 @@ async function handleChatTurn(req, res, submittedBody = null) {
         const refreshedMemories = refreshed.memories || [];
         const signatures = memoryEvidenceSignatures(refreshedMemories);
         const changedMemories = refreshedMemories.filter(hit =>
-          refreshAfterCompaction ||
           nextMemorySignatures[hit.record?.id] !== signatures[hit.record?.id]
         );
         const memoryContributions = (refreshed.contributions || []).filter(
@@ -2186,7 +2185,9 @@ async function handleChatTurn(req, res, submittedBody = null) {
             : '[Updated Long-Term Memory]';
           finalPrompt = `<ADDITIONAL_METADATA>\n${memoryLabel}\n${memoryLines.join('\n')}\n</ADDITIONAL_METADATA>\n${finalPrompt}`;
         }
-        nextMemorySignatures = signatures;
+        // Native compaction can retain injected user metadata. Do not replay
+        // already delivered memory simply because a compaction occurred.
+        nextMemorySignatures = { ...nextMemorySignatures, ...signatures };
         memoryRefreshConsumed = true;
       } catch (error) {
         console.warn('[Memory Context] Incremental refresh failed:', error.message);

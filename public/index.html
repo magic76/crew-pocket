@@ -1141,17 +1141,17 @@
         <div>
           <div class="text-[9px] font-bold tracking-[0.18em] text-amber-400/80">SAFE COMPACTION</div>
           <h2 class="mt-1 text-base font-bold text-white">Compact Context</h2>
-          <p class="mt-1 text-[10px] text-slate-500">先確認會保留什麼、會精簡什麼。</p>
+          <p class="mt-1 text-[10px] text-slate-500">以下是精簡候選分析；實際內容由 Provider 的精簡流程決定。</p>
         </div>
         <button id="close-context-preview-btn" type="button" class="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-700 bg-slate-800 text-slate-400">✕</button>
       </div>
       <div class="space-y-4 overflow-y-auto p-4">
         <section>
-          <div class="text-[10px] font-bold text-emerald-300">Keep</div>
+          <div class="text-[10px] font-bold text-emerald-300">建議保留</div>
           <div id="context-preview-keep" class="mt-2 space-y-1.5 text-[11px] text-slate-300"></div>
         </section>
         <section>
-          <div class="text-[10px] font-bold text-amber-300">Compact</div>
+          <div class="text-[10px] font-bold text-amber-300">精簡候選</div>
           <div id="context-preview-compact" class="mt-2 space-y-1.5 text-[11px] text-slate-300"></div>
         </section>
         <section>
@@ -1165,7 +1165,7 @@
             <div><div class="text-[9px] text-slate-600">Save</div><div id="context-preview-savings" class="mt-1 font-mono text-xs font-bold text-amber-300">—</div></div>
           </div>
         </section>
-        <p class="text-[10px] leading-relaxed text-slate-500">Role identity、Project、Current task 與最近工作內容不會被 planner 當作可丟棄資料。Long-term Memory 也不會被刪除；需要時會重新擷取。</p>
+        <p class="text-[10px] leading-relaxed text-slate-500">這些分類是建議，不保證逐項保留、刪除或節省特定 token 數。Codex 使用原生精簡；實際用量須在後續 Provider 回報後確認。Role Memory 和原始對話紀錄仍保留。</p>
       </div>
       <div class="grid grid-cols-2 gap-2 border-t border-slate-800 bg-slate-950/60 p-3">
         <button id="cancel-context-preview-btn" type="button" class="min-h-11 rounded-xl border border-slate-700 bg-slate-900 text-xs font-semibold text-slate-300">Cancel</button>
