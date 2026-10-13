@@ -2530,6 +2530,7 @@ async function handleChatTurn(req, res, submittedBody = null) {
             execution_mode: executionPolicy?.mode || null,
             execution_source: executionPolicy?.source || null,
             role_id: role?.id || savedSettings?.roleId || DEFAULT_ROLE_ID,
+            crew_mcp_status: event.roleToolsStatus || null,
             role_name: role?.name || null,
             project_id: projectId || null,
             execution_intent: approvedExecutionIntent,
