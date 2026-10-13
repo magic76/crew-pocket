@@ -1,0 +1,13 @@
+{
+  "name": "crew-pocket-mcp",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Opt-in Role-scoped MCP stdio server for Crew Pocket",
+  "engines": { "node": ">=20" },
+  "scripts": { "start": "node server.mjs" },
+  "dependencies": {
+    "@modelcontextprotocol/server": "^2.0.0",
+    "zod": "^4.0.0"
+  }
+}
