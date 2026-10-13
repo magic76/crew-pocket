@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 12
     env:
-      CREW_UPLOADS_DIR: ${{ runner.temp }}/crew-pocket-uploads
+      CREW_UPLOADS_DIR: ${{ github.workspace }}/.ci-uploads
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
