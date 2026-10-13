@@ -129,3 +129,15 @@ test('dreaming reviews one candidate after idle, deduplicates lesson, preserves 
   assert.equal(summarizations,1);
   assert.equal((await f.memoryProvider.readAll()).length,memories.length);
 });
+
+test('role deletion interrupts queued handoffs and purges candidate memories',async t=>{
+  const f=await fixture(t);
+  const task=await f.taskStore.create({fromRoleId:'role-a',toRoleId:'role-b',task:'Inspect queued item'});
+  const proposal=await f.toolsFor('role-b').crew_propose_memory({
+    text:'Pending test-only memory for deleted Role'
+  });
+  assert.equal(await f.taskStore.cancelRole('role-b'),1);
+  assert.equal((await f.taskStore.get(task.id)).status,'interrupted');
+  assert.equal(await f.candidateStore.purgeRole('role-b'),1);
+  assert.equal((await f.candidateStore.readAll()).some(x=>x.id===proposal.candidateId),false);
+});
