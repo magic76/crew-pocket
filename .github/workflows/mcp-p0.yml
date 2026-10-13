@@ -1,0 +1,30 @@
+name: Check Crew Pocket MCP
+on:
+  pull_request:
+    paths:
+      - 'lib/mcp/**'
+      - 'mcp/**'
+      - 'test/mcp-*'
+      - '.github/workflows/mcp-p0.yml'
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check JavaScript syntax
+        run: |
+          node --check lib/mcp/agent-tools.js
+          node --check lib/mcp/memory-candidates.js
+          node --check mcp/server.mjs
+          node --check test/mcp-core.test.js
+          node --check test/mcp-stdio.test.js
+      - name: Install isolated MCP dependencies
+        run: npm install --prefix mcp --omit=dev --no-audit --no-fund
+      - name: Run full Node test suite
+        run: node --test test/
