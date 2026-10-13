@@ -57,7 +57,8 @@ test('worker continues recipient session, completes job, and delivers one task-r
     model:'gpt-test',effort:'low',workspace:f.home};
   const provider={
     getStatus:()=>({isBusy:false}),
-    async startTurn({conversationId,roleId,executionMode,executionPolicy,prompt,onEvent}){
+    async startTurn({conversationId,roleId,sandboxMode,executionMode,executionPolicy,prompt,onEvent}){
+      assert.equal(sandboxMode,'readOnly');
       assert.equal(conversationId,'thread-existing');
       assert.equal(roleId,'role-b');
       assert.equal(executionMode,'INSPECT');
