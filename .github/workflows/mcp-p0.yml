@@ -12,6 +12,8 @@ jobs:
   check:
     runs-on: ubuntu-latest
     timeout-minutes: 12
+    env:
+      CREW_UPLOADS_DIR: ${{ runner.temp }}/crew-pocket-uploads
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
