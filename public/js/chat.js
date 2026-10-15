@@ -1384,6 +1384,84 @@ async function openSafeContextCompactionPreview() {
   }
 }
 
+const pendingCompactRequests = new Map();
+
+async function requestContextCompaction(endpoint, body, onProgress = () => {}) {
+  const key = `${body.provider}:${body.conversation_id}`;
+  let pending = pendingCompactRequests.get(key);
+  const readJson = async (url, options = {}, timeoutMs = 5000) => {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const response = await fetch(url, { ...options, signal: controller.signal });
+      return { response, data: await response.json() };
+    } finally {
+      clearTimeout(timeout);
+    }
+  };
+  const uncertain = message => Object.assign(new Error(message), { compactPending: true });
+  if (!pending) {
+    pending = {
+      requestId: globalThis.crypto?.randomUUID?.() || `compact-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`,
+      startedAt: Date.now()
+    };
+    pendingCompactRequests.set(key, pending);
+    // Dispatch once. A lost HTTP response is recovered by this same request ID;
+    // clicking Compact again must not replay an operation with an unknown result.
+    pending.start = readJson(endpoint, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...body, async: true, request_id: pending.requestId })
+    }, 30000).catch(() => null);
+  }
+  const showProgress = () => onProgress(Math.floor((Date.now() - pending.startedAt) / 1000));
+  showProgress();
+  const progressTimer = setInterval(showProgress, 1000);
+  let terminal = false;
+  try {
+    const initial = await pending.start;
+    if (initial && (!initial.response.ok || !initial.data.success)) {
+      terminal = true;
+      throw new Error(initial.data.error || 'Context compaction failed');
+    }
+    if (initial && !initial.data.pending) {
+      terminal = true;
+      return initial.data; // Compatibility with a Runtime awaiting its restart.
+    }
+    const query = new URLSearchParams({ request_id: pending.requestId, provider: body.provider });
+    const deadline = Date.now() + 10 * 60 * 1000;
+    let unavailable = 0;
+    while (Date.now() < deadline) {
+      let status;
+      try { status = await readJson(`/api/turn-status?${query}`, { cache: 'no-store' }); }
+      catch (_) { /* Network loss is not evidence that compact failed. */ }
+      const record = status?.data;
+      if (!status?.response.ok || record?.request_id !== pending.requestId ||
+          record?.provider !== body.provider || record?.conversation_id !== body.conversation_id || record?.kind !== 'compact') {
+        if (++unavailable >= 3) throw uncertain(status?.response.status === 404
+          ? 'Runtime 已無這次操作的狀態紀錄；請重新載入對話歷史確認壓縮結果。'
+          : '暫時無法確認壓縮結果；請稍後再次按 Compact 查詢。');
+      } else {
+        unavailable = 0;
+        if (record.terminal) {
+          if (record.result?.request_id !== pending.requestId || !['completed', 'failed', 'interrupted'].includes(record.status)) {
+            throw uncertain('未取得明確壓縮結果；請稍後再次按 Compact 查詢。');
+          }
+          terminal = true;
+          if (record.status !== 'completed' || !record.result.success) {
+            throw new Error(record.result.error || `Context compaction ${record.status}`);
+          }
+          return record.result;
+        }
+      }
+      await new Promise(resolve => setTimeout(resolve, 3000));
+    }
+    throw uncertain('壓縮尚未回報完成，仍保留執行狀態；稍後再次按 Compact 可查詢同一次操作。');
+  } finally {
+    clearInterval(progressTimer);
+    if (terminal && pendingCompactRequests.get(key) === pending) pendingCompactRequests.delete(key);
+  }
+}
+
 async function executeSafeContextCompaction() {
   if (!currentConversationId || !currentContextPlan || isStreaming) return;
   const button = document.getElementById('confirm-context-compact-btn');
@@ -1397,18 +1475,14 @@ async function executeSafeContextCompaction() {
   }
 
   try {
-    const response = await fetch('/api/context/compact', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        provider: targetProvider,
-        conversation_id: targetConversationId,
-        confirmed: true,
-        locale: typeof getCrewLocale === 'function' ? getCrewLocale() : 'zh-TW'
-      })
+    const data = await requestContextCompaction('/api/context/compact', {
+      provider: targetProvider,
+      conversation_id: targetConversationId,
+      confirmed: true,
+      locale: typeof getCrewLocale === 'function' ? getCrewLocale() : 'zh-TW'
+    }, elapsed => {
+      if (button) button.textContent = `Compacting… ${elapsed}s`;
     });
-    const data = await response.json();
-    if (!response.ok || !data.success) throw new Error(data.error || 'Context compaction failed');
 
     setContextPreviewOpen(false);
     if (currentConversationId !== targetConversationId || currentProvider !== targetProvider) return;
@@ -1905,8 +1979,152 @@ let backgroundHistoryPoll = null;
 
 function stopBackgroundHistoryPoll() {
   if (!backgroundHistoryPoll) return;
-  clearInterval(backgroundHistoryPoll.interval);
+  clearTimeout(backgroundHistoryPoll.nextTimer);
+  clearInterval(backgroundHistoryPoll.clockTimer);
+  backgroundHistoryPoll.controller?.abort();
   backgroundHistoryPoll = null;
+}
+
+async function monitorBackgroundHistory({ convId, provider, isCurrentHistory, historyRequestedAt }) {
+  if (!isCurrentHistory()) return;
+  stopBackgroundHistoryPoll();
+  const poll = { nextTimer: null, clockTimer: null, controller: null, snapshot: null,
+    requestId: null, seenBusy: false, unavailable: false, unconfirmed: false, checkedAt: null };
+  backgroundHistoryPoll = poll;
+  let card = null;
+  const isActive = () => backgroundHistoryPoll === poll && isCurrentHistory();
+  const clock = value => new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const render = () => {
+    if (!isCurrentHistory()) return;
+    if (!card) {
+      card = document.createElement('div');
+      card.id = 'resumed-live-card';
+      card.className = 'w-full max-w-2xl mx-auto min-w-0';
+      card.innerHTML = `
+        <div class="bg-slate-900 border border-indigo-500/50 text-slate-200 rounded-2xl p-3.5 text-xs sm:text-sm shadow-md">
+          <div class="flex items-center gap-2 text-indigo-300 font-medium">
+            <span data-background-dot class="w-2 h-2 rounded-full bg-indigo-400 shrink-0"></span>
+            <span data-background-title aria-live="polite"></span>
+          </div>
+          <p data-background-time class="mt-2 text-xs text-slate-300"></p>
+          <p data-background-note class="mt-1 text-xs text-slate-400"></p>
+          <button type="button" data-background-refresh class="hidden mt-2 min-h-[44px] px-3 rounded-lg border border-slate-600 text-xs text-slate-200">重新載入紀錄</button>
+        </div>`;
+      card.querySelector('[data-background-refresh]').addEventListener('click', () => {
+        if (isCurrentHistory()) void loadConversationHistory(convId, { preserveComposer: true });
+      });
+      messagesContainer.appendChild(card);
+      scrollToBottom(true);
+    }
+    const activity = poll.snapshot?.activity;
+    const now = Date.now();
+    const startedAt = Number(activity?.started_at) || 0;
+    const lastActivity = Number(activity?.last_activity_at) || 0;
+    const quietMs = lastActivity || startedAt ? Math.max(0, now - (lastActivity || startedAt)) : null;
+    const phases = {
+      preparing: '準備工作中', waiting: '等待 AI 回報', thinking: '正在處理內容',
+      responding: '正在撰寫回覆', tool: '正在執行工具', tool_result: '正在處理工具結果',
+      compacting: '正在精簡上下文', retrying: '暫時中斷，正在重試',
+      awaiting_result: '等待結果確認', finishing: '正在保存結果'
+    };
+    const work = activity?.kind === 'crew_reply' ? 'Crew 自動回覆中'
+      : activity?.kind === 'compact' ? (activity.source === 'auto_compact' ? '自動精簡上下文中' : '正在精簡上下文')
+        : '背景工作執行中';
+    const phase = phases[activity?.phase];
+    card.querySelector('[data-background-title]').textContent = poll.unavailable ? '暫時無法取得工作狀態'
+      : poll.unconfirmed ? '目前未執行；結果尚未確認'
+        : `${work}${phase && phase !== work ? ` · ${phase}` : ''}`;
+    const timing = [];
+    if (startedAt) timing.push(`已經過 ${formatExecutionDuration(Math.max(0, (activity.ended_at || now) - startedAt))}`);
+    if (lastActivity) timing.push(`最後活動 ${clock(lastActivity)}（${formatExecutionDuration(quietMs)}前）`);
+    card.querySelector('[data-background-time]').textContent = timing.join(' · ') || '起始時間與最後活動時間尚無資料';
+    const note = poll.unavailable
+      ? `${poll.checkedAt ? `上次查詢成功 ${clock(poll.checkedAt)}。` : ''}正在重新查詢，尚無法確認工作是否結束。`
+      : poll.unconfirmed ? '未取得這次工作的完成結果，請重新載入紀錄確認。'
+        : quietMs !== null && quietMs >= 90000 ? `已 ${formatExecutionDuration(quietMs)}${lastActivity ? '沒有新回報' : '尚未收到進度回報'}，仍等待工作結果。`
+          : !lastActivity ? '目前只取得執行狀態，尚無進度回報。' : '完成後會自動更新對話紀錄。';
+    card.querySelector('[data-background-note]').textContent = note;
+    card.querySelector('[data-background-dot]').classList.toggle('animate-pulse', !poll.unavailable && !poll.unconfirmed && (quietMs === null || quietMs < 90000));
+    card.querySelector('[data-background-refresh]').classList.toggle('hidden', !poll.unavailable && !poll.unconfirmed);
+  };
+  const readStatus = async url => {
+    const controller = new AbortController();
+    poll.controller = controller;
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    try {
+      const response = await fetch(url, { cache: 'no-store', signal: controller.signal });
+      if (!response.ok) throw new Error(`Status unavailable (${response.status})`);
+      return await response.json();
+    } finally {
+      clearTimeout(timeout);
+      if (poll.controller === controller) poll.controller = null;
+    }
+  };
+  const reload = () => {
+    stopBackgroundHistoryPoll();
+    if (!poll.snapshot?.isBusy) setStreamingState(false);
+    void loadConversationHistory(convId, { preserveComposer: true }).then(() => {
+      if (!poll.snapshot?.isBusy && currentConversationId === convId && currentProvider === provider && !isStreaming) flushQueuedBtwMessage();
+    });
+  };
+  const check = async () => {
+    if (!isActive()) {
+      if (backgroundHistoryPoll === poll) stopBackgroundHistoryPoll();
+      return;
+    }
+    try {
+      const query = new URLSearchParams({ id: convId, provider });
+      const data = await readStatus(`/api/session-status?${query}`);
+      if (!isActive()) return;
+      if (data.conversation_id !== convId || data.provider !== provider || typeof data.isBusy !== 'boolean') throw new Error('Status mismatch');
+      poll.snapshot = data;
+      poll.unavailable = false;
+      poll.checkedAt = Date.now();
+      const activity = data.activity;
+      if (poll.requestId && activity?.request_id && activity.request_id !== poll.requestId) {
+        reload(); // A new request owns the conversation; show its own history/state.
+        return;
+      }
+      if (data.isBusy) {
+        poll.seenBusy = true;
+        if (activity && !activity.terminal) poll.requestId = activity.request_id;
+        setStreamingState(true);
+        render();
+      } else if (poll.seenBusy || (activity?.terminal && activity.ended_at >= historyRequestedAt)) {
+        let terminal = activity;
+        if (poll.requestId && !(terminal?.request_id === poll.requestId && terminal.terminal)) {
+          try {
+            const exactQuery = new URLSearchParams({ request_id: poll.requestId, provider });
+            terminal = await readStatus(`/api/turn-status?${exactQuery}`);
+            if (terminal.provider !== provider || terminal.conversation_id !== convId) terminal = null;
+          } catch (_) { terminal = null; }
+          if (!isActive()) return;
+        }
+        if (poll.requestId && !(terminal?.request_id === poll.requestId && terminal.terminal && ['completed', 'failed', 'interrupted'].includes(terminal.status))) {
+          // Idle after a restart/lost record is not proof of completion.
+          poll.unconfirmed = true;
+          stopBackgroundHistoryPoll();
+          setStreamingState(false);
+          render();
+          return;
+        }
+        reload(); // Legacy busy-only responses refresh history without claiming success.
+      } else {
+        stopBackgroundHistoryPoll();
+        setStreamingState(false);
+        card?.remove();
+      }
+    } catch (_) {
+      if (!isActive()) return;
+      poll.unavailable = true;
+      render();
+    } finally {
+      if (backgroundHistoryPoll === poll && !isCurrentHistory()) stopBackgroundHistoryPoll();
+      else if (isActive()) poll.nextTimer = setTimeout(check, poll.unavailable || document.hidden ? 10000 : 3000);
+    }
+  };
+  poll.clockTimer = setInterval(() => { if (isActive() && card) render(); }, 1000);
+  await check();
 }
 
 function showHistoryLoadOverlay() {
@@ -2060,7 +2278,8 @@ function renderHistoryMessages(messages, convId, renderVersion, options = {}) {
 }
 
 // Load History for a Conversation
-async function loadConversationHistory(convId, { preserveComposer = false, preserveCrewHome = false } = {}) {
+let roleActivationTask = Promise.resolve();
+async function loadConversationHistory(convId, { preserveComposer = false, preserveCrewHome = false, activate = false } = {}) {
   if (typeof window.isLiveSessionActive === 'function' && window.isLiveSessionActive()) {
     alert('🎙️ 目前仍在語音通話中，請先按紅色掛斷，完成備忘錄保存後再切換歷史對話。');
     return false;
@@ -2070,6 +2289,7 @@ async function loadConversationHistory(convId, { preserveComposer = false, prese
   stopBackgroundHistoryPoll();
   const renderVersion = ++historyRenderVersion;
   const historyProvider = currentProvider;
+  const historyRequestedAt = Date.now();
   const isCurrentHistory = () => renderVersion === historyRenderVersion
     && currentConversationId === convId && currentProvider === historyProvider;
   const historyQuery = `id=${encodeURIComponent(convId)}&provider=${encodeURIComponent(historyProvider)}`;
@@ -2116,6 +2336,29 @@ async function loadConversationHistory(convId, { preserveComposer = false, prese
     const res = await fetch(`/api/history?${historyQuery}`);
     const data = await res.json();
     if (!isCurrentHistory()) return;
+    if (!res.ok) throw new Error(data.error || '無法載入對話紀錄');
+    // Only explicit navigation changes the Role's routing. Background reloads
+    // and silent recovery must never activate a conversation.
+    if (activate && data.conversation_settings?.roleId) {
+      roleActivationTask = roleActivationTask.catch(() => {}).then(async () => {
+        if (!isCurrentHistory()) return;
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 10000);
+        try {
+          const activation = await fetch('/api/role-runtime', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: controller.signal,
+            body: JSON.stringify({ action: 'activate', role_id: data.conversation_settings.roleId,
+              provider: historyProvider, conversation_id: convId })
+          });
+          if (!activation.ok) {
+            const detail = await activation.json().catch(() => ({}));
+            console.warn('[Role navigation]', detail.error || 'Role activation unavailable');
+          }
+        } finally { clearTimeout(timeout); }
+      });
+      await roleActivationTask;
+      if (!isCurrentHistory()) return;
+    }
 
     // Conversations own their model choice. Restore it before rendering so the
     // header and the next message always agree with this thread.
@@ -2163,64 +2406,7 @@ async function loadConversationHistory(convId, { preserveComposer = false, prese
 
     hideHistoryLoadOverlay(loadOverlay);
 
-    // ⚡ Check if this conversation is actively generating in background and auto-resume loading UI
-    try {
-      const statusRes = await fetch(`/api/session-status?${historyQuery}`);
-      if (statusRes.ok) {
-        const statusData = await statusRes.json();
-        if (!isCurrentHistory()) return;
-        if (statusData.isBusy) {
-          setStreamingState(true);
-          const existingLive = document.getElementById('resumed-live-card');
-          if (!existingLive) {
-            const liveCard = document.createElement('div');
-            liveCard.id = 'resumed-live-card';
-            liveCard.className = 'w-full max-w-2xl mx-auto justify-start min-w-0';
-            liveCard.innerHTML = `
-              <div class="bg-slate-900 border border-indigo-500/50 text-slate-200 rounded-2xl p-3.5 text-xs sm:text-sm shadow-md w-full min-w-0 aurora-glow-box">
-                <div class="flex items-center gap-2 text-indigo-300 font-medium">
-                  <span class="w-2 h-2 rounded-full bg-indigo-400 animate-ping"></span>
-                  <span>⚡ AI 正在背景持續生成回覆中...</span>
-                </div>
-              </div>
-            `;
-            messagesContainer.appendChild(liveCard);
-            scrollToBottom(true);
-
-            // Keep exactly one poll for the active history render. When the
-            // response is persisted, reload history instead of appending its
-            // final message; this guarantees one DOM card per response.
-            const poll = { convId, renderVersion, interval: null };
-            backgroundHistoryPoll = poll;
-            poll.interval = setInterval(async () => {
-              if (backgroundHistoryPoll !== poll || !isCurrentHistory()) {
-                if (backgroundHistoryPoll === poll) stopBackgroundHistoryPoll();
-                return;
-              }
-              try {
-                const checkRes = await fetch(`/api/session-status?${historyQuery}`);
-                if (checkRes.ok) {
-                  const checkData = await checkRes.json();
-                  if (backgroundHistoryPoll !== poll || !isCurrentHistory()) return;
-                  if (!checkData.isBusy) {
-                    stopBackgroundHistoryPoll();
-                    setStreamingState(false);
-                    const card = document.getElementById('resumed-live-card');
-                    if (card) card.remove();
-                    if (currentConversationId === convId && renderVersion === historyRenderVersion) {
-                      loadConversationHistory(convId, { preserveComposer: true });
-                    }
-                    setTimeout(flushQueuedBtwMessage, 300);
-                  }
-                }
-              } catch (e) {}
-            }, 1200);
-          }
-        } else {
-          setStreamingState(false);
-        }
-      }
-    } catch (e) {}
+    await monitorBackgroundHistory({ convId, provider: historyProvider, isCurrentHistory, historyRequestedAt });
 
   } catch (err) {
     console.error(err);
@@ -2562,7 +2748,7 @@ function renderConversationItems(conversations) {
         });
         const open = typeof window.openCrewConversation === 'function'
           ? window.openCrewConversation(conversationProvider, conv.id)
-          : loadConversationHistory(conv.id);
+          : loadConversationHistory(conv.id, { activate: true });
         Promise.resolve(open).then(result => {
           // A Live voice guard returns false. Keep the sheet in that case.
           if (result !== false) window.closeCrewHistory?.();
@@ -3273,7 +3459,7 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
       <div class="bg-slate-900/90 border border-cyan-500/50 text-slate-200 rounded-2xl rounded-tl-none p-3.5 text-xs sm:text-sm shadow-xl flex-1 min-w-0 prose thinking-active-glow">
         <div class="flex items-center gap-2 text-cyan-300 font-bold mb-1.5">
           <span class="w-2 h-2 rounded-full bg-cyan-400 animate-ping"></span>
-          <span>📦 ${isMaxCompact ? (isEnglish ? 'Max-compacting conversation memory...' : '正在極致精簡對話記憶...') : (isEnglish ? 'Compacting continuation context...' : '正在提煉可接續的對話狀態...')}</span>
+          <span class="compact-progress-label">📦 ${isMaxCompact ? (isEnglish ? 'Max-compacting conversation memory...' : '正在極致精簡對話記憶...') : (isEnglish ? 'Compacting continuation context...' : '正在提煉可接續的對話狀態...')}</span>
         </div>
         <p class="text-slate-400 text-xs leading-relaxed">
           ${isMaxCompact ? (isEnglish ? 'Keeping only final outcome, remaining verification, and non-negotiable state to reduce context.' : '只保留最終成果、待驗證事項與不可遺失的關鍵狀態，盡量降低 Context。') : (isEnglish ? 'Keeping the active task, decisions, paths, values, and next action so work can continue smoothly.' : '保留目前任務、決策、路徑、數值與下一步，讓壓縮後能無縫繼續工作。')}
@@ -3284,18 +3470,18 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
     scrollToBottom(true);
 
     try {
-      const res = await fetch('/api/compact', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          conversation_id: targetConvId,
-          focus: focusText,
-          mode: compactMode,
-          provider: compactProvider,
-          locale: typeof getCrewLocale === 'function' ? getCrewLocale() : 'zh-TW'
-        })
+      const data = await requestContextCompaction('/api/compact', {
+        conversation_id: targetConvId,
+        focus: focusText,
+        mode: compactMode,
+        provider: compactProvider,
+        locale: typeof getCrewLocale === 'function' ? getCrewLocale() : 'zh-TW'
+      }, elapsed => {
+        const label = compactingMsgDiv.querySelector('.compact-progress-label');
+        if (label) label.textContent = isEnglish
+          ? `📦 Compacting… ${elapsed}s${elapsed >= 120 ? ' · still waiting for completion' : ''}`
+          : `📦 正在精簡… ${elapsed} 秒${elapsed >= 120 ? ' · 尚在等待完成回報' : ''}`;
       });
-      const data = await res.json();
       if (compactingMsgDiv.parentNode) compactingMsgDiv.remove();
 
       // 🛡️ Cross-Session Guard: Only update active DOM if user is STILL in the same conversation!
@@ -3322,7 +3508,7 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
     } catch (e) {
       if (compactingMsgDiv.parentNode) compactingMsgDiv.remove();
       if (isCompactVisible()) {
-        appendMessage('assistant', `⚠️ 壓縮請求失敗：${e.message}`);
+        appendMessage('assistant', `${e.compactPending ? 'ℹ️ 壓縮結果尚未確認' : '⚠️ 壓縮請求失敗'}：${e.message}`);
       }
     }
     return;
@@ -3338,6 +3524,7 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
   const streamRoleId = currentStreamRoleId();
   const activeStreamConvId = currentConversationId;
   const streamProvider = currentProvider;
+  const streamRequestId = globalThis.crypto?.randomUUID?.() || `chat-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
   const streamAbortController = new AbortController();
   registerActiveRoleStream({
     roleId: streamRoleId,
@@ -3378,6 +3565,7 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
   const startTs = performance.now();
   let lastProgressEventAt = startTs;
   let livePhase = 'preparing';
+  let providerNotice = null;
   let lastReportedTool = null;
   let currentOperationNote = '';
   const toolActivity = new Map();
@@ -3436,6 +3624,7 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
   const stickyExecution = isBtwQuery ? null : createExecutionStickyController(assistantMsgDiv, isStreamVisible);
 
   let turnFinalized = false;
+  let reconcileSilentStream = null;
   function finalizeTurn(doneData = null) {
     if (turnFinalized) return;
     turnFinalized = true;
@@ -3455,6 +3644,7 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
     if (!incomplete) {
       markProgressDone('phase:analysis');
       markProgressDone('phase:writing');
+      markProgressDone('phase:provider-recovery');
     } else {
       for (const [key, entry] of progressEntries) {
         if (entry.state === 'running') progressEntries.set(key, { ...entry, state: 'interrupted' });
@@ -3472,6 +3662,8 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
     if (statusTextElem) {
       statusTextElem.textContent = incomplete
         ? (terminalUnknown ? '終態未確認' : interrupted ? '執行已中斷' : '執行未完成')
+        : doneData?.recovered_from_status
+        ? '✓ 已完成 · 已確認回合結果'
         : liveTools.length > 0
         ? `✓ 已完成 · ${liveTools.length} 項操作`
         : '✓ 已完成';
@@ -3623,7 +3815,7 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
 
   function renderLiveState() {
     if (turnFinalized) return;
-    const state = getLiveExecutionStatus(liveTools, livePhase, performance.now(), lastProgressEventAt, lastReportedTool);
+    const state = providerNotice || getLiveExecutionStatus(liveTools, livePhase, performance.now(), lastProgressEventAt, lastReportedTool);
     if (liveStageElem && liveStageElem.textContent !== state.stage) liveStageElem.textContent = state.stage;
     if (statusTextElem.textContent !== state.text) statusTextElem.textContent = state.text;
     liveStatusElem.dataset.phase = state.waiting ? 'waiting' : livePhase;
@@ -3695,19 +3887,80 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
     stickyExecution?.update(null, elapsedMs);
     renderLiveState();
     renderProgressPeek();
+    if (reconcileSilentStream) void reconcileSilentStream();
   }, 1000);
 
   let accumulatedText = '';
   let abortedHandled = false;
   let renderPending = false;
   let renderTimer = null;
+  let reader = null;
+  let requestTrackingAvailable = false;
+  let recoveringSilentStream = false;
+  let silentRecoveryPromise = null;
+  let lastSilentRecoveryAt = 0;
+  let headerTimedOut = false;
+  let headerTimer = null;
+
+  const recoverSilentStream = async (force = false) => {
+    const now = performance.now();
+    if (turnFinalized || isBtwQuery || (streamAbortController.signal.aborted && !headerTimedOut) || recoveringSilentStream ||
+        (!force && (now - lastProgressEventAt < 45000 || now - lastSilentRecoveryAt < 15000))) return;
+    recoveringSilentStream = true;
+    lastSilentRecoveryAt = now;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    try {
+      const query = `request_id=${encodeURIComponent(streamRequestId)}&provider=${encodeURIComponent(streamProvider)}`;
+      const response = await fetch(`/api/turn-status?${query}`, { cache: 'no-store', signal: controller.signal });
+      if (turnFinalized || (streamAbortController.signal.aborted && !headerTimedOut)) return;
+      if (response.status === 404 && requestTrackingAvailable) {
+        finalizeTurn({ status: 'unknown', error: '無法確認本次請求的結果，請重新載入對話紀錄。' });
+      } else {
+        if (!response.ok) return;
+        const turn = await response.json();
+        if (turnFinalized || (streamAbortController.signal.aborted && !headerTimedOut) || turn.request_id !== streamRequestId || turn.provider !== streamProvider) return;
+        requestTrackingAvailable = true;
+        if (!turn.terminal || !['completed', 'interrupted', 'failed', 'unknown'].includes(turn.status) ||
+            turn.result?.request_id !== streamRequestId) return;
+        if (turn.conversation_id) {
+          streamConversationId = turn.conversation_id;
+          updateActiveRoleStream(streamRoleId, { conversationId: streamConversationId });
+          if (assistantMsgDiv.isConnected && currentStreamRoleId() === streamRoleId &&
+              currentProvider === streamProvider && currentConversationId === activeStreamConvId) {
+            currentConversationId = streamConversationId;
+            localStorage.setItem(activeConversationStorageKey(), currentConversationId);
+          }
+        }
+        if (queuedDelivery && !deliveryAccepted && turn.accepted) acceptQueuedDelivery();
+        for (const tool of turn.result.tools || []) mergeToolEventIntoMap(liveToolMap, liveTools, tool);
+        finalizeTurn({ ...turn.result, status: turn.status, recovered_from_status: true });
+      }
+      // Cancel only after an exact terminal result (or an explicitly unknown
+      // request after a Runtime restart), never because a conversation is idle.
+      if (reader) await reader.cancel().catch(() => {});
+      else streamAbortController.abort();
+    } catch (_) {
+      // A failed check does not imply successful completion.
+    } finally {
+      clearTimeout(timeout);
+      recoveringSilentStream = false;
+    }
+  };
+  reconcileSilentStream = (force = false) => {
+    if (silentRecoveryPromise) return silentRecoveryPromise;
+    silentRecoveryPromise = recoverSilentStream(force).finally(() => { silentRecoveryPromise = null; });
+    return silentRecoveryPromise;
+  };
 
   try {
+    headerTimer = setTimeout(() => { headerTimedOut = true; streamAbortController.abort(); }, 45000);
     const response = await fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         provider: streamProvider,
+        request_id: streamRequestId,
         prompt: text,
         conversation_id: activeStreamConvId,
         image_path: imgPath,
@@ -3721,6 +3974,8 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
       signal: streamAbortController.signal
     });
 
+    clearTimeout(headerTimer);
+    if (turnFinalized) { await response.body?.cancel(); }
     if (!response.ok) {
       const detail = await response.json().catch(() => ({}));
       const error = new Error(detail.error || `HTTP ${response.status}`);
@@ -3728,12 +3983,12 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
       error.code = detail.code || null;
       throw error;
     }
-    const reader = response.body.getReader();
+    reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
     let currentEvent = 'message';
 
-    while (true) {
+    while (!turnFinalized) {
       const { value, done } = await reader.read();
       if (done) break;
 
@@ -3751,8 +4006,22 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
           if (!rawData) continue;
           try {
             const data = JSON.parse(rawData);
+            if (requestTrackingAvailable && data.request_id && data.request_id !== streamRequestId) continue;
+            if (data.request_id === streamRequestId) requestTrackingAvailable = true;
             lastProgressEventAt = performance.now();
-            if (currentEvent === 'init' && data.conversation_id) {
+            if (providerNotice && ['init', 'thought', 'tool', 'chunk'].includes(currentEvent)) {
+              providerNotice = null;
+              markProgressDone('phase:provider-recovery');
+            }
+            if (currentEvent === 'accepted') {
+              if (statusTextElem) statusTextElem.textContent = '正在準備工作環境…';
+            } else if (currentEvent === 'provider_status') {
+              providerNotice = data.status === 'retrying'
+                ? { stage: '重試中', text: '暫時中斷，正在重試…', waiting: true }
+                : { stage: '確認中', text: '收到錯誤回報，等待結果確認…', waiting: true };
+              upsertProgress('phase:provider-recovery', { icon: '↻', text: providerNotice.text, state: 'running' });
+              renderLiveState();
+            } else if (currentEvent === 'init' && data.conversation_id) {
               streamConversationId = data.conversation_id;
               updateActiveRoleStream(streamRoleId, { conversationId: data.conversation_id });
               if (queuedDelivery) acceptQueuedDelivery();
@@ -3877,43 +4146,50 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
         }
       }
     }
+    if (!turnFinalized) await reconcileSilentStream(true);
     if (!turnFinalized) finalizeTurn({ completionState: 'interrupted' });
   } catch (err) {
-    if (queuedDelivery && !deliveryAccepted) {
-      deliveryError = { message: err.message, code: err.code || null, httpStatus: err.httpStatus || null };
-    }
-    if (err.name === 'AbortError') {
-      abortedHandled = true;
-      stickyExecution?.dispose();
-      finalizeTurn({ completionState: 'interrupted' });
-      const abortBadge = document.createElement('div');
-      abortBadge.className = 'mt-2 pt-1.5 border-t border-slate-800 text-[11px] text-amber-400 font-mono flex items-center gap-1';
-      abortBadge.innerHTML = `<svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg><span>[已手動中斷生成]</span>`;
-      assistantMsgDiv.querySelector('.bg-slate-900').appendChild(abortBadge);
-      if (typeof enhanceCodeBlocks === 'function') enhanceCodeBlocks(assistantMsgDiv);
-    } else {
-      console.warn('[SSE Disconnect] Stream interrupted:', err);
-      finalizeTurn(err.httpStatus ? { error: err.message } : { completionState: 'interrupted' });
-      const article = assistantMsgDiv.querySelector('.assistant-article, .btw-card');
-      const notice = document.createElement('div');
-      notice.className = 'recovery-badge mt-2 text-xs text-amber-300';
-      notice.textContent = err.httpStatus ? '請求失敗，請確認錯誤後再重試。' : '連線中斷，已保留收到的內容。';
-      if (streamConversationId) {
-        const reload = document.createElement('button');
-        reload.type = 'button';
-        reload.className = 'ml-2 px-2 py-1 rounded bg-slate-800';
-        reload.textContent = '重新載入紀錄';
-        reload.addEventListener('click', () => {
-          if (currentStreamRoleId() === streamRoleId && currentProvider === streamProvider && currentConversationId === streamConversationId) {
-            loadConversationHistory(streamConversationId);
-          }
-        });
-        notice.appendChild(reload);
+    if (!turnFinalized && !err.httpStatus && (!streamAbortController.signal.aborted || headerTimedOut)) await reconcileSilentStream(true);
+    if (!turnFinalized) {
+      if (headerTimedOut) { err = new Error('等待伺服器接受請求逾時，請檢查 Runtime 狀態。'); err.httpStatus = 408; }
+      if (queuedDelivery && !deliveryAccepted) {
+        deliveryError = { message: err.message, code: err.code || null, httpStatus: err.httpStatus || null };
       }
-      article?.appendChild(notice);
+      if (err.name === 'AbortError') {
+        abortedHandled = true;
+        stickyExecution?.dispose();
+        finalizeTurn({ completionState: 'interrupted' });
+        const abortBadge = document.createElement('div');
+        abortBadge.className = 'mt-2 pt-1.5 border-t border-slate-800 text-[11px] text-amber-400 font-mono flex items-center gap-1';
+        abortBadge.innerHTML = `<svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg><span>[已手動中斷生成]</span>`;
+        assistantMsgDiv.querySelector('.bg-slate-900').appendChild(abortBadge);
+        if (typeof enhanceCodeBlocks === 'function') enhanceCodeBlocks(assistantMsgDiv);
+      } else {
+        console.warn('[SSE Disconnect] Stream interrupted:', err);
+        finalizeTurn(err.httpStatus ? { error: err.message } : { completionState: 'interrupted' });
+        const article = assistantMsgDiv.querySelector('.assistant-article, .btw-card');
+        const notice = document.createElement('div');
+        notice.className = 'recovery-badge mt-2 text-xs text-amber-300';
+        notice.textContent = err.httpStatus ? '請求失敗，請確認錯誤後再重試。' : '連線中斷，已保留收到的內容。';
+        if (streamConversationId) {
+          const reload = document.createElement('button');
+          reload.type = 'button';
+          reload.className = 'ml-2 px-2 py-1 rounded bg-slate-800';
+          reload.textContent = '重新載入紀錄';
+          reload.addEventListener('click', () => {
+            if (currentStreamRoleId() === streamRoleId && currentProvider === streamProvider && currentConversationId === streamConversationId) {
+              loadConversationHistory(streamConversationId);
+            }
+          });
+          notice.appendChild(reload);
+        }
+        article?.appendChild(notice);
+      }
     }
   } finally {
+    clearTimeout(headerTimer);
     clearInterval(liveTimerInterval);
+    reconcileSilentStream = null;
     clearActiveRoleStream(streamRoleId, streamAbortController);
     if (queuedDelivery && !deliveryAccepted) {
       queuedUserBubble?.remove();

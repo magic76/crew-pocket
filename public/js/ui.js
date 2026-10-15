@@ -972,11 +972,14 @@ function renderRoleNavigation() {
     const state = reported === 'working' && status?.busy !== true ? 'unknown' : reported;
     const queued = Number(status?.queuedMessageCount || 0) + Number(status?.queuedRequestCount || 0);
     const unread = Number(status?.unreadReplyCount || 0);
-    const attention = queued + unread;
+    const failed = Number(status?.failedRequestCount || 0);
+    const attention = queued + unread + failed;
     const currentTitle = status?.currentWork?.title || status?.conversationTitle || '';
     const latestTitle = latest?.title || '';
     // A past conversation title is not evidence that work is underway.
-    const workDescription = state === 'working'
+    const workDescription = failed && state !== 'working'
+      ? failed + ' 則訊息自動回覆失敗，已停止重試'
+      : state === 'working'
       ? '正在處理 · ' + (currentTitle || '目前對話')
       : state === 'waiting'
         ? (attention ? attention + ' 則訊息待處理' : '等待處理')
@@ -1649,7 +1652,7 @@ function renderProviderOptions() {
   });
 }
 
-window.selectProvider = async function(providerId, { preserveActiveStream = false } = {}) {
+window.selectProvider = async function(providerId, { preserveActiveStream = false, activateConversation = true } = {}) {
   if (!availableProviders.some(provider => provider.id === providerId) || providerId === currentProvider) return;
   if (isStreaming && !preserveActiveStream && typeof window.stopGeneration === 'function') {
     await window.stopGeneration();
@@ -1669,7 +1672,7 @@ window.selectProvider = async function(providerId, { preserveActiveStream = fals
   updateModelUI();
   loadModelsList();
   toggleModelModal(false);
-  if (currentConversationId) await loadConversationHistory(currentConversationId);
+  if (currentConversationId) await loadConversationHistory(currentConversationId, { activate: activateConversation });
   else {
     messagesContainer.innerHTML = '';
     const activeRoleName = roleMeta()?.name || '';
@@ -1698,11 +1701,11 @@ window.openCrewConversation = async function(providerId, conversationId) {
   localStorage.setItem(providerStorageKey('active_conv_id', targetProvider), targetConversationId);
 
   if (targetProvider !== currentProvider) {
-    await window.selectProvider(targetProvider, { preserveActiveStream: true });
+    await window.selectProvider(targetProvider, { preserveActiveStream: true, activateConversation: true });
   } else if (currentConversationId !== targetConversationId) {
-    await loadConversationHistory(targetConversationId);
+    await loadConversationHistory(targetConversationId, { activate: true });
   } else {
-    await loadConversationHistory(targetConversationId, { preserveComposer: true });
+    await loadConversationHistory(targetConversationId, { preserveComposer: true, activate: true });
   }
 
   return currentProvider === targetProvider && currentConversationId === targetConversationId;

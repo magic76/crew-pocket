@@ -30,6 +30,7 @@ const {
 
 const { sessionManager } = require('./lib/session');
 const { getProvider, normalizeProviderId, listProviders, listProviderMetadata } = require('./lib/providers');
+const { isTerminalProviderError } = require('./lib/providers/events');
 const { handleLiveSync, handleLiveTranscribe, handleQuickTranscribe } = require('./lib/history');
 const { generateCompactedSummary, buildCompactionSource } = require('./lib/compact');
 const { handleRunCode } = require('./lib/sandbox');
@@ -43,7 +44,7 @@ const { listWorkspaces, resolveWorkspace, createWorkspace } = require('./lib/wor
 const { listCrewMembers, saveCrewMember } = require('./lib/crew-members');
 const { DEFAULT_ROLE_ID, roleIdForProject, listRoles, getRole, saveRole } = require('./lib/roles');
 const { deleteRoleLifecycle } = require('./lib/role-delete');
-const { listCrewRoles, sendCrewMessage, getCrewInbox, getCrewMessageActivity, getCrewRoomEvents, markCrewMessagesDelivered } = require('./lib/crew-messages');
+const { listCrewRoles, sendCrewMessage, getCrewInbox, getCrewMessageActivity, getCrewRoomEvents, markCrewMessagesDelivered, updateCrewAutoResponse } = require('./lib/crew-messages');
 const { createCrewAutoResponder } = require('./lib/crew-auto-response');
 const { getRoleRuntime, listRoleRuntimes, activateRoleConversation, prepareNewRoleConversation, clearRoleConversation, clearRoleConversationByConversation } = require('./lib/role-runtime');
 const { buildCrewStatus } = require('./lib/crew-status');
@@ -95,9 +96,11 @@ const {
 const { createHistoryMigration } = require('./lib/runtime/history-migration');
 const { getProviderRuntimeStatus, updateProvider } = require('./lib/runtime/provider-manager');
 const { prepareTurnExecution } = require('./lib/runtime/turn-orchestrator');
+const { ChatTurnRegistry, publicTurnActivity } = require('./lib/runtime/chat-turn-registry');
+const chatTurns = new ChatTurnRegistry();
 const { normalizeExecutionIntent } = require('./lib/execution-intent');
 const { getDefaultModel } = require('./lib/model-runtime');
-const { buildTurnResult } = require('./lib/turn-result');
+const { buildTurnResult, normalizeResultStatus } = require('./lib/turn-result');
 const { saveExecutionFeedback, enrichExecutionHistory } = require('./lib/execution-feedback');
 const { renderVisualAnswer } = require('./lib/visual-answer');
 
@@ -576,12 +579,12 @@ If the failure is caused by a missing native runtime dependency that cannot be f
       if (!event) return;
       if (event.type === 'text_delta') {
         runtimeSelfDebug.response = String(event.accumulated || `${runtimeSelfDebug.response}${event.delta || ''}`).slice(-12000);
-      } else if (event.type === 'error') {
+      } else if (isTerminalProviderError(event)) {
         runtimeSelfDebug.status = 'failed';
         runtimeSelfDebug.error = String(event.message || 'Self-debug failed').slice(0, 4000);
         runtimeSelfDebug.completedAt = Date.now();
       } else if (event.type === 'turn_completed') {
-        runtimeSelfDebug.status = 'completed';
+        runtimeSelfDebug.status = normalizeResultStatus(event);
         runtimeSelfDebug.response = String(event.response || runtimeSelfDebug.response || '').slice(-12000);
         runtimeSelfDebug.completedAt = Date.now();
       }
@@ -613,6 +616,14 @@ async function handleRuntimeSelfDebug(req, res) {
 }
 
 // ⚡ Check Conversation Session Busy Status
+function handleTurnStatus(parsedUrl, res) {
+  const requestId = String(parsedUrl.query.request_id || '');
+  const provider = normalizeProviderId(parsedUrl.query.provider);
+  const turn = chatTurns.get(requestId, provider);
+  res.writeHead(turn ? 200 : 404, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+  res.end(JSON.stringify(turn || { request_id: requestId, provider, status: 'unknown', terminal: false }));
+}
+
 function handleSessionStatus(parsedUrl, res) {
   const convId = parsedUrl.query.id;
   if (!convId) {
@@ -621,8 +632,14 @@ function handleSessionStatus(parsedUrl, res) {
   }
   const providerId = normalizeProviderId(parsedUrl.query.provider);
   const status = getProvider(providerId).getStatus(convId);
-  res.writeHead(200, { 'Content-Type': 'application/json' });
-  res.end(JSON.stringify({ ...status, provider: providerId }));
+  const latest = chatTurns.latestForConversation(providerId, convId);
+  // A native background operation may have no HTTP request record. Never reuse
+  // an older completed request's timestamps to describe that new work.
+  const turn = status.isBusy && latest?.terminal ? null : latest;
+  const activity = publicTurnActivity(turn);
+  res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+  res.end(JSON.stringify({ ...status, provider: providerId,
+    isBusy: Boolean(status.isBusy || (turn && !turn.terminal)), activity }));
 }
 
 async function handleProviderConversations(parsedUrl, res) {
@@ -652,6 +669,58 @@ async function handleProviderConversations(parsedUrl, res) {
   }
 }
 
+// Manual and automatic compact share the same lifecycle, including operations
+// with no HTTP response. Disconnecting an observer never cancels native compact.
+function startTrackedCompaction({ requestId = crypto.randomUUID(), providerId, conversationId,
+  source = 'manual_compact', roleId = null, run }) {
+  if (typeof requestId !== 'string' || !/^[A-Za-z0-9_-]{16,100}$/.test(requestId) ||
+      !chatTurns.start(requestId, providerId, conversationId, { kind: 'compact', source, roleId })) {
+    const error = new Error('Invalid or duplicate compaction request_id');
+    error.statusCode = 409;
+    throw error;
+  }
+  chatTurns.update(requestId, { accepted: true, status: 'running' });
+  const startedAt = Date.now();
+  const log = status => console.log('[CompactionLifecycle]', JSON.stringify({
+    request_id: requestId, provider: providerId, conversation_id: conversationId,
+    source, role_id: chatTurns.get(requestId, providerId)?.role_id || roleId,
+    at: Date.now(), status, elapsed_ms: Date.now() - startedAt
+  }));
+  log('running');
+  broadcastCrewStatusEvent('compact-started', roleId);
+  const operation = Promise.resolve().then(() => run(event => chatTurns.noteProviderEvent(requestId, event), requestId)).then(result => {
+    chatTurns.finish(requestId, { ...result, status: 'completed' });
+    log('completed');
+    return { statusCode: 200, result };
+  }).catch(error => {
+    const result = { success: false, status: 'failed', conversation_id: conversationId,
+      error: error.message || '對話壓縮失敗' };
+    chatTurns.finish(requestId, result);
+    log('failed');
+    console.error('[Compaction Error]', error);
+    return { statusCode: error.statusCode || 500, result };
+  }).finally(() => {
+    broadcastCrewStatusEvent('compact-finished', chatTurns.get(requestId, providerId)?.role_id || roleId);
+  });
+  return { requestId, startedAt, operation };
+}
+
+// New clients observe one operation by request ID; older clients await JSON.
+async function respondToCompaction(res, body, providerId, conversationId, run) {
+  const { requestId, startedAt, operation } = startTrackedCompaction({
+    requestId: body.request_id || crypto.randomUUID(), providerId, conversationId, run
+  });
+  if (body.async === true) {
+    res.writeHead(202, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+    return res.end(JSON.stringify({ success: true, pending: true, request_id: requestId,
+      provider: providerId, conversation_id: conversationId, started_at: startedAt }));
+  }
+  const { statusCode, result } = await operation;
+  if (res.destroyed) return;
+  res.writeHead(statusCode, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+  res.end(JSON.stringify(result));
+}
+
 async function handleProviderCompact(req, res, forcedProviderId = null) {
   try {
     const body = await parseJsonBody(req);
@@ -662,20 +731,36 @@ async function handleProviderCompact(req, res, forcedProviderId = null) {
     }
     const provider = getProvider(providerId);
     if (!provider.metadata.capabilities.compact || typeof provider.compactConversation !== 'function') throw new Error('Provider does not support conversation compaction');
-    const result = await provider.compactConversation(body.conversation_id, {
-      focus: body.focus,
-      mode: body.mode === 'max' ? 'max' : 'continue',
-      locale: body.locale === 'en' ? 'en' : 'zh-TW'
+    await respondToCompaction(res, body, providerId, body.conversation_id, async (onEvent, requestId) => {
+      const settings = await getConversationSettings(providerId, body.conversation_id);
+      const roleId = settings?.roleId || DEFAULT_ROLE_ID;
+      chatTurns.update(requestId, { role_id: roleId });
+      if (activeChatRoles.has(roleId) || crewAutoResponder.activeRoles.has(roleId) || activeCompactRoles.has(roleId)) {
+        const error = new Error('Role is busy; context compaction must wait until idle');
+        error.statusCode = 409;
+        throw error;
+      }
+      activeCompactRoles.add(roleId);
+      broadcastCrewStatusEvent('compact-started', roleId);
+      try {
+        const result = await provider.compactConversation(body.conversation_id, {
+          onEvent,
+          focus: body.focus,
+          mode: body.mode === 'max' ? 'max' : 'continue',
+          locale: body.locale === 'en' ? 'en' : 'zh-TW'
+        });
+        return {
+          success: true,
+          provider: providerId,
+          conversation_id: result.conversationId || body.conversation_id,
+          summary: result.summary,
+          message: result.message,
+          context_verification: result.contextVerification || null
+        };
+      } finally {
+        activeCompactRoles.delete(roleId);
+      }
     });
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({
-      success: true,
-      provider: providerId,
-      conversation_id: result.conversationId || body.conversation_id,
-      summary: result.summary,
-      message: result.message,
-      context_verification: result.contextVerification || null
-    }));
   } catch (err) {
     console.error('[Provider Compact Error]', err);
     res.writeHead(err.statusCode || 500, { 'Content-Type': 'application/json' });
@@ -854,10 +939,12 @@ function publicAutoCompactAssessment(assessment) {
 // and provider Safe Compact implementation. Role Memory and raw transcripts
 // are handled exclusively by that established runtime, not by this evaluator.
 async function performSafeContextCompact(providerId, conversationId, {
-  mode = 'manual', focus = '', locale = 'zh-TW', bundle = null, assessment = null
+  mode = 'manual', focus = '', locale = 'zh-TW', bundle = null, assessment = null,
+  onEvent = () => {}, requestId = null
 } = {}) {
   const beforeBundle = bundle || await getConversationContextHealth(providerId, conversationId);
   const roleId = beforeBundle.conversationSettings?.roleId || DEFAULT_ROLE_ID;
+  chatTurns.update(requestId, { role_id: roleId });
   if (activeChatRoles.has(roleId) || crewAutoResponder.activeRoles.has(roleId) ||
       activeCompactRoles.has(roleId)) {
     const error = new Error('Role is busy; context compaction must wait until idle');
@@ -865,6 +952,7 @@ async function performSafeContextCompact(providerId, conversationId, {
     throw error;
   }
   activeCompactRoles.add(roleId);
+  broadcastCrewStatusEvent('compact-started', roleId);
   try {
     const provider = getProvider(providerId);
     if (!provider.metadata.capabilities.compact || typeof provider.compactConversation !== 'function') {
@@ -877,7 +965,7 @@ async function performSafeContextCompact(providerId, conversationId, {
       throw error;
     }
     const result = await provider.compactConversation(conversationId, {
-      focus, mode: 'continue', locale
+      focus, mode: 'continue', locale, onEvent
     });
     if (plan.reretrieve.length > 0) {
       await markContextMemoryReretrieve(providerId, conversationId);
@@ -937,9 +1025,14 @@ async function finishAutoCompactTurn(providerId, conversationId, recentTools, st
     const freshBundle = await getConversationContextHealth(providerId, conversationId);
     const fresh = await assessAutoCompact(providerId, conversationId, freshBundle);
     if (fresh.decision.recommendation !== 'auto' || !fresh.decision.safeNow) return;
-    await performSafeContextCompact(providerId, conversationId, {
-      mode: 'automatic', bundle: freshBundle, assessment: fresh
+    const { operation } = startTrackedCompaction({
+      providerId, conversationId, source: 'auto_compact',
+      roleId: freshBundle.conversationSettings?.roleId || DEFAULT_ROLE_ID,
+      run: (onEvent, requestId) => performSafeContextCompact(providerId, conversationId, {
+        mode: 'automatic', bundle: freshBundle, assessment: fresh, onEvent, requestId
+      })
     });
+    await operation;
   } catch (error) {
     // Background opt-in evaluation must never break a user turn.
     console.warn('[AutoCompact] Post-turn evaluation skipped:', error.message);
@@ -985,13 +1078,13 @@ async function handleSafeContextCompact(req, res) {
     const conversationId = String(body.conversation_id || '').trim();
     if (!conversationId || !/^[a-zA-Z0-9_-]+$/.test(conversationId)) throw new Error('Invalid conversation id');
 
-    const result = await performSafeContextCompact(providerId, conversationId, {
-      mode: 'manual',
-      focus: body.focus,
-      locale: body.locale === 'en' ? 'en' : 'zh-TW'
-    });
-    res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-    res.end(JSON.stringify(result));
+    await respondToCompaction(res, body, providerId, conversationId, (onEvent, requestId) =>
+      performSafeContextCompact(providerId, conversationId, {
+        onEvent, requestId,
+        mode: 'manual',
+        focus: body.focus,
+        locale: body.locale === 'en' ? 'en' : 'zh-TW'
+      }));
   } catch (error) {
     console.error('[Safe Context Compact Error]', error);
     res.writeHead(error.statusCode || 500, { 'Content-Type': 'application/json' });
@@ -1004,17 +1097,6 @@ async function handleProviderHistory(parsedUrl, res) {
   try {
     const conversationId = parsedUrl.query.id;
     const bundle = await getConversationContextHealth(providerId, conversationId);
-    const settings = bundle.conversationSettings;
-    if (settings?.roleId) {
-      await activateRoleConversation({
-        roleId: settings.roleId,
-        providerId,
-        conversationId,
-        model: settings.model || getDefaultModel(providerId),
-        effort: settings.effort || 'low',
-        workspace: settings.workspace || null
-      }).catch(error => console.warn('[Role Runtime] History activation failed:', error.message));
-    }
     const publicHistory = await enrichExecutionHistory(providerId, conversationId, bundle.history).catch(error => {
       console.warn('[Execution Feedback] Read failed:', error.message);
       return { ...bundle.history };
@@ -1320,6 +1402,7 @@ async function handleCrewStatus(res) {
       getCrewInbox,
       getCrewMessageActivity,
       getProvider,
+      getRoleActivity: roleId => publicTurnActivity(chatTurns.latestForRole(roleId)),
       listRoleQueuedMessages
     });
     res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
@@ -1407,6 +1490,7 @@ async function handleMissionGraph(parsedUrl, res) {
 }
 
 async function handleRoleRuntime(req, res) {
+  const routingAt = Date.now();
   try {
     const body = await parseJsonBody(req);
     const action = String(body.action || '').trim();
@@ -1414,11 +1498,35 @@ async function handleRoleRuntime(req, res) {
     const role = roleId ? await getRole(roleId) : null;
     if (!role) throw new Error('Role does not exist');
 
+    if (action === 'activate') {
+      const providerId = normalizeProviderId(body.provider);
+      const conversationId = String(body.conversation_id || '');
+      const settings = await getConversationSettings(providerId, conversationId);
+      if (settings?.roleId !== role.id) throw new Error('Conversation does not belong to this Role');
+      const previous = await getRoleRuntime(role.id);
+      if (activeChatRoles.has(role.id) || crewAutoResponder.activeRoles.has(role.id) ||
+          activeCompactRoles.has(role.id) || (previous?.conversationId &&
+          getProvider(previous.providerId).getStatus(previous.conversationId)?.isBusy)) {
+        if (previous?.providerId === providerId && previous.conversationId === conversationId) {
+          res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+          return res.end(JSON.stringify({ success: true, runtime: previous }));
+        }
+        res.writeHead(409, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify({ success: false, error: 'Role 正在處理工作，目前僅瀏覽紀錄' }));
+      }
+      const runtime = await activateRoleConversation({ roleId: role.id, providerId, conversationId,
+        model: settings.model, effort: settings.effort, workspace: settings.workspace, routingAt });
+      broadcastCrewStatusEvent('runtime-activate', role.id);
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+      return res.end(JSON.stringify({ success: true, runtime }));
+    }
+
     if (action === 'prepare_new') {
       const providerId = normalizeProviderId(body.provider);
       const project = role.projectId ? await getProject(role.projectId) : null;
       const workspace = await resolveWorkspace(project?.workspace || body.workspace || RUNTIME_HOME);
       const runtime = await prepareNewRoleConversation({
+        routingAt,
         roleId: role.id,
         providerId,
         model: body.model || getDefaultModel(providerId),
@@ -1430,7 +1538,7 @@ async function handleRoleRuntime(req, res) {
       return res.end(JSON.stringify({ success: true, runtime }));
     }
 
-    throw new Error('Role runtime action must be prepare_new');
+    throw new Error('Role runtime action must be prepare_new or activate');
   } catch (error) {
     res.writeHead(400, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
     res.end(JSON.stringify({ success: false, error: error.message }));
@@ -1797,6 +1905,9 @@ function formatCrewInbox(messages = []) {
 }
 
 const crewAutoResponder = createCrewAutoResponder({
+  isRoleReserved: roleId => activeChatRoles.has(roleId) || activeCompactRoles.has(roleId),
+  turnRegistry: chatTurns,
+  onActivityChanged: roleId => broadcastCrewStatusEvent('auto-reply-activity', roleId),
   listProviders,
   getProvider,
   getProviderConversationSettings,
@@ -1810,6 +1921,10 @@ const crewAutoResponder = createCrewAutoResponder({
   sendCrewMessage,
   getCrewInbox,
   markCrewMessagesDelivered,
+  async updateCrewAutoResponse(roleId, messageId, state) {
+    await updateCrewAutoResponse(roleId, messageId, state);
+    broadcastCrewStatusEvent('auto-reply-state', roleId);
+  },
   saveConversationSettings,
   runtimeHome: RUNTIME_HOME
 });
@@ -1924,7 +2039,7 @@ const roleSubmitter = createRoleSubmitter({
   store: defaultRoleMessageQueueStore, getRole,
   listProviders, getProvider, getProviderConversationSettings, getDefaultModel,
   getRoleRuntime, activateRoleConversation, clearRoleConversation,
-  isRoleReserved: roleId => crewAutoResponder.activeRoles.has(roleId) || activeChatRoles.has(roleId),
+  isRoleReserved: roleId => crewAutoResponder.activeRoles.has(roleId) || activeChatRoles.has(roleId) || activeCompactRoles.has(roleId),
   async validateImage(imagePath) {
     if (!imagePath) return; // Text-only Role submissions must never realpath('')
     const real = await fsPromises.realpath(imagePath);
@@ -1972,16 +2087,51 @@ async function handleChat(req, res, submittedBody = null) {
     res.writeHead(409, { 'Content-Type': 'application/json' });
     return res.end(JSON.stringify({ error: 'Role 正在處理其他工作', code: 'CONVERSATION_BUSY' }));
   }
+  const requestId = body.request_id || crypto.randomUUID();
+  if (typeof requestId !== 'string' || !/^[A-Za-z0-9_-]{16,100}$/.test(requestId)) {
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify({ error: 'Invalid request_id' }));
+  }
+  const provider = normalizeProviderId(body.provider);
+  if (!chatTurns.start(requestId, provider, body.conversation_id, { roleId, source: 'chat' })) {
+    res.writeHead(409, { 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify({ error: 'Request already accepted', code: 'DUPLICATE_REQUEST', request_id: requestId }));
+  }
+  body = { ...body, request_id: requestId };
+  console.log('[TurnLifecycle] ' + JSON.stringify({ request_id: requestId, provider,
+    conversation_id: body.conversation_id || null, at: Date.now(), phase: 'accepted' }));
   activeChatRoles.add(roleId);
-  const release = () => activeChatRoles.delete(roleId);
+  let released = false;
+  const release = () => { if (!released) { released = true; activeChatRoles.delete(roleId); } };
   res.once('finish', release);
   res.once('close', release);
+  res.once('close', () => queueMicrotask(() => {
+    chatTurns.finish(requestId, { status: 'interrupted', conversation_id: body.conversation_id || null });
+    if (!res.writableFinished) console.log('[TurnLifecycle] ' + JSON.stringify({ request_id: requestId,
+      at: Date.now(), phase: 'client_closed', status: chatTurns.get(requestId, provider)?.status || 'unknown' }));
+  }));
+  res.once('finish', () => {
+    chatTurns.finish(requestId, { status: res.statusCode >= 400 ? 'failed' : 'unknown',
+      conversation_id: body.conversation_id || null });
+    console.log('[TurnLifecycle] ' + JSON.stringify({ request_id: requestId, at: Date.now(),
+      phase: 'http_finished', status: chatTurns.get(requestId, provider)?.status || 'unknown' }));
+  });
   try { await handleChatTurn(req, res, body); }
-  catch (error) { release(); throw error; }
+  catch (error) {
+    release();
+    const result = { request_id: requestId, provider, conversation_id: body.conversation_id || null,
+      error: error.message, status: 'failed' };
+    chatTurns.finish(requestId, result);
+    console.warn('[Chat Preparation]', JSON.stringify({ request_id: requestId, at: Date.now(), error: error.message }));
+    if (!res.writableEnded && !res.destroyed) {
+      if (res.headersSent) res.end(`event: done\ndata: ${JSON.stringify(result)}\n\n`);
+      else { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(result)); }
+    }
+  }
 }
 
 async function handleChatTurn(req, res, submittedBody = null) {
-  const requestId = crypto.randomUUID();
+  const requestId = submittedBody?.request_id || crypto.randomUUID();
   const requestStartedAt = Date.now();
   const turnTiming = {
     body_ms: null,
@@ -1992,6 +2142,8 @@ async function handleChatTurn(req, res, submittedBody = null) {
     to_first_text_ms: null,
     to_first_tool_ms: null,
     intent_ms: null,
+    to_provider_done_ms: null,
+    to_http_finish_ms: null,
     to_done_ms: null
   };
   const elapsed = () => Date.now() - requestStartedAt;
@@ -2021,6 +2173,29 @@ async function handleChatTurn(req, res, submittedBody = null) {
     res.writeHead(400, { 'Content-Type': 'application/json' });
     return res.end(JSON.stringify({ error: 'Prompt or image is required' }));
   }
+  // Acknowledge this exact request before workspace/context/model preparation.
+  // Heartbeats describe transport liveness; they are not proof of model progress.
+  res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8',
+    'Cache-Control': 'no-cache, no-transform', 'Connection': 'keep-alive' });
+  res.flushHeaders?.();
+  markOnce('to_sse_ms');
+  let clientClosed = false;
+  let abortTurn = () => {};
+  const sendEvent = (event, data) => {
+    if (res.destroyed || res.writableEnded) return false;
+    chatTurns.update(requestId, { phase: event });
+    return res.write(`event: ${event}\ndata: ${JSON.stringify({ ...data, request_id: requestId })}\n\n`);
+  };
+  sendEvent('accepted', { provider: providerId, conversation_id: conversation_id || null, status: 'preparing' });
+  const heartbeat = setInterval(() => {
+    if (!res.destroyed && !res.writableEnded) res.write(`: heartbeat ${Date.now()}\n\n`);
+  }, 15000);
+  heartbeat.unref?.();
+  res.once('finish', () => { clearInterval(heartbeat); markOnce('to_http_finish_ms'); });
+  res.once('close', () => {
+    clearInterval(heartbeat);
+    if (!res.writableEnded) { clientClosed = true; abortTurn(); }
+  });
   // Role owns long-lived identity. Project owns workspace; Conversation owns short-lived execution context.
   const workspaceStartedAt = Date.now();
   let workspace;
@@ -2033,6 +2208,7 @@ async function handleChatTurn(req, res, submittedBody = null) {
 
     const identity = await resolveConversationRole({ body, previous: savedSettings });
     role = identity.role;
+    chatTurns.update(requestId, { role_id: role.id });
     project = identity.project;
     projectId = identity.projectId;
     workspace = await resolveWorkspace(identity.workspace || savedSettings?.workspace || body.workspace || RUNTIME_HOME);
@@ -2047,10 +2223,13 @@ async function handleChatTurn(req, res, submittedBody = null) {
       }).catch(() => {});
     }
   } catch (err) {
-    res.writeHead(err.statusCode || 400, { 'Content-Type': 'application/json' });
-    return res.end(JSON.stringify({ error: err.message }));
+    const result = { error: err.message, status: 'failed', conversation_id, provider: providerId };
+    chatTurns.finish(requestId, result);
+    sendEvent('done', result);
+    return res.end();
   }
   turnTiming.workspace_ms = Date.now() - workspaceStartedAt;
+  if (clientClosed) return;
 
   let pendingCrewMessages = [];
   try {
@@ -2083,6 +2262,7 @@ async function handleChatTurn(req, res, submittedBody = null) {
     getProvider,
     turnTiming
   });
+  if (clientClosed) return;
 
   if (executionIntent || intentReview) {
     console.log('[ExecutionIntent] ' + JSON.stringify({
@@ -2233,22 +2413,7 @@ async function handleChatTurn(req, res, submittedBody = null) {
   }
 
 
-  // Set SSE Headers
-  const origin = req.headers.origin;
-  const allowOrigin = (origin && /^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/.test(origin)) ? origin : '';
-  const headers = {
-    'Content-Type': 'text/event-stream; charset=utf-8',
-    'Cache-Control': 'no-cache, no-transform',
-    'Connection': 'keep-alive'
-  };
-  if (allowOrigin) headers['Access-Control-Allow-Origin'] = allowOrigin;
-  res.writeHead(200, headers);
-  markOnce('to_sse_ms');
-
-  const sendEvent = (event, data) => {
-    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
-  };
-
+  if (clientClosed) return;
   try {
     const provider = getProvider(providerId);
     const toolRuns = new Map();
@@ -2256,7 +2421,6 @@ async function handleChatTurn(req, res, submittedBody = null) {
     let toolEventCount = 0;
     let metricsLogged = false;
     let ended = false;
-    let abortTurn = () => {};
     let lastContextStats = null;
     let policyWarned = false;
     let activeConversationId = conversation_id || null;
@@ -2283,9 +2447,11 @@ async function handleChatTurn(req, res, submittedBody = null) {
       if (metricsLogged) return;
       metricsLogged = true;
       const metrics = {
+        at: Date.now(),
+        started_at: requestStartedAt,
         request_id: requestId,
         provider: providerId,
-        conversation_id: conversation_id || null,
+        conversation_id: activeConversationId || null,
         execution_mode: executionPolicy?.mode || null,
         execution_policy_source: executionPolicy?.source || null,
         execution_intent: approvedExecutionIntent,
@@ -2369,7 +2535,7 @@ async function handleChatTurn(req, res, submittedBody = null) {
     const finish = (payload) => {
       if (ended) return;
       ended = true;
-      markOnce('to_done_ms');
+      markOnce('to_provider_done_ms');
       const toolMetrics = getToolMetrics();
       const turnResult = buildTurnResult({
         requestId,
@@ -2381,23 +2547,32 @@ async function handleChatTurn(req, res, submittedBody = null) {
       });
       const finalPayload = {
         ...(payload || {}),
+        status: normalizeResultStatus(payload),
         request_id: requestId,
         tool_metrics: toolMetrics,
+        tools: [...feedbackTools.values()],
         turn_result: turnResult || undefined,
         execution_policy: executionPolicy || undefined,
         execution_intent: approvedExecutionIntent || undefined,
         intent_review: intentReview || undefined,
         turn_timing: turnTiming
       };
-      logToolMetrics(finalPayload.error ? 'error' : 'completed');
+      chatTurns.finish(requestId, finalPayload);
+      // Notify the UI independently of feedback persistence. HTTP finish only
+      // means the server flushed its response, not that a WebView rendered it.
+      res.once('finish', () => logToolMetrics(finalPayload.status));
+      res.once('close', () => { if (!res.writableFinished) logToolMetrics('client_closed_after_terminal'); });
+      markOnce('to_done_ms');
+      sendEvent('done', finalPayload);
+      res.end();
       settingsCheckpoint.then(() => saveExecutionFeedback(providerId, finalPayload.conversation_id || activeConversationId, {
         response: finalPayload.response || streamedResponse,
         startedAt: requestStartedAt,
         turnResult,
         tools: [...feedbackTools.values()]
       })).catch(error => console.warn('[Execution Feedback] Save failed:', error.message)).finally(() => {
-        sendEvent('done', finalPayload);
-        res.end();
+        console.log('[TurnPersistence] ' + JSON.stringify({ request_id: requestId, at: Date.now(),
+          feedback_settled_ms: elapsed() }));
         if (!finalPayload.error && (finalPayload.conversation_id || activeConversationId)) {
           const toolsForAssessment = [...feedbackTools.values()].map(tool => ({
             name: tool.tool_name,
@@ -2472,6 +2647,8 @@ async function handleChatTurn(req, res, submittedBody = null) {
       if (!ended && !res.writableEnded) {
         ended = true;
         abortTurn();
+        chatTurns.finish(requestId, { status: 'interrupted', conversation_id: activeConversationId,
+          response: streamedResponse, provider: providerId });
         saveExecutionFeedback(providerId, activeConversationId, {
           response: streamedResponse,
           startedAt: requestStartedAt,
@@ -2496,11 +2673,13 @@ async function handleChatTurn(req, res, submittedBody = null) {
       executionIntent: approvedExecutionIntent,
       prompt: finalPrompt,
       imagePath: image_path,
-      onAbort(handler) { abortTurn = handler; },
+      onAbort(handler) { abortTurn = handler; if (clientClosed) abortTurn(); },
       onEvent(event) {
         if (ended) return;
+        chatTurns.noteProviderEvent(requestId, event);
         markOnce('to_first_event_ms');
         if (event.type === 'session_started') {
+          chatTurns.update(requestId, { conversation_id: event.conversationId, accepted: true, status: 'running' });
           markOnce('to_session_ms');
           activeConversationId = event.conversationId || activeConversationId;
           // A new thread only has an id after its provider starts. Persist here
@@ -2514,6 +2693,7 @@ async function handleChatTurn(req, res, submittedBody = null) {
             role: body.role || savedSettings?.role || 'general',
             ...(executionPolicy?.mode ? { executionMode: executionPolicy.mode } : {})
           }).then(settings => activateRoleConversation({
+            routingAt: requestStartedAt,
             roleId: settings.roleId || role?.id || DEFAULT_ROLE_ID,
             providerId,
             conversationId: event.conversationId,
@@ -2590,8 +2770,17 @@ async function handleChatTurn(req, res, submittedBody = null) {
           lastContextStats = event.stats || null;
           sendEvent('context', event.stats);
         } else if (event.type === 'error') {
+          if (!isTerminalProviderError(event)) {
+            const status = event.retryable ? 'retrying' : 'awaiting_result';
+            console.log('[TurnLifecycle]', JSON.stringify({ request_id: requestId, provider: providerId,
+              conversation_id: activeConversationId, at: Date.now(), phase: status, terminal: false }));
+            sendEvent('provider_status', { status,
+              provider: providerId, conversation_id: activeConversationId });
+            return;
+          }
           broadcastCrewStatusEvent('turn-error', role?.id || null);
-          finish({ error: event.message, provider: providerId, conversation_id });
+          finish({ error: event.message, status: event.status || 'failed', provider: providerId,
+            conversation_id: event.conversationId || activeConversationId || conversation_id });
           if (role?.id) {
             setImmediate(() => crewAutoResponder.drain(role.id)
               .catch(error => console.warn('[Crew Messages] Queue drain failed:', error.message)));
@@ -2616,6 +2805,7 @@ async function handleChatTurn(req, res, submittedBody = null) {
           }
           finish({
             response: event.response,
+            error: event.error,
             conversation_id: event.conversationId,
             provider: providerId,
             status: event.status
@@ -2629,7 +2819,12 @@ async function handleChatTurn(req, res, submittedBody = null) {
     });
 
   } catch (err) {
+    if (chatTurns.get(requestId, providerId)?.terminal) return;
     console.error('[Chat Error]', err);
+    const terminal = { error: err.message, code: err.code, request_id: requestId, status: 'failed',
+      conversation_id: chatTurns.get(requestId, providerId)?.conversation_id || conversation_id,
+      provider: providerId, turn_timing: turnTiming };
+    chatTurns.finish(requestId, terminal);
     markOnce('to_done_ms');
     console.log('[TurnMetrics] ' + JSON.stringify({
       request_id: requestId,
@@ -2640,7 +2835,7 @@ async function handleChatTurn(req, res, submittedBody = null) {
       turn_timing: turnTiming
     }));
     if (!res.writableEnded && !res.destroyed) {
-      sendEvent('done', { error: err.message, code: err.code, request_id: requestId, turn_timing: turnTiming });
+      sendEvent('done', terminal);
       res.end();
     }
   }
@@ -2980,6 +3175,7 @@ async function handleCrewHome(req, res) {
       getCrewInbox,
       getCrewMessageActivity,
       getProvider,
+      getRoleActivity: roleId => publicTurnActivity(chatTurns.latestForRole(roleId)),
       listRoleQueuedMessages
     });
     const roles = Array.isArray(status.roles) ? status.roles : [];
@@ -3320,6 +3516,8 @@ const server = http.createServer(async (req, res) => {
     return handleCodexApiKey(req, res);
   } else if (pathname === '/api/auth/agy/token' && req.method === 'POST') {
     return handleAgyToken(req, res);
+  } else if (pathname === '/api/turn-status' && req.method === 'GET') {
+    return handleTurnStatus(parsedUrl, res);
   } else if (pathname === '/api/session-status' && req.method === 'GET') {
     return handleSessionStatus(parsedUrl, res);
   } else if (pathname === '/api/usage' && req.method === 'GET') {
@@ -3379,6 +3577,8 @@ process.on('unhandledRejection', (reason) => {
 server.listen(PORT, HOST, () => {
   dreamingManager.start();
   crewTaskRunner.start().catch(error => console.warn('[Crew Tasks] Startup failed:', error.message));
+  listRoles().then(roles => Promise.allSettled(roles.map(role => crewAutoResponder.drain(role.id))))
+    .catch(error => console.warn('[Crew Auto Response] Recovery failed:', error.message));
   console.log(`=================================================`);
   console.log(`🚀 Crew Pocket Web UI (Resident Pipe) at: http://${HOST}:${PORT}`);
   const runtimeSecurity = securityStatus();
