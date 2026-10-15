@@ -502,6 +502,18 @@ function formatExecutionDuration(durationMs) {
   return seconds ? `${minutes}m ${seconds}s` : `${minutes}m`;
 }
 
+function confirmedTurnDuration(data) {
+  const values = [data?.turn_result?.duration_ms, data?.duration_ms,
+    data?.turn_timing?.to_provider_done_ms, data?.turn_timing?.to_done_ms];
+  return values.find(value => typeof value === 'number' && Number.isFinite(value) && value >= 0) ?? null;
+}
+
+function executionFailureReason(turnResult) {
+  if (executionResultState(turnResult) === 'completed') return '';
+  return ['usage_limit_exceeded', 'usageLimitExceeded'].includes(turnResult?.error_code)
+    ? '已達 Codex 用量上限，這輪工作未完成。' : String(turnResult?.error || '');
+}
+
 function executionFileName(filePath) {
   const value = String(filePath || '').replace(/\\/g, '/');
   return value.split('/').filter(Boolean).pop() || value;
@@ -625,9 +637,12 @@ function buildExecutionResultBodyHtml(content, tools = [], thinking = '', turnRe
     </details>
   ` : '';
 
-  const responseHtml = !content || !String(content).trim()
+  const failureReason = executionFailureReason(turnResult);
+  const failureHtml = failureReason && !String(content || '').includes(failureReason)
+    ? `<p class="text-amber-300 text-xs">${escapeHtml(failureReason)}</p>` : '';
+  const responseHtml = failureHtml + (!content || !String(content).trim()
     ? (executionResultState(turnResult) === 'completed' ? buildEmptyTurnFallbackHtml() : '<p class="text-slate-400 text-xs">沒有可顯示的完整回覆。</p>')
-    : formatMessageContent(content);
+    : formatMessageContent(content));
 
   // Living UI uses only trusted turn_result fields. Keep the historical HTML
   // fallback for standalone embed/tests that load chat.js without living-ui.js.
@@ -657,7 +672,7 @@ function buildExecutionResultBodyHtml(content, tools = [], thinking = '', turnRe
 function buildExecutionResultCardHtml(content, tools = [], thinking = '', turnResult = null, { lazy = false, open = false } = {}) {
   const state = executionResultState(turnResult);
   const failed = state === 'failed' || state === 'interrupted';
-  const duration = formatExecutionDuration(turnResult?.duration_ms);
+  const duration = state === 'unknown' ? '' : formatExecutionDuration(turnResult?.duration_ms);
   const structuredCommit = turnResult?.commit && typeof turnResult.commit === 'object'
     ? (turnResult.commit.short_hash || turnResult.commit.hash || '')
     : '';
@@ -665,7 +680,7 @@ function buildExecutionResultCardHtml(content, tools = [], thinking = '', turnRe
   if (structuredCommit) meta.push(String(structuredCommit).slice(0, 8));
   if (duration) meta.push(duration);
   const bodyHtml = lazy ? '' : buildExecutionResultBodyHtml(content, tools, thinking, turnResult);
-  const preview = executionResultPreviewText(content).slice(0, 220);
+  const preview = executionResultPreviewText(executionFailureReason(turnResult) || content).slice(0, 220);
 
   return `
     <details class="execution-result-card ${lazy ? 'lazy-result-card' : ''}" data-result-kind="execution" ${open ? 'open' : ''}>
@@ -3651,7 +3666,9 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
       }
     }
 
-    const activityElapsedSec = ((performance.now() - startTs) / 1000).toFixed(1);
+    // A suspended WebView's clock includes time after the provider finished.
+    // Only server/native timing describes a completed turn; unknown stays blank.
+    const durationMs = terminalUnknown ? null : confirmedTurnDuration(doneData);
     if (!incomplete && hadThinking && !progressEntries.has('phase:analysis')) {
   upsertProgress('phase:analysis', { icon: '🧠', text: '分析需求與執行方案', state: 'done' });
     }
@@ -3667,7 +3684,7 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
         : liveTools.length > 0
         ? `✓ 已完成 · ${liveTools.length} 項操作`
         : '✓ 已完成';
-      if (liveTimerElem) liveTimerElem.textContent = `${activityElapsedSec}s`;
+      if (liveTimerElem) liveTimerElem.textContent = formatExecutionDuration(durationMs) || '耗時未確認';
     }
     if (responseTimeElem) responseTimeElem.textContent = `🕒 回覆時間 ${formatMessageTimestamp()}`;
     if (!incomplete && liveTools.length === 0) {
@@ -3703,8 +3720,8 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
     }
 
     const structuredTurnResult = isStructuredExecutionResult(doneData?.turn_result)
-      ? { ...doneData.turn_result, ...(incomplete ? { status: terminalUnknown ? 'unknown' : interrupted ? 'interrupted' : 'failed' } : {}) }
-      : (isExecutionHistoryTools(liveTools) ? { kind: 'execution', status: incomplete ? (terminalUnknown ? 'unknown' : interrupted ? 'interrupted' : 'failed') : 'completed', duration_ms: performance.now() - startTs } : null);
+      ? { ...doneData.turn_result, duration_ms: durationMs, ...(incomplete ? { status: terminalUnknown ? 'unknown' : interrupted ? 'interrupted' : 'failed' } : {}) }
+      : (isExecutionHistoryTools(liveTools) ? { kind: 'execution', status: incomplete ? (terminalUnknown ? 'unknown' : interrupted ? 'interrupted' : 'failed') : 'completed', duration_ms: durationMs } : null);
     const hasAuthRecovery = Boolean(doneData?.error && typeof isAuthErrorMessage === 'function' && isAuthErrorMessage(doneData.error));
     if (structuredTurnResult && !isBtwQuery && !hasAuthRecovery) {
       const article = assistantMsgDiv.querySelector('.assistant-article');
@@ -3725,10 +3742,8 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
         }
       }
       if (isStreamVisible()) scrollToBottom();
-      stickyExecution?.complete(
-        structuredTurnResult.duration_ms ?? (Number(activityElapsedSec) * 1000),
-        incomplete
-      );
+      if (durationMs !== null) stickyExecution?.complete(durationMs, incomplete);
+      else stickyExecution?.dispose();
     } else {
       stickyExecution?.dispose();
     }
@@ -3755,10 +3770,6 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
         }).catch(() => {});
     }
     if (targetDoneConvId) loadConversations();
-
-    const totalSec = activityElapsedSec;
-    const estTokens = Math.round(accumulatedText.length / 2);
-    const avgSpeed = Math.round(estTokens / Math.max(0.5, totalSec));
 
     if (isBtwQuery) {
       let btwHeader = assistantMsgDiv.querySelector('.btw-header');

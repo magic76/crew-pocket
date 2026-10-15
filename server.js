@@ -97,7 +97,12 @@ const { createHistoryMigration } = require('./lib/runtime/history-migration');
 const { getProviderRuntimeStatus, updateProvider } = require('./lib/runtime/provider-manager');
 const { prepareTurnExecution } = require('./lib/runtime/turn-orchestrator');
 const { ChatTurnRegistry, publicTurnActivity } = require('./lib/runtime/chat-turn-registry');
-const chatTurns = new ChatTurnRegistry();
+const { TurnResultStore } = require('./lib/runtime/turn-result-store');
+const turnResults = new TurnResultStore();
+const chatTurns = new ChatTurnRegistry({
+  persist: record => turnResults.save(record),
+  onPersistError: error => console.warn('[Turn Result] Save failed:', error.message)
+});
 const { normalizeExecutionIntent } = require('./lib/execution-intent');
 const { getDefaultModel } = require('./lib/model-runtime');
 const { buildTurnResult, normalizeResultStatus } = require('./lib/turn-result');
@@ -616,10 +621,16 @@ async function handleRuntimeSelfDebug(req, res) {
 }
 
 // ⚡ Check Conversation Session Busy Status
-function handleTurnStatus(parsedUrl, res) {
+async function handleTurnStatus(parsedUrl, res) {
   const requestId = String(parsedUrl.query.request_id || '');
   const provider = normalizeProviderId(parsedUrl.query.provider);
-  const turn = chatTurns.get(requestId, provider);
+  let turn = chatTurns.get(requestId, provider);
+  try { turn ||= await turnResults.get(provider, requestId); }
+  catch (error) {
+    console.warn('[Turn Result] Read failed:', error.message);
+    res.writeHead(503, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+    return res.end(JSON.stringify({ error: 'Turn result temporarily unavailable' }));
+  }
   res.writeHead(turn ? 200 : 404, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
   res.end(JSON.stringify(turn || { request_id: requestId, provider, status: 'unknown', terminal: false }));
 }
@@ -2121,11 +2132,11 @@ async function handleChat(req, res, submittedBody = null) {
     release();
     const result = { request_id: requestId, provider, conversation_id: body.conversation_id || null,
       error: error.message, status: 'failed' };
-    chatTurns.finish(requestId, result);
+    const terminalRecord = chatTurns.finish(requestId, result);
     console.warn('[Chat Preparation]', JSON.stringify({ request_id: requestId, at: Date.now(), error: error.message }));
     if (!res.writableEnded && !res.destroyed) {
-      if (res.headersSent) res.end(`event: done\ndata: ${JSON.stringify(result)}\n\n`);
-      else { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(result)); }
+      if (res.headersSent) res.end(`event: done\ndata: ${JSON.stringify(terminalRecord.result)}\n\n`);
+      else { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(terminalRecord.result)); }
     }
   }
 }
@@ -2183,6 +2194,7 @@ async function handleChatTurn(req, res, submittedBody = null) {
   let abortTurn = () => {};
   const sendEvent = (event, data) => {
     if (res.destroyed || res.writableEnded) return false;
+    if (event === 'done') data = chatTurns.get(requestId, providerId)?.result || data;
     chatTurns.update(requestId, { phase: event });
     return res.write(`event: ${event}\ndata: ${JSON.stringify({ ...data, request_id: requestId })}\n\n`);
   };
@@ -2557,7 +2569,7 @@ async function handleChatTurn(req, res, submittedBody = null) {
         intent_review: intentReview || undefined,
         turn_timing: turnTiming
       };
-      chatTurns.finish(requestId, finalPayload);
+      const terminalRecord = chatTurns.finish(requestId, finalPayload);
       // Notify the UI independently of feedback persistence. HTTP finish only
       // means the server flushed its response, not that a WebView rendered it.
       res.once('finish', () => logToolMetrics(finalPayload.status));
@@ -2568,6 +2580,10 @@ async function handleChatTurn(req, res, submittedBody = null) {
       settingsCheckpoint.then(() => saveExecutionFeedback(providerId, finalPayload.conversation_id || activeConversationId, {
         response: finalPayload.response || streamedResponse,
         startedAt: requestStartedAt,
+        endedAt: terminalRecord.ended_at,
+        requestId, nativeTurnId: terminalRecord.native_turn_id,
+        status: finalPayload.status, error: finalPayload.error, errorCode: finalPayload.error_code,
+        durationMs: terminalRecord.result.duration_ms,
         turnResult,
         tools: [...feedbackTools.values()]
       })).catch(error => console.warn('[Execution Feedback] Save failed:', error.message)).finally(() => {
@@ -2647,11 +2663,13 @@ async function handleChatTurn(req, res, submittedBody = null) {
       if (!ended && !res.writableEnded) {
         ended = true;
         abortTurn();
-        chatTurns.finish(requestId, { status: 'interrupted', conversation_id: activeConversationId,
+        const terminalRecord = chatTurns.finish(requestId, { status: 'interrupted', conversation_id: activeConversationId,
           response: streamedResponse, provider: providerId });
         saveExecutionFeedback(providerId, activeConversationId, {
           response: streamedResponse,
           startedAt: requestStartedAt,
+          endedAt: terminalRecord.ended_at, requestId, nativeTurnId: terminalRecord.native_turn_id,
+          status: 'interrupted', durationMs: terminalRecord.result.duration_ms,
           turnResult: buildTurnResult({ requestId, executionPolicy, toolMetrics: getToolMetrics(), elapsedMs: elapsed(), status: 'interrupted' }),
           tools: [...feedbackTools.values()]
         })
@@ -2779,7 +2797,8 @@ async function handleChatTurn(req, res, submittedBody = null) {
             return;
           }
           broadcastCrewStatusEvent('turn-error', role?.id || null);
-          finish({ error: event.message, status: event.status || 'failed', provider: providerId,
+          finish({ error: event.message, error_code: event.errorCode, response: event.response,
+            status: event.status || 'failed', provider: providerId,
             conversation_id: event.conversationId || activeConversationId || conversation_id });
           if (role?.id) {
             setImmediate(() => crewAutoResponder.drain(role.id)
