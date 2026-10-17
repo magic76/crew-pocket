@@ -102,6 +102,7 @@ async function tick(){await new Promise(resolve=>setImmediate(resolve));}
       // Match the existing Role navigation's actual behavior: history restore
       // clears the native textarea before the commander restores its draft.
       nodes['prompt-input'].value='';
+      return true;
     },
     openCrewCollaboration(id,eventId){collaborationVisit={id,eventId};}
   };
