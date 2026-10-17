@@ -35,7 +35,7 @@ const sandbox = {
   buildTurnResult: () => null, saveExecutionFeedback: async () => {}, saveContextSnapshot: async () => {},
   broadcastCrewStatusEvent() {}, cleanUserContent: text => text,
   dreamingManager: { recordTurn: async () => {} }, crewAutoResponder: { drain: async () => {}, activeRoles: new Set() },
-  setImmediate, setTimeout, clearTimeout,
+  setImmediate, setTimeout, clearTimeout, setInterval, clearInterval,
   getProvider: () => ({ startTurn: async args => {
     providerCalls.push(args);
     if (releaseTurn) await new Promise(resolve => { releaseTurn.resolve = resolve; });
