@@ -55,8 +55,9 @@ assert.ok(ui.includes("if (role) selectRole(role.dataset.roleNavId)"),
   'tap Role => select existing Role Runtime, not New Work');
 assert.ok(ui.includes("case 'new-work':") && ui.includes("return selectRole(roleId, true)"),
   'only explicit New Work creates a fresh conversation');
-assert.ok(ui.includes("await window.openCrewConversation(runtime.providerId, runtime.conversationId)"));
-assert.ok(ui.includes("await window.openCrewConversation(latest.provider, latest.id)"),
+assert.ok(ui.includes('const opened = await window.openCrewConversation?.(') &&
+  ui.includes('expectedRoleId: role.id'), 'map Role navigation validates restored ownership');
+assert.ok(ui.includes('roleLatestConversation(role.id)'),
   'historical last-work fallback remains available');
 assert.ok(ui.includes("return selectRole(roleId, true)"));
 assert.ok(ui.includes("window.CrewMissionGraph?.inspectRole(role.id, eventId)"),

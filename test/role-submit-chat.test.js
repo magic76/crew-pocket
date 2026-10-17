@@ -4,6 +4,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const { runChatInBackground } = require('../lib/role-submit');
+const { ChatTurnRegistry } = require('../lib/runtime/chat-turn-registry');
+const { normalizeResultStatus } = require('../lib/turn-result');
 const source = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
 const identity = source.slice(source.indexOf('function requestedRoleId'), source.indexOf('async function handleConversationSettings'));
 const handler = source.slice(source.indexOf('const activeChatRoles = new Set()'), source.indexOf('// 🛑 Abort Active Generation'));
@@ -15,6 +17,7 @@ const sandbox = {
   console: { log() {}, warn() {}, error() {} }, crypto: require('node:crypto'),
   DEFAULT_ROLE_ID: 'role-general', RUNTIME_HOME: '/home', TURN_METRICS_DIR: '/metrics', TURN_METRICS_FILE: '/metrics/turns',
   getRole: async id => roles.get(id), getProject: async id => ({ id, workspace: '/target' }),
+  chatTurns: new ChatTurnRegistry(), normalizeResultStatus,
   getConversationSettings: async (_, id) => settings.get(id),
   saveConversationSettings: async (providerId, id, value) => { settings.set(id, value); persisted.push({ providerId, id, value }); return value; },
   activateRoleConversation: async value => value,
@@ -33,7 +36,7 @@ const sandbox = {
   buildTurnResult: () => null, saveExecutionFeedback: async () => {}, saveContextSnapshot: async () => {},
   broadcastCrewStatusEvent() {}, cleanUserContent: text => text,
   dreamingManager: { recordTurn: async () => {} }, crewAutoResponder: { drain: async () => {}, activeRoles: new Set() },
-  setImmediate, setTimeout, clearTimeout,
+  setImmediate, setTimeout, clearTimeout, setInterval, clearInterval,
   getProvider: () => ({ startTurn: async args => {
     providerCalls.push(args);
     if (releaseTurn) await new Promise(resolve => { releaseTurn.resolve = resolve; });
@@ -64,7 +67,8 @@ vm.runInContext(identity + '\n' + handler + '\nthis.chatHandler = handleChat;', 
   settings.set('sender-thread', { roleId: 'sender', workspace: '/sender' });
   const before = providerCalls.length;
   const rejected = await runChatInBackground(sandbox.chatHandler, { ...body, conversation_id: 'sender-thread' });
-  assert.equal(rejected.statusCode, 409); assert.match(rejected.error, /另一個 Role/);
+  // SSE headers are already sent before ownership validation; the final turn is failed, not HTTP 409.
+  assert.equal(rejected.statusCode, 200); assert.equal(rejected.status, 'failed'); assert.match(rejected.error, /另一個 Role/);
   assert.equal(providerCalls.length, before, 'cross-Role thread cannot reach provider');
 
   releaseTurn = {};

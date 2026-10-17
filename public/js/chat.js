@@ -2294,7 +2294,7 @@ function renderHistoryMessages(messages, convId, renderVersion, options = {}) {
 
 // Load History for a Conversation
 let roleActivationTask = Promise.resolve();
-async function loadConversationHistory(convId, { preserveComposer = false, preserveCrewHome = false, activate = false } = {}) {
+async function loadConversationHistory(convId, { preserveComposer = false, preserveCrewHome = false, activate = false, expectedRoleId = null } = {}) {
   if (typeof window.isLiveSessionActive === 'function' && window.isLiveSessionActive()) {
     alert('🎙️ 目前仍在語音通話中，請先按紅色掛斷，完成備忘錄保存後再切換歷史對話。');
     return false;
@@ -2304,6 +2304,7 @@ async function loadConversationHistory(convId, { preserveComposer = false, prese
   stopBackgroundHistoryPoll();
   const renderVersion = ++historyRenderVersion;
   const historyProvider = currentProvider;
+  const previousConversationId = currentConversationId;
   const historyRequestedAt = Date.now();
   const isCurrentHistory = () => renderVersion === historyRenderVersion
     && currentConversationId === convId && currentProvider === historyProvider;
@@ -2322,10 +2323,10 @@ async function loadConversationHistory(convId, { preserveComposer = false, prese
 
   // 🎯 Instantly sync workspace & role from cachedConversations if available so there is 0ms window for cross-session pollution!
   if (Array.isArray(cachedConversations)) {
-    const cached = cachedConversations.find(c => c.id === convId);
-    if (cached) {
+    const cached = cachedConversations.find(c => c.id === convId && c.provider === historyProvider);
+    if (cached && (!expectedRoleId || cached.roleId === expectedRoleId)) {
       if (cached.roleId && typeof window.setConversationRoleDirect === 'function') {
-        window.setConversationRoleDirect(cached.roleId, null, cached.crewMemberId, cached.workspace);
+        window.setConversationRoleDirect(cached.roleId, null, cached.workspace);
       } else if (cached.crewMemberId && typeof window.setConversationCrewMemberDirect === 'function') {
         window.setConversationCrewMemberDirect(cached.crewMemberId, cached.workspace);
       } else if (cached.workspace && typeof window.setConversationWorkspaceDirect === 'function') {
@@ -2350,13 +2351,17 @@ async function loadConversationHistory(convId, { preserveComposer = false, prese
   try {
     const res = await fetch(`/api/history?${historyQuery}`);
     const data = await res.json();
-    if (!isCurrentHistory()) return;
+    if (!isCurrentHistory()) return false;
     if (!res.ok) throw new Error(data.error || '無法載入對話紀錄');
+    if (expectedRoleId && data.conversation_settings?.roleId &&
+        data.conversation_settings.roleId !== expectedRoleId) {
+      throw new Error('此對話實際屬於其他 Role；請從全部工作紀錄開啟。');
+    }
     // Only explicit navigation changes the Role's routing. Background reloads
     // and silent recovery must never activate a conversation.
     if (activate && data.conversation_settings?.roleId) {
       roleActivationTask = roleActivationTask.catch(() => {}).then(async () => {
-        if (!isCurrentHistory()) return;
+        if (!isCurrentHistory()) return false;
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 10000);
         try {
@@ -2372,7 +2377,7 @@ async function loadConversationHistory(convId, { preserveComposer = false, prese
         } finally { clearTimeout(timeout); }
       });
       await roleActivationTask;
-      if (!isCurrentHistory()) return;
+      if (!isCurrentHistory()) return false;
     }
 
     // Conversations own their model choice. Restore it before rendering so the
@@ -2411,7 +2416,7 @@ async function loadConversationHistory(convId, { preserveComposer = false, prese
       const rendered = await renderHistoryMessages(data.messages, convId, renderVersion, {
         startIndex: pageState.startIndex
       });
-      if (!rendered) return;
+      if (!rendered) return false;
       addLoadEarlierSentinel(pageState);
       scrollToBottom(true);
     } else {
@@ -2421,12 +2426,17 @@ async function loadConversationHistory(convId, { preserveComposer = false, prese
 
     hideHistoryLoadOverlay(loadOverlay);
 
-    await monitorBackgroundHistory({ convId, provider: historyProvider, isCurrentHistory, historyRequestedAt });
+    void monitorBackgroundHistory({ convId, provider: historyProvider, isCurrentHistory, historyRequestedAt });
+    return true;
 
   } catch (err) {
     console.error(err);
-    if (!isCurrentHistory()) return;
-    messagesContainer.innerHTML = `<div class="p-4 text-center text-xs text-rose-400">載入歷史對話失敗：${err.message}</div>`;
+    if (!isCurrentHistory()) return false;
+    currentConversationId = previousConversationId;
+    if (previousConversationId) localStorage.setItem(activeConversationStorageKey(), previousConversationId);
+    else localStorage.setItem(activeConversationStorageKey(), '__new__');
+    messagesContainer.innerHTML = `<div class="p-4 text-center text-xs text-rose-400">載入歷史對話失敗：${escapeHtml(err.message)}</div>`;
+    return false;
   } finally {
     // Startup/provider changes can make this load stale and return early.
     // Always release its overlay so the WebView cannot stay covered forever.
@@ -2438,6 +2448,7 @@ async function loadConversationHistory(convId, { preserveComposer = false, prese
 // provider-wide filesystem scans until the user opens it, and share concurrent
 // callers so completion/title updates cannot start duplicate scans.
 let conversationListRequest = null;
+let conversationProviderErrors = [];
 
 function isConversationDrawerVisible() {
   // Crew Home is no longer a Drawer. Scan provider histories only while the
@@ -2460,19 +2471,27 @@ async function loadConversations({ force = false } = {}) {
       const results = await Promise.all(providerIds.map(async provider => {
         try {
           const response = await fetch('/api/conversations?provider=' + encodeURIComponent(provider));
+          if (!response.ok) throw new Error('HTTP ' + response.status);
           const data = await response.json();
-          return (data.conversations || []).map(conversation => ({ ...conversation, provider }));
-        } catch (_) {
-          return [];
+          if (!Array.isArray(data.conversations)) throw new Error('Invalid conversation list');
+          return { provider, conversations: data.conversations.map(conversation => ({ ...conversation, provider })) };
+        } catch (error) {
+          console.warn('[Role History] Failed to read ' + provider, error.message);
+          return { provider, error: error.message, conversations: null };
         }
       }));
-      cachedConversations = results.flat().sort(compareConversationsStable);
+      conversationProviderErrors = results.filter(item => item.conversations === null).map(item => item.provider);
+      const failed = new Set(conversationProviderErrors);
+      const retained = cachedConversations.filter(conversation => failed.has(conversation.provider));
+      const fetched = results.flatMap(item => item.conversations || []);
+      cachedConversations = [...fetched, ...retained].sort(compareConversationsStable);
       renderConversationItems(cachedConversations);
       window.renderRoleNavigation?.();
       return cachedConversations;
     } catch (err) {
       console.error('Failed to load conversations:', err);
-      if (convList) convList.innerHTML = '<div class="p-4 text-center text-xs text-rose-400">無法載入工作紀錄</div>';
+      conversationProviderErrors = availableProviders.map(provider => provider.id);
+      renderConversationItems(cachedConversations);
       return cachedConversations;
     } finally {
       conversationListRequest = null;
@@ -2494,7 +2513,8 @@ function compareConversationsStable(a, b) {
 function getRoleConversations(roleId, conversations = cachedConversations) {
   const targetRoleId = String(roleId || DEFAULT_ROLE_ID);
   return (conversations || [])
-    .filter(conversation => String(conversation.roleId || DEFAULT_ROLE_ID) === targetRoleId)
+    .filter(conversation => targetRoleId === '__all__' ||
+      String(conversation.roleId || DEFAULT_ROLE_ID) === targetRoleId)
     .slice()
     .sort(compareConversationsStable);
 }
@@ -2506,6 +2526,7 @@ window.getLatestConversationForRole = function(roleId) {
 window.getCachedConversations = function() {
   return cachedConversations.slice();
 };
+window.getConversationHistoryLoadErrors = () => conversationProviderErrors.slice();
 
 function conversationWorkspaceLabel(workspace) {
   if (!workspace || workspace === UNASSIGNED_WORKSPACE) return '未指定';
@@ -2527,8 +2548,25 @@ function renderConversationItems(conversations) {
     : DEFAULT_ROLE_ID);
   const filtered = getRoleConversations(activeRoleId, conversations);
 
+  if (conversationProviderErrors.length) {
+    const warning = document.createElement('div');
+    warning.className = 'p-3 text-xs text-amber-300 bg-amber-950/30 border border-amber-700/40 rounded-xl mb-2';
+    warning.textContent = '部分對話紀錄暫時無法讀取（' + conversationProviderErrors.join(', ') +
+      '）。已保留先前載入的資料，請稍後重試。';
+    const retry = document.createElement('button');
+    retry.type = 'button'; retry.className = 'ml-2 underline';
+    retry.textContent = '重試';
+    retry.addEventListener('click', () => { void loadConversations({ force: true }); });
+    warning.appendChild(retry);
+    convList.appendChild(warning);
+  }
   if (filtered.length === 0) {
-    convList.innerHTML = '<div class="p-6 text-center text-xs text-slate-500">這個 Role 還沒有工作紀錄</div>';
+    const note = document.createElement('div');
+    note.className = 'p-6 text-center text-xs text-slate-400';
+    note.textContent = conversationProviderErrors.length
+      ? '尚無可顯示的紀錄；部分 Provider 無法讀取，不能確定是否真的沒有歷史。'
+      : (activeRoleId === '__all__' ? '目前沒有工作紀錄' : '這個 Role 還沒有工作紀錄。可切換「查看全部工作紀錄」尋找舊對話。');
+    convList.appendChild(note);
     return;
   }
 
@@ -2603,7 +2641,10 @@ function renderConversationItems(conversations) {
           </div>
           <div class="flex items-center gap-1.5 truncate text-[9px] text-slate-500">
             <span class="px-1 py-0.2 rounded border font-mono shrink-0 ${providerBadgeClass}">${providerLabel}</span>
-            <span class="truncate">${isCurrent && isStreaming ? '● 回覆中' : (workspaceLabel || '未指定工作區')}</span>
+            <span class="truncate">${activeRoleId === '__all__'
+              ? (conv.roleAssignment === 'unassigned' ? '未歸屬 / General' :
+                (window.getCrewCockpitSnapshot?.()?.roles?.find(role => role.id === conv.roleId)?.name || conv.roleId || 'General'))
+              : (isCurrent && isStreaming ? '● 回覆中' : (workspaceLabel || '未指定工作區'))}</span>
           </div>
         </div>
         <div class="flex items-center gap-1 shrink-0 ml-1">

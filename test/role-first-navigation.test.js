@@ -28,8 +28,9 @@ assert.ok(css.includes('body[data-primary-tab="settings"] #chat-composer-footer'
 assert.ok(css.includes('padding-bottom: max(24px, env(safe-area-inset-bottom'));
 assert.ok(premium.includes('--crew-primary-nav-height: 0px'));
 assert.ok(!premium.includes('.primary-tab'), 'remove dead tab styles');
-assert.ok(app.includes('await loadConversationHistory(target.id, { preserveCrewHome: true })'),
-  'app restores conversation data without navigating out of Crew Home');
+assert.ok(app.includes('preserveCrewHome: true, expectedRoleId: savedRoleId') &&
+  app.includes('roleRuntime.conversationId'),
+  'app restores the saved Role conversation without navigating out of Crew Home');
 assert.ok(chat.includes('if (!preserveCrewHome) toggleDrawer(false)'),
   'normal Role selection still enters chat');
 assert.ok(ui.includes("window.CrewNavigation?.openOverlay('role-detail')"));

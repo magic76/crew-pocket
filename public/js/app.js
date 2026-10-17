@@ -933,37 +933,61 @@ function initAppAndListeners() {
       // with its persisted provider/model settings.
       applyAvailableModelDefaults();
       updateWorkspaceUI();
-      loadWorkspaces().catch(() => {});
+      await loadWorkspaces().catch(error => console.warn('[Role Restore] Roles unavailable:', error));
+      const savedRoleId = localStorage.getItem('crew_current_role') || window.getCurrentRoleId?.();
       const savedConvId = localStorage.getItem(activeConversationStorageKey());
-      let restorePromise = Promise.resolve();
-      if (savedConvId === '__new__') {
-        currentConversationId = null;
-        if (headerTitle) headerTitle.textContent = '新工作';
-        restorePromise = loadConversations().catch(() => {});
-      } else {
-        restorePromise = (async () => {
-          const res = await fetch(`/api/conversations?${providerQuery()}`);
-          const data = await res.json();
-          if (data.conversations && data.conversations.length > 0) {
-            const target = data.conversations.find(c => savedConvId && c.id === savedConvId) || data.conversations[0];
-            // Apply the server-owned model before history rendering. This
-            // prevents a brief Gemini/default label while Codex is restoring.
-            if (target?.model) {
-              window.applyConversationSettings({
-                provider: currentProvider,
-                model: target.model,
-                effort: target.effort,
-                workspace: target.workspace,
-                crewMemberId: target.crewMemberId,
-                roleId: target.roleId,
-                role: target.role
-              });
-            }
-            await loadConversationHistory(target.id, { preserveCrewHome: true });
-          }
-        })();
-      }
+      const restorePromise = (async () => {
+        let roleRuntime = null;
+        try {
+          const response = await fetch('/api/crew-status', { cache: 'no-store' });
+          if (!response.ok) throw new Error('HTTP ' + response.status);
+          const status = await response.json();
+          roleRuntime = status.roles?.find(role => role.roleId === savedRoleId)?.runtime || null;
+        } catch (error) {
+          console.warn('[Role Restore] Runtime pointer unavailable, checking provider history:', error);
+        }
 
+        // Role Runtime is canonical. A provider-wide active_conv_id might
+        // point at another Role, so never blindly open the provider's first work.
+        if (roleRuntime?.pendingNew && !roleRuntime.conversationId) {
+          if (roleRuntime.providerId && roleRuntime.providerId !== currentProvider) {
+            await window.selectProvider(roleRuntime.providerId, {
+              preserveActiveStream: true, activateConversation: false, restoreConversation: false
+            });
+          }
+          currentConversationId = null;
+          localStorage.setItem(activeConversationStorageKey(), '__new__');
+          if (headerTitle) headerTitle.textContent = '新工作';
+          return;
+        }
+        if (roleRuntime?.conversationId && roleRuntime?.providerId) {
+          const restored = await window.openCrewConversation(roleRuntime.providerId,
+            roleRuntime.conversationId, { expectedRoleId: savedRoleId });
+          if (restored) return;
+          // Do not fall through to an unrelated provider conversation.
+          throw new Error('目前 Role 的工作尚未恢復；可從全部工作紀錄搜尋。');
+        }
+        if (savedConvId === '__new__') {
+          currentConversationId = null;
+          if (headerTitle) headerTitle.textContent = '新工作';
+          await loadConversations().catch(() => {});
+          return;
+        }
+        const res = await fetch('/api/conversations?' + providerQuery());
+        if (!res.ok) throw new Error('歷史 API 回應 ' + res.status);
+        const data = await res.json();
+        const owned = (data.conversations || []).filter(c => c.roleId === savedRoleId);
+        const target = owned.find(c => savedConvId && c.id === savedConvId) || owned[0];
+        if (target) {
+          const restored = await loadConversationHistory(target.id, {
+            preserveCrewHome: true, expectedRoleId: savedRoleId
+          });
+          if (!restored) throw new Error('無法載入目前 Role 的歷史工作');
+        } else {
+          currentConversationId = null;
+          if (headerTitle) headerTitle.textContent = '新工作';
+        }
+      })();
       const modelsData = await modelsReady;
       applyAvailableModelDefaults(modelsData);
       await restorePromise;

@@ -58,10 +58,10 @@ assert.ok(ui.includes("fetch('/api/crew-status'"));
 assert.ok(ui.includes("fetch('/api/role-runtime'"));
 assert.ok(ui.includes("action: 'prepare_new'"));
 assert.ok(ui.includes('crewStatusForRole(role.id)'));
-assert.ok(ui.includes('await window.openCrewConversation(runtime.providerId, runtime.conversationId)'));
-assert.ok(ui.includes('getLatestConversationForRole'));
-assert.ok(ui.includes('await window.openCrewConversation(latest.provider, latest.id)'));
-assert.ok(ui.includes('A fresh Conversation is created only'));
+assert.ok(ui.includes('roleLatestConversation(role.id)'));
+assert.ok(ui.includes('expectedRoleId: role.id'), 'Role restore verifies conversation ownership');
+assert.ok(ui.includes('if (!opened) throw new Error'), 'failed restore is not a new work');
+assert.ok(ui.includes('Only explicit New Work or a persisted pending-new state'));
 
 // Main New Work action preserves the active Role and no longer opens the old picker.
 const newWorkStart = app.indexOf('// New Work Action');
