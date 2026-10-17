@@ -456,6 +456,8 @@ window.getCrewHistoryRoleId = () => historyAllRoles ? '__all__' : historyRoleId;
 historyScopeToggle?.addEventListener('click', () => {
   historyAllRoles = !historyAllRoles;
   historyScopeToggle.textContent = historyAllRoles ? '只看目前 Role' : '查看全部工作紀錄';
+  if (roleHistoryTitle) roleHistoryTitle.textContent = historyAllRoles
+    ? '全部工作紀錄' : (roleMeta(historyRoleId)?.name || 'Role') + ' · 工作紀錄';
   historyScopeToggle.setAttribute('aria-pressed', String(historyAllRoles));
   window.renderCrewHistoryFromCache?.();
   loadConversations({ force: true }).catch(() => {});
@@ -1498,6 +1500,9 @@ async function selectRole(roleId, isCreatingNewChat = false) {
         if (version !== roleSelectionVersion) return false;
         const latest = roleLatestConversation(role.id);
         if (latest) target = { id: latest.id, provider: latest.provider };
+        else if (window.getConversationHistoryLoadErrors?.()?.length) {
+          throw new Error('部分 Provider 的歷史無法讀取，先保留目前對話；請重試切換。');
+        }
       }
 
       if (target) {
