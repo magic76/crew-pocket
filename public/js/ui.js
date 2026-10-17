@@ -1472,6 +1472,9 @@ async function selectRole(roleId, isCreatingNewChat = false) {
   const role = roleMeta(roleId);
   if (!role) { alert('找不到這個 Role。'); return false; }
   const version = ++roleSelectionVersion;
+  const previousRoleId = currentRoleId;
+  const previousProviderId = currentProvider;
+  const previousConversationId = currentConversationId;
   let restorePendingNew = false;
   let pendingRuntime = null;
 
@@ -1559,6 +1562,26 @@ async function selectRole(roleId, isCreatingNewChat = false) {
     return true;
   } catch (error) {
     console.warn('[Role Navigation] Role switch failed; preserving existing work:', error);
+    if (version === roleSelectionVersion) {
+      // The failed provider/history request may already have changed the
+      // global pointer. Restore the previous Role before allowing new input.
+      try {
+        if (previousConversationId && previousConversationId !== '__new__') {
+          const restored = await window.openCrewConversation?.(
+            previousProviderId, previousConversationId, { expectedRoleId: previousRoleId });
+          if (!restored) throw new Error('Previous conversation is unavailable');
+        } else if (previousProviderId !== currentProvider) {
+          await window.selectProvider(previousProviderId, {
+            preserveActiveStream: true, activateConversation: false, restoreConversation: false
+          });
+        }
+        if (version === roleSelectionVersion && roleMeta(previousRoleId)) {
+          activateRoleIdentity(roleMeta(previousRoleId));
+        }
+      } catch (restoreError) {
+        console.warn('[Role Navigation] Previous conversation restore failed:', restoreError);
+      }
+    }
     // Do not silently turn a failed resume into a blank "new work".
     if (typeof showContextToast === 'function') {
       showContextToast('角色對話切換失敗：' + (error.message || '請重試'));
