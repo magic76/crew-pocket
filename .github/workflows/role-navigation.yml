@@ -1,0 +1,40 @@
+name: Check Role Navigation
+on:
+  pull_request:
+    paths:
+      - 'public/js/ui.js'
+      - 'public/js/chat.js'
+      - 'public/js/app.js'
+      - 'public/js/crew-world-launcher.js'
+      - 'public/index.html'
+      - 'lib/providers/antigravity.js'
+      - 'lib/session.js'
+      - 'server.js'
+      - 'test/role-map-navigation.test.js'
+      - '.github/workflows/role-navigation.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  navigation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate changed JavaScript
+        run: |
+          node --check public/js/ui.js
+          node --check public/js/chat.js
+          node --check public/js/app.js
+          node --check public/js/crew-world-launcher.js
+          node --check lib/providers/antigravity.js
+          node --check lib/session.js
+          node --check server.js
+          node --check test/role-map-navigation.test.js
+      - name: Run Role navigation regressions
+        run: node --test test/role-map-navigation.test.js
