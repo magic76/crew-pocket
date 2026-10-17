@@ -2526,6 +2526,7 @@ window.getLatestConversationForRole = function(roleId) {
 window.getCachedConversations = function() {
   return cachedConversations.slice();
 };
+window.getConversationHistoryLoadErrors = () => conversationProviderErrors.slice();
 
 function conversationWorkspaceLabel(workspace) {
   if (!workspace || workspace === UNASSIGNED_WORKSPACE) return '未指定';
@@ -2640,7 +2641,10 @@ function renderConversationItems(conversations) {
           </div>
           <div class="flex items-center gap-1.5 truncate text-[9px] text-slate-500">
             <span class="px-1 py-0.2 rounded border font-mono shrink-0 ${providerBadgeClass}">${providerLabel}</span>
-            <span class="truncate">${isCurrent && isStreaming ? '● 回覆中' : (workspaceLabel || '未指定工作區')}</span>
+            <span class="truncate">${activeRoleId === '__all__'
+              ? (conv.roleAssignment === 'unassigned' ? '未歸屬 / General' :
+                (window.getCrewCockpitSnapshot?.()?.roles?.find(role => role.id === conv.roleId)?.name || conv.roleId || 'General'))
+              : (isCurrent && isStreaming ? '● 回覆中' : (workspaceLabel || '未指定工作區'))}</span>
           </div>
         </div>
         <div class="flex items-center gap-1 shrink-0 ml-1">
