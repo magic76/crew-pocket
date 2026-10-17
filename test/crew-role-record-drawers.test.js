@@ -29,7 +29,9 @@ assert.ok(ui.includes("case 'history': return showRoleHistoryView(roleId)"),
   'history link must pass the clicked Role ID, not switch active identity');
 assert.ok(ui.includes("case 'collaboration': return openCrewCollaboration(roleId)"),
   'collaboration uses a drawer instead of scrolling the home page');
-assert.ok(ui.includes("window.getCrewHistoryRoleId = () => historyRoleId"));
+assert.ok(ui.includes("window.getCrewHistoryRoleId = () => historyAllRoles ? '__all__' : historyRoleId"));
+assert.ok(html.includes('id="role-history-scope-toggle"'),
+  'history scope can expand to all providers without mutating Role ownership');
 assert.ok(chat.includes('const historyRoleId = window.getCrewHistoryRoleId?.()'));
 assert.ok(chat.includes('window.renderCrewHistoryFromCache'));
 assert.ok(chat.includes('window.closeCrewHistory?.()'));
