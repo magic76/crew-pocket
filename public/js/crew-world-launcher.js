@@ -331,9 +331,10 @@
     // composer or overwrite the user's unsent global command draft.
     const navigate=roleSwitchQueue.catch(()=>{}).then(async()=>{
       if(modal.hidden||version!==selectVersion)return false;
-      try{await window.openCrewCockpitRole(roleId);}
+      let restored=false;
+      try{restored=await window.openCrewCockpitRole(roleId);}
       catch(error){console.warn('[Crew World] Role unavailable:',error);return false;}
-      if(modal.hidden||version!==selectVersion||window.getCurrentRoleId?.()!==roleId)
+      if(!restored||modal.hidden||version!==selectVersion||window.getCurrentRoleId?.()!==roleId)
         return false;
       selectedRoleId=roleId;
       selectedRoleName=liveRole(roleId)?.name||roleId;
