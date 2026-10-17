@@ -5,6 +5,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 const { runChatInBackground } = require('../lib/role-submit');
 const { ChatTurnRegistry } = require('../lib/runtime/chat-turn-registry');
+const { normalizeResultStatus } = require('../lib/turn-result');
 const source = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
 const identity = source.slice(source.indexOf('function requestedRoleId'), source.indexOf('async function handleConversationSettings'));
 const handler = source.slice(source.indexOf('const activeChatRoles = new Set()'), source.indexOf('// 🛑 Abort Active Generation'));
@@ -16,7 +17,7 @@ const sandbox = {
   console: { log() {}, warn() {}, error() {} }, crypto: require('node:crypto'),
   DEFAULT_ROLE_ID: 'role-general', RUNTIME_HOME: '/home', TURN_METRICS_DIR: '/metrics', TURN_METRICS_FILE: '/metrics/turns',
   getRole: async id => roles.get(id), getProject: async id => ({ id, workspace: '/target' }),
-  chatTurns: new ChatTurnRegistry(),
+  chatTurns: new ChatTurnRegistry(), normalizeResultStatus,
   getConversationSettings: async (_, id) => settings.get(id),
   saveConversationSettings: async (providerId, id, value) => { settings.set(id, value); persisted.push({ providerId, id, value }); return value; },
   activateRoleConversation: async value => value,
