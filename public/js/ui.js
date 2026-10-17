@@ -446,15 +446,29 @@ const roleHistoryModal = document.getElementById('role-history-modal');
 const roleCollaborationModal = document.getElementById('role-collaboration-modal');
 const roleCollaborationTitle = document.getElementById('role-collaboration-title');
 let historyRoleId = null;
+let historyAllRoles = false;
+const historyScopeToggle = document.getElementById('role-history-scope-toggle');
 let historyReturnFocus = null;
 let collaborationReturnFocus = null;
 
 // Listing another Role's history must not silently switch the active conversation.
-window.getCrewHistoryRoleId = () => historyRoleId;
+window.getCrewHistoryRoleId = () => historyAllRoles ? '__all__' : historyRoleId;
+historyScopeToggle?.addEventListener('click', () => {
+  historyAllRoles = !historyAllRoles;
+  historyScopeToggle.textContent = historyAllRoles ? '只看目前 Role' : '查看全部工作紀錄';
+  historyScopeToggle.setAttribute('aria-pressed', String(historyAllRoles));
+  window.renderCrewHistoryFromCache?.();
+  loadConversations({ force: true }).catch(() => {});
+});
 function showRoleHistoryView(roleId = currentRoleId || DEFAULT_ROLE_ID) {
   const role = roleMeta(roleId);
   if (!role || !roleHistoryModal) return;
   historyRoleId = role.id;
+  historyAllRoles = false;
+  if (historyScopeToggle) {
+    historyScopeToggle.textContent = '查看全部工作紀錄';
+    historyScopeToggle.setAttribute('aria-pressed', 'false');
+  }
   historyReturnFocus = document.activeElement;
   if (roleHistoryTitle) roleHistoryTitle.textContent = role.name + ' · 工作紀錄';
   if (convList) convList.innerHTML = '<div class="crew-record-loading">正在讀取此角色的工作紀錄…</div>';
@@ -474,6 +488,7 @@ function closeCrewHistory() {
   if (!roleHistoryModal || roleHistoryModal.classList.contains('hidden')) return;
   toggleRoleModal(roleHistoryModal, false);
   historyRoleId = null;
+  historyAllRoles = false;
   const focus = historyReturnFocus;
   historyReturnFocus = null;
   focus?.focus?.({ preventScroll: true });
@@ -1449,105 +1464,102 @@ function activateRoleIdentity(role) {
   return role;
 }
 
+let roleSelectionVersion = 0;
 async function selectRole(roleId, isCreatingNewChat = false) {
-  if (!roleId) return closeWorkspaceModal();
+  if (!roleId) { closeWorkspaceModal(); return false; }
   const role = roleMeta(roleId);
-  if (!role) return alert('找不到這個 Role。');
-
+  if (!role) { alert('找不到這個 Role。'); return false; }
+  const version = ++roleSelectionVersion;
   let restorePendingNew = false;
+  let pendingRuntime = null;
 
-  if (!isCreatingNewChat) {
-    try {
-      await loadCrewStatus({ force: true });
-      const status = crewStatusForRole(role.id);
-      const runtime = status?.runtime || null;
+  try {
+    if (!isCreatingNewChat) {
+      // Runtime is the preferred current-work pointer; history is a fallback.
+      // A temporary status failure must not erase or replace older work.
+      await loadCrewStatus({ force: true }).catch(error => {
+        console.warn('[Role Navigation] Status unavailable, trying saved history:', error);
+      });
+      if (version !== roleSelectionVersion) return false;
+      const runtime = crewStatusForRole(role.id)?.runtime || null;
+      restorePendingNew = Boolean(runtime?.pendingNew && !runtime.conversationId);
+      pendingRuntime = restorePendingNew ? runtime : null;
 
-      if (runtime?.pendingNew && !runtime.conversationId) {
-        restorePendingNew = true;
-        activateRoleIdentity(role);
-      } else if (
-        runtime?.conversationId &&
-        runtime?.providerId &&
-        window.openCrewConversation
-      ) {
-        activateRoleIdentity(role);
-        closeWorkspaceModal();
-        if (typeof toggleDrawer === 'function') toggleDrawer(false);
-
-        if (
-          roleId === currentRoleId &&
-          currentConversationId === runtime.conversationId &&
-          currentProvider === runtime.providerId
-        ) {
-          return;
-        }
-
-        await window.openCrewConversation(runtime.providerId, runtime.conversationId);
-        return;
-      }
-
-      if (!restorePendingNew && currentConversationId && roleId === currentRoleId) {
-        closeWorkspaceModal();
-        if (typeof toggleDrawer === 'function') toggleDrawer(false);
-        return;
-      }
-
-      if (!restorePendingNew) {
-        activateRoleIdentity(role);
-        if (typeof loadConversations === 'function') await loadConversations({ force: true });
-        const latest = roleLatestConversation(role.id);
-        if (latest && window.openCrewConversation) {
+      let target = !restorePendingNew && runtime?.conversationId && runtime?.providerId
+        ? { id: runtime.conversationId, provider: runtime.providerId } : null;
+      if (!target && !restorePendingNew) {
+        if (roleId === currentRoleId && currentConversationId &&
+            currentConversationId !== '__new__') {
           closeWorkspaceModal();
           if (typeof toggleDrawer === 'function') toggleDrawer(false);
-          await window.openCrewConversation(latest.provider, latest.id);
-          return;
+          return true;
         }
+        if (typeof loadConversations === 'function') await loadConversations({ force: true });
+        if (version !== roleSelectionVersion) return false;
+        const latest = roleLatestConversation(role.id);
+        if (latest) target = { id: latest.id, provider: latest.provider };
       }
-    } catch (error) {
-      console.warn('[Role Navigation] Failed to restore current work:', error);
+
+      if (target) {
+        const alreadyOpen = roleId === currentRoleId &&
+          currentConversationId === target.id && currentProvider === target.provider;
+        if (!alreadyOpen) {
+          const opened = await window.openCrewConversation?.(
+            target.provider, target.id, { expectedRoleId: role.id });
+          if (!opened) throw new Error('目前工作沒有成功載入；原本的工作紀錄仍保留。');
+        }
+        if (version !== roleSelectionVersion) return false;
+        activateRoleIdentity(role);
+        closeWorkspaceModal();
+        if (typeof toggleDrawer === 'function') toggleDrawer(false);
+        return true;
+      }
     }
-  }
 
-  activateRoleIdentity(role);
-
-  if (isCreatingNewChat) {
-    try {
-      await prepareNewRoleRuntime(role.id);
-    } catch (error) {
-      console.warn('[Role Runtime] Failed to prepare new work:', error.message);
+    // Only explicit New Work or a persisted pending-new state may clear the chat.
+    if (pendingRuntime?.providerId && pendingRuntime.providerId !== currentProvider) {
+      await window.selectProvider(pendingRuntime.providerId, {
+        preserveActiveStream: true, activateConversation: false, restoreConversation: false
+      });
     }
-  }
+    if (version !== roleSelectionVersion) return false;
+    if (isCreatingNewChat) await prepareNewRoleRuntime(role.id);
+    if (version !== roleSelectionVersion) return false;
+    activateRoleIdentity(role);
+    currentConversationId = null;
+    localStorage.setItem(activeConversationStorageKey(), '__new__');
 
-  // A Role owns durable identity/memory. A fresh Conversation is created only
-  // when this Role has no current/prior work or the user explicitly asks for New Work.
-  currentConversationId = null;
-  localStorage.setItem(activeConversationStorageKey(), '__new__');
+    if (typeof revokeAllBlobUrls === 'function') revokeAllBlobUrls();
+    if (typeof clearQueuedBtwMessages === 'function') await clearQueuedBtwMessages();
+    if (typeof updateContextPill === 'function') updateContextPill(null);
+    if (promptInput) { promptInput.value = ''; promptInput.style.height = 'auto'; }
+    uploadedImagePath = null;
+    if (cameraInput) cameraInput.value = '';
+    if (typeof attachInput !== 'undefined' && attachInput) attachInput.value = '';
+    if (imagePreviewContainer) imagePreviewContainer.classList.add('hidden');
 
-  if (typeof revokeAllBlobUrls === 'function') revokeAllBlobUrls();
-  if (typeof clearQueuedBtwMessages === 'function') await clearQueuedBtwMessages();
-  if (typeof updateContextPill === 'function') updateContextPill(null);
-  if (promptInput) {
-    promptInput.value = '';
-    promptInput.style.height = 'auto';
-  }
-  uploadedImagePath = null;
-  if (cameraInput) cameraInput.value = '';
-  if (typeof attachInput !== 'undefined' && attachInput) attachInput.value = '';
-  if (imagePreviewContainer) imagePreviewContainer.classList.add('hidden');
-
-  if (headerTitle) headerTitle.textContent = '新工作';
-  if (messagesContainer) {
-    messagesContainer.innerHTML = '';
-    if (typeof appendMessage === 'function') {
-      const projectLine = role.projectId ? `\n\n專案：${roleProjectLabel(role)}` : '';
-      appendMessage('assistant', `🧠 ${role.name} 已就位。${projectLine}\n\n這是一段新的工作 Context；Role 的長期記憶仍會保留。`);
+    if (headerTitle) headerTitle.textContent = '新工作';
+    if (messagesContainer) {
+      messagesContainer.innerHTML = '';
+      if (typeof appendMessage === 'function') {
+        const projectLine = role.projectId ? '\n\n專案：' + roleProjectLabel(role) : '';
+        appendMessage('assistant', '🧠 ' + role.name + ' 已就位。' + projectLine +
+          '\n\n這是一段新的工作 Context；Role 的長期記憶仍會保留。');
+      }
     }
+    closeWorkspaceModal();
+    showRoleNavigationView();
+    if (typeof toggleDrawer === 'function') toggleDrawer(false);
+    window.requestProviderPrewarm?.(0);
+    return true;
+  } catch (error) {
+    console.warn('[Role Navigation] Role switch failed; preserving existing work:', error);
+    // Do not silently turn a failed resume into a blank "new work".
+    if (typeof showContextToast === 'function') {
+      showContextToast('角色對話切換失敗：' + (error.message || '請重試'));
+    }
+    return false;
   }
-
-  closeWorkspaceModal();
-  showRoleNavigationView();
-  if (typeof toggleDrawer === 'function') toggleDrawer(false);
-  window.requestProviderPrewarm?.(0);
 }
 
 async function selectWorkspace(workspace, isCreatingNewChat = false) {
