@@ -1664,14 +1664,15 @@ function renderProviderOptions() {
   });
 }
 
-window.selectProvider = async function(providerId, { preserveActiveStream = false, activateConversation = true } = {}) {
-  if (!availableProviders.some(provider => provider.id === providerId) || providerId === currentProvider) return;
+window.selectProvider = async function(providerId, { preserveActiveStream = false, activateConversation = true, restoreConversation = true, expectedRoleId = null } = {}) {
+  if (!availableProviders.some(provider => provider.id === providerId) || providerId === currentProvider) return false;
   if (isStreaming && !preserveActiveStream && typeof window.stopGeneration === 'function') {
     await window.stopGeneration();
   }
   currentProvider = providerId;
   localStorage.setItem('crew_current_provider', currentProvider);
-  currentConversationId = localStorage.getItem(activeConversationStorageKey());
+  const storedConversationId = localStorage.getItem(activeConversationStorageKey());
+  currentConversationId = restoreConversation && storedConversationId !== '__new__' ? storedConversationId : null;
   const models = availableModels.filter(model => (model.provider || 'antigravity') === currentProvider);
   const savedModelKey = providerStorageKey('current_model');
   currentModel = localStorage.getItem(savedModelKey) || (models.find(model => model.isDefault) || models[0] || {}).id || 'gemini-3.7-flash';
@@ -1684,7 +1685,8 @@ window.selectProvider = async function(providerId, { preserveActiveStream = fals
   updateModelUI();
   loadModelsList();
   toggleModelModal(false);
-  if (currentConversationId) await loadConversationHistory(currentConversationId, { activate: activateConversation });
+  let restored = true;
+  if (currentConversationId) restored = await loadConversationHistory(currentConversationId, { activate: activateConversation, expectedRoleId });
   else {
     messagesContainer.innerHTML = '';
     const activeRoleName = roleMeta()?.name || '';
@@ -1695,9 +1697,10 @@ window.selectProvider = async function(providerId, { preserveActiveStream = fals
   }
   loadConversations();
   window.requestProviderPrewarm();
+  return restored === true;
 };
 
-window.openCrewConversation = async function(providerId, conversationId) {
+window.openCrewConversation = async function(providerId, conversationId, { expectedRoleId = null } = {}) {
   const targetProvider = String(providerId || '').trim() || currentProvider;
   const targetConversationId = String(conversationId || '').trim();
   if (!targetConversationId) return false;
@@ -1712,15 +1715,18 @@ window.openCrewConversation = async function(providerId, conversationId) {
   // whatever that provider last had active.
   localStorage.setItem(providerStorageKey('active_conv_id', targetProvider), targetConversationId);
 
+  let loaded = false;
   if (targetProvider !== currentProvider) {
-    await window.selectProvider(targetProvider, { preserveActiveStream: true, activateConversation: true });
+    loaded = await window.selectProvider(targetProvider, {
+      preserveActiveStream: true, activateConversation: true, expectedRoleId
+    });
   } else if (currentConversationId !== targetConversationId) {
-    await loadConversationHistory(targetConversationId, { activate: true });
+    loaded = await loadConversationHistory(targetConversationId, { activate: true, expectedRoleId });
   } else {
-    await loadConversationHistory(targetConversationId, { preserveComposer: true, activate: true });
+    loaded = await loadConversationHistory(targetConversationId, { preserveComposer: true, activate: true, expectedRoleId });
   }
 
-  return currentProvider === targetProvider && currentConversationId === targetConversationId;
+  return loaded === true && currentProvider === targetProvider && currentConversationId === targetConversationId;
 };
 
 window.openCrewTaskResult = async function(providerId, conversationId, taskId) {
