@@ -67,7 +67,8 @@ vm.runInContext(identity + '\n' + handler + '\nthis.chatHandler = handleChat;', 
   settings.set('sender-thread', { roleId: 'sender', workspace: '/sender' });
   const before = providerCalls.length;
   const rejected = await runChatInBackground(sandbox.chatHandler, { ...body, conversation_id: 'sender-thread' });
-  assert.equal(rejected.statusCode, 409); assert.match(rejected.error, /另一個 Role/);
+  // SSE headers are already sent before ownership validation; the final turn is failed, not HTTP 409.
+  assert.equal(rejected.statusCode, 200); assert.equal(rejected.status, 'failed'); assert.match(rejected.error, /另一個 Role/);
   assert.equal(providerCalls.length, before, 'cross-Role thread cannot reach provider');
 
   releaseTurn = {};
