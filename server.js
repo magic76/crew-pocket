@@ -668,6 +668,9 @@ async function handleProviderConversations(parsedUrl, res) {
       workspace: settingsByConversation.get(conversation.id)?.workspace || null,
       crewMemberId: settingsByConversation.get(conversation.id)?.crewMemberId || null,
       roleId: settingsByConversation.get(conversation.id)?.roleId || DEFAULT_ROLE_ID,
+      // Retain the legacy General fallback, but expose missing ownership for
+      // history recovery instead of pretending the conversation was assigned.
+      roleAssignment: settingsByConversation.get(conversation.id)?.roleId ? 'assigned' : 'unassigned',
       role: settingsByConversation.get(conversation.id)?.role || 'general',
       model: settingsByConversation.get(conversation.id)?.model || null,
       effort: settingsByConversation.get(conversation.id)?.effort || null,
