@@ -113,3 +113,19 @@ test('benchmark does not pass without independent task labels and output counter
   }), /distinct conversations/);
   assert.throws(() => readOptions(['--baseline','b']),/Missing --manifest/);
 });
+
+test('failed baseline cannot be treated as a cheaper successful benchmark', () => {
+  const manifest={version:1,cases:[{
+    id:'invalid-both-failed',provider:'codex',model:'gpt-6',cacheCondition:'cold',
+    baseline:{conversationId:'b',taskSuccess:false},
+    candidate:{conversationId:'c',taskSuccess:false}
+  }]};
+  const result=runBenchmark({
+    manifest,
+    baseline:[turn('b',1700000000000,sig,1000,200,100)],
+    candidate:[turn('c',1700000001000,other,200,100,20)],
+    pricing:{'codex/gpt-6':{inputPerMillion:2,cachedInputPerMillion:1,outputPerMillion:10}}
+  });
+  assert.equal(result.summary.unsuccessfulBaselineCases,1);
+  assert.equal(result.summary.acceptance,'inconclusive');
+});
