@@ -93,6 +93,7 @@ function runBenchmark({ manifest, baseline, candidate,
   const knownSuccess = rows.filter(row =>
     row.baseline.taskSuccess !== null && row.candidate.taskSuccess !== null);
   const regressions = knownSuccess.filter(row => row.comparison.successRegression);
+  const unsuccessfulBaseline = knownSuccess.filter(row => row.baseline.taskSuccess === false);
   const measuredTokenPairs = rows.filter(row => row.comparison.inputTokenDelta !== null);
   const measuredCostPairs = rows.filter(row => row.comparison.estimatedCostDelta !== null);
   const average = (items, key) => items.length
@@ -105,13 +106,15 @@ function runBenchmark({ manifest, baseline, candidate,
       cases: rows.length,
       successLabeledPairs: knownSuccess.length,
       successRegressions: regressions.length,
+      unsuccessfulBaselineCases: unsuccessfulBaseline.length,
       averageInputTokenDelta: average(measuredTokenPairs, 'inputTokenDelta'),
       averageEstimatedCostDelta: average(measuredCostPairs, 'estimatedCostDelta'),
       inputTokenComparablePairs: measuredTokenPairs.length,
       pricedComparablePairs: measuredCostPairs.length,
       // Quality gate cannot pass without all task labels and the real costs.
       acceptance: regressions.length ? 'fail'
-        : knownSuccess.length !== rows.length || measuredCostPairs.length !== rows.length
+        // Failed baseline work cannot establish cost per *successful* task.
+        : unsuccessfulBaseline.length || knownSuccess.length !== rows.length || measuredCostPairs.length !== rows.length
           ? 'inconclusive'
           : average(measuredCostPairs, 'estimatedCostDelta') <= -0.1 &&
             rows.every(row => row.comparison.elapsedDelta === null ||
