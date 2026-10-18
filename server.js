@@ -73,6 +73,7 @@ const {
   recordAutoCompactTurn, recordAutoCompactSuccess, appendAutoCompactTelemetry
 } = require('./lib/context/auto-compact-store');
 const { contributionFromText } = require('./lib/context/estimator');
+const { readFingerprint } = require('./lib/context/tool-fingerprint');
 const { ContextSourceType, ContextPriority } = require('./lib/context/types');
 const {
   getContextSnapshot,
@@ -2433,6 +2434,7 @@ async function handleChatTurn(req, res, submittedBody = null) {
     const provider = getProvider(providerId);
     const toolRuns = new Map();
     const changedFiles = new Set();
+    const readFingerprints = new Set();
     let toolEventCount = 0;
     let metricsLogged = false;
     let ended = false;
@@ -2467,6 +2469,8 @@ async function handleChatTurn(req, res, submittedBody = null) {
         request_id: requestId,
         provider: providerId,
         conversation_id: activeConversationId || null,
+        role_id: role?.id || DEFAULT_ROLE_ID,
+        model: effectiveModel || model || null,
         execution_mode: executionPolicy?.mode || null,
         execution_policy_source: executionPolicy?.source || null,
         execution_intent: approvedExecutionIntent,
@@ -2489,13 +2493,16 @@ async function handleChatTurn(req, res, submittedBody = null) {
           turn_uncached_input_tokens: lastContextStats.turn_uncached_input_tokens,
           turn_cache_write_input_tokens: lastContextStats.turn_cache_write_input_tokens,
           turn_cache_read_rate: lastContextStats.turn_cache_read_rate,
+          turn_output_tokens: lastContextStats.turn_output_tokens ?? null,
           total_input_tokens: lastContextStats.total_input_tokens,
           total_cached_input_tokens: lastContextStats.total_cached_input_tokens,
           total_uncached_input_tokens: lastContextStats.total_uncached_input_tokens,
           total_cache_write_input_tokens: lastContextStats.total_cache_write_input_tokens,
           total_cache_read_rate: lastContextStats.total_cache_read_rate
         } : null,
-        ...getToolMetrics()
+        ...getToolMetrics(),
+        // Ephemeral HMAC values only: no plaintext paths, commands or search strings.
+        read_fingerprints: [...readFingerprints].slice(0, 64)
       };
       console.log('[ToolMetrics] ' + JSON.stringify(metrics));
       fsPromises.mkdir(TURN_METRICS_DIR, { recursive: true })
@@ -2536,7 +2543,13 @@ async function handleChatTurn(req, res, submittedBody = null) {
         attempts: run.attempts,
         poll_count: run.pollCount
       });
-      if (['completed', 'complete', 'success', 'succeeded'].includes(effectiveState)) collectChangedFiles(event, changedFiles);
+      if (['completed', 'complete', 'success', 'succeeded'].includes(effectiveState)) {
+        collectChangedFiles(event, changedFiles);
+        if (!isTerminalToolState(previousState) && readFingerprints.size < 64) {
+          const fingerprint = readFingerprint(event);
+          if (fingerprint) readFingerprints.add(fingerprint);
+        }
+      }
       return {
         key,
         attempts: run.attempts,

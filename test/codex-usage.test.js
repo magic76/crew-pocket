@@ -73,3 +73,21 @@ test('cache benchmark only aggregates complete comparable turn samples', () => {
   assert.equal(summary.meanTurnMs, 1500);
   assert.equal(summary.meanFirstTextMs, 500);
 });
+
+test('output tokens are measured from the whole turn, never just the final model call', () => {
+  const before = normalizeCacheUsage({ total: {
+    inputTokens: 10000, cachedInputTokens: 6000, outputTokens: 2000
+  } });
+  const after = normalizeCacheUsage({ total: {
+    inputTokens: 16000, cachedInputTokens: 9000, outputTokens: 3100
+  }, last: { inputTokens: 500, outputTokens: 100 } });
+  const measured = withTurnCacheUsage(after, before);
+  assert.equal(measured.last_output_tokens, 100);
+  assert.equal(measured.total_output_tokens, 3100);
+  assert.equal(measured.turn_output_tokens, 1100);
+  assert.equal(measured.turn_input_tokens, 6000);
+  assert.equal(measured.turn_cached_input_tokens, 3000);
+  assert.equal(withTurnCacheUsage(after, {...before, total_output_tokens: 4000}).turn_output_tokens, null);
+  assert.equal(withTurnCacheUsage(after, {...before, total_output_tokens: null}).turn_output_tokens, null);
+  assert.equal(normalizeCacheUsage({}).total_output_tokens, null);
+});

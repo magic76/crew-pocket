@@ -1,0 +1,38 @@
+name: Session Efficiency Benchmark
+
+on:
+  pull_request:
+    paths:
+      - "server.js"
+      - "lib/context/session-efficiency.js"
+      - "lib/context/tool-fingerprint.js"
+      - "lib/providers/codex-usage.js"
+      - "lib/providers/codex.js"
+      - "scripts/benchmark-session-efficiency.js"
+      - "test/session-efficiency.test.js"
+      - "test/codex-usage.test.js"
+      - ".github/workflows/session-efficiency.yml"
+  workflow_dispatch:
+
+jobs:
+  benchmark-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Syntax
+        run: |
+          node --check server.js
+          node --check lib/context/session-efficiency.js
+          node --check lib/context/tool-fingerprint.js
+          node --check lib/providers/codex-usage.js
+          node --check lib/providers/codex.js
+          node --check scripts/benchmark-session-efficiency.js
+          node --check test/session-efficiency.test.js
+          node --check test/codex-usage.test.js
+      - name: Run offline efficiency regression tests
+        run: |
+          node --test test/session-efficiency.test.js
+          node --test test/codex-usage.test.js
