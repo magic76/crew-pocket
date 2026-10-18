@@ -110,9 +110,9 @@ function runBenchmark({ manifest, baseline, candidate,
       inputTokenComparablePairs: measuredTokenPairs.length,
       pricedComparablePairs: measuredCostPairs.length,
       // Quality gate cannot pass without all task labels and the real costs.
-      acceptance: knownSuccess.length !== rows.length || measuredCostPairs.length !== rows.length
-        ? 'inconclusive'
-        : regressions.length ? 'fail'
+      acceptance: regressions.length ? 'fail'
+        : knownSuccess.length !== rows.length || measuredCostPairs.length !== rows.length
+          ? 'inconclusive'
           : average(measuredCostPairs, 'estimatedCostDelta') <= -0.1 &&
             rows.every(row => row.comparison.elapsedDelta === null ||
               row.comparison.elapsedDelta <= 0.2) ? 'pass' : 'fail'
