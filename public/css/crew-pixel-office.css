@@ -25,12 +25,12 @@
   background:#172234e3;border:1px solid #788e9f9c;border-radius:6px;
   color:#e1effa;padding:7px 10px;margin:0;max-width:calc(100% - 160px);
   font:650 11px/1.3 system-ui,sans-serif}
-.crew-world-modal .crew-office-tools{top:calc(var(--crew-shared-header-height,96px) + 8px)}
-.crew-world-modal .crew-office-tools>button{width:38px;min-width:38px;height:38px;font-size:19px}
+.crew-world-modal .crew-pixel-tools{top:calc(var(--crew-shared-header-height,96px) + 8px)}
+.crew-world-modal .crew-pixel-tools>button{width:38px;min-width:38px;height:38px;font-size:19px}
 .crew-world-modal #world-reset{font-size:23px}
 @media(max-width:480px){.crew-pixel-role strong{font-size:10px;max-width:74px}
  .crew-pixel-feedback{max-width:calc(100% - 146px);font-size:10px}
- .crew-world-modal .crew-office-tools>button{width:35px;min-width:35px;height:35px}}
+ .crew-world-modal .crew-pixel-tools>button{width:35px;min-width:35px;height:35px}}
 @media(prefers-reduced-motion:reduce){.crew-pixel-role{transition:none}}
 
 .crew-pixel-role[data-context-tone="warning"] strong{border-color:#f3c56a}
