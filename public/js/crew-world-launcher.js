@@ -31,20 +31,16 @@
   const peekKind=document.getElementById('crew-world-result-peek-kind');
   const peekText=document.getElementById('crew-world-result-peek-text');
   const commandContext=document.getElementById('crew-world-command-context');
-  const renderModeButton=document.getElementById('world-render-mode');
   if(!opener||!dashboardButton||!toggle||!headerHost||!homeHeader||!modal||!panel||!messagesSlot||!composerSlot||
      !messages||!composer||!hideButton||!expandButton)return;
   let restoreMessages=null,restoreComposer=null;
   let stopWorld=null,previousFocus=null,selectedRoleId=null,selectedRoleName='';
-  // The map is the primary home surface on each cold start. Preserve an
+  // Pixel Office is the primary home surface on cold start. Preserve an
   // explicit Dashboard choice while navigating to Chat, Settings or overlays.
   let preferredHomeView='map';
   let bootstrapRolePending=false,initialSceneRole=null;
   let selectVersion=0,previousTab=null,restoreTab=false,openVersion=0;
-  let sceneScripts=null,pixelScript=null,sceneRefreshPending=false;
-  let sceneMode='3d';
-  try{if(window.localStorage?.getItem('crew-world-renderer')==='pixel')sceneMode='pixel';}
-  catch(_){/* Storage is optional, especially in WebViews. */}
+  let pixelScript=null,sceneRefreshPending=false;
   let requestedRole=null,roleSwitchQueue=Promise.resolve(),switchingRole=false,commandDraft='';
   let switchFailed=false,switchTimer=null,sendLockHeld=false,sendWasDisabled=false;
   let rolesSignature='',previewObserver=null,previewFrame=0;
@@ -151,36 +147,15 @@
       document.head.appendChild(tag);
     });
   }
-  function updateRendererUI(){
-    modal.dataset.worldRenderer=sceneMode;
-    if(!renderModeButton)return;
-    const pixel=sceneMode==='pixel';
-    renderModeButton.textContent=pixel?'3D':'PIXEL';
-    renderModeButton.setAttribute('aria-label',pixel?'切換成 3D 城鎮地圖':'切換成 Pixel Office 像素辦公室');
-    renderModeButton.setAttribute('aria-pressed',String(pixel));
+  function ensureScene(){
+    if(typeof window.mountCrewPixelOfficeScene==='function')return Promise.resolve();
+    if(!pixelScript)pixelScript=loadScript('/js/crew-pixel-office.js').catch(error=>{
+      pixelScript=null;throw error;
+    });
+    return pixelScript;
   }
   function mountScene(camera){
-    return sceneMode==='pixel'?window.mountCrewPixelOfficeScene?.(camera):window.mountCrewWorldScene?.(camera);
-  }
-  function ensureScene(mode=sceneMode){
-    if(mode==='pixel'){
-      if(typeof window.mountCrewPixelOfficeScene==='function')return Promise.resolve();
-      if(!pixelScript)pixelScript=loadScript('/js/crew-pixel-office.js').catch(error=>{
-        pixelScript=null;throw error;
-      });
-      return pixelScript;
-    }
-    if(typeof window.mountCrewWorldScene==='function')return Promise.resolve();
-    if(!sceneScripts){
-      sceneScripts=(async()=>{
-        if(!window.THREE)await loadScript('/vendor/three.min.js');
-        if(!window.WorldLabKit)await loadScript('/js/world-lab-kit.js');
-        if(!window.WorldLabEvents)await loadScript('/js/world-lab-events.js');
-        if(typeof window.mountCrewWorldScene!=='function')await loadScript('/js/world-lab.js');
-        if(typeof window.mountCrewWorldScene!=='function')throw new Error('3D 啟動功能未載入');
-      })().catch(error=>{sceneScripts=null;throw error;});
-    }
-    return sceneScripts;
+    return window.mountCrewPixelOfficeScene?.(camera);
   }
   function moved(){return Boolean(restoreMessages);}
   function putChatBack(){
@@ -226,7 +201,7 @@
     syncReadAction();
     // We preserve the active Role and its stream, only move DOM visibility.
     window.requestAnimationFrame(()=>{
-      document.getElementById(sceneMode==='pixel'?'crew-pixel-office':'world-stage')?.focus?.({preventScroll:true});
+      document.getElementById('crew-pixel-canvas')?.focus?.({preventScroll:true});
     });
   }
   function showCompactChat(){
@@ -297,9 +272,8 @@
     syncHeaderHeight();
     modal.hidden=false;
     updateHomeView('map');
-    updateRendererUI();
-    const loading=document.getElementById('world-loading');
-    if(loading&&!stopWorld){loading.hidden=sceneMode==='pixel';loading.textContent='正在載入 3D 場景…';}
+    const loading=document.getElementById('crew-pixel-feedback');
+    if(loading&&!stopWorld)loading.textContent='正在載入 Pixel Agents 辦公室…';
     opener.focus({preventScroll:true});
     updateKeyboard();
     try{
@@ -315,8 +289,7 @@
       if(initial&&!selectedRoleId)onSelectedRole(initial.id,initial.name);
     }catch(error){
       if(!modal.hidden&&openVersion===version&&loading){
-        loading.textContent='無法載入 Crew 世界，請切換渲染模式重試。'+(error.message||'');
-        loading.hidden=false;
+        loading.textContent='無法載入 Pixel Office：'+(error.message||'');
       }
     }
   }
@@ -331,29 +304,6 @@
       stopWorld();stopWorld=null;
       stopWorld=mountScene({...camera,selectedId})||null;
     }finally{sceneRefreshPending=false;}
-  }
-  async function switchRenderer(){
-    if(modal.hidden||sceneRefreshPending)return;
-    const version=++openVersion;
-    const previous=sceneMode;
-    const selectedId=selectedRoleId||stopWorld?.getCameraState?.()?.selectedId||null;
-    stopWorld?.();stopWorld=null;
-    sceneMode=previous==='pixel'?'3d':'pixel';
-    updateRendererUI();
-    try{
-      await ensureScene(sceneMode);
-      if(modal.hidden||openVersion!==version)return;
-      stopWorld=mountScene({selectedId})||null;
-      if(!stopWorld)throw new Error('renderer did not mount');
-      try{window.localStorage?.setItem('crew-world-renderer',sceneMode);}catch(_){/* Optional */}
-    }catch(error){
-      console.warn('[Crew World] Renderer unavailable:',error);
-      if(modal.hidden||openVersion!==version)return;
-      sceneMode=previous;updateRendererUI();
-      await ensureScene(previous);
-      if(modal.hidden||openVersion!==version)return;
-      stopWorld=mountScene({selectedId})||null;
-    }
   }
   function openChat(roleId=selectedRoleId,{compact=false}={}){
     if(modal.hidden||!roleId||!window.openCrewCockpitRole||!liveRole(roleId))
@@ -507,8 +457,6 @@
       close({preferDashboard:true});
     }else updateHomeView('dashboard');
   }
-  renderModeButton?.addEventListener('click',()=>{void switchRenderer();});
-  updateRendererUI();
   opener.addEventListener('click',()=>{void open();});
   dashboardButton.addEventListener('click',()=>{
     preferredHomeView='dashboard';
