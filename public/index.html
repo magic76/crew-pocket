@@ -55,6 +55,7 @@
   <link rel="stylesheet" href="/css/crew-room.css">
   <link rel="stylesheet" href="/css/crew-cinematic.css">
   <link rel="stylesheet" href="/css/crew-world-launcher.css">
+  <link rel="stylesheet" href="/css/crew-pixel-office.css">
   <link rel="stylesheet" href="/css/world-lab.css">
   <link rel="stylesheet" href="/css/visual-inspector.css">
 </head>
@@ -1799,6 +1800,13 @@
         <div id="world-labels" aria-label="Crew Role 對話回覆"></div>
         <div id="world-loading" role="status">正在建立 3D 世界…</div>
       </div>
+      <section id="crew-pixel-office" class="crew-pixel-office" aria-label="Pixel Office 像素小隊辦公室" hidden>
+        <div id="crew-pixel-room" class="crew-pixel-room">
+          <canvas id="crew-pixel-canvas" aria-hidden="true"></canvas>
+          <div id="crew-pixel-roles" class="crew-pixel-roles" aria-label="角色工位"></div>
+        </div>
+        <p id="crew-pixel-feedback" class="crew-pixel-feedback" role="status" aria-live="polite">載入角色狀態中…</p>
+      </section>
       <svg id="world-collaboration-links" class="world-collaboration-links" aria-label="近期已記錄角色協作關係" aria-hidden="true"></svg>
     </div>
     <div id="world-status-strip" class="world-status-strip" role="status" aria-live="polite">讀取小隊狀態中…</div>
@@ -1848,6 +1856,7 @@
     <!-- Map tools belong to the overview corner, not a bottom control row.
          Focus mode uses its own existing '返回總覽' action. -->
     <nav class="world-quick-tools" aria-label="地圖快捷操作">
+      <button id="world-render-mode" type="button" aria-label="切換成 Pixel Office 像素辦公室" aria-pressed="false">PIXEL</button>
       <button id="world-reset" type="button" aria-label="回到世界全景" title="回到世界全景">
         <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M3 9V4h5M21 15v5h-5M4 4l6 6M20 20l-6-6"/>
