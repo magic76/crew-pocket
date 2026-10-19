@@ -212,8 +212,11 @@
     function snapCamera(){
       if(!layout)return;
       const worldW=layout.cols*TILE*Math.max(1,Math.ceil(roles.length/positions.length));
-      panX=Math.max(Math.min(panX,worldW+80-width/zoom/2),width/zoom/2-80);
-      panY=Math.max(142,Math.min(338,panY));
+      // Clamp world origin independently from screen size; don't trap the camera
+      // off-screen on narrow phones or prevent centering on the first desk.
+      const mx=Math.min(96,width/(zoom*2)),my=Math.min(96,height/(zoom*2));
+      panX=Math.min(worldW+mx,Math.max(-mx,panX));
+      panY=Math.min(layout.rows*TILE+my,Math.max(-my,panY));
     }
     function focusInitialCamera(){
       if(initialFocusDone||!layout||!selectedId||
@@ -228,6 +231,8 @@
     }
     function redrawControls(){
       if(disposed||paused||!layout)return;
+      board.dataset.labelMode=prefs.labelMode;
+      board.dataset.editing=String(editMode);
       const signature=JSON.stringify([roles.map(role=>[role.id,role.name,role.state,role.attention]),
         selectedId,prefs.labelMode,editMode,Math.round(panX*100)/100,Math.round(panY*100)/100,
         Math.round(zoom*1000)/1000,width,height]);
@@ -313,18 +318,22 @@
       ctx.restore();
       redrawControls();
     }
-    function selectRole(id){
+    function focusSelected(){
+      const index=roles.findIndex(role=>role.id===selectedId);
+      if(index<0||!layout)return;
+      const seat=rolePosition(roles[index],index);
+      panX=seat.x;panY=seat.y+10;snapCamera();draw();
+    }
+    function selectRole(id,{open=true}={}){
       const role=roles.find(entry=>entry.id===id);
       if(disposed||!role)return false;
+      const same=selectedId===id;
       selectedId=id;
-      const seat=seatFor(roles.indexOf(role),layout);
-      // Focus the selected workstation, without moving the actual agent.
-      const point=worldToScreen(seat.x,seat.y);
-      if(point.x<50||point.x>width-50||point.y<90||point.y>height-100){
-        panX=seat.x;panY=seat.y+30;
-      }
-      snapCamera();draw();
-      window.CrewWorldHost?.onSelectedRole?.(role.id,role.name);
+      if(prefs.followSelection)focusSelected();
+      else draw();
+      syncControls();
+      if(open&&(prefs.interaction==='direct'||same))
+        window.CrewWorldHost?.onSelectedRole?.(role.id,role.name);
       return true;
     }
     async function sync(){
@@ -367,21 +376,44 @@
     function onPointerDown(event){
       if(disposed||paused)return;
       event.preventDefault();canvas.setPointerCapture?.(event.pointerId);
-      pointers.set(event.pointerId,gesturePoint(event));lastGesture.dragged=false;
+      const point=gesturePoint(event);
+      if(pointers.size===0){lastGesture.dragged=false;mouseDownStart=point;}
+      else lastGesture.dragged=true;
+      pointers.set(event.pointerId,point);
     }
     function onPointerMove(event){
-      if(!pointers.has(event.pointerId)||disposed||paused)return;
+      if(disposed||paused)return;
+      if(!pointers.has(event.pointerId)){
+        if(event.pointerType==='mouse'&&!editMode&&layout){
+          const point=gesturePoint(event);
+          const wx=panX+(point.x-width/2)/zoom,wy=panY+(point.y-height/2)/zoom;
+          const hovered=roles.findIndex((role,index)=>{
+            const seat=rolePosition(role,index);
+            return Math.abs(wx-seat.x)<=11&&Math.abs(wy-(seat.y-9))<19;
+          });
+          const id=hovered>=0?roles[hovered].id:null;
+          if(id!==hoveredId){hoveredId=id;draw();}
+        }
+        return;
+      }
       const point=gesturePoint(event),prev=pointers.get(event.pointerId);
       if(pointers.size===1){
         const dx=point.x-prev.x,dy=point.y-prev.y;
-        if(Math.abs(dx)+Math.abs(dy)>2)lastGesture.dragged=true;
-        panX-=dx/zoom;panY-=dy/zoom;
+        if(mouseDownStart&&Math.hypot(point.x-mouseDownStart.x,point.y-mouseDownStart.y)>7)
+          lastGesture.dragged=true;
+        if(lastGesture.dragged){panX-=dx/zoom;panY-=dy/zoom;}
       }else if(pointers.size===2){
         const other=[...pointers].find(([k])=>k!==event.pointerId)?.[1];
         if(other){
           const oldDistance=Math.hypot(prev.x-other.x,prev.y-other.y);
           const newDistance=Math.hypot(point.x-other.x,point.y-other.y);
-          if(oldDistance>5)zoom=Math.max(.9,Math.min(5,zoom*newDistance/oldDistance));
+          if(oldDistance>5){
+            const anchor={x:(point.x+other.x)/2,y:(point.y+other.y)/2};
+            const wx=panX+(anchor.x-width/2)/zoom,wy=panY+(anchor.y-height/2)/zoom;
+            zoom=Math.max(.9,Math.min(5,zoom*newDistance/oldDistance));
+            panX=wx-(anchor.x-width/2)/zoom;
+            panY=wy-(anchor.y-height/2)/zoom;
+          }
           lastGesture.dragged=true;
         }
       }
@@ -392,9 +424,12 @@
       const point=gesturePoint(event);pointers.delete(event.pointerId);
       if(disposed||paused||lastGesture.dragged||pointers.size||!layout)return;
       const x=panX+(point.x-width/2)/zoom,y=panY+(point.y-height/2)/zoom;
-      const nearest=roles.map((r,i)=>({r,d:Math.hypot(seatFor(i,layout).x-x,seatFor(i,layout).y-y)}))
-        .sort((a,b)=>a.d-b.d)[0];
-      if(nearest&&nearest.d<20)selectRole(nearest.r.id);
+      if(editMode){applyEdit(x,y);return;}
+      const nearest=roles.map((r,i)=>{
+        const seat=rolePosition(r,i);
+        return{r,d:Math.hypot(seat.x-x,seat.y-9-y)};
+      }).sort((a,b)=>a.d-b.d)[0];
+      if(nearest&&nearest.d<21)selectRole(nearest.r.id,{open:true});
     }
     function onPointerCancel(event){pointers.delete(event.pointerId);}
     function onResize(){if(!disposed&&!paused)draw();}
@@ -406,13 +441,16 @@
     const zoomIn=document.getElementById('world-zoom-in');
     const zoomOut=document.getElementById('world-zoom-out');
     function resetCamera(){
-      zoom=Math.max(1.05,Math.min(2.4,(width-32)/(21*TILE)));
-      const roleIndex=roles.findIndex(r=>r.id===selectedId);
-      panX=(Math.max(0,Math.floor(Math.max(0,roleIndex)/positions.length))*21+10.5)*TILE;
-      panY=255;draw();
+      const rooms=Math.max(1,Math.ceil(roles.length/positions.length));
+      const worldW=layout.cols*TILE*rooms;
+      zoom=Math.min(3,Math.max(.9,Math.min((width-30)/worldW,(height-60)/(layout.rows*TILE))));
+      panX=worldW/2;panY=layout.rows*TILE/2;snapCamera();draw();
     }
     function zoomBy(factor){zoom=Math.min(5,Math.max(.9,zoom*factor));snapCamera();draw();}
     const handleReset=()=>resetCamera(),handleIn=()=>zoomBy(1.25),handleOut=()=>zoomBy(.8);
+    const focusButton=document.getElementById('world-focus');
+    const handleFocus=()=>focusSelected();
+    focusButton?.addEventListener('click',handleFocus);
     reset?.addEventListener('click',handleReset);
     zoomIn?.addEventListener('click',handleIn);
     zoomOut?.addEventListener('click',handleOut);
@@ -482,6 +520,7 @@
       reset?.removeEventListener('click',handleReset);
       zoomIn?.removeEventListener('click',handleIn);
       zoomOut?.removeEventListener('click',handleOut);
+      focusButton?.removeEventListener('click',handleFocus);
       window.removeEventListener('resize',onResize);
       window.removeEventListener('crew:context-usage-updated',onContextUpdated);
       board.hidden=true;
