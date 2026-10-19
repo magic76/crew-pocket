@@ -7,6 +7,9 @@ on:
       - "public/css/world-lab.css"
       - "public/js/world-lab*.js"
       - "public/js/crew-world-launcher.js"
+      - "public/js/crew-pixel-office.js"
+      - "public/css/crew-pixel-office.css"
+      - "test/crew-pixel-office.test.js"
       - "public/vendor/three.min.js"
       - "public/vendor/THREE-LICENSE.txt"
       - "test/world-lab.test.js"
@@ -43,5 +46,6 @@ jobs:
           node test/world-paper-plane.test.js
           node test/world-road-network.test.js
           node test/crew-world-portal.test.js
+          node test/crew-pixel-office.test.js
           node test/world-chat-history.test.js
           node test/role-submit.test.js

@@ -31,6 +31,7 @@
   const peekKind=document.getElementById('crew-world-result-peek-kind');
   const peekText=document.getElementById('crew-world-result-peek-text');
   const commandContext=document.getElementById('crew-world-command-context');
+  const renderModeButton=document.getElementById('world-render-mode');
   if(!opener||!dashboardButton||!toggle||!headerHost||!homeHeader||!modal||!panel||!messagesSlot||!composerSlot||
      !messages||!composer||!hideButton||!expandButton)return;
   let restoreMessages=null,restoreComposer=null;
@@ -40,7 +41,10 @@
   let preferredHomeView='map';
   let bootstrapRolePending=false,initialSceneRole=null;
   let selectVersion=0,previousTab=null,restoreTab=false,openVersion=0;
-  let sceneScripts=null,sceneRefreshPending=false;
+  let sceneScripts=null,pixelScript=null,sceneRefreshPending=false;
+  let sceneMode='3d';
+  try{if(window.localStorage?.getItem('crew-world-renderer')==='pixel')sceneMode='pixel';}
+  catch(_){/* Storage is optional, especially in WebViews. */}
   let requestedRole=null,roleSwitchQueue=Promise.resolve(),switchingRole=false,commandDraft='';
   let switchFailed=false,switchTimer=null,sendLockHeld=false,sendWasDisabled=false;
   let rolesSignature='',previewObserver=null,previewFrame=0;
@@ -147,7 +151,25 @@
       document.head.appendChild(tag);
     });
   }
-  function ensureScene(){
+  function updateRendererUI(){
+    modal.dataset.worldRenderer=sceneMode;
+    if(!renderModeButton)return;
+    const pixel=sceneMode==='pixel';
+    renderModeButton.textContent=pixel?'3D':'PIXEL';
+    renderModeButton.setAttribute('aria-label',pixel?'切換成 3D 城鎮地圖':'切換成 Pixel Office 像素辦公室');
+    renderModeButton.setAttribute('aria-pressed',String(pixel));
+  }
+  function mountScene(camera){
+    return sceneMode==='pixel'?window.mountCrewPixelOfficeScene?.(camera):window.mountCrewWorldScene?.(camera);
+  }
+  function ensureScene(mode=sceneMode){
+    if(mode==='pixel'){
+      if(typeof window.mountCrewPixelOfficeScene==='function')return Promise.resolve();
+      if(!pixelScript)pixelScript=loadScript('/js/crew-pixel-office.js').catch(error=>{
+        pixelScript=null;throw error;
+      });
+      return pixelScript;
+    }
     if(typeof window.mountCrewWorldScene==='function')return Promise.resolve();
     if(!sceneScripts){
       sceneScripts=(async()=>{
@@ -204,7 +226,7 @@
     syncReadAction();
     // We preserve the active Role and its stream, only move DOM visibility.
     window.requestAnimationFrame(()=>{
-      document.getElementById('world-stage')?.focus?.({preventScroll:true});
+      document.getElementById(sceneMode==='pixel'?'crew-pixel-office':'world-stage')?.focus?.({preventScroll:true});
     });
   }
   function showCompactChat(){
@@ -275,15 +297,16 @@
     syncHeaderHeight();
     modal.hidden=false;
     updateHomeView('map');
+    updateRendererUI();
     const loading=document.getElementById('world-loading');
-    if(loading&&!stopWorld){loading.hidden=false;loading.textContent='正在載入 3D 場景…';}
+    if(loading&&!stopWorld){loading.hidden=sceneMode==='pixel';loading.textContent='正在載入 3D 場景…';}
     opener.focus({preventScroll:true});
     updateKeyboard();
     try{
       await ensureScene();
       if(modal.hidden||openVersion!==version)return;
       if(stopWorld)stopWorld.resume?.();
-      else stopWorld=window.mountCrewWorldScene?.()||null;
+      else stopWorld=mountScene()||null;
       // The scene eventually selects its map Role. Until then, use the
       // active Role identity, not a hard-coded first entry.
       const initial=roleSnapshot()?.roles?.find(role=>role.id===window.getCurrentRoleId?.())||
@@ -292,7 +315,7 @@
       if(initial&&!selectedRoleId)onSelectedRole(initial.id,initial.name);
     }catch(error){
       if(!modal.hidden&&openVersion===version&&loading){
-        loading.textContent='無法載入 3D 世界，請重新開啟。'+(error.message||'');
+        loading.textContent='無法載入 Crew 世界，請切換渲染模式重試。'+(error.message||'');
         loading.hidden=false;
       }
     }
@@ -306,8 +329,31 @@
     const selectedId=selectedRoleId||camera?.selectedId||null;
     try{
       stopWorld();stopWorld=null;
-      stopWorld=window.mountCrewWorldScene?.({...camera,selectedId})||null;
+      stopWorld=mountScene({...camera,selectedId})||null;
     }finally{sceneRefreshPending=false;}
+  }
+  async function switchRenderer(){
+    if(modal.hidden||sceneRefreshPending)return;
+    const version=++openVersion;
+    const previous=sceneMode;
+    const selectedId=selectedRoleId||stopWorld?.getCameraState?.()?.selectedId||null;
+    stopWorld?.();stopWorld=null;
+    sceneMode=previous==='pixel'?'3d':'pixel';
+    updateRendererUI();
+    try{
+      await ensureScene(sceneMode);
+      if(modal.hidden||openVersion!==version)return;
+      stopWorld=mountScene({selectedId})||null;
+      if(!stopWorld)throw new Error('renderer did not mount');
+      try{window.localStorage?.setItem('crew-world-renderer',sceneMode);}catch(_){/* Optional */}
+    }catch(error){
+      console.warn('[Crew World] Renderer unavailable:',error);
+      if(modal.hidden||openVersion!==version)return;
+      sceneMode=previous;updateRendererUI();
+      await ensureScene(previous);
+      if(modal.hidden||openVersion!==version)return;
+      stopWorld=mountScene({selectedId})||null;
+    }
   }
   function openChat(roleId=selectedRoleId,{compact=false}={}){
     if(modal.hidden||!roleId||!window.openCrewCockpitRole||!liveRole(roleId))
@@ -461,6 +507,8 @@
       close({preferDashboard:true});
     }else updateHomeView('dashboard');
   }
+  renderModeButton?.addEventListener('click',()=>{void switchRenderer();});
+  updateRendererUI();
   opener.addEventListener('click',()=>{void open();});
   dashboardButton.addEventListener('click',()=>{
     preferredHomeView='dashboard';
