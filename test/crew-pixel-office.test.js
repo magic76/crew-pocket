@@ -45,4 +45,69 @@ assert.match(launcher,/stopWorld=mountScene\(/);
 assert.match(launcher,/crew-world-renderer/);
 assert.match(css,/data-world-renderer="pixel"/);
 assert.match(css,/\.crew-pixel-role:focus-visible/);
+
+(async()=>{
+  const ids=['crew-pixel-office','crew-pixel-room','crew-pixel-canvas',
+    'crew-pixel-roles','crew-pixel-feedback'];
+  class FakeNode {
+    constructor(){this.children=[];this.style={};this.dataset={};this.attrs={};
+      this.hidden=false;this.clientWidth=360;this.clientHeight=660;this.events={};}
+    setAttribute(k,v){this.attrs[k]=v;}
+    getAttribute(k){return this.attrs[k];}
+    addEventListener(k,cb){this.events[k]=cb;}
+    append(...items){this.children.push(...items);}
+    replaceChildren(...items){this.children=items;}
+    getBoundingClientRect(){return{width:360,height:660};}
+    click(){this.events.click?.();}
+  }
+  const nodes=Object.fromEntries(ids.map(id=>[id,new FakeNode()]));
+  let renders=0;
+  const ctx={setTransform(){},fillRect(){renders++;},fillText(){},imageSmoothingEnabled:false};
+  nodes['crew-pixel-canvas'].getContext=()=>ctx;
+  const intervals=new Map();let seq=0,selected=[];
+  const mockWindow={
+    devicePixelRatio:1,matchMedia:()=>({matches:true}),
+    getCurrentRoleId:()=> 'dev',
+    CrewWorldHost:{onSelectedRole(id,name){selected.push([id,name]);}},
+    setInterval(fn){const id=++seq;intervals.set(id,fn);return id;},
+    clearInterval(id){intervals.delete(id);},
+    addEventListener(){},removeEventListener(){},
+    performance:{now:()=>10}
+  };
+  const doc={
+    hidden:false,
+    getElementById:id=>nodes[id]||null,
+    createElement:()=>new FakeNode()
+  };
+  const mockRows=[
+    {roleId:'dev',roleName:'Developer',state:'working',currentWork:{title:'Editing code'}},
+    {roleId:'qa',roleName:'Reviewer',state:'waiting',attentionCount:1}
+  ];
+  let calls=0;
+  const readStatus=async()=>{calls++;return{ok:true,json:async()=>({success:true,roles:mockRows})};};
+  vm.runInNewContext(src,{window:mockWindow,document:doc,fetch:readStatus});
+  const scene=mockWindow.mountCrewPixelOfficeScene({selectedId:'dev'});
+  assert.ok(scene,'Pixel renderer mounts independently of Three.js');
+  await new Promise(resolve=>setImmediate(resolve));
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(calls,1,'only read real crew-status');
+  assert.equal(nodes['crew-pixel-roles'].children.length,2);
+  assert.equal(nodes['crew-pixel-roles'].children[0].attrs['aria-pressed'],'true');
+  assert.equal(nodes['crew-pixel-roles'].children[1].dataset.state,'waiting');
+  nodes['crew-pixel-roles'].children[1].click();
+  assert.equal(selected.at(-1)[0],'qa','tapping desk targets original Role Chat');
+  assert.equal(scene.getCameraState().selectedId,'qa');
+  assert.ok(renders>0);
+  assert.equal(intervals.size,1,'reduced-motion disables decorative animation');
+  scene.pause();
+  assert.equal(intervals.size,0,'hidden mode stops polling');
+  scene.resume();
+  assert.equal(intervals.size,1);
+  scene();
+  assert.equal(intervals.size,0);
+  assert.equal(nodes['crew-pixel-office'].hidden,true);
+  assert.equal(nodes['crew-pixel-roles'].children.length,0);
+  console.log('Pixel Office live-role mount, tap, pause/resume/disposal OK');
+})().catch(error=>{console.error(error);process.exitCode=1;});
 console.log('Pixel Office P0 renderer and integration contracts OK');
+

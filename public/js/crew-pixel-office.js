@@ -88,7 +88,7 @@
         const col=index%cols,row=Math.floor(index/cols);
         const cx=cellW*(col+.5),y=startY+row*cellH;
         const palette=role.palette;
-        const deskX=cx-36;
+        const deskX=cx;
         // Floor shadow, table, computer, keyboard, stool.
         fill('#142838',deskX-12,y+75,98,9);
         fill('#765a4c',deskX-38,y+44,76,27);

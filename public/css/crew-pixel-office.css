@@ -29,7 +29,7 @@
 .crew-pixel-role[aria-pressed="true"]{outline:3px solid #b9f4ff;outline-offset:2px;
   background:#19384e}
 .crew-pixel-role:focus-visible{outline:3px solid #fff;outline-offset:3px}
-.crew-pixel-feedback{position:sticky;z-index:3;top:calc(var(--crew-shared-header-height,96px) + 58px);
+.crew-pixel-feedback{position:fixed;z-index:3;top:calc(var(--crew-shared-header-height,96px) + 58px);
   margin:0 10px 0 auto;padding:7px 9px;width:max-content;max-width:calc(100% - 150px);
   background:#12283cdb;border:1px solid #91a9b8a0;color:#e5f4fb;
   border-radius:6px;font:700 10px/1.4 system-ui,sans-serif;pointer-events:none}
