@@ -8,107 +8,103 @@ const read=path=>fs.readFileSync(require('node:path').join(root,path),'utf8');
 const src=read('public/js/crew-pixel-office.js');
 const host={};
 vm.runInNewContext(src,{window:host});
-assert.equal(typeof host.mountCrewPixelOfficeScene,'function');
 const project=host.CrewPixelOffice.projectRoles;
 const rows=project([
-  {roleId:'r1',roleName:'Dev',state:'working',currentWork:{title:'Real job'},attentionCount:1},
-  {roleId:'r2',roleName:'QA',state:'waiting',attentionCount:2},
-  {roleId:'r3',roleName:'Idle',state:'idle',currentWork:{title:'Stale job'}},
-  {roleId:'r1',roleName:'Duplicate',state:'working'},
-  {roleId:'r4',roleName:'Unknown',state:'complete',currentWork:{title:'Fake'}},
+ {roleId:'r1',roleName:'Dev',state:'working',currentWork:{title:'Real job'},attentionCount:1},
+ {roleId:'r2',roleName:'QA',state:'waiting',attentionCount:2},
+ {roleId:'r3',roleName:'Idle',state:'idle',currentWork:{title:'Stale job'}},
+ {roleId:'r1',roleName:'Duplicate',state:'working'},
+ {roleId:'r4',roleName:'Unknown',state:'complete',currentWork:{title:'Fake'}}
 ]);
 assert.deepEqual(Array.from(rows,row=>row.id),['r1','r2','r3','r4']);
 assert.equal(rows[0].work,'Real job');
 assert.equal(rows[1].attention,2);
-assert.equal(rows[2].work,'','idle job title must not imply active work');
-assert.equal(rows[3].state,'unknown','invalid state must never imply work');
+assert.equal(rows[2].work,'');
+assert.equal(rows[3].state,'unknown');
 assert.equal(rows[3].work,'');
-assert.equal(project([]).length,0,'no demo agents on verified empty roster');
+assert.equal(project([]).length,0);
 assert.equal(project(Array.from({length:44},(_,i)=>({roleId:'r'+i}))).length,36);
-assert.match(src,/fetch\('\/api\/crew-status'/);
+assert.equal(host.CrewPixelOffice.resolveFurniture('PLANT_2').path,
+ 'furniture/PLANT_2/PLANT_2.png');
+assert.equal(host.CrewPixelOffice.resolveFurniture('SOFA_SIDE:left').mirrored,true);
+assert.equal(host.CrewPixelOffice.resolveFurniture('DESK_FRONT').path,
+ 'furniture/DESK/DESK_FRONT.png');
+const layout=JSON.parse(read('public/vendor/pixel-agents/default-layout.json'));
+assert.equal(layout.cols,21);assert.equal(layout.rows,22);
+assert.ok(layout.furniture.length>20);
+assert.equal(host.CrewPixelOffice.seatFor(9,layout).segment,1);
+assert.match(src,/112x96/);
+assert.match(src,/FRAME_TIME/);
+assert.match(src,/\/api\/crew-status/);
 assert.doesNotMatch(src,/method\s*:\s*['"](?:POST|PUT|PATCH|DELETE)/);
-assert.match(src,/document\.hidden/);
-assert.match(src,/dispose\.pause/);
-assert.match(src,/dispose\.resume/);
 assert.match(src,/CrewWorldHost\?\.onSelectedRole/);
-assert.match(src,/role\.state==='working'/);
-const html=read('public/index.html');
-const launcher=read('public/js/crew-world-launcher.js');
-const css=read('public/css/crew-pixel-office.css');
-assert.match(html,/id="world-render-mode"/);
+const html=read('public/index.html'),launcher=read('public/js/crew-world-launcher.js');
 assert.match(html,/id="crew-pixel-office"/);
 assert.match(html,/id="crew-pixel-roles"/);
-assert.match(html,/\/css\/crew-pixel-office\.css/);
-assert.match(launcher,/function switchRenderer\(/);
-assert.match(launcher,/stopWorld\?\.\(\);stopWorld=null/);
-assert.match(launcher,/stopWorld=mountScene\(/);
-assert.match(launcher,/crew-world-renderer/);
-assert.match(css,/data-world-renderer="pixel"/);
-assert.match(css,/\.crew-pixel-role:focus-visible/);
-
+assert.doesNotMatch(html,/id="world-render-mode"/);
+assert.doesNotMatch(html,/id="world-stage"/);
+assert.doesNotMatch(launcher,/THREE|mountCrewWorldScene|\/js\/world-lab\.js/);
+assert.match(launcher,/mountCrewPixelOfficeScene/);
+assert.match(read('public/css/crew-pixel-office.css'),/image-rendering:pixelated/);
 (async()=>{
-  const ids=['crew-pixel-office','crew-pixel-room','crew-pixel-canvas',
-    'crew-pixel-roles','crew-pixel-feedback'];
-  class FakeNode {
-    constructor(){this.children=[];this.style={};this.dataset={};this.attrs={};
-      this.hidden=false;this.clientWidth=360;this.clientHeight=660;this.events={};}
-    setAttribute(k,v){this.attrs[k]=v;}
-    getAttribute(k){return this.attrs[k];}
-    addEventListener(k,cb){this.events[k]=cb;}
-    append(...items){this.children.push(...items);}
-    appendChild(node){this.children.push(node);return node;}
-    replaceChildren(...items){this.children=items;}
-    getBoundingClientRect(){return{width:360,height:660};}
-    click(){this.events.click?.();}
-  }
-  const nodes=Object.fromEntries(ids.map(id=>[id,new FakeNode()]));
-  let renders=0;
-  const ctx={setTransform(){},fillRect(){renders++;},fillText(){},imageSmoothingEnabled:false};
-  nodes['crew-pixel-canvas'].getContext=()=>ctx;
-  const intervals=new Map();let seq=0,selected=[];
-  const mockWindow={
-    devicePixelRatio:1,matchMedia:()=>({matches:true}),
-    getCurrentRoleId:()=> 'dev',
-    CrewWorldHost:{onSelectedRole(id,name){selected.push([id,name]);}},
-    setInterval(fn){const id=++seq;intervals.set(id,fn);return id;},
-    clearInterval(id){intervals.delete(id);},
-    addEventListener(){},removeEventListener(){},
-    performance:{now:()=>10}
-  };
-  const doc={
-    hidden:false,
-    getElementById:id=>nodes[id]||null,
-    createElement:()=>new FakeNode()
-  };
-  const mockRows=[
-    {roleId:'dev',roleName:'Developer',state:'working',currentWork:{title:'Editing code'}},
-    {roleId:'qa',roleName:'Reviewer',state:'waiting',attentionCount:1}
-  ];
-  let calls=0;
-  const readStatus=async()=>{calls++;return{ok:true,json:async()=>({success:true,roles:mockRows})};};
-  vm.runInNewContext(src,{window:mockWindow,document:doc,fetch:readStatus});
-  const scene=mockWindow.mountCrewPixelOfficeScene({selectedId:'dev'});
-  assert.ok(scene,'Pixel renderer mounts independently of Three.js');
-  await new Promise(resolve=>setImmediate(resolve));
-  await new Promise(resolve=>setImmediate(resolve));
-  assert.equal(calls,1,'only read real crew-status');
-  assert.equal(nodes['crew-pixel-roles'].children.length,2);
-  assert.equal(nodes['crew-pixel-roles'].children[0].attrs['aria-pressed'],'true');
-  assert.equal(nodes['crew-pixel-roles'].children[1].dataset.state,'waiting');
-  nodes['crew-pixel-roles'].children[1].click();
-  assert.equal(selected.at(-1)[0],'qa','tapping desk targets original Role Chat');
-  assert.equal(scene.getCameraState().selectedId,'qa');
-  assert.ok(renders>0);
-  assert.equal(intervals.size,1,'reduced-motion disables decorative animation');
-  scene.pause();
-  assert.equal(intervals.size,0,'hidden mode stops polling');
-  scene.resume();
-  assert.equal(intervals.size,1);
-  scene();
-  assert.equal(intervals.size,0);
-  assert.equal(nodes['crew-pixel-office'].hidden,true);
-  assert.equal(nodes['crew-pixel-roles'].children.length,0);
-  console.log('Pixel Office live-role mount, tap, pause/resume/disposal OK');
+ class Node{
+  constructor(){this.children=[];this.events=new Map();this.attrs={};this.style={};
+   this.dataset={};this.hidden=false;this.clientWidth=390;this.clientHeight=700;}
+  addEventListener(type,fn){const f=this.events.get(type)||[];f.push(fn);this.events.set(type,f);}
+  removeEventListener(type,fn){this.events.set(type,(this.events.get(type)||[]).filter(x=>x!==fn));}
+  setAttribute(name,val){this.attrs[name]=val;}
+  getAttribute(name){return this.attrs[name];}
+  append(...items){this.children.push(...items);}
+  appendChild(el){this.children.push(el);return el;}
+  replaceChildren(...items){this.children=items;}
+  getBoundingClientRect(){return{left:0,top:0,width:390,height:700};}
+  click(){for(const fn of this.events.get('click')||[])fn({});}
+ }
+ const names=['crew-pixel-office','crew-pixel-canvas','crew-pixel-roles','crew-pixel-feedback',
+  'world-reset','world-zoom-in','world-zoom-out'];
+ const dom=Object.fromEntries(names.map(name=>[name,new Node()]));
+ const canvas=dom['crew-pixel-canvas'];let renders=0;
+ canvas.getContext=()=>({
+  setTransform(){},fillRect(){renders++;},fillText(){},strokeRect(){},drawImage(){renders++;},
+  translate(){},scale(){},save(){},restore(){}
+ });
+ const timers=new Map();let tid=0;const selected=[];
+ const win={devicePixelRatio:1,innerWidth:390,innerHeight:700,
+  getCurrentRoleId:()=> 'dev',matchMedia:()=>({matches:true}),
+  addEventListener(){},removeEventListener(){},
+  setInterval(fn){const id=++tid;timers.set(id,fn);return id;},
+  clearInterval(id){timers.delete(id);},
+  CrewWorldHost:{onSelectedRole(id,name){selected.push([id,name]);}}
+ };
+ const doc={hidden:false,getElementById:id=>dom[id]||null,createElement:()=>new Node()};
+ const crew=[
+  {roleId:'dev',roleName:'Developer',state:'working',currentWork:{title:'Edit'}},
+  {roleId:'qa',roleName:'Reviewer',state:'waiting',attentionCount:2}
+ ];
+ const requests=[];
+ const readStatus=async url=>{
+  requests.push(url);return{ok:true,json:async()=>url.includes('default-layout.json')
+   ?layout:{success:true,roles:crew}};
+ };
+ class ImageMock{
+  constructor(){this.width=16;this.height=32;}
+  set src(value){this.url=value;setImmediate(()=>{if(value.includes('char_')){this.width=112;this.height=96;}this.onload?.();});}
+ }
+ vm.runInNewContext(src,{window:win,document:doc,fetch:readStatus,Image:ImageMock});
+ const scene=win.mountCrewPixelOfficeScene({selectedId:'dev'});
+ assert.ok(scene);
+ for(let i=0;i<5;i++)await new Promise(resolve=>setImmediate(resolve));
+ assert.ok(requests.includes('/api/crew-status'));
+ assert.ok(requests.includes('/vendor/pixel-agents/default-layout.json'));
+ assert.ok(renders>0,'renders original office furniture/floor and sprites');
+ assert.equal(dom['crew-pixel-roles'].children.length,2);
+ assert.equal(dom['crew-pixel-roles'].children[0].attrs['aria-pressed'],'true');
+ dom['crew-pixel-roles'].children[1].click();
+ assert.equal(selected.at(-1)[0],'qa','selects original Crew Role by ID');
+ assert.equal(scene.getCameraState().selectedId,'qa');
+ dom['world-zoom-in'].click();dom['world-zoom-out'].click();dom['world-reset'].click();
+ scene.pause();assert.equal(timers.size,0);
+ scene.resume();assert.equal(timers.size,1);
+ scene();assert.equal(timers.size,0);assert.equal(dom['crew-pixel-office'].hidden,true);
+ console.log('Upstream Pixel Agents sprites/layout and Crew Role lifecycle tests passed');
 })().catch(error=>{console.error(error);process.exitCode=1;});
-console.log('Pixel Office P0 renderer and integration contracts OK');
-

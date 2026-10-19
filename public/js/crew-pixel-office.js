@@ -46,8 +46,8 @@
   }
   function resolveFurniture(type){
     const base=String(type).split(':')[0];
-    const group=furniturePaths.find(part=>base===part||base.startsWith(part+'_')&&
-      !furniturePaths.some(other=>other.length>part.length&&base.startsWith(other+'_')));
+    const group=[...furniturePaths].sort((a,b)=>b.length-a.length)
+      .find(part=>base===part||base.startsWith(part+'_'));
     return group?{path:'furniture/'+group+'/'+base+'.png',
       mirrored:String(type).endsWith(':left')}:null;
   }
@@ -266,7 +266,7 @@
       return{x:event.clientX-rect.left,y:event.clientY-rect.top};
     }
     function onPointerDown(event){
-      if(disposed)return;
+      if(disposed||paused)return;
       event.preventDefault();canvas.setPointerCapture?.(event.pointerId);
       pointers.set(event.pointerId,gesturePoint(event));lastGesture.dragged=false;
     }
@@ -289,8 +289,9 @@
       pointers.set(event.pointerId,point);snapCamera();draw();
     }
     function onPointerUp(event){
+      if(!pointers.has(event.pointerId))return;
       const point=gesturePoint(event);pointers.delete(event.pointerId);
-      if(disposed||lastGesture.dragged||!layout)return;
+      if(disposed||paused||lastGesture.dragged||pointers.size||!layout)return;
       const x=panX+(point.x-width/2)/zoom,y=panY+(point.y-height/2)/zoom;
       const nearest=roles.map((r,i)=>({r,d:Math.hypot(seatFor(i,layout).x-x,seatFor(i,layout).y-y)}))
         .sort((a,b)=>a.d-b.d)[0];
@@ -323,6 +324,7 @@
       refreshTimer=null;frameTimer=null;
     }
     function startTimers(){
+      if(disposed)return;
       stopTimers();
       paused=false;
       refreshTimer=window.setInterval(()=>{void sync();},5500);
@@ -372,7 +374,7 @@
       board.hidden=true;
     };
     dispose.pause=()=>{paused=true;stopTimers();};
-    dispose.resume=()=>{if(!disposed){board.hidden=false;startTimers();}};
+    dispose.resume=()=>{if(!disposed&&paused){board.hidden=false;startTimers();}};
     dispose.getCameraState=()=>({selectedId,panX,panY,zoom});
     dispose.selectRole=selectRole;
     startTimers();

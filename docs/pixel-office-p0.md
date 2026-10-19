@@ -1,32 +1,37 @@
-# Pixel Office P0 (Crew Pocket)
+# Crew Pixel Office — upstream Pixel Agents visual integration
 
-Pixel Office is an optional renderer inside the existing Crew World shell. It does **not** change durable Role IDs, Memory, Dreaming, CLI, PTY, MCP, history or the original Chat DOM.
+**Source:** [pixel-agents-hq/pixel-agents](https://github.com/pixel-agents-hq/pixel-agents), pinned commit `b1bafd02896d90d83457266575a1e8e5011ce997`; MIT license copied to `public/vendor/pixel-agents/LICENSE.txt`. Characters originated with JIK-A-4's Metro City sprite pack, per the upstream README.
 
-## Use
+This replaces the *production* Crew World 3D scene, with no 3D toggle. The Crew Runtime, durable Role identity, Conversation, Context/Memory, CLI, PTY and MCP remain Crew-owned. No upstream Claude hooks or separate Pixel Agents HTTP/WebSocket server are installed.
 
-Open Crew World and tap **PIXEL** near the top-right. The same button becomes **3D** to return to the existing town. Preference is saved locally where browser storage is available; the original 3D renderer remains available.
+## What is imported
 
-- One Role = one persistent seat; scrolling supports up to 36 Roles.
-- Tap the Role's name/status plaque to select its **current** conversation through `CrewWorldHost.onSelectedRole`.
-- Runtime data is read-only from `GET /api/crew-status` every 5.5 seconds. Only the verified `working` state animates typing. `waiting`/attention shows a badge. Unknown, disconnected or missing state is explicitly not presented as working.
-- If the status endpoint cannot be reached, a locally known Role roster may be shown with all states marked **未同步**.
-- Closing the map pauses polling and animation. Mode switches dispose the old renderer but keep the original Chat composer and unsent draft.
+- Exact upstream `default-layout-1.json` (21 × 22 tiles, furniture geometry, room arrangement).
+- Upstream PNG sprites: 6 character sheets (112 × 96), walls, floor tiles, furniture and PC animation frames.
+- Corresponding upstream sprite-sheet frame coordinates, scene z-order and Canvas nearest-neighbor drawing logic are adapted to Crew's existing WebView.
+- Character typing animation only occurs for Crew's verified `working` status; waiting markers come from real `waiting`/attention. No simulated agent tool actions.
+- Click/tap a character or accessible role-name target -> the ORIGINAL Crew Role conversation, with one preserved original message stream and unsent draft. One room per 9 roles, draggable/pinch-zoom canvas, zoom/reset controls, reduced-motion support.
+- Both status polling and animation are paused while the office is closed.
 
-## Architecture and upstream
+This is a **visual/asset integration**, not a wholesale copy of the React editor, Claude session provider, terminal launcher, or the complete Pixel Agents pathfinding state machine. Additional gameplay/editor support would require a separate scoped integration.
 
-This is an original, dependency-free Canvas 2D P0 implementation **inspired by** [Pixel Agents](https://github.com/pixel-agents-hq/pixel-agents), whose core has a React Canvas/office engine and a different session-based data model. Its MIT-licensed sprites or rendering source have **not** been copied or bundled; a future asset reuse needs licensing and attribution review.
+## Offline assets
 
-The existing Three.js `world-lab.js` renderer remains intact. Pixel Office is loaded only when selected, via `crew-world-launcher.js`. It deliberately does not emulate agent/tool events or fabricate Subagent collaboration.
-
-## Verification
+Official PNG assets are checked into `public/vendor/pixel-agents/assets/` by a one-time GitHub Actions vendor job when the feature branch updates. To refresh or verify locally:
 
 ```bash
-node --check public/js/crew-pixel-office.js
-node --check public/js/crew-world-launcher.js
-node test/crew-pixel-office.test.js
-node test/crew-world-portal.test.js
-node test/world-lab.test.js
-git diff --check
+node scripts/sync-pixel-assets.mjs
+node scripts/sync-pixel-assets.mjs --check
 ```
 
-Manual smoke: toggle Pixel/3D while a Role streams; tap multiple Roles; ensure the selected Role and draft remain correct. Verify unknown network state, empty roster, 8/16 Role layouts, viewport resize, and reopening after Dashboard. No APK rebuild is needed for these `public/` changes.
+If local images are temporarily absent, the renderer uses a commit-pinned GitHub raw URL as a fallback. The source layout itself always stays local. This is not an extra required runtime server.
+
+## Tests
+
+```bash
+node test/crew-pixel-office.test.js
+node test/crew-world-portal.test.js
+node test/role-map-navigation.test.js
+```
+
+Manual smoke: open the home office on Android WebView and regular mobile browser; tap roles at different desks; confirm original input and history follow the selected Role; test scrolling, pinch/pan, layout 1–36 roles, disconnected status, resize and Dashboard return. No APK rebuild is required for `public/` changes.
