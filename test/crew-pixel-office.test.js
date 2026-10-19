@@ -56,6 +56,7 @@ assert.match(css,/\.crew-pixel-role:focus-visible/);
     getAttribute(k){return this.attrs[k];}
     addEventListener(k,cb){this.events[k]=cb;}
     append(...items){this.children.push(...items);}
+    appendChild(node){this.children.push(node);return node;}
     replaceChildren(...items){this.children=items;}
     getBoundingClientRect(){return{width:360,height:660};}
     click(){this.events.click?.();}
