@@ -69,7 +69,31 @@
     const ctx=canvas.getContext('2d');
     if(!ctx){note.textContent='Canvas 無法使用，請從角色選單切換';return null;}
     const reduced=window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches||false;
-    const assets=new Map(),failed=new Set(),loadTasks=[];
+    const assets=new Map(),failed=new Set(),loadTasks=[],outlineCache=new Map();
+    const config=window.CrewPixelConfig;
+    let prefs=config?.read?.()||{labelMode:'selected',outline:true,followSelection:true,
+      interaction:'direct',showPets:false,appearance:{},placements:{},layout:null};
+    let placements={...prefs.placements};
+    const walkers=new Map();
+    let editMode=false,editTool='move',selectedFurnitureUid=null,hoveredId=null;
+    let undoStack=[],redoStack=[];
+    function persist(){
+      prefs.placements=placements;
+      prefs.layout=layout&&prefs.layout?layout:prefs.layout;
+      prefs=config?.write?.(prefs)||prefs;
+      placements=prefs.placements;
+    }
+    function roleSeat(role,index){
+      return layout&&placements[role.id]&&config?config.seatWorld(placements[role.id],layout):seatFor(index,layout);
+    }
+    function paletteFor(role){
+      const value=prefs.appearance?.[role.id];
+      return Number.isInteger(value)&&value>=0&&value<6?value:role.palette;
+    }
+    function rolePosition(role,index){
+      const seat=roleSeat(role,index),move=walkers.get(role.id);
+      return move&&role.state==='idle'?{...seat,x:move.x,y:move.y}:seat;
+    }
     let disposed=false,paused=false,polling=false,ready=false,synced=false,roles=[];
     let width=1,height=1,layout=null,selectedId=initial?.selectedId||window.getCurrentRoleId?.()||null;
     let refreshTimer=null,frameTimer=null,observer=null,
@@ -78,6 +102,7 @@
       zoom=Number.isFinite(initial?.zoom)?Math.max(.9,Math.min(5,initial.zoom)):2.2;
     const pointers=new Map(),lastGesture={dragged:false};
     let animationTick=0,loadingError=false,controlsSignature='',contextUsageByRole=new Map();
+    let mouseDownStart=null;
     let initialFocusDone=false;
     board.hidden=false;
     function getAsset(path){return assets.get(path)||null;}
@@ -129,7 +154,7 @@
       }
     }
     function drawActor(role,index,seat){
-      const sprite=getAsset('characters/char_'+role.palette+'.png');
+      const sprite=getAsset('characters/char_'+paletteFor(role)+'.png');
       const charY=seat.y-CHAR_H+7,charX=seat.x-CHAR_W/2;
       if(sprite){
         // Exact 112x96 upstream sprite sheet: 3 directions x 7 frames.
@@ -138,9 +163,30 @@
       }else{
         ctx.fillStyle='#bcb4a5';ctx.fillRect(charX+4,charY+7,8,21);
       }
-      if(role.id===selectedId){
-        ctx.strokeStyle='#d7f8ff';ctx.lineWidth=1;
-        ctx.strokeRect(Math.round(charX)-2,Math.round(charY)-2,CHAR_W+4,CHAR_H+4);
+      if(sprite&&prefs.outline&&(role.id===selectedId||role.id===hoveredId)){
+        const alpha=role.id===selectedId?1:.55;
+        const frame=role.state==='working'&&!reduced?3+(animationTick%2):0;
+        const key=paletteFor(role)+':'+frame;
+        let outline=outlineCache.get(key);
+        if(outline===undefined){
+          outline=null;
+          try{
+            const temp=document.createElement('canvas');temp.width=CHAR_W;temp.height=CHAR_H;
+            const t=temp.getContext('2d',{willReadFrequently:true});
+            t.drawImage(sprite,frame*CHAR_W,0,CHAR_W,CHAR_H,0,0,CHAR_W,CHAR_H);
+            const pixels=t.getImageData(0,0,CHAR_W,CHAR_H).data;
+            const edge=document.createElement('canvas');edge.width=CHAR_W+2;edge.height=CHAR_H+2;
+            const e=edge.getContext('2d');e.fillStyle='#dcfaff';
+            const solid=(x,y)=>x>=0&&x<CHAR_W&&y>=0&&y<CHAR_H&&pixels[(y*CHAR_W+x)*4+3]>16;
+            for(let y=0;y<CHAR_H;y++)for(let x=0;x<CHAR_W;x++)if(solid(x,y))
+              for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]])
+                if(!solid(x+dx,y+dy))e.fillRect(x+dx+1,y+dy+1,1,1);
+            outline=edge;
+          }catch(_){/* WebViews lacking pixel readback keep Role focus accessible. */}
+          outlineCache.set(key,outline);
+        }
+        if(outline){ctx.save();ctx.globalAlpha=alpha;
+          ctx.drawImage(outline,Math.round(charX)-1,Math.round(charY)-1);ctx.restore();}
       }
       if(role.state==='waiting'||role.attention>0){
         ctx.fillStyle='#ffdb85';ctx.fillRect(seat.x+7,charY-7,10,10);
@@ -174,7 +220,7 @@
         Number.isFinite(initial?.panX)||Number.isFinite(initial?.panY))return;
       const index=roles.findIndex(role=>role.id===selectedId);
       if(index<0)return;
-      const seat=seatFor(index,layout);
+      const seat=roleSeat(roles[index],index);
       panX=seat.x+(seat.col<layout.cols/2?45:-45);
       panY=seat.y+22;
       snapCamera();
@@ -183,17 +229,19 @@
     function redrawControls(){
       if(disposed||paused||!layout)return;
       const signature=JSON.stringify([roles.map(role=>[role.id,role.name,role.state,role.attention]),
-        selectedId,Math.round(panX*100)/100,Math.round(panY*100)/100,Math.round(zoom*1000)/1000,width,height]);
+        selectedId,prefs.labelMode,editMode,Math.round(panX*100)/100,Math.round(panY*100)/100,
+        Math.round(zoom*1000)/1000,width,height]);
       if(signature===controlsSignature)return;
       controlsSignature=signature;
       layer.replaceChildren();
       roles.forEach((role,index)=>{
-        const seat=seatFor(index,layout),point=worldToScreen(seat.x,seat.y);
+        const seat=rolePosition(role,index),point=worldToScreen(seat.x,seat.y);
         if(point.x < -80||point.x>width+80||point.y< -100||point.y>height+100)return;
         const button=document.createElement('button');
         button.type='button';button.className='crew-pixel-role';
         button.dataset.state=role.state;
         button.dataset.attention=String(role.attention>0);
+        button.dataset.labelMode=prefs.labelMode;
         const context=contextUsageByRole.get(role.id);
         button.dataset.contextTone=context?.tone||'unknown';
         button.title=role.name+' · '+labelFor[role.state]+
@@ -210,7 +258,7 @@
           button.append(warning);
         }
         button.append(dot,name);
-        button.addEventListener('click',()=>selectRole(role.id));
+        button.addEventListener('click',()=>{if(!editMode)selectRole(role.id,{open:true});});
         layer.appendChild(button);
       });
     }
@@ -258,7 +306,7 @@
         }
       }
       roles.forEach((role,index)=>{
-        const seat=seatFor(index,layout);
+        const seat=rolePosition(role,index);
         drawables.push({depth:seat.y+TILE/2+.1,draw:()=>drawActor(role,index,seat)});
       });
       drawables.sort((a,b)=>a.depth-b.depth).forEach(entry=>entry.draw());
@@ -291,6 +339,12 @@
         const next=projectRoles(data.roles);
         const diff=JSON.stringify(next)!==JSON.stringify(roles);
         roles=next;synced=true;
+        if(layout&&config){
+          const stable=config.allocateRoles(roles.map(role=>role.id),layout,placements);
+          const incomplete=roles.some(role=>!placements[role.id]);
+          placements={...placements,...stable};
+          if(incomplete)persist();
+        }
         if(selectedId&&!roles.some(role=>role.id===selectedId))selectedId=null;
         focusInitialCamera();
         syncContextWarnings();
@@ -395,7 +449,13 @@
         if(!Number.isInteger(data.cols)||data.cols!==21||data.rows!==22||!Array.isArray(data.tiles)||
           data.tiles.length!==data.cols*data.rows||!Array.isArray(data.furniture))throw Error('invalid Pixel Agents layout');
         if(disposed)return;
-        layout=data;
+        layout=prefs.layout||data;
+        if(config){
+          const stable=config.allocateRoles(roles.map(role=>role.id),layout,placements);
+          const incomplete=roles.some(role=>!placements[role.id]);
+          placements={...placements,...stable};
+          if(incomplete)persist();
+        }
         focusInitialCamera();
         for(let i=0;i<6;i++)scheduleAsset('characters/char_'+i+'.png');
         for(let i=0;i<9;i++)scheduleAsset('floors/floor_'+i+'.png');
