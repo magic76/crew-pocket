@@ -72,9 +72,12 @@
     const assets=new Map(),failed=new Set(),loadTasks=[];
     let disposed=false,paused=false,polling=false,ready=false,synced=false,roles=[];
     let width=1,height=1,layout=null,selectedId=initial?.selectedId||window.getCurrentRoleId?.()||null;
-    let refreshTimer=null,frameTimer=null,observer=null,panX=168,panY=254,zoom=2.2;
+    let refreshTimer=null,frameTimer=null,observer=null,
+      panX=Number.isFinite(initial?.panX)?initial.panX:168,
+      panY=Number.isFinite(initial?.panY)?initial.panY:254,
+      zoom=Number.isFinite(initial?.zoom)?Math.max(.9,Math.min(5,initial.zoom)):2.2;
     const pointers=new Map(),lastGesture={dragged:false};
-    let animationTick=0,loadingError=false;
+    let animationTick=0,loadingError=false,controlsSignature='';
     board.hidden=false;
     function getAsset(path){return assets.get(path)||null;}
     function scheduleAsset(path){
@@ -154,6 +157,10 @@
     }
     function redrawControls(){
       if(disposed||paused||!layout)return;
+      const signature=JSON.stringify([roles.map(role=>[role.id,role.name,role.state,role.attention]),
+        selectedId,Math.round(panX*100)/100,Math.round(panY*100)/100,Math.round(zoom*1000)/1000,width,height]);
+      if(signature===controlsSignature)return;
+      controlsSignature=signature;
       layer.replaceChildren();
       roles.forEach((role,index)=>{
         const seat=seatFor(index,layout),point=worldToScreen(seat.x,seat.y);

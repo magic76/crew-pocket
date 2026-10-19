@@ -1,0 +1,10 @@
+/* Crew Office shell: no Three.js/WebGL or island-map dependencies. */
+.world-app,.world-app *{box-sizing:border-box}
+.world-app{position:relative;width:100%;height:100%;overflow:hidden;background:#161b26;color:#f6f8fc;
+  font-family:Inter,-apple-system,BlinkMacSystemFont,"Noto Sans TC",sans-serif}
+.world-app button{cursor:pointer;font:inherit}
+.world-app button:focus-visible{outline:2px solid #a4e4fa;outline-offset:2px}
+.world-stage-frame{position:absolute;inset:0;width:100%;height:100%;overflow:hidden}
+.world-quick-tools{position:absolute;z-index:8;right:10px;display:flex;align-items:center;gap:6px}
+.world-quick-tools button{display:grid;place-items:center;border:1px solid #91bede8a;border-radius:10px;
+  background:#142e46ed;color:#f0f9ff;min-width:39px;min-height:39px;padding:0 8px}
