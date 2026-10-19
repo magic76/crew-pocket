@@ -77,7 +77,7 @@
       panY=Number.isFinite(initial?.panY)?initial.panY:254,
       zoom=Number.isFinite(initial?.zoom)?Math.max(.9,Math.min(5,initial.zoom)):2.2;
     const pointers=new Map(),lastGesture={dragged:false};
-    let animationTick=0,loadingError=false,controlsSignature='';
+    let animationTick=0,loadingError=false,controlsSignature='',contextUsageByRole=new Map();
     board.hidden=false;
     function getAsset(path){return assets.get(path)||null;}
     function scheduleAsset(path){
@@ -146,6 +146,19 @@
         ctx.font='bold 9px monospace';ctx.fillStyle='#533f24';ctx.fillText('!',seat.x+10,charY+1);
       }
     }
+    function syncContextWarnings(){
+      const gauge=window.CrewContextUsage;
+      contextUsageByRole=new Map();
+      let warnings=0;
+      if(gauge){
+        for(const role of roles){
+          const description=gauge.describe(gauge.get(role.id));
+          contextUsageByRole.set(role.id,description);
+          if(description.tone==='warning'||description.tone==='critical')warnings++;
+        }
+      }
+      note.dataset.contextWarningCount=String(warnings);
+    }
     function worldToScreen(x,y){
       return{x:width/2+(x-panX)*zoom,y:height/2+(y-panY)*zoom};
     }
@@ -169,11 +182,21 @@
         button.type='button';button.className='crew-pixel-role';
         button.dataset.state=role.state;
         button.dataset.attention=String(role.attention>0);
+        const context=contextUsageByRole.get(role.id);
+        button.dataset.contextTone=context?.tone||'unknown';
+        button.title=role.name+' · '+labelFor[role.state]+
+          (context?.known?' · Context '+context.label:'');
         button.style.left=point.x+'px';button.style.top=(point.y+30*zoom)+'px';
         button.setAttribute('aria-pressed',String(role.id===selectedId));
         button.setAttribute('aria-label',role.name+' · '+labelFor[role.state]+' · 切換對話');
         const dot=document.createElement('span');dot.className='crew-pixel-state';dot.setAttribute('aria-hidden','true');
         const name=document.createElement('strong');name.textContent=role.name;
+        if(context?.known&&(context.tone==='warning'||context.tone==='critical')){
+          const warning=document.createElement('span');
+          warning.className='crew-pixel-context';warning.textContent=context.label;
+          warning.setAttribute('aria-label','Context '+context.label);
+          button.append(warning);
+        }
         button.append(dot,name);
         button.addEventListener('click',()=>selectRole(role.id));
         layer.appendChild(button);
@@ -257,6 +280,7 @@
         const diff=JSON.stringify(next)!==JSON.stringify(roles);
         roles=next;synced=true;
         if(selectedId&&!roles.some(role=>role.id===selectedId))selectedId=null;
+        syncContextWarnings();
         if(diff)draw();
         note.textContent=roles.length?
           'CREW OFFICE · '+roles.length+' ROLES · '+roles.filter(r=>r.state==='working').length+' WORKING':
@@ -264,6 +288,7 @@
       }catch(_){
         if(disposed||paused)return;
         synced=false;roles=roles.map(role=>({...role,state:'unknown',work:'',attention:0}));
+        syncContextWarnings();
         note.textContent='CREW OFFICE · Runtime 未同步';
         draw();
       }finally{polling=false;}
@@ -324,6 +349,11 @@
     reset?.addEventListener('click',handleReset);
     zoomIn?.addEventListener('click',handleIn);
     zoomOut?.addEventListener('click',handleOut);
+    function onContextUpdated(){
+      if(disposed||paused)return;
+      syncContextWarnings();draw();
+    }
+    window.addEventListener('crew:context-usage-updated',onContextUpdated);
     window.addEventListener('resize',onResize);
     if(window.ResizeObserver){observer=new window.ResizeObserver(onResize);observer.observe(board);}
     function stopTimers(){
@@ -341,6 +371,7 @@
         }
       },FRAME_TIME);
       void sync();
+      void window.CrewContextUsage?.load?.();
       draw();
     }
     async function start(){
@@ -378,6 +409,7 @@
       zoomIn?.removeEventListener('click',handleIn);
       zoomOut?.removeEventListener('click',handleOut);
       window.removeEventListener('resize',onResize);
+      window.removeEventListener('crew:context-usage-updated',onContextUpdated);
       board.hidden=true;
     };
     dispose.pause=()=>{paused=true;stopTimers();};

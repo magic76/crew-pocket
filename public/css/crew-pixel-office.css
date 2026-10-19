@@ -32,3 +32,11 @@
  .crew-pixel-feedback{max-width:calc(100% - 146px);font-size:10px}
  .crew-world-modal .crew-office-tools>button{width:35px;min-width:35px;height:35px}}
 @media(prefers-reduced-motion:reduce){.crew-pixel-role{transition:none}}
+
+.crew-pixel-role[data-context-tone="warning"] strong{border-color:#f3c56a}
+.crew-pixel-role[data-context-tone="critical"] strong{border-color:#ff8181;box-shadow:2px 2px 0 #802a2a}
+.crew-pixel-context{position:absolute;top:-16px;left:5px;color:#fff1d8;
+  font:800 9px/1 monospace;background:#85522fdd;border:1px solid #e8ad58;
+  padding:3px 4px;border-radius:3px;white-space:nowrap}
+.crew-pixel-role[data-context-tone="critical"] .crew-pixel-context{
+ background:#933e40;border-color:#ff9494;color:#fff}
