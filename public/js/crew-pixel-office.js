@@ -78,6 +78,7 @@
       zoom=Number.isFinite(initial?.zoom)?Math.max(.9,Math.min(5,initial.zoom)):2.2;
     const pointers=new Map(),lastGesture={dragged:false};
     let animationTick=0,loadingError=false,controlsSignature='',contextUsageByRole=new Map();
+    let initialFocusDone=false;
     board.hidden=false;
     function getAsset(path){return assets.get(path)||null;}
     function scheduleAsset(path){
@@ -167,6 +168,17 @@
       const worldW=layout.cols*TILE*Math.max(1,Math.ceil(roles.length/positions.length));
       panX=Math.max(Math.min(panX,worldW+80-width/zoom/2),width/zoom/2-80);
       panY=Math.max(142,Math.min(338,panY));
+    }
+    function focusInitialCamera(){
+      if(initialFocusDone||!layout||!selectedId||
+        Number.isFinite(initial?.panX)||Number.isFinite(initial?.panY))return;
+      const index=roles.findIndex(role=>role.id===selectedId);
+      if(index<0)return;
+      const seat=seatFor(index,layout);
+      panX=seat.x+(seat.col<layout.cols/2?45:-45);
+      panY=seat.y+22;
+      snapCamera();
+      initialFocusDone=true;
     }
     function redrawControls(){
       if(disposed||paused||!layout)return;
@@ -278,18 +290,9 @@
         if(disposed||paused)return;
         const next=projectRoles(data.roles);
         const diff=JSON.stringify(next)!==JSON.stringify(roles);
-        const firstRoster=roles.length===0;
         roles=next;synced=true;
         if(selectedId&&!roles.some(role=>role.id===selectedId))selectedId=null;
-        if(firstRoster&&selectedId&&layout&&
-          !Number.isFinite(initial?.panX)&&!Number.isFinite(initial?.panY)){
-          const index=roles.findIndex(role=>role.id===selectedId);
-          if(index>=0){
-            const seat=seatFor(index,layout);
-            panX=seat.x+(seat.col<layout.cols/2?45:-45);
-            panY=seat.y+22;snapCamera();
-          }
-        }
+        focusInitialCamera();
         syncContextWarnings();
         if(diff)draw();
         note.textContent=roles.length?
@@ -393,6 +396,7 @@
           data.tiles.length!==data.cols*data.rows||!Array.isArray(data.furniture))throw Error('invalid Pixel Agents layout');
         if(disposed)return;
         layout=data;
+        focusInitialCamera();
         for(let i=0;i<6;i++)scheduleAsset('characters/char_'+i+'.png');
         for(let i=0;i<9;i++)scheduleAsset('floors/floor_'+i+'.png');
         scheduleAsset('walls/wall_0.png');
