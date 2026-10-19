@@ -74,16 +74,17 @@ const health=(used,cap,exact=true)=>({
   await ui.load();assert.equal(fetches,1,'Dashboard and Map share the same client cache');
   assert.ok(events.includes('crew:context-usage-updated'));
   const uiFile=fs.readFileSync(path.join(__dirname,'..','public/js/ui.js'),'utf8');
-  const scene=fs.readFileSync(path.join(__dirname,'..','public/js/world-lab.js'),'utf8');
+  const scene=fs.readFileSync(path.join(__dirname,'..','public/js/crew-pixel-office.js'),'utf8');
   const page=fs.readFileSync(path.join(__dirname,'..','public/index.html'),'utf8');
   const server=fs.readFileSync(path.join(__dirname,'..','server.js'),'utf8');
-  assert.match(scene,/contextUsageByRole\.set\(roles\[i\].id,\{usage,detail\}\)/,
-    'calculate Context usage and pressure once per data refresh, not each 3D frame');
-  assert.match(scene,/contextForRole\(roles\[index\].id\)/,
-    'render uses already computed Role warning entries');
-  assert.match(scene,/contextMark\.hidden=!pressure/);
-  assert.match(scene,/crew:context-usage-updated/);
-  assert.match(scene,/pill\.dataset\.contextWarningCount/);
+  assert.match(scene,/contextUsageByRole\.set\(role\.id,description\)/,
+    'Context warning is scoped to durable Role ID');
+  assert.match(scene,/contextUsageByRole\.get\(role\.id\)/,
+    'pixel nameplates use Role-only pressure entries');
+  assert.match(scene,/note\.dataset\.contextWarningCount/,
+    'Context pressure count comes from verified Context Health data');
+  assert.match(scene,/crew:context-usage-updated/,
+    'react to shared Context cache updates');
   assert.match(page,/\/js\/crew-context-usage.js/);
   assert.doesNotMatch(page,/id="world-info"/,
     'hosted World does not recreate a second selected-Role detail bar');

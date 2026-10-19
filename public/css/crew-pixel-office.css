@@ -1,40 +1,42 @@
-/* Pixel Office is an independent renderer, not a second Chat or Runtime. */
-.crew-pixel-office[hidden],.crew-world-modal[data-world-renderer="pixel"] #world-stage,
-.crew-world-modal[data-world-renderer="pixel"] #world-collaboration-links,
-.crew-world-modal[data-world-renderer="pixel"] #world-status-strip,
-.crew-world-modal[data-world-renderer="pixel"] #world-activity-open,
-.crew-world-modal[data-world-renderer="pixel"] #world-attention-open,
-.crew-world-modal[data-world-renderer="pixel"] #world-attention-panel,
-.crew-world-modal[data-world-renderer="pixel"] #world-handoffs-open,
-.crew-world-modal[data-world-renderer="pixel"] #world-handoffs-panel,
-.crew-world-modal[data-world-renderer="pixel"] #world-flight-notice,
-.crew-world-modal[data-world-renderer="pixel"] #world-reset{display:none!important}
-.crew-pixel-office{position:absolute;inset:0;z-index:2;overflow-x:hidden;overflow-y:auto;
-  overscroll-behavior:contain;touch-action:pan-y;background:#222c3b;color:#eff8fa;scrollbar-width:thin}
-.crew-pixel-room{position:relative;min-height:100%;width:100%;isolation:isolate}
-.crew-pixel-room canvas{position:absolute;inset:0;width:100%;height:100%;
-  display:block;image-rendering:pixelated;pointer-events:none}
-.crew-pixel-roles{position:absolute;inset:0;pointer-events:none}
-.crew-pixel-role{position:absolute;z-index:2;display:flex;flex-direction:column;align-items:center;
-  justify-content:center;gap:2px;min-height:56px;max-width:180px;
-  padding:6px 5px 5px;border:2px solid #435a6a;border-radius:5px;
-  background:#101f33e8;color:#ecf9ff;box-shadow:3px 4px 0 #101a27a8;
-  transform:translateX(-50%);pointer-events:auto;text-align:center;cursor:pointer}
-.crew-pixel-role strong{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
-  width:100%;font-size:11px;line-height:1.25}
-.crew-pixel-role small{display:block;font-size:10px;line-height:1.25;color:#c6dbe5}
-.crew-pixel-role[data-state="working"]{border-color:#56c69d}
-.crew-pixel-role[data-state="waiting"]{border-color:#f5bb68}
-.crew-pixel-role[data-state="unknown"]{border-color:#778ba0}
-.crew-pixel-role[aria-pressed="true"]{outline:3px solid #b9f4ff;outline-offset:2px;
-  background:#19384e}
-.crew-pixel-role:focus-visible{outline:3px solid #fff;outline-offset:3px}
-.crew-pixel-feedback{position:fixed;z-index:3;top:calc(var(--crew-shared-header-height,96px) + 58px);
-  margin:0 10px 0 auto;padding:7px 9px;width:max-content;max-width:calc(100% - 150px);
-  background:#12283cdb;border:1px solid #91a9b8a0;color:#e5f4fb;
-  border-radius:6px;font:700 10px/1.4 system-ui,sans-serif;pointer-events:none}
-.crew-world-modal #world-render-mode{width:auto;min-width:57px;padding:0 8px;
-  font:800 11px/1.1 ui-monospace,monospace;letter-spacing:.5px}
-.crew-world-modal #world-render-mode[aria-pressed="true"]{border-color:#8be9b3;
-  color:#bdfbd4;background:#24453d}
+/* Pixel Agents office: official upstream sprites/layout, Crew's native Role commander. */
+.crew-pixel-office{position:absolute;inset:0;overflow:hidden;background:#1a1c27;touch-action:none;isolation:isolate}
+.crew-pixel-office canvas{position:absolute;inset:0;width:100%;height:100%;display:block;
+  image-rendering:pixelated;cursor:grab;touch-action:none;outline:none}
+.crew-pixel-office canvas:active{cursor:grabbing}
+.crew-pixel-office canvas:focus-visible{outline:2px solid #82d9ee;outline-offset:-3px}
+.crew-pixel-roles{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.crew-pixel-role{position:absolute;z-index:2;pointer-events:auto;transform:translate(-50%,-50%);
+  width:64px;min-height:45px;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;
+  background:transparent;border:0;padding:0 3px 0;cursor:pointer;color:#f8f9ff}
+.crew-pixel-role strong{max-width:105px;display:block;white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis;background:#172431e8;border:1px solid #90a1b1bb;
+  box-shadow:2px 2px 0 #15121b96;padding:3px 6px;border-radius:3px;
+  font:700 10px/1.2 system-ui,sans-serif;letter-spacing:.1px;pointer-events:none}
+.crew-pixel-role[data-state="working"] strong{border-color:#7ac4aa}
+.crew-pixel-role[data-state="waiting"] strong,.crew-pixel-role[data-attention="true"] strong{border-color:#eeb75a}
+.crew-pixel-role[aria-pressed="true"] strong{background:#24435a;outline:2px solid #b8efff;outline-offset:1px}
+.crew-pixel-role:focus-visible{outline:2px solid #c3f6ff;outline-offset:0}
+.crew-pixel-role .crew-pixel-state{width:7px;height:7px;position:absolute;top:0;right:6px;
+  border:1px solid #243b4a;border-radius:2px;background:#78899b}
+.crew-pixel-role[data-state="working"] .crew-pixel-state{background:#59d3a8}
+.crew-pixel-role[data-state="waiting"] .crew-pixel-state{background:#efb850}
+.crew-pixel-feedback{position:absolute;z-index:8;pointer-events:none;
+  top:calc(var(--crew-shared-header-height,96px) + 10px);left:10px;
+  background:#172234e3;border:1px solid #788e9f9c;border-radius:6px;
+  color:#e1effa;padding:7px 10px;margin:0;max-width:calc(100% - 160px);
+  font:650 11px/1.3 system-ui,sans-serif}
+.crew-world-modal .crew-pixel-tools{top:calc(var(--crew-shared-header-height,96px) + 8px)}
+.crew-world-modal .crew-pixel-tools>button{width:38px;min-width:38px;height:38px;font-size:19px}
+.crew-world-modal #world-reset{font-size:23px}
+@media(max-width:480px){.crew-pixel-role strong{font-size:10px;max-width:74px}
+ .crew-pixel-feedback{max-width:calc(100% - 146px);font-size:10px}
+ .crew-world-modal .crew-pixel-tools>button{width:35px;min-width:35px;height:35px}}
 @media(prefers-reduced-motion:reduce){.crew-pixel-role{transition:none}}
+
+.crew-pixel-role[data-context-tone="warning"] strong{border-color:#f3c56a}
+.crew-pixel-role[data-context-tone="critical"] strong{border-color:#ff8181;box-shadow:2px 2px 0 #802a2a}
+.crew-pixel-context{position:absolute;top:-16px;left:5px;color:#fff1d8;
+  font:800 9px/1 monospace;background:#85522fdd;border:1px solid #e8ad58;
+  padding:3px 4px;border-radius:3px;white-space:nowrap}
+.crew-pixel-role[data-context-tone="critical"] .crew-pixel-context{
+ background:#933e40;border-color:#ff9494;color:#fff}

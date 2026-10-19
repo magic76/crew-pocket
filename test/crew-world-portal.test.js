@@ -7,16 +7,16 @@ const vm=require('node:vm');
 /* Map and Dashboard intentionally share ONE header, but only the map makes
    it an overlay. Guard against opaque bars and duplicate World counters. */
 const hudCss=fs.readFileSync(path.join(__dirname,'../public/css/crew-world-launcher.css'),'utf8');
-const worldJs=fs.readFileSync(path.join(__dirname,'../public/js/world-lab.js'),'utf8');
+const worldJs=fs.readFileSync(path.join(__dirname,'../public/js/crew-pixel-office.js'),'utf8');
 assert.match(hudCss,/body\.crew-world-active #crew-home-header-host\{[\s\S]*?position:fixed/);
 assert.match(hudCss,/body\.crew-world-active #crew-home-header\{[\s\S]*?background:transparent!important/);
 assert.match(hudCss,/body\.crew-world-active \.crew-world-modal:not\(\[hidden\]\)\{inset:0\}/);
 assert.match(hudCss,/body\.crew-world-active \.crew-home-view-toggle button,[\s\S]*?pointer-events:auto/);
 assert.match(hudCss,/body\.crew-world-active \.crew-home-top,[\s\S]*?pointer-events:none/);
 assert.match(hudCss,/\.crew-world-modal \.world-quick-tools\{\s*top:calc\(var\(--crew-shared-header-height/);
-assert.doesNotMatch(worldJs,/addStatus\(working\+' 工作中'/);
-assert.doesNotMatch(worldJs,/addStatus\(roles\.length\+' 位 Role'/);
-assert.match(worldJs,/syncContextWarnings\(\);\s*renderAttention\(\)/);
+assert.match(worldJs,/default-layout\.json/);
+assert.match(worldJs,/\/api\/crew-status/);
+assert.match(worldJs,/CHAR_W=16,CHAR_H=32/);
 
 class Node {
   constructor(id,doc){this.id=id;this.doc=doc;this.parentNode=null;this.children=[];
@@ -53,7 +53,7 @@ async function tick(){await new Promise(resolve=>setImmediate(resolve));}
   const ids=['crew-world-open-btn','crew-home-dashboard-btn','crew-open-settings-btn','crew-home-view-toggle','crew-home-header','crew-home-header-host','crew-world-modal',
     'crew-world-chat-panel','crew-world-chat-messages-slot','crew-world-chat-composer-slot',
     'messages-container','chat-composer-footer','crew-world-chat-hide','crew-world-chat-expand',
-    'world-chat-open','crew-world-chat-role-name','crew-back-home-btn','world-stage',
+    'world-chat-open','crew-world-chat-role-name','crew-back-home-btn','crew-pixel-canvas',
     'context-pill','world-reset',
     'crew-world-command-role','crew-world-command-state','crew-world-command-read',
     'crew-world-command-context',
@@ -89,7 +89,7 @@ async function tick(){await new Promise(resolve=>setImmediate(resolve));}
     addEventListener(){},requestAnimationFrame(fn){fn();},
     setTimeout(fn,ms){const id=++clockIndex;scheduled.set(id,{fn,ms});return id;},
     clearTimeout(id){scheduled.delete(id);},
-    mountCrewWorldScene(camera){mountCount++;mountArgs.push(camera);const dispose=()=>disposeCount++;
+    mountCrewPixelOfficeScene(camera){mountCount++;mountArgs.push(camera);const dispose=()=>disposeCount++;
       dispose.pause=()=>pauseCount++;dispose.resume=()=>resumeCount++;
       dispose.getCameraState=()=>({x:3,z:-2,zoom:2.25,selectedId:'pocket'});
       return dispose;},

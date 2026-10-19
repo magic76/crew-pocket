@@ -56,7 +56,7 @@
   <link rel="stylesheet" href="/css/crew-cinematic.css">
   <link rel="stylesheet" href="/css/crew-world-launcher.css">
   <link rel="stylesheet" href="/css/crew-pixel-office.css">
-  <link rel="stylesheet" href="/css/world-lab.css">
+  <link rel="stylesheet" href="/css/crew-pixel-shell.css">
   <link rel="stylesheet" href="/css/visual-inspector.css">
 </head>
 <body data-primary-tab="crew" class="bg-slate-950 text-slate-100 flex flex-col h-[100dvh] w-full max-w-full overflow-hidden">
@@ -517,7 +517,7 @@
     <div id="crew-home-header" class="crew-home-header">
           <div class="crew-home-top">
             <div id="crew-home-view-toggle" class="crew-home-view-toggle" role="group" aria-label="首頁檢視模式" data-view="map">
-              <button id="crew-world-open-btn" type="button" aria-label="地圖主畫面" title="地圖" aria-pressed="true" class="is-active"><span class="crew-home-toggle-icon" aria-hidden="true">◇</span></button>
+              <button id="crew-world-open-btn" type="button" aria-label="像素辦公室主畫面" title="Pixel Office" aria-pressed="true" class="is-active"><span class="crew-home-toggle-icon" aria-hidden="true">◇</span></button>
               <button id="crew-home-dashboard-btn" type="button" aria-label="Dashboard 輔助總覽" title="Dashboard" aria-pressed="false"><span class="crew-home-toggle-icon" aria-hidden="true">▦</span></button>
             </div>
             <div class="crew-home-actions">
@@ -1790,84 +1790,22 @@
   </div>
 
 
-  <!-- Same-document Three.js stage + portals for the ORIGINAL chat DOM.
-       There is only one messages-container, one composer, and one Chat Runtime. -->
-  <section id="crew-world-modal" class="crew-world-modal" aria-label="Crew World 3D 小隊主畫面" hidden>
-  <div id="world-app" class="world-app">
-    <div class="world-stage-frame">
-      <div id="world-stage" aria-label="可縮放、平移的 3D Crew World 場景">
-        <div id="world-districts" aria-label="專案工作區域"></div>
-        <div id="world-labels" aria-label="Crew Role 對話回覆"></div>
-        <div id="world-loading" role="status">正在建立 3D 世界…</div>
+  <!-- Pixel Agents art/layout; one original Crew Chat DOM and Runtime. -->
+  <section id="crew-world-modal" class="crew-world-modal" aria-label="Crew Pixel Office 小隊主畫面" hidden>
+    <div id="world-app" class="world-app">
+      <div class="world-stage-frame">
+        <section id="crew-pixel-office" class="crew-pixel-office" aria-label="像素小隊辦公室">
+          <canvas id="crew-pixel-canvas" tabindex="0" aria-label="可拖曳、雙指縮放的 Pixel Agents 辦公室"></canvas>
+          <div id="crew-pixel-roles" class="crew-pixel-roles" aria-label="選擇 Crew 角色"></div>
+        </section>
       </div>
-      <section id="crew-pixel-office" class="crew-pixel-office" aria-label="Pixel Office 像素小隊辦公室" hidden>
-        <div id="crew-pixel-room" class="crew-pixel-room">
-          <canvas id="crew-pixel-canvas" aria-hidden="true"></canvas>
-          <div id="crew-pixel-roles" class="crew-pixel-roles" aria-label="角色工位"></div>
-        </div>
-        <p id="crew-pixel-feedback" class="crew-pixel-feedback" role="status" aria-live="polite">載入角色狀態中…</p>
-      </section>
-      <svg id="world-collaboration-links" class="world-collaboration-links" aria-label="近期已記錄角色協作關係" aria-hidden="true"></svg>
+      <p id="crew-pixel-feedback" class="crew-pixel-feedback" role="status" aria-live="polite">正在載入 Pixel Agents 辦公室…</p>
+      <nav class="world-quick-tools crew-pixel-tools" aria-label="辦公室檢視操作">
+        <button id="world-zoom-out" type="button" aria-label="縮小辦公室">−</button>
+        <button id="world-reset" type="button" aria-label="辦公室全景">⌗</button>
+        <button id="world-zoom-in" type="button" aria-label="放大辦公室">＋</button>
+      </nav>
     </div>
-    <div id="world-status-strip" class="world-status-strip" role="status" aria-live="polite">讀取小隊狀態中…</div>
-    <button id="world-activity-open" class="world-activity-open" type="button" aria-expanded="false"
-      aria-controls="world-attention-panel world-handoffs-panel" aria-label="查看小隊動態" hidden>
-      <span id="world-activity-label">動態</span><span id="world-activity-count" hidden>0</span>
-    </button>
-    <button id="world-attention-open" class="world-attention-open" type="button" aria-expanded="false"
-      aria-controls="world-attention-panel" aria-label="查看需要注意的角色" hidden>待處理 <span id="world-attention-count">0</span></button>
-    <section id="world-attention-panel" class="world-attention-panel" aria-label="真實待處理與新回覆" hidden>
-      <div class="world-attention-heading"><strong>需要關注</strong><button id="world-activity-to-handoffs" type="button">協作紀錄 ›</button><button id="world-attention-close" type="button" aria-label="關閉提醒">✕</button></div>
-      <div id="world-attention-list" class="world-attention-list"></div>
-      <section id="world-runtime-feed" class="world-runtime-feed" aria-label="本次地圖的 Runtime 狀態變化" hidden>
-        <h3>本次觀察到的工作變化</h3>
-        <div id="world-runtime-feed-list" class="world-runtime-feed-list" role="list"></div>
-      </section>
-      <p>僅列出已同步的 Runtime 狀態變化與新回覆；離開工作中不代表已完成，歷史從本次開啟地圖開始。</p>
-    </section>
-    <!-- Real saved messages only; this is a flight cue, NOT delivery proof. -->
-    <button id="world-flight-notice" class="world-flight-notice" type="button"
-      aria-label="查看剛記錄的角色協作訊息" hidden>
-      <span class="world-flight-notice-plane" aria-hidden="true">✈</span>
-      <span id="world-flight-notice-text" class="world-flight-notice-text">已記錄角色訊息</span>
-      <span class="world-flight-notice-action">查看 ›</span>
-    </button>
-    <button id="world-handoffs-open" class="world-handoffs-open" type="button" aria-controls="world-handoffs-panel" aria-expanded="false" hidden>協作紀錄</button>
-    <section id="world-handoffs-panel" class="world-handoffs-panel" aria-label="已保存的角色間訊息" hidden>
-      <div class="world-handoffs-heading">
-        <div><strong>最近協作</strong><small>虛線表示已記錄訊息，非送達／已讀／完成</small></div>
-        <button id="world-activity-to-attention" type="button" hidden>待處理</button>
-        <button id="world-handoffs-close" type="button" aria-label="關閉協作紀錄">✕</button>
-      </div>
-      <button id="world-handoffs-filter" class="world-handoffs-filter" type="button" aria-pressed="false">只看目前 Role</button>
-      <div id="world-handoffs-list" class="world-handoffs-list" role="list">
-        <p>尚無已確認的協作紀錄</p>
-      </div>
-    </section>
-    <section id="world-district-picker" class="world-district-picker" role="dialog" aria-label="選擇工作室成員" hidden>
-      <div class="world-district-picker-head">
-        <strong id="world-district-picker-name">工作室成員</strong>
-        <button id="world-district-picker-close" type="button" aria-label="關閉成員選單">✕</button>
-      </div>
-      <div id="world-district-picker-list" class="world-district-picker-list"></div>
-    </section>
-    <!-- Dashboard and World share the original top navigation, including
-         its Dashboard / Map toggle; only the Chat header is hidden. -->
-    <!-- Map tools belong to the overview corner, not a bottom control row.
-         Focus mode uses its own existing '返回總覽' action. -->
-    <nav class="world-quick-tools" aria-label="地圖快捷操作">
-      <button id="world-render-mode" type="button" aria-label="切換成 Pixel Office 像素辦公室" aria-pressed="false">PIXEL</button>
-      <button id="world-reset" type="button" aria-label="回到世界全景" title="回到世界全景">
-        <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M3 9V4h5M21 15v5h-5M4 4l6 6M20 20l-6-6"/>
-          <path d="M14 4h6v6M4 14v6h6M20 4l-6 6M4 20l6-6"/>
-        </svg>
-      </button>
-    </nav>
-    <div id="world-toast" class="world-toast" role="status" aria-live="polite"></div>
-    <noscript>此 Demo 需要啟用 JavaScript。</noscript>
-  </div>
- 
     <section id="crew-world-chat-panel" class="crew-world-chat-panel" aria-label="地圖指揮與原有 Role 對話" hidden>
       <div class="crew-world-command-head">
         <label for="crew-world-command-role">指揮角色</label>
@@ -2038,7 +1976,7 @@
   <script src="/js/i18n.js"></script>
   <script src="/js/crew-room.js"></script>
   <script src="/js/crew-cinematic.js"></script>
-  <!-- World 3D scripts are loaded on first visit to avoid startup WebGL cost. -->
+  <!-- The Pixel Agents asset renderer loads on first visit; no 3D/WebGL dependency. -->
   <script src="/js/crew-context-usage.js"></script>
   <script src="/js/crew-world-launcher.js"></script>
   <script src="/js/ui.js"></script>
