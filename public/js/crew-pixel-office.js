@@ -278,8 +278,18 @@
         if(disposed||paused)return;
         const next=projectRoles(data.roles);
         const diff=JSON.stringify(next)!==JSON.stringify(roles);
+        const firstRoster=roles.length===0;
         roles=next;synced=true;
         if(selectedId&&!roles.some(role=>role.id===selectedId))selectedId=null;
+        if(firstRoster&&selectedId&&layout&&
+          !Number.isFinite(initial?.panX)&&!Number.isFinite(initial?.panY)){
+          const index=roles.findIndex(role=>role.id===selectedId);
+          if(index>=0){
+            const seat=seatFor(index,layout);
+            panX=seat.x+(seat.col<layout.cols/2?45:-45);
+            panY=seat.y+22;snapCamera();
+          }
+        }
         syncContextWarnings();
         if(diff)draw();
         note.textContent=roles.length?

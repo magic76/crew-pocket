@@ -99,6 +99,7 @@ assert.match(read('public/css/crew-pixel-office.css'),/image-rendering:pixelated
  assert.ok(renders>0,'renders original office furniture/floor and sprites');
  assert.equal(dom['crew-pixel-roles'].children.length,2);
  assert.equal(dom['crew-pixel-roles'].children[0].attrs['aria-pressed'],'true');
+ assert.ok(scene.getCameraState().panX<168,'initial camera shows the selected workstation');
  dom['crew-pixel-roles'].children[1].click();
  assert.equal(selected.at(-1)[0],'qa','selects original Crew Role by ID');
  assert.equal(scene.getCameraState().selectedId,'qa');
