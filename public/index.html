@@ -1800,9 +1800,76 @@
         </section>
       </div>
       <p id="crew-pixel-feedback" class="crew-pixel-feedback" role="status" aria-live="polite">正在載入 Pixel Agents 辦公室…</p>
-      <nav class="world-quick-tools crew-pixel-tools" aria-label="辦公室檢視操作">
+      <div id="crew-pixel-controls" class="crew-pixel-controls">
+        <button id="crew-pixel-settings-toggle" type="button" aria-label="像素辦公室設定" aria-expanded="false">⚙</button>
+        <button id="crew-pixel-edit-toggle" type="button" aria-label="編輯辦公室" aria-pressed="false">✎</button>
+      </div>
+      <section id="crew-pixel-settings" class="crew-pixel-settings" aria-label="辦公室顯示設定" hidden>
+        <div class="crew-pixel-settings-head"><strong>辦公室設定</strong><button id="crew-pixel-settings-close" type="button" aria-label="關閉設定">✕</button></div>
+        <label>人物名稱
+          <select id="crew-pixel-label-mode">
+            <option value="always">全部顯示</option>
+            <option value="selected">僅選取／懸停</option>
+            <option value="hidden">全部隱藏</option>
+          </select>
+        </label>
+        <label class="crew-pixel-setting-check"><input id="crew-pixel-outline" type="checkbox" checked> 人物像素輪廓高亮</label>
+        <label class="crew-pixel-setting-check"><input id="crew-pixel-follow" type="checkbox" checked> 切換角色時聚焦</label>
+        <label>點擊角色
+          <select id="crew-pixel-interaction"><option value="direct">直接開啟對話</option><option value="two-tap">先選取，再點進對話</option></select>
+        </label>
+        <label>目前角色外觀
+          <select id="crew-pixel-appearance">
+            <option value="0">造型 1</option><option value="1">造型 2</option>
+            <option value="2">造型 3</option><option value="3">造型 4</option>
+            <option value="4">造型 5</option><option value="5">造型 6</option>
+          </select>
+        </label>
+        <label class="crew-pixel-setting-check"><input id="crew-pixel-pets" type="checkbox"> 顯示辦公室寵物</label>
+      </section>
+      <section id="crew-pixel-editor" class="crew-pixel-editor" aria-label="辦公室編輯工具" hidden>
+        <div class="crew-pixel-editor-head"><strong>編輯辦公室</strong><button id="crew-pixel-edit-done" type="button">完成</button></div>
+        <label>工具
+          <select id="crew-pixel-edit-tool">
+            <option value="move">移動家具</option>
+            <option value="place">放置家具</option>
+            <option value="role">調整目前角色位置</option>
+            <option value="floor">塗地板</option>
+            <option value="wall">繪製牆壁</option>
+            <option value="erase">擦除家具／牆面</option>
+          </select>
+        </label>
+        <label id="crew-pixel-furniture-group">家具
+          <select id="crew-pixel-furniture-type">
+            <option value="DESK_FRONT">辦公桌</option><option value="CUSHIONED_CHAIR_FRONT">辦公椅</option>
+            <option value="SOFA_FRONT">沙發</option><option value="SMALL_TABLE_FRONT">小桌子</option>
+            <option value="PLANT">盆栽</option><option value="PLANT_2">植物</option>
+            <option value="BOOKSHELF">書架</option><option value="PC_FRONT_OFF">電腦</option>
+            <option value="COFFEE">咖啡杯</option><option value="WHITEBOARD">白板</option>
+          </select>
+        </label>
+        <label id="crew-pixel-floor-group" hidden>地板樣式
+          <select id="crew-pixel-floor-type">
+            <option value="1">地板 1</option><option value="2">地板 2</option>
+            <option value="3">地板 3</option><option value="4">地板 4</option>
+            <option value="5">地板 5</option><option value="6">地板 6</option>
+            <option value="7">地板 7</option><option value="8">地板 8</option><option value="9">地板 9</option>
+          </select>
+        </label>
+        <p id="crew-pixel-editor-hint" role="status">先點家具，再點新的空位移動。</p>
+        <div class="crew-pixel-editor-actions">
+          <button id="crew-pixel-undo" type="button">復原</button>
+          <button id="crew-pixel-redo" type="button">重做</button>
+          <button id="crew-pixel-export" type="button">匯出</button>
+          <button id="crew-pixel-import" type="button">匯入</button>
+          <button id="crew-pixel-reset-layout" type="button">重設佈局</button>
+          <input id="crew-pixel-import-file" type="file" accept=".json,application/json" hidden>
+        </div>
+      </section>
+      <nav class="world-quick-tools crew-pixel-tools" aria-label="辦公室鏡頭操作">
         <button id="world-zoom-out" type="button" aria-label="縮小辦公室">−</button>
         <button id="world-reset" type="button" aria-label="辦公室全景">⌗</button>
+        <button id="world-focus" type="button" aria-label="聚焦選取的角色">◎</button>
         <button id="world-zoom-in" type="button" aria-label="放大辦公室">＋</button>
       </nav>
     </div>
@@ -1978,6 +2045,7 @@
   <script src="/js/crew-cinematic.js"></script>
   <!-- The Pixel Agents asset renderer loads on first visit; no 3D/WebGL dependency. -->
   <script src="/js/crew-context-usage.js"></script>
+  <script src="/js/crew-pixel-config.js"></script>
   <script src="/js/crew-world-launcher.js"></script>
   <script src="/js/ui.js"></script>
   <script src="/js/memory-xray.js"></script>
