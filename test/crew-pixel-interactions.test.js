@@ -152,11 +152,11 @@ vm.runInNewContext(read('public/js/crew-pixel-office.js'),{window:win,document:d
  nodes['crew-pixel-canvas'].trigger('pointerdown',start);
  nodes['crew-pixel-canvas'].trigger('pointermove',end);
  nodes['crew-pixel-canvas'].trigger('pointerup',end);
- const coffee=preferences().layout.furniture.find(f=>f.type==='COFFEE');
+ const coffee=preferences().layout.furniture.find(f=>f.type==='COFFEE'&&f.row===19);
  assert.equal(coffee.col,2,'furniture drag updates actual position');
  assert.equal(nodes['crew-pixel-rotate'].disabled,false,'furniture action becomes available');
  nodes['crew-pixel-undo'].click();
- assert.equal(preferences().layout.furniture.find(f=>f.type==='COFFEE').col,1,
+ assert.equal(preferences().layout.furniture.find(f=>f.type==='COFFEE'&&f.row===19).col,1,
    'furniture drag may be undone');
  nodes['crew-pixel-add'].click();
  assert.equal(tool.value,'place','add-furniture button opens placement mode');
