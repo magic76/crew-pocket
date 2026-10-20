@@ -21,6 +21,8 @@ const paths=new Set();
 for(let i=0;i<6;i++)paths.add('characters/char_'+i+'.png');
 for(let i=0;i<9;i++)paths.add('floors/floor_'+i+'.png');
 paths.add('walls/wall_0.png');
+paths.add('pets/gitcat/pet.png');
+paths.add('pets/claudio/pet.png');
 for(const item of layout.furniture){
  const type=String(item.type).split(':')[0];
  const group=groups.find(g=>type===g||type.startsWith(g+'_'));

@@ -35,3 +35,32 @@ node test/role-map-navigation.test.js
 ```
 
 Manual smoke: open the home office on Android WebView and regular mobile browser; tap roles at different desks; confirm original input and history follow the selected Role; test scrolling, pinch/pan, layout 1–36 roles, disconnected status, resize and Dashboard return. No APK rebuild is required for `public/` changes.
+
+## Customized Office and user settings (PR #111)
+
+Crew Pocket renders one official 21×22 upstream Pixel Agents room **per nine Roles**. Each Role is now assigned by **durable roleId**, so reordering or renaming does not move a Role. The furniture and tile palette are shared across all room copies; only individual Role positions can differ across copies.
+
+The office contains two native-to-Crew controls beside zoom/focus:
+
+- **Settings** (gear): label visibility (always, selected/hover, hidden), pixel-accurate alpha silhouette selection, camera focus, one-tap versus two-tap Role conversation navigation, six character appearances, and a toggle for the upstream Gitcat/Claudio pets (both sprites vendored locally).
+- **Edit Office** (pencil): select the Role to move, place/rotate/duplicate/move/erase furniture, repaint floors/walls, undo/redo, restore layout, export and import portable JSON. Edit mode disables chat-target clicks to avoid accidental Role navigation. Furniture moves use tile-boundary/overlap checks; painting a wall under a Role is blocked.
+
+Idle Roles can take small, bounded movements along walkable tiles near their registered workstation (unless reduced-motion is enabled). They never initiate a new task or signal a fake job state.
+
+### Storage and privacy
+
+Settings, appearance, custom furniture/tile data and Role positions are persisted only in the browser's `localStorage`, namespace `crew-pocket:pixel-office:v2`. These are **display-only settings** and never change the Role Runtime, Context, Memory, provider, active conversation or CLI process.
+
+The new editor is a **bounded Crew-compatible editor** rather than a full port of Pixel Agents' React Editor: advanced wall/carpet tinting, area-to-directory mapping, arbitrary-sized room resizing and full NPC state machines are outside this PR.
+
+### Smoke testing
+
+```bash
+node test/crew-pixel-config.test.js
+node test/crew-pixel-interactions.test.js
+node test/crew-pixel-office.test.js
+node test/crew-world-portal.test.js
+node scripts/sync-pixel-assets.mjs --check
+```
+
+Manual checks: Pixel Office opening on Android WebView; six character palette options; hide all labels without losing touch selection or context warning; 1/10/36 Roles; selected Role silhouette; two-tap chat; edit a floor and undo; move a Role and reload page; export/import JSON; toggle pets; zoom-to-fit 4 rooms; ensure Dashboard/Chat switching preserves draft and streams.
