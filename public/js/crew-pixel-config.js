@@ -61,7 +61,7 @@
     if(input.appearance&&typeof input.appearance==='object'){
       for(const [id,value] of Object.entries(input.appearance).slice(0,60))
         if(id.length<=120&&!['__proto__','prototype','constructor'].includes(id)&&
-          Number.isInteger(value)&&value>=0&&value<6)s.appearance[id]=value;
+          Number.isInteger(value)&&value>=0&&value<24)s.appearance[id]=value;
     }
     if(input.placements&&typeof input.placements==='object'){
       for(const [id,p] of Object.entries(input.placements).slice(0,60))
