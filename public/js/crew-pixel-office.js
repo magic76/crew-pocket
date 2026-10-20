@@ -314,6 +314,15 @@
         const seat=rolePosition(role,index);
         drawables.push({depth:seat.y+TILE/2+.1,draw:()=>drawActor(role,index,seat)});
       });
+      if(prefs.showPets){
+        const pet=getAsset('pets/gitcat/pet.png'),friend=getAsset('pets/claudio/pet.png');
+        const pets=[pet,friend];
+        for(let i=0;i<pets.length;i++){
+          if(!pets[i])continue;
+          const px=170+i*32,py=270+i*19;
+          drawables.push({depth:py,draw:()=>ctx.drawImage(pets[i],(animationTick%3)*16,0,16,32,px,py-32,16,32)});
+        }
+      }
       drawables.sort((a,b)=>a.depth-b.depth).forEach(entry=>entry.draw());
       ctx.restore();
       redrawControls();
@@ -357,6 +366,7 @@
         if(selectedId&&!roles.some(role=>role.id===selectedId))selectedId=null;
         focusInitialCamera();
         syncContextWarnings();
+        syncControls();
         if(diff)draw();
         note.textContent=roles.length?
           'CREW OFFICE · '+roles.length+' ROLES · '+roles.filter(r=>r.state==='working').length+' WORKING':
@@ -431,6 +441,266 @@
       }).sort((a,b)=>a.d-b.d)[0];
       if(nearest&&nearest.d<21)selectRole(nearest.r.id,{open:true});
     }
+
+    // Editing is separate from Crew Runtime: only cosmetic browser-local data.
+    const byId=id=>document.getElementById(id);
+    const settingPanel=byId('crew-pixel-settings'),editorPanel=byId('crew-pixel-editor');
+    const toggleSettings=byId('crew-pixel-settings-toggle'),closeSettings=byId('crew-pixel-settings-close');
+    const toggleEdit=byId('crew-pixel-edit-toggle'),doneEdit=byId('crew-pixel-edit-done');
+    const labelInput=byId('crew-pixel-label-mode'),outlineInput=byId('crew-pixel-outline');
+    const followInput=byId('crew-pixel-follow'),interactionInput=byId('crew-pixel-interaction');
+    const appearanceInput=byId('crew-pixel-appearance'),petsInput=byId('crew-pixel-pets');
+    const editToolInput=byId('crew-pixel-edit-tool'),furnitureInput=byId('crew-pixel-furniture-type');
+    const floorInput=byId('crew-pixel-floor-type'),editHint=byId('crew-pixel-editor-hint');
+    const undoButton=byId('crew-pixel-undo'),redoButton=byId('crew-pixel-redo');
+    const resetLayoutButton=byId('crew-pixel-reset-layout');
+    const exportButton=byId('crew-pixel-export'),importButton=byId('crew-pixel-import');
+    const importFile=byId('crew-pixel-import-file');
+    const floorGroup=byId('crew-pixel-floor-group'),furnitureGroup=byId('crew-pixel-furniture-group');
+    let defaultLayout=null;
+    let editHistorySelection=null;
+    const controls=[];
+    function listen(el,type,handler){
+      if(!el)return;
+      el.addEventListener(type,handler);controls.push([el,type,handler]);
+    }
+    function updateEditorHint(message){
+      if(editHint)editHint.textContent=message;
+    }
+    function syncControls(){
+      if(board.dataset){
+        board.dataset.labelMode=prefs.labelMode;
+        board.dataset.editing=String(editMode);
+      }
+      if(labelInput)labelInput.value=prefs.labelMode;
+      if(outlineInput)outlineInput.checked=prefs.outline;
+      if(followInput)followInput.checked=prefs.followSelection;
+      if(interactionInput)interactionInput.value=prefs.interaction;
+      if(petsInput)petsInput.checked=prefs.showPets;
+      const selected=roles.find(role=>role.id===selectedId);
+      if(appearanceInput){
+        appearanceInput.disabled=!selected;
+        if(selected)appearanceInput.value=String(paletteFor(selected));
+      }
+      if(editToolInput)editToolInput.value=editTool;
+      if(furnitureGroup)furnitureGroup.hidden=editTool!=='place';
+      if(floorGroup)floorGroup.hidden=editTool!=='floor';
+      if(undoButton)undoButton.disabled=!undoStack.length;
+      if(redoButton)redoButton.disabled=!redoStack.length;
+      if(toggleEdit)toggleEdit.setAttribute('aria-pressed',String(editMode));
+    }
+    const setPrefs=(key,value)=>{
+      prefs[key]=value;persist();controlsSignature='';syncControls();draw();
+    };
+    function showSettings(show){
+      if(settingPanel)settingPanel.hidden=!show;
+      toggleSettings?.setAttribute('aria-expanded',String(show));
+      if(show&&editorPanel)editorPanel.hidden=true;
+      if(show&&editMode){editMode=false;selectedFurnitureUid=null;}
+      syncControls();
+    }
+    function showEditor(show){
+      if(editorPanel)editorPanel.hidden=!show;
+      if(show&&settingPanel)showSettings(false);
+      editMode=show;
+      selectedFurnitureUid=null;
+      controlsSignature='';
+      if(show)updateEditorHint('點選家具，再點新位置；拖曳空白處仍可移動鏡頭。');
+      syncControls();draw();
+    }
+    listen(toggleSettings,'click',()=>showSettings(settingPanel?.hidden!==false));
+    listen(closeSettings,'click',()=>showSettings(false));
+    listen(toggleEdit,'click',()=>showEditor(!editMode));
+    listen(doneEdit,'click',()=>showEditor(false));
+    listen(labelInput,'change',()=>setPrefs('labelMode',labelInput.value));
+    listen(outlineInput,'change',()=>setPrefs('outline',Boolean(outlineInput.checked)));
+    listen(followInput,'change',()=>setPrefs('followSelection',Boolean(followInput.checked)));
+    listen(interactionInput,'change',()=>setPrefs('interaction',interactionInput.value));
+    listen(petsInput,'change',()=>{
+      setPrefs('showPets',Boolean(petsInput.checked));
+      if(petsInput.checked)loadPets();
+    });
+    listen(appearanceInput,'change',()=>{
+      if(!selectedId||!Number.isInteger(Number(appearanceInput.value)))return;
+      prefs.appearance={...prefs.appearance,[selectedId]:Number(appearanceInput.value)};
+      persist();draw();
+    });
+    listen(editToolInput,'change',()=>{
+      editTool=editToolInput.value;selectedFurnitureUid=null;syncControls();
+      updateEditorHint(editTool==='role'?'點擊格子，把目前角色移動到該位置':
+        editTool==='place'?'點擊空白位置，放置選擇的家具':
+        editTool==='floor'?'點擊地板格子調整地板':
+        editTool==='wall'?'點擊格子新增牆面':
+        editTool==='erase'?'點擊家具或牆面進行擦除':
+        '先點家具，再點想放置的位置');
+    });
+    const snapshot=()=>JSON.stringify({layout,placements});
+    function capture(){
+      if(!layout)return;
+      undoStack.push(snapshot());
+      if(undoStack.length>30)undoStack.shift();
+      redoStack=[];
+    }
+    function applySnapshot(data){
+      const next=JSON.parse(data);
+      layout=config.validateLayout(next.layout);
+      placements=next.placements||{};
+      selectedFurnitureUid=null;
+      prefs.layout=layout;persist();
+      for(const f of layout.furniture){const ref=resolveFurniture(f.type);if(ref)scheduleAsset(ref.path);}
+      syncControls();draw();
+    }
+    function undo(){
+      if(!undoStack.length)return;
+      redoStack.push(snapshot());applySnapshot(undoStack.pop());
+    }
+    function redo(){
+      if(!redoStack.length)return;
+      undoStack.push(snapshot());applySnapshot(redoStack.pop());
+    }
+    listen(undoButton,'click',undo);
+    listen(redoButton,'click',redo);
+    listen(resetLayoutButton,'click',()=>{
+      if(!layout||!defaultLayout)return;
+      capture();layout=config.validateLayout(defaultLayout);
+      prefs.layout=null;placements={};prefs.placements={};persist();
+      const stable=config.allocateRoles(roles.map(r=>r.id),layout,{});
+      placements={...stable};prefs.layout=layout;persist();
+      syncControls();draw();updateEditorHint('已重設為原版辦公室配置。');
+    });
+    listen(exportButton,'click',()=>{
+      if(!layout||!config)return;
+      const payload={format:'crew-pocket-pixel-office',version:1,
+        layout:config.validateLayout(layout),placements,appearance:prefs.appearance};
+      const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});
+      const url=URL.createObjectURL(blob);
+      const link=document.createElement('a');link.href=url;
+      link.download='crew-pocket-office-layout.json';link.click();
+      URL.revokeObjectURL(url);
+    });
+    listen(importButton,'click',()=>importFile?.click());
+    listen(importFile,'change',async()=>{
+      const file=importFile.files?.[0];if(!file)return;
+      try{
+        if(file.size>180000)throw Error('佈局檔案過大');
+        const incoming=JSON.parse(await file.text());
+        if(incoming.format!=='crew-pocket-pixel-office')throw Error('不是 Crew Pocket 佈局檔案');
+        const next=config.validateLayout(incoming.layout);
+        capture();layout=next;
+        placements=config.allocateRoles(roles.map(r=>r.id),layout,
+          config.normalize({placements:incoming.placements}).placements);
+        prefs.appearance=config.normalize({appearance:incoming.appearance}).appearance;
+        prefs.layout=next;persist();
+        for(const f of layout.furniture){const ref=resolveFurniture(f.type);if(ref)scheduleAsset(ref.path);}
+        syncControls();draw();updateEditorHint('匯入成功');
+      }catch(error){updateEditorHint('匯入失敗：'+error.message);}
+      finally{importFile.value='';}
+    });
+    function furnitureAt(col,row){
+      // Reverse order: top-most item receives the click.
+      return [...layout.furniture].reverse().find(f=>{
+        const dim=config?.shape(f);
+        return dim&&col>=f.col&&col<f.col+dim[0]&&row>=f.row&&row<f.row+dim[1];
+      });
+    }
+    function canPutFurniture(f,col,row,excluding=null){
+      const dim=config?.shape(f);
+      if(!dim||col<0||row<0||col+dim[0]>layout.cols||row+dim[1]>layout.rows)return false;
+      for(let dy=0;dy<dim[1];dy++)for(let dx=0;dx<dim[0];dx++){
+        const tile=layout.tiles[(row+dy)*layout.cols+col+dx];
+        if(tile===0||tile===255)return false;
+      }
+      // Furniture occupies grid cells, but a coffee cup/PC can sit on a desk.
+      if(/^(PC_|COFFEE$)/.test(f.type))return true;
+      for(const other of layout.furniture){
+        if(other.uid===excluding||/^(PC_|COFFEE$)/.test(other.type))continue;
+        const odim=config.shape(other);
+        if(odim&&col<other.col+odim[0]&&col+dim[0]>other.col&&
+          row<other.row+odim[1]&&row+dim[1]>other.row)return false;
+      }
+      return true;
+    }
+    function applyEdit(x,y){
+      if(!editMode||!layout||!config)return;
+      const room=Math.floor(x/(layout.cols*TILE));
+      const col=Math.floor(x/TILE)-room*layout.cols;
+      const row=Math.floor(y/TILE);
+      if(room<0||room>3||col<0||col>=layout.cols||row<0||row>=layout.rows)return;
+      if(editTool==='role'){
+        if(!selectedId)return updateEditorHint('請先選取角色');
+        const next=config.moveRole(selectedId,{room,col,row},placements,layout);
+        if(!next)return updateEditorHint('此位置不可用，可能是牆面或已有角色');
+        capture();placements=next;persist();draw();updateEditorHint('已移動角色');
+        return;
+      }
+      const found=furnitureAt(col,row);
+      if(editTool==='move'){
+        if(!selectedFurnitureUid){
+          if(!found)return updateEditorHint('請先選取家具');
+          selectedFurnitureUid=found.uid;updateEditorHint('已選擇家具，點擊新的位置');
+          return;
+        }
+        const moving=layout.furniture.find(f=>f.uid===selectedFurnitureUid);
+        if(!moving){selectedFurnitureUid=null;return;}
+        if(!canPutFurniture(moving,col,row,moving.uid))
+          return updateEditorHint('位置不適合，請選別處');
+        capture();layout.furniture=layout.furniture.map(f=>f.uid===moving.uid?{...f,col,row}:f);
+        selectedFurnitureUid=null;prefs.layout=layout;persist();draw();updateEditorHint('已移動家具');
+      }else if(editTool==='place'){
+        const type=furnitureInput?.value||'PLANT';
+        const item={uid:'f-'+Date.now()+'-'+Math.floor(Math.random()*100000),type,col,row};
+        if(!canPutFurniture(item,col,row))return updateEditorHint('這個格子無法放置家具');
+        capture();layout.furniture.push(item);prefs.layout=layout;persist();
+        const ref=resolveFurniture(item.type);if(ref)scheduleAsset(ref.path);
+        draw();updateEditorHint('已放置家具');
+      }else if(editTool==='erase'){
+        if(found){
+          capture();layout.furniture=layout.furniture.filter(f=>f.uid!==found.uid);
+        }else if(layout.tiles[row*layout.cols+col]===0){
+          capture();layout.tiles[row*layout.cols+col]=1;
+        }else return;
+        prefs.layout=layout;persist();draw();
+      }else if(editTool==='floor'||editTool==='wall'){
+        const value=editTool==='wall'?0:Number(floorInput?.value||1);
+        if(layout.tiles[row*layout.cols+col]===value)return;
+        // Do not bury durable Role locations under newly painted walls.
+        if(value===0&&Object.values(placements).some(p=>p.room===room&&p.col===col&&p.row===row))
+          return updateEditorHint('角色正站在此處，無法蓋牆');
+        capture();layout.tiles[row*layout.cols+col]=value;
+        prefs.layout=layout;persist();draw();
+      }
+      syncControls();
+    }
+    function updateWalkers(){
+      if(!layout||reduced||editMode)return;
+      for(const [index,role] of roles.entries()){
+        const seat=roleSeat(role,index);
+        if(role.state!=='idle'){walkers.delete(role.id);continue;}
+        let w=walkers.get(role.id);
+        if(!w)w={x:seat.x,y:seat.y,path:[],pause:hash(role.id)%13};
+        if(w.path.length){
+          const next=w.path.shift();
+          w.x=(seat.room*layout.cols+next.col+.5)*TILE;
+          w.y=(next.row+.5)*TILE;
+        }else if(--w.pause<=0){
+          w.pause=12+(hash(role.id+String(animationTick))%17);
+          const x=Math.floor(w.x/TILE)%layout.cols,y=Math.floor(w.y/TILE);
+          const possibles=[
+            {col:seat.col,row:seat.row},
+            {col:seat.col+1,row:seat.row},{col:seat.col-1,row:seat.row},
+            {col:seat.col,row:seat.row+1},{col:seat.col,row:seat.row-1}
+          ].filter(p=>config.walkable(layout,p.col,p.row));
+          const next=possibles[hash(role.id+String(animationTick))%Math.max(1,possibles.length)];
+          if(next)w.path=config.findPath(layout,{col:x,row:y},next);
+        }
+        walkers.set(role.id,w);
+      }
+    }
+    function loadPets(){
+      if(!prefs.showPets)return;
+      scheduleAsset('pets/gitcat/pet.png');scheduleAsset('pets/claudio/pet.png');
+    }
+
     function onPointerCancel(event){pointers.delete(event.pointerId);}
     function onResize(){if(!disposed&&!paused)draw();}
     canvas.addEventListener('pointerdown',onPointerDown);
@@ -471,8 +741,10 @@
       paused=false;
       refreshTimer=window.setInterval(()=>{void sync();},5500);
       if(!reduced)frameTimer=window.setInterval(()=>{
-        if(roles.some(role=>role.state==='working')){
-          animationTick++;draw();
+        if(roles.some(role=>role.state==='working'||role.state==='idle')&&layout){
+          animationTick++;
+          updateWalkers();
+          draw();
         }
       },FRAME_TIME);
       void sync();
@@ -487,6 +759,7 @@
         if(!Number.isInteger(data.cols)||data.cols!==21||data.rows!==22||!Array.isArray(data.tiles)||
           data.tiles.length!==data.cols*data.rows||!Array.isArray(data.furniture))throw Error('invalid Pixel Agents layout');
         if(disposed)return;
+        defaultLayout=data;
         layout=prefs.layout||data;
         if(config){
           const stable=config.allocateRoles(roles.map(role=>role.id),layout,placements);
@@ -502,7 +775,7 @@
           const ref=resolveFurniture(f.type);if(ref)scheduleAsset(ref.path);
         }
         for(let i=1;i<=3;i++)scheduleAsset('furniture/PC/PC_FRONT_ON_'+i+'.png');
-        ready=true;draw();
+        ready=true;syncControls();loadPets();draw();
         // Do not claim full fidelity while remote asset downloads are incomplete.
         await Promise.allSettled(loadTasks);
         if(!disposed)draw();
@@ -513,6 +786,7 @@
     const dispose=()=>{
       if(disposed)return;
       disposed=true;stopTimers();observer?.disconnect();layer.replaceChildren();
+      for(const [el,event,handler] of controls)el.removeEventListener?.(event,handler);
       canvas.removeEventListener('pointerdown',onPointerDown);
       canvas.removeEventListener('pointermove',onPointerMove);
       canvas.removeEventListener('pointerup',onPointerUp);
