@@ -37,6 +37,10 @@ const ids=[
  'crew-pixel-appearance','crew-pixel-pets','crew-pixel-edit-tool','crew-pixel-edit-role',
  'crew-pixel-furniture-type','crew-pixel-floor-type','crew-pixel-editor-hint',
  'crew-pixel-undo','crew-pixel-redo','crew-pixel-rotate','crew-pixel-duplicate',
+ 'crew-pixel-avatar-preview','crew-pixel-mode-furniture','crew-pixel-mode-role',
+ 'crew-pixel-mode-tile','crew-pixel-add','crew-pixel-delete','crew-pixel-furniture-actions',
+ 'crew-pixel-edit-role-group','crew-pixel-tile-actions','crew-pixel-floor-paint',
+ 'crew-pixel-wall-paint','crew-pixel-erase-tile',
  'crew-pixel-reset-layout','crew-pixel-export','crew-pixel-import','crew-pixel-import-file',
  'crew-pixel-floor-group','crew-pixel-furniture-group','world-reset','world-zoom-in',
  'world-zoom-out','world-focus'
@@ -87,8 +91,9 @@ vm.runInNewContext(read('public/js/crew-pixel-office.js'),{window:win,document:d
  assert.equal(preferences().labelMode,'hidden');
  assert.equal(nodes['crew-pixel-office'].dataset.labelMode,'hidden');
  const appearance=nodes['crew-pixel-appearance'];
- appearance.value='4';appearance.trigger('change');
- assert.equal(preferences().appearance.dev,4);
+ appearance.value='20';appearance.trigger('change');
+ assert.equal(preferences().appearance.dev,20,'24 selectable combinations: 6 original sprites × 4 uniforms');
+ assert.ok(paints>0,'avatar preview can render');
  const interaction=nodes['crew-pixel-interaction'];
  interaction.value='two-tap';interaction.trigger('change');
  assert.equal(preferences().interaction,'two-tap');
@@ -98,7 +103,9 @@ vm.runInNewContext(read('public/js/crew-pixel-office.js'),{window:win,document:d
  nodes['crew-pixel-edit-toggle'].click();
  assert.equal(nodes['crew-pixel-editor'].hidden,false);
  const tool=nodes['crew-pixel-edit-tool'];
- tool.value='role';tool.trigger('change');
+ nodes['crew-pixel-mode-role'].click();
+ assert.equal(tool.value,'role','role tab exposes role placement directly');
+ assert.equal(nodes['crew-pixel-edit-role-group'].hidden,false);
  const camera=scene.getCameraState();
  const coordinate=(col,row)=>{
    return{clientX:390/2+((col+.5)*16-camera.panX)*camera.zoom,
@@ -116,7 +123,13 @@ vm.runInNewContext(read('public/js/crew-pixel-office.js'),{window:win,document:d
  const picker=nodes['crew-pixel-edit-role'];
  picker.value='qa';picker.trigger('change');
  assert.equal(scene.getCameraState().selectedId,'qa','editor can choose which Role to reposition');
- tool.value='floor';tool.trigger('change');
+ nodes['crew-pixel-mode-tile'].click();
+ assert.equal(tool.value,'floor');
+ assert.equal(nodes['crew-pixel-floor-group'].hidden,false);
+ nodes['crew-pixel-wall-paint'].click();
+ assert.equal(tool.value,'wall','wall button is explicit');
+ nodes['crew-pixel-floor-paint'].click();
+ assert.equal(tool.value,'floor');
  nodes['crew-pixel-floor-type'].value='2';
  const before=(preferences().layout||layout).tiles[19*21+4];
  const c2=scene.getCameraState();
@@ -129,6 +142,27 @@ vm.runInNewContext(read('public/js/crew-pixel-office.js'),{window:win,document:d
  assert.equal(preferences().layout.tiles[19*21+4],before,'undo restores prior tile');
  nodes['crew-pixel-redo'].click();
  assert.equal(preferences().layout.tiles[19*21+4],2,'redo replays tile edit');
+ nodes['crew-pixel-mode-furniture'].click();
+ assert.equal(tool.value,'move','furniture tab defaults to selection/dragging');
+ assert.equal(nodes['crew-pixel-furniture-actions'].hidden,false);
+ const dragCamera=scene.getCameraState();
+ const start={clientX:195+(1.5*16-dragCamera.panX)*dragCamera.zoom,
+   clientY:350+(19.5*16-dragCamera.panY)*dragCamera.zoom,pointerId:15};
+ const end={...start,clientX:start.clientX+16*dragCamera.zoom};
+ nodes['crew-pixel-canvas'].trigger('pointerdown',start);
+ nodes['crew-pixel-canvas'].trigger('pointermove',end);
+ nodes['crew-pixel-canvas'].trigger('pointerup',end);
+ const coffee=preferences().layout.furniture.find(f=>f.type==='COFFEE'&&f.row===19);
+ assert.equal(coffee.col,2,'furniture drag updates actual position');
+ assert.equal(nodes['crew-pixel-rotate'].disabled,false,'furniture action becomes available');
+ nodes['crew-pixel-undo'].click();
+ assert.equal(preferences().layout.furniture.find(f=>f.type==='COFFEE'&&f.row===19).col,1,
+   'furniture drag may be undone');
+ nodes['crew-pixel-add'].click();
+ assert.equal(tool.value,'place','add-furniture button opens placement mode');
+ assert.equal(nodes['crew-pixel-furniture-group'].hidden,false);
+ nodes['crew-pixel-add'].click();
+ assert.equal(tool.value,'move','add-furniture button toggles placement mode off');
  nodes['crew-pixel-edit-done'].click();
  assert.equal(nodes['crew-pixel-editor'].hidden,true);
  assert.equal(timers.size,2);
@@ -137,5 +171,5 @@ vm.runInNewContext(read('public/js/crew-pixel-office.js'),{window:win,document:d
  scene();assert.equal(timers.size,0);
  assert.equal(nodes['crew-pixel-office'].hidden,true);
  assert.ok(paints>0);
- console.log('Pixel Office: settings, silhouette, appearance, pets, seat editing, tile editing, undo/redo and lifecycle passed');
+ console.log('Pixel Office: 24 outfits, mobile mode tabs, touch furniture dragging, seat/tile edit, undo/redo and lifecycle passed');
 })().catch(error=>{console.error(error);process.exitCode=1;});
