@@ -118,7 +118,7 @@ vm.runInNewContext(read('public/js/crew-pixel-office.js'),{window:win,document:d
  assert.equal(scene.getCameraState().selectedId,'qa','editor can choose which Role to reposition');
  tool.value='floor';tool.trigger('change');
  nodes['crew-pixel-floor-type'].value='2';
- const before=preferences().layout.tiles[19*21+4];
+ const before=(preferences().layout||layout).tiles[19*21+4];
  const c2=scene.getCameraState();
  const x=390/2+((4.5*16)-c2.panX)*c2.zoom;
  const y=700/2+((19.5*16)-c2.panY)*c2.zoom;
