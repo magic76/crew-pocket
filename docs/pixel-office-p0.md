@@ -64,3 +64,17 @@ node scripts/sync-pixel-assets.mjs --check
 ```
 
 Manual checks: Pixel Office opening on Android WebView; six character palette options; hide all labels without losing touch selection or context warning; 1/10/36 Roles; selected Role silhouette; two-tap chat; edit a floor and undo; move a Role and reload page; export/import JSON; toggle pets; zoom-to-fit 4 rooms; ensure Dashboard/Chat switching preserves draft and streams.
+
+## Mobile editing interaction (October 2026 update)
+
+The original six Pixel Agents character sprite sheets are the **only original six characters**; Crew Pocket offers 24 **appearance combinations**, calculated by recoloring torso clothing pixels in the six official sheets (four palettes × six characters). This preserves animation frames, hair and face; it is **not** 24 new independent character designs.
+
+The "佈置" button opens the task-oriented, bottom-anchored editor dock (the same Role/Chat DOM stays mounted, but the compact chat dock hides during editing). There are three primary tabs:
+
+1. **家具** (default): tap a furniture item to select it; contextual **Rotate**, **Duplicate**, **Delete** actions activate. Drag an item to another tile; its translucent footprint shows valid (teal) / blocked (red) placement. Drag blank floor to pan. Tap **＋ 加家具** to pick and place an item, tap again to exit placement.
+2. **人物**: pick a Role from the dropdown, tap walkable free floor to change its Role-ID-persisted position. This never switches the active Conversation or sends a command.
+3. **地板**: pick a floor texture and tap squares to paint; switch to **蓋牆** or **擦除** for wall/erase operations. Role-occupied tile cannot become a wall.
+
+Undo/redo are always visible. Export/import/reset and the legacy tool selector are under **更多**. The panel says **自動儲存** so users know edits persist in this browser. Do not mistake this for multi-device cloud syncing: use JSON export/import to transfer rooms.
+
+Regression tests: `test/crew-pixel-interactions.test.js` now checks all three tabs, 24 costume option persistence, touch drag, role/tile editing and undo/redo. Mobile gesture and visual behavior still warrant user hands-on verification before merge.

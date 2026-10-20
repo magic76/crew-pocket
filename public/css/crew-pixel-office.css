@@ -123,3 +123,9 @@
  .crew-pixel-editor-context button{font-size:11px}
  .crew-pixel-settings{max-height:60dvh}
 }
+
+/* Discoverable edit entry: text instead of unexplained pencil-only icon. */
+.crew-pixel-controls #crew-pixel-edit-toggle{width:60px;min-width:60px;
+ font-size:12px;font-weight:800;letter-spacing:.3px}
+.crew-pixel-controls #crew-pixel-edit-toggle[aria-pressed="true"]{
+ background:#2f656f;border-color:#96e2f5;color:#fff}
