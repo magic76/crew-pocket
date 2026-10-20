@@ -99,7 +99,7 @@
     let refreshTimer=null,frameTimer=null,observer=null,
       panX=Number.isFinite(initial?.panX)?initial.panX:168,
       panY=Number.isFinite(initial?.panY)?initial.panY:254,
-      zoom=Number.isFinite(initial?.zoom)?Math.max(.9,Math.min(5,initial.zoom)):2.2;
+      zoom=Number.isFinite(initial?.zoom)?Math.max(.25,Math.min(5,initial.zoom)):2.2;
     const pointers=new Map(),lastGesture={dragged:false};
     let animationTick=0,loadingError=false,controlsSignature='',contextUsageByRole=new Map();
     let mouseDownStart=null;
@@ -324,6 +324,30 @@
         }
       }
       drawables.sort((a,b)=>a.depth-b.depth).forEach(entry=>entry.draw());
+      if(editMode){
+        ctx.save();ctx.lineWidth=.25;ctx.strokeStyle='rgba(175,223,251,.22)';
+        const n=Math.max(1,Math.ceil(roles.length/positions.length));
+        for(let r=0;r<n;r++){
+          const offset=r*layout.cols*TILE;
+          for(let x=0;x<=layout.cols;x++){
+            ctx.beginPath();ctx.moveTo(offset+x*TILE,0);
+            ctx.lineTo(offset+x*TILE,layout.rows*TILE);ctx.stroke();
+          }
+          for(let y=0;y<=layout.rows;y++){
+            ctx.beginPath();ctx.moveTo(offset,y*TILE);
+            ctx.lineTo(offset+layout.cols*TILE,y*TILE);ctx.stroke();
+          }
+        }
+        const selected=layout.furniture.find(f=>f.uid===selectedFurnitureUid);
+        if(selected){
+          const dim=config?.shape(selected)||[1,1];
+          const room=roles.findIndex(role=>role.id===selectedId);
+          const offset=Math.max(0,Math.floor(Math.max(0,room)/positions.length))*layout.cols*TILE;
+          ctx.lineWidth=1;ctx.strokeStyle='#b6fbff';
+          ctx.strokeRect(offset+selected.col*TILE,selected.row*TILE,dim[0]*TILE,dim[1]*TILE);
+        }
+        ctx.restore();
+      }
       ctx.restore();
       redrawControls();
     }
@@ -359,9 +383,10 @@
         roles=next;synced=true;
         if(layout&&config){
           const stable=config.allocateRoles(roles.map(role=>role.id),layout,placements);
-          const incomplete=roles.some(role=>!placements[role.id]);
-          placements={...placements,...stable};
-          if(incomplete)persist();
+          const needsUpdate=JSON.stringify(stable)!==JSON.stringify(
+            Object.fromEntries(roles.map(r=>[r.id,placements[r.id]])));
+          placements=stable;
+          if(needsUpdate)persist();
         }
         if(selectedId&&!roles.some(role=>role.id===selectedId))selectedId=null;
         focusInitialCamera();
@@ -420,7 +445,7 @@
           if(oldDistance>5){
             const anchor={x:(point.x+other.x)/2,y:(point.y+other.y)/2};
             const wx=panX+(anchor.x-width/2)/zoom,wy=panY+(anchor.y-height/2)/zoom;
-            zoom=Math.max(.9,Math.min(5,zoom*newDistance/oldDistance));
+            zoom=Math.max(.25,Math.min(5,zoom*newDistance/oldDistance));
             panX=wx-(anchor.x-width/2)/zoom;
             panY=wy-(anchor.y-height/2)/zoom;
           }
@@ -451,8 +476,10 @@
     const followInput=byId('crew-pixel-follow'),interactionInput=byId('crew-pixel-interaction');
     const appearanceInput=byId('crew-pixel-appearance'),petsInput=byId('crew-pixel-pets');
     const editToolInput=byId('crew-pixel-edit-tool'),furnitureInput=byId('crew-pixel-furniture-type');
+    const editRoleInput=byId('crew-pixel-edit-role');
     const floorInput=byId('crew-pixel-floor-type'),editHint=byId('crew-pixel-editor-hint');
     const undoButton=byId('crew-pixel-undo'),redoButton=byId('crew-pixel-redo');
+    const rotateButton=byId('crew-pixel-rotate'),duplicateButton=byId('crew-pixel-duplicate');
     const resetLayoutButton=byId('crew-pixel-reset-layout');
     const exportButton=byId('crew-pixel-export'),importButton=byId('crew-pixel-import');
     const importFile=byId('crew-pixel-import-file');
@@ -478,6 +505,19 @@
       if(interactionInput)interactionInput.value=prefs.interaction;
       if(petsInput)petsInput.checked=prefs.showPets;
       const selected=roles.find(role=>role.id===selectedId);
+      if(editRoleInput){
+        const signature=roles.map(r=>r.id+'\\u0001'+r.name).join('\\u0002');
+        if(editRoleInput.dataset.signature!==signature){
+          editRoleInput.replaceChildren();
+          for(const role of roles){
+            const o=document.createElement('option');
+            o.value=role.id;o.textContent=role.name;
+            editRoleInput.appendChild(o);
+          }
+          editRoleInput.dataset.signature=signature;
+        }
+        if(selectedId)editRoleInput.value=selectedId;
+      }
       if(appearanceInput){
         appearanceInput.disabled=!selected;
         if(selected)appearanceInput.value=String(paletteFor(selected));
@@ -487,6 +527,8 @@
       if(floorGroup)floorGroup.hidden=editTool!=='floor';
       if(undoButton)undoButton.disabled=!undoStack.length;
       if(redoButton)redoButton.disabled=!redoStack.length;
+      if(rotateButton)rotateButton.disabled=!selectedFurnitureUid;
+      if(duplicateButton)duplicateButton.disabled=!selectedFurnitureUid;
       if(toggleEdit)toggleEdit.setAttribute('aria-pressed',String(editMode));
     }
     const setPrefs=(key,value)=>{
@@ -525,6 +567,11 @@
       prefs.appearance={...prefs.appearance,[selectedId]:Number(appearanceInput.value)};
       persist();draw();
     });
+    listen(editRoleInput,'change',()=>{
+      if(roles.some(r=>r.id===editRoleInput.value))
+        selectRole(editRoleInput.value,{open:false});
+      updateEditorHint('點地板可調整這位角色的座位');
+    });
     listen(editToolInput,'change',()=>{
       editTool=editToolInput.value;selectedFurnitureUid=null;syncControls();
       updateEditorHint(editTool==='role'?'點擊格子，把目前角色移動到該位置':
@@ -560,6 +607,33 @@
     }
     listen(undoButton,'click',undo);
     listen(redoButton,'click',redo);
+    const rotations={DESK_FRONT:'DESK_SIDE',DESK_SIDE:'DESK_FRONT',
+      SMALL_TABLE_FRONT:'SMALL_TABLE_SIDE',SMALL_TABLE_SIDE:'SMALL_TABLE_FRONT',
+      SOFA_FRONT:'SOFA_SIDE',SOFA_SIDE:'SOFA_FRONT',
+      WOODEN_CHAIR_FRONT:'WOODEN_CHAIR_SIDE',WOODEN_CHAIR_SIDE:'WOODEN_CHAIR_FRONT',
+      CUSHIONED_CHAIR_FRONT:'CUSHIONED_CHAIR_SIDE',
+      CUSHIONED_CHAIR_SIDE:'CUSHIONED_CHAIR_FRONT'};
+    listen(rotateButton,'click',()=>{
+      if(!layout||!selectedFurnitureUid)return;
+      const f=layout.furniture.find(e=>e.uid===selectedFurnitureUid);
+      if(!f)return;
+      const type=rotations[f.type.split(':')[0]];
+      if(!type||!canPutFurniture({...f,type},f.col,f.row,f.uid))
+        return updateEditorHint('此家具無法旋轉或空間不足');
+      capture();f.type=type;prefs.layout=layout;persist();
+      const asset=resolveFurniture(type);if(asset)scheduleAsset(asset.path);
+      draw();syncControls();updateEditorHint('家具已旋轉');
+    });
+    listen(duplicateButton,'click',()=>{
+      if(!layout||!selectedFurnitureUid)return;
+      const f=layout.furniture.find(e=>e.uid===selectedFurnitureUid);
+      if(!f)return;
+      const col=f.col+1,row=f.row+1;
+      if(!canPutFurniture(f,col,row))return updateEditorHint('附近空間不足，無法複製');
+      capture();const item={...f,uid:'f-copy-'+Date.now(),col,row};
+      layout.furniture.push(item);selectedFurnitureUid=item.uid;
+      prefs.layout=layout;persist();draw();syncControls();updateEditorHint('已複製家具');
+    });
     listen(resetLayoutButton,'click',()=>{
       if(!layout||!defaultLayout)return;
       capture();layout=config.validateLayout(defaultLayout);
@@ -637,7 +711,8 @@
       if(editTool==='move'){
         if(!selectedFurnitureUid){
           if(!found)return updateEditorHint('請先選取家具');
-          selectedFurnitureUid=found.uid;updateEditorHint('已選擇家具，點擊新的位置');
+          selectedFurnitureUid=found.uid;syncControls();
+          draw();updateEditorHint('已選擇家具，點擊新的位置，或使用旋轉／複製');
           return;
         }
         const moving=layout.furniture.find(f=>f.uid===selectedFurnitureUid);
@@ -713,10 +788,10 @@
     function resetCamera(){
       const rooms=Math.max(1,Math.ceil(roles.length/positions.length));
       const worldW=layout.cols*TILE*rooms;
-      zoom=Math.min(3,Math.max(.9,Math.min((width-30)/worldW,(height-60)/(layout.rows*TILE))));
+      zoom=Math.min(3,Math.max(.25,Math.min((width-30)/worldW,(height-60)/(layout.rows*TILE))));
       panX=worldW/2;panY=layout.rows*TILE/2;snapCamera();draw();
     }
-    function zoomBy(factor){zoom=Math.min(5,Math.max(.9,zoom*factor));snapCamera();draw();}
+    function zoomBy(factor){zoom=Math.min(5,Math.max(.25,zoom*factor));snapCamera();draw();}
     const handleReset=()=>resetCamera(),handleIn=()=>zoomBy(1.25),handleOut=()=>zoomBy(.8);
     const focusButton=document.getElementById('world-focus');
     const handleFocus=()=>focusSelected();

@@ -51,7 +51,7 @@
     return {version:1,cols:21,rows:22,tiles:input.tiles.slice(),furniture};
   }
   function normalize(input){
-    const s={...DEFAULTS,appearance:{},placements:{}};
+    const s={...DEFAULTS,appearance:Object.create(null),placements:Object.create(null)};
     if(!input||typeof input!=='object')return s;
     if(['always','selected','hidden'].includes(input.labelMode))s.labelMode=input.labelMode;
     if(typeof input.outline==='boolean')s.outline=input.outline;
@@ -60,11 +60,12 @@
     if(['direct','two-tap'].includes(input.interaction))s.interaction=input.interaction;
     if(input.appearance&&typeof input.appearance==='object'){
       for(const [id,value] of Object.entries(input.appearance).slice(0,60))
-        if(id.length<=120&&Number.isInteger(value)&&value>=0&&value<6)s.appearance[id]=value;
+        if(id.length<=120&&!['__proto__','prototype','constructor'].includes(id)&&
+          Number.isInteger(value)&&value>=0&&value<6)s.appearance[id]=value;
     }
     if(input.placements&&typeof input.placements==='object'){
       for(const [id,p] of Object.entries(input.placements).slice(0,60))
-        if(id.length<=120&&p&&Number.isInteger(p.room)&&p.room>=0&&p.room<=3&&
+        if(id.length<=120&&!['__proto__','prototype','constructor'].includes(id)&&p&&Number.isInteger(p.room)&&p.room>=0&&p.room<=3&&
           Number.isInteger(p.col)&&p.col>=0&&p.col<21&&
           Number.isInteger(p.row)&&p.row>=0&&p.row<22)
           s.placements[id]={room:p.room,col:p.col,row:p.row};
@@ -106,7 +107,7 @@
     });
   }
   function allocateRoles(ids,layout,existing={}){
-    const result={};
+    const result=Object.create(null);
     const used=new Set();
     const valid=(p)=>p&&p.room>=0&&p.room<4&&walkable(layout,p.col,p.row,{furniture:false});
     const mark=p=>p.room+':'+p.col+':'+p.row;
@@ -115,7 +116,7 @@
       if(valid(p)&&!used.has(mark(p))){result[id]={room:p.room,col:p.col,row:p.row};used.add(mark(p));}
     }
     for(const id of ids){
-      if(result[id])continue;
+      if(Object.prototype.hasOwnProperty.call(result,id))continue;
       let found=null;
       for(let i=0;i<36;i++){
         const seat=seatFor(i,layout),p={room:seat.room,col:seat.col,row:seat.row};
@@ -127,11 +128,15 @@
     return result;
   }
   function moveRole(roleId,p,placements,layout){
-    if(!p||!Number.isInteger(p.room)||!Number.isInteger(p.col)||!Number.isInteger(p.row)||
+    if(!roleId||['__proto__','prototype','constructor'].includes(roleId)||
+      !p||!Number.isInteger(p.room)||!Number.isInteger(p.col)||!Number.isInteger(p.row)||
       p.room<0||p.room>3||!walkable(layout,p.col,p.row,{furniture:false}))return null;
     if(Object.entries(placements).some(([id,other])=>id!==roleId&&
       other.room===p.room&&other.col===p.col&&other.row===p.row))return null;
-    return {...placements,[roleId]:{room:p.room,col:p.col,row:p.row}};
+    const result=Object.assign(Object.create(null),placements);
+    Object.defineProperty(result,roleId,{value:{room:p.room,col:p.col,row:p.row},
+      enumerable:true,writable:true,configurable:true});
+    return result;
   }
   function findPath(layout,from,to){
     const start=from.col+','+from.row,end=to.col+','+to.row;

@@ -1839,6 +1839,9 @@
             <option value="erase">擦除家具／牆面</option>
           </select>
         </label>
+        <label>要移動的角色
+          <select id="crew-pixel-edit-role" aria-label="選擇要移動的角色"></select>
+        </label>
         <label id="crew-pixel-furniture-group">家具
           <select id="crew-pixel-furniture-type">
             <option value="DESK_FRONT">辦公桌</option><option value="CUSHIONED_CHAIR_FRONT">辦公椅</option>
@@ -1860,6 +1863,8 @@
         <div class="crew-pixel-editor-actions">
           <button id="crew-pixel-undo" type="button">復原</button>
           <button id="crew-pixel-redo" type="button">重做</button>
+          <button id="crew-pixel-rotate" type="button">旋轉家具</button>
+          <button id="crew-pixel-duplicate" type="button">複製家具</button>
           <button id="crew-pixel-export" type="button">匯出</button>
           <button id="crew-pixel-import" type="button">匯入</button>
           <button id="crew-pixel-reset-layout" type="button">重設佈局</button>
