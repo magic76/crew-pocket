@@ -367,6 +367,21 @@
         }
       }
       drawables.sort((a,b)=>a.depth-b.depth).forEach(entry=>entry.draw());
+      if(editMode&&dragItem?.dragged){
+        const f=layout.furniture.find(item=>item.uid===dragItem.uid);
+        if(f){
+          const dx=Math.round((dragItem.point.x-dragItem.start.x)/(zoom*TILE));
+          const dy=Math.round((dragItem.point.y-dragItem.start.y)/(zoom*TILE));
+          const dim=config?.shape(f)||[1,1];
+          const valid=canPutFurniture(f,f.col+dx,f.row+dy,f.uid);
+          ctx.save();
+          ctx.globalAlpha=.4;ctx.fillStyle=valid?'#60d6ae':'#fa7785';
+          ctx.fillRect((dragItem.room*layout.cols+f.col+dx)*TILE,(f.row+dy)*TILE,dim[0]*TILE,dim[1]*TILE);
+          ctx.globalAlpha=1;ctx.lineWidth=1;ctx.strokeStyle=valid?'#a9ffe4':'#ffacb5';
+          ctx.strokeRect((dragItem.room*layout.cols+f.col+dx)*TILE,(f.row+dy)*TILE,dim[0]*TILE,dim[1]*TILE);
+          ctx.restore();
+        }
+      }
       if(editMode){
         ctx.save();ctx.lineWidth=.25;ctx.strokeStyle='rgba(175,223,251,.22)';
         const n=Math.max(1,Math.ceil(roles.length/positions.length));
@@ -455,8 +470,23 @@
       if(disposed||paused)return;
       event.preventDefault();canvas.setPointerCapture?.(event.pointerId);
       const point=gesturePoint(event);
-      if(pointers.size===0){lastGesture.dragged=false;mouseDownStart=point;}
-      else lastGesture.dragged=true;
+      if(pointers.size===0){
+        lastGesture.dragged=false;mouseDownStart=point;
+        dragItem=null;
+        if(editMode&&editTool==='move'&&layout){
+          const wx=panX+(point.x-width/2)/zoom;
+          const wy=panY+(point.y-height/2)/zoom;
+          const room=Math.floor(wx/(layout.cols*TILE));
+          const col=Math.floor(wx/TILE)-room*layout.cols,row=Math.floor(wy/TILE);
+          if(room>=0&&room<Math.ceil(roles.length/positions.length)){
+            const hit=furnitureAt(col,row);
+            if(hit)dragItem={uid:hit.uid,room,start:point,point,dragged:false};
+          }
+        }
+      }else{
+        lastGesture.dragged=true;
+        dragItem=null; // two-finger gestures always control the camera
+      }
       pointers.set(event.pointerId,point);
     }
     function onPointerMove(event){
@@ -475,6 +505,15 @@
         return;
       }
       const point=gesturePoint(event),prev=pointers.get(event.pointerId);
+      if(dragItem&&pointers.size===1){
+        const distance=Math.hypot(point.x-dragItem.start.x,point.y-dragItem.start.y);
+        if(distance>7)dragItem.dragged=true;
+        if(dragItem.dragged){
+          dragItem.point=point;lastGesture.dragged=true;
+          pointers.set(event.pointerId,point);draw();
+          return;
+        }
+      }
       if(pointers.size===1){
         const dx=point.x-prev.x,dy=point.y-prev.y;
         if(mouseDownStart&&Math.hypot(point.x-mouseDownStart.x,point.y-mouseDownStart.y)>7)
@@ -500,7 +539,26 @@
     function onPointerUp(event){
       if(!pointers.has(event.pointerId))return;
       const point=gesturePoint(event);pointers.delete(event.pointerId);
-      if(disposed||paused||lastGesture.dragged||pointers.size||!layout)return;
+      if(disposed||paused||pointers.size||!layout)return;
+      if(dragItem?.dragged&&editMode&&editTool==='move'){
+        const item=layout.furniture.find(f=>f.uid===dragItem.uid);
+        const dx=Math.round((point.x-dragItem.start.x)/(zoom*TILE));
+        const dy=Math.round((point.y-dragItem.start.y)/(zoom*TILE));
+        const prev=dragItem;dragItem=null;
+        if(item&&(dx||dy)){
+          const col=item.col+dx,row=item.row+dy;
+          if(canPutFurniture(item,col,row,item.uid)){
+            capture();
+            layout.furniture=layout.furniture.map(f=>f.uid===item.uid?{...f,col,row}:f);
+            selectedFurnitureUid=item.uid;prefs.layout=layout;persist();
+            updateEditorHint('已移動家具，變更會同步至所有辦公室房間。可按「復原」還原。');
+          }else updateEditorHint('這裡無法放置家具，原位置已保留。');
+        }else if(item){selectedFurnitureUid=item.uid;updateEditorHint('家具已選取，可旋轉、複製或刪除。');}
+        syncControls();draw();
+        return;
+      }
+      dragItem=null;
+      if(lastGesture.dragged)return;
       const x=panX+(point.x-width/2)/zoom,y=panY+(point.y-height/2)/zoom;
       if(editMode){applyEdit(x,y);return;}
       const nearest=roles.map((r,i)=>{
@@ -892,7 +950,11 @@
       scheduleAsset('pets/gitcat/pet.png');scheduleAsset('pets/claudio/pet.png');
     }
 
-    function onPointerCancel(event){pointers.delete(event.pointerId);}
+    function onPointerCancel(event){
+      pointers.delete(event.pointerId);
+      dragItem=null;
+      if(!pointers.size)lastGesture.dragged=false;
+    }
     function onResize(){if(!disposed&&!paused)draw();}
     canvas.addEventListener('pointerdown',onPointerDown);
     canvas.addEventListener('pointermove',onPointerMove);
