@@ -69,15 +69,40 @@
     const ctx=canvas.getContext('2d');
     if(!ctx){note.textContent='Canvas 無法使用，請從角色選單切換';return null;}
     const reduced=window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches||false;
-    const assets=new Map(),failed=new Set(),loadTasks=[];
+    const assets=new Map(),failed=new Set(),loadTasks=[],outlineCache=new Map();
+    const config=window.CrewPixelConfig;
+    let prefs=config?.read?.()||{labelMode:'selected',outline:true,followSelection:true,
+      interaction:'direct',showPets:false,appearance:{},placements:{},layout:null};
+    let placements={...prefs.placements};
+    const walkers=new Map();
+    let editMode=false,editTool='move',selectedFurnitureUid=null,hoveredId=null;
+    let undoStack=[],redoStack=[];
+    function persist(){
+      prefs.placements=placements;
+      prefs.layout=layout&&prefs.layout?layout:prefs.layout;
+      prefs=config?.write?.(prefs)||prefs;
+      placements=prefs.placements;
+    }
+    function roleSeat(role,index){
+      return layout&&placements[role.id]&&config?config.seatWorld(placements[role.id],layout):seatFor(index,layout);
+    }
+    function paletteFor(role){
+      const value=prefs.appearance?.[role.id];
+      return Number.isInteger(value)&&value>=0&&value<6?value:role.palette;
+    }
+    function rolePosition(role,index){
+      const seat=roleSeat(role,index),move=walkers.get(role.id);
+      return move&&role.state==='idle'?{...seat,x:move.x,y:move.y}:seat;
+    }
     let disposed=false,paused=false,polling=false,ready=false,synced=false,roles=[];
     let width=1,height=1,layout=null,selectedId=initial?.selectedId||window.getCurrentRoleId?.()||null;
     let refreshTimer=null,frameTimer=null,observer=null,
       panX=Number.isFinite(initial?.panX)?initial.panX:168,
       panY=Number.isFinite(initial?.panY)?initial.panY:254,
-      zoom=Number.isFinite(initial?.zoom)?Math.max(.9,Math.min(5,initial.zoom)):2.2;
+      zoom=Number.isFinite(initial?.zoom)?Math.max(.25,Math.min(5,initial.zoom)):2.2;
     const pointers=new Map(),lastGesture={dragged:false};
     let animationTick=0,loadingError=false,controlsSignature='',contextUsageByRole=new Map();
+    let mouseDownStart=null;
     let initialFocusDone=false;
     board.hidden=false;
     function getAsset(path){return assets.get(path)||null;}
@@ -129,7 +154,7 @@
       }
     }
     function drawActor(role,index,seat){
-      const sprite=getAsset('characters/char_'+role.palette+'.png');
+      const sprite=getAsset('characters/char_'+paletteFor(role)+'.png');
       const charY=seat.y-CHAR_H+7,charX=seat.x-CHAR_W/2;
       if(sprite){
         // Exact 112x96 upstream sprite sheet: 3 directions x 7 frames.
@@ -138,9 +163,30 @@
       }else{
         ctx.fillStyle='#bcb4a5';ctx.fillRect(charX+4,charY+7,8,21);
       }
-      if(role.id===selectedId){
-        ctx.strokeStyle='#d7f8ff';ctx.lineWidth=1;
-        ctx.strokeRect(Math.round(charX)-2,Math.round(charY)-2,CHAR_W+4,CHAR_H+4);
+      if(sprite&&prefs.outline&&(role.id===selectedId||role.id===hoveredId)){
+        const alpha=role.id===selectedId?1:.55;
+        const frame=role.state==='working'&&!reduced?3+(animationTick%2):0;
+        const key=paletteFor(role)+':'+frame;
+        let outline=outlineCache.get(key);
+        if(outline===undefined){
+          outline=null;
+          try{
+            const temp=document.createElement('canvas');temp.width=CHAR_W;temp.height=CHAR_H;
+            const t=temp.getContext('2d',{willReadFrequently:true});
+            t.drawImage(sprite,frame*CHAR_W,0,CHAR_W,CHAR_H,0,0,CHAR_W,CHAR_H);
+            const pixels=t.getImageData(0,0,CHAR_W,CHAR_H).data;
+            const edge=document.createElement('canvas');edge.width=CHAR_W+2;edge.height=CHAR_H+2;
+            const e=edge.getContext('2d');e.fillStyle='#dcfaff';
+            const solid=(x,y)=>x>=0&&x<CHAR_W&&y>=0&&y<CHAR_H&&pixels[(y*CHAR_W+x)*4+3]>16;
+            for(let y=0;y<CHAR_H;y++)for(let x=0;x<CHAR_W;x++)if(solid(x,y))
+              for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]])
+                if(!solid(x+dx,y+dy))e.fillRect(x+dx+1,y+dy+1,1,1);
+            outline=edge;
+          }catch(_){/* WebViews lacking pixel readback keep Role focus accessible. */}
+          outlineCache.set(key,outline);
+        }
+        if(outline){ctx.save();ctx.globalAlpha=alpha;
+          ctx.drawImage(outline,Math.round(charX)-1,Math.round(charY)-1);ctx.restore();}
       }
       if(role.state==='waiting'||role.attention>0){
         ctx.fillStyle='#ffdb85';ctx.fillRect(seat.x+7,charY-7,10,10);
@@ -166,15 +212,18 @@
     function snapCamera(){
       if(!layout)return;
       const worldW=layout.cols*TILE*Math.max(1,Math.ceil(roles.length/positions.length));
-      panX=Math.max(Math.min(panX,worldW+80-width/zoom/2),width/zoom/2-80);
-      panY=Math.max(142,Math.min(338,panY));
+      // Clamp world origin independently from screen size; don't trap the camera
+      // off-screen on narrow phones or prevent centering on the first desk.
+      const mx=Math.min(96,width/(zoom*2)),my=Math.min(96,height/(zoom*2));
+      panX=Math.min(worldW+mx,Math.max(-mx,panX));
+      panY=Math.min(layout.rows*TILE+my,Math.max(-my,panY));
     }
     function focusInitialCamera(){
       if(initialFocusDone||!layout||!selectedId||
         Number.isFinite(initial?.panX)||Number.isFinite(initial?.panY))return;
       const index=roles.findIndex(role=>role.id===selectedId);
       if(index<0)return;
-      const seat=seatFor(index,layout);
+      const seat=roleSeat(roles[index],index);
       panX=seat.x+(seat.col<layout.cols/2?45:-45);
       panY=seat.y+22;
       snapCamera();
@@ -182,18 +231,22 @@
     }
     function redrawControls(){
       if(disposed||paused||!layout)return;
+      board.dataset.labelMode=prefs.labelMode;
+      board.dataset.editing=String(editMode);
       const signature=JSON.stringify([roles.map(role=>[role.id,role.name,role.state,role.attention]),
-        selectedId,Math.round(panX*100)/100,Math.round(panY*100)/100,Math.round(zoom*1000)/1000,width,height]);
+        selectedId,prefs.labelMode,editMode,Math.round(panX*100)/100,Math.round(panY*100)/100,
+        Math.round(zoom*1000)/1000,width,height]);
       if(signature===controlsSignature)return;
       controlsSignature=signature;
       layer.replaceChildren();
       roles.forEach((role,index)=>{
-        const seat=seatFor(index,layout),point=worldToScreen(seat.x,seat.y);
+        const seat=rolePosition(role,index),point=worldToScreen(seat.x,seat.y);
         if(point.x < -80||point.x>width+80||point.y< -100||point.y>height+100)return;
         const button=document.createElement('button');
         button.type='button';button.className='crew-pixel-role';
         button.dataset.state=role.state;
         button.dataset.attention=String(role.attention>0);
+        button.dataset.labelMode=prefs.labelMode;
         const context=contextUsageByRole.get(role.id);
         button.dataset.contextTone=context?.tone||'unknown';
         button.title=role.name+' · '+labelFor[role.state]+
@@ -210,7 +263,7 @@
           button.append(warning);
         }
         button.append(dot,name);
-        button.addEventListener('click',()=>selectRole(role.id));
+        button.addEventListener('click',()=>{if(!editMode)selectRole(role.id,{open:true});});
         layer.appendChild(button);
       });
     }
@@ -258,25 +311,62 @@
         }
       }
       roles.forEach((role,index)=>{
-        const seat=seatFor(index,layout);
+        const seat=rolePosition(role,index);
         drawables.push({depth:seat.y+TILE/2+.1,draw:()=>drawActor(role,index,seat)});
       });
+      if(prefs.showPets){
+        const pet=getAsset('pets/gitcat/pet.png'),friend=getAsset('pets/claudio/pet.png');
+        const pets=[pet,friend];
+        for(let i=0;i<pets.length;i++){
+          if(!pets[i])continue;
+          const px=170+i*32,py=270+i*19;
+          drawables.push({depth:py,draw:()=>ctx.drawImage(pets[i],(animationTick%3)*16,0,16,32,px,py-32,16,32)});
+        }
+      }
       drawables.sort((a,b)=>a.depth-b.depth).forEach(entry=>entry.draw());
+      if(editMode){
+        ctx.save();ctx.lineWidth=.25;ctx.strokeStyle='rgba(175,223,251,.22)';
+        const n=Math.max(1,Math.ceil(roles.length/positions.length));
+        for(let r=0;r<n;r++){
+          const offset=r*layout.cols*TILE;
+          for(let x=0;x<=layout.cols;x++){
+            ctx.beginPath();ctx.moveTo(offset+x*TILE,0);
+            ctx.lineTo(offset+x*TILE,layout.rows*TILE);ctx.stroke();
+          }
+          for(let y=0;y<=layout.rows;y++){
+            ctx.beginPath();ctx.moveTo(offset,y*TILE);
+            ctx.lineTo(offset+layout.cols*TILE,y*TILE);ctx.stroke();
+          }
+        }
+        const selected=layout.furniture.find(f=>f.uid===selectedFurnitureUid);
+        if(selected){
+          const dim=config?.shape(selected)||[1,1];
+          const room=roles.findIndex(role=>role.id===selectedId);
+          const offset=Math.max(0,Math.floor(Math.max(0,room)/positions.length))*layout.cols*TILE;
+          ctx.lineWidth=1;ctx.strokeStyle='#b6fbff';
+          ctx.strokeRect(offset+selected.col*TILE,selected.row*TILE,dim[0]*TILE,dim[1]*TILE);
+        }
+        ctx.restore();
+      }
       ctx.restore();
       redrawControls();
     }
-    function selectRole(id){
+    function focusSelected(){
+      const index=roles.findIndex(role=>role.id===selectedId);
+      if(index<0||!layout)return;
+      const seat=rolePosition(roles[index],index);
+      panX=seat.x;panY=seat.y+10;snapCamera();draw();
+    }
+    function selectRole(id,{open=true}={}){
       const role=roles.find(entry=>entry.id===id);
       if(disposed||!role)return false;
+      const same=selectedId===id;
       selectedId=id;
-      const seat=seatFor(roles.indexOf(role),layout);
-      // Focus the selected workstation, without moving the actual agent.
-      const point=worldToScreen(seat.x,seat.y);
-      if(point.x<50||point.x>width-50||point.y<90||point.y>height-100){
-        panX=seat.x;panY=seat.y+30;
-      }
-      snapCamera();draw();
-      window.CrewWorldHost?.onSelectedRole?.(role.id,role.name);
+      if(prefs.followSelection)focusSelected();
+      else draw();
+      syncControls();
+      if(open&&(prefs.interaction==='direct'||same))
+        window.CrewWorldHost?.onSelectedRole?.(role.id,role.name);
       return true;
     }
     async function sync(){
@@ -291,9 +381,17 @@
         const next=projectRoles(data.roles);
         const diff=JSON.stringify(next)!==JSON.stringify(roles);
         roles=next;synced=true;
+        if(layout&&config){
+          const stable=config.allocateRoles(roles.map(role=>role.id),layout,placements);
+          const needsUpdate=JSON.stringify(stable)!==JSON.stringify(
+            Object.fromEntries(roles.map(r=>[r.id,placements[r.id]])));
+          placements=stable;
+          if(needsUpdate)persist();
+        }
         if(selectedId&&!roles.some(role=>role.id===selectedId))selectedId=null;
         focusInitialCamera();
         syncContextWarnings();
+        syncControls();
         if(diff)draw();
         note.textContent=roles.length?
           'CREW OFFICE · '+roles.length+' ROLES · '+roles.filter(r=>r.state==='working').length+' WORKING':
@@ -313,21 +411,44 @@
     function onPointerDown(event){
       if(disposed||paused)return;
       event.preventDefault();canvas.setPointerCapture?.(event.pointerId);
-      pointers.set(event.pointerId,gesturePoint(event));lastGesture.dragged=false;
+      const point=gesturePoint(event);
+      if(pointers.size===0){lastGesture.dragged=false;mouseDownStart=point;}
+      else lastGesture.dragged=true;
+      pointers.set(event.pointerId,point);
     }
     function onPointerMove(event){
-      if(!pointers.has(event.pointerId)||disposed||paused)return;
+      if(disposed||paused)return;
+      if(!pointers.has(event.pointerId)){
+        if(event.pointerType==='mouse'&&!editMode&&layout){
+          const point=gesturePoint(event);
+          const wx=panX+(point.x-width/2)/zoom,wy=panY+(point.y-height/2)/zoom;
+          const hovered=roles.findIndex((role,index)=>{
+            const seat=rolePosition(role,index);
+            return Math.abs(wx-seat.x)<=11&&Math.abs(wy-(seat.y-9))<19;
+          });
+          const id=hovered>=0?roles[hovered].id:null;
+          if(id!==hoveredId){hoveredId=id;draw();}
+        }
+        return;
+      }
       const point=gesturePoint(event),prev=pointers.get(event.pointerId);
       if(pointers.size===1){
         const dx=point.x-prev.x,dy=point.y-prev.y;
-        if(Math.abs(dx)+Math.abs(dy)>2)lastGesture.dragged=true;
-        panX-=dx/zoom;panY-=dy/zoom;
+        if(mouseDownStart&&Math.hypot(point.x-mouseDownStart.x,point.y-mouseDownStart.y)>7)
+          lastGesture.dragged=true;
+        if(lastGesture.dragged){panX-=dx/zoom;panY-=dy/zoom;}
       }else if(pointers.size===2){
         const other=[...pointers].find(([k])=>k!==event.pointerId)?.[1];
         if(other){
           const oldDistance=Math.hypot(prev.x-other.x,prev.y-other.y);
           const newDistance=Math.hypot(point.x-other.x,point.y-other.y);
-          if(oldDistance>5)zoom=Math.max(.9,Math.min(5,zoom*newDistance/oldDistance));
+          if(oldDistance>5){
+            const anchor={x:(point.x+other.x)/2,y:(point.y+other.y)/2};
+            const wx=panX+(anchor.x-width/2)/zoom,wy=panY+(anchor.y-height/2)/zoom;
+            zoom=Math.max(.25,Math.min(5,zoom*newDistance/oldDistance));
+            panX=wx-(anchor.x-width/2)/zoom;
+            panY=wy-(anchor.y-height/2)/zoom;
+          }
           lastGesture.dragged=true;
         }
       }
@@ -338,10 +459,323 @@
       const point=gesturePoint(event);pointers.delete(event.pointerId);
       if(disposed||paused||lastGesture.dragged||pointers.size||!layout)return;
       const x=panX+(point.x-width/2)/zoom,y=panY+(point.y-height/2)/zoom;
-      const nearest=roles.map((r,i)=>({r,d:Math.hypot(seatFor(i,layout).x-x,seatFor(i,layout).y-y)}))
-        .sort((a,b)=>a.d-b.d)[0];
-      if(nearest&&nearest.d<20)selectRole(nearest.r.id);
+      if(editMode){applyEdit(x,y);return;}
+      const nearest=roles.map((r,i)=>{
+        const seat=rolePosition(r,i);
+        return{r,d:Math.hypot(seat.x-x,seat.y-9-y)};
+      }).sort((a,b)=>a.d-b.d)[0];
+      if(nearest&&nearest.d<21)selectRole(nearest.r.id,{open:true});
     }
+
+    // Editing is separate from Crew Runtime: only cosmetic browser-local data.
+    const byId=id=>document.getElementById(id);
+    const settingPanel=byId('crew-pixel-settings'),editorPanel=byId('crew-pixel-editor');
+    const toggleSettings=byId('crew-pixel-settings-toggle'),closeSettings=byId('crew-pixel-settings-close');
+    const toggleEdit=byId('crew-pixel-edit-toggle'),doneEdit=byId('crew-pixel-edit-done');
+    const labelInput=byId('crew-pixel-label-mode'),outlineInput=byId('crew-pixel-outline');
+    const followInput=byId('crew-pixel-follow'),interactionInput=byId('crew-pixel-interaction');
+    const appearanceInput=byId('crew-pixel-appearance'),petsInput=byId('crew-pixel-pets');
+    const editToolInput=byId('crew-pixel-edit-tool'),furnitureInput=byId('crew-pixel-furniture-type');
+    const editRoleInput=byId('crew-pixel-edit-role');
+    const floorInput=byId('crew-pixel-floor-type'),editHint=byId('crew-pixel-editor-hint');
+    const undoButton=byId('crew-pixel-undo'),redoButton=byId('crew-pixel-redo');
+    const rotateButton=byId('crew-pixel-rotate'),duplicateButton=byId('crew-pixel-duplicate');
+    const resetLayoutButton=byId('crew-pixel-reset-layout');
+    const exportButton=byId('crew-pixel-export'),importButton=byId('crew-pixel-import');
+    const importFile=byId('crew-pixel-import-file');
+    const floorGroup=byId('crew-pixel-floor-group'),furnitureGroup=byId('crew-pixel-furniture-group');
+    let defaultLayout=null;
+    let editHistorySelection=null;
+    const controls=[];
+    function listen(el,type,handler){
+      if(!el)return;
+      el.addEventListener(type,handler);controls.push([el,type,handler]);
+    }
+    function updateEditorHint(message){
+      if(editHint)editHint.textContent=message;
+    }
+    function syncControls(){
+      if(board.dataset){
+        board.dataset.labelMode=prefs.labelMode;
+        board.dataset.editing=String(editMode);
+      }
+      if(labelInput)labelInput.value=prefs.labelMode;
+      if(outlineInput)outlineInput.checked=prefs.outline;
+      if(followInput)followInput.checked=prefs.followSelection;
+      if(interactionInput)interactionInput.value=prefs.interaction;
+      if(petsInput)petsInput.checked=prefs.showPets;
+      const selected=roles.find(role=>role.id===selectedId);
+      if(editRoleInput){
+        const signature=roles.map(r=>r.id+'\\u0001'+r.name).join('\\u0002');
+        if(editRoleInput.dataset.signature!==signature){
+          editRoleInput.replaceChildren();
+          for(const role of roles){
+            const o=document.createElement('option');
+            o.value=role.id;o.textContent=role.name;
+            editRoleInput.appendChild(o);
+          }
+          editRoleInput.dataset.signature=signature;
+        }
+        if(selectedId)editRoleInput.value=selectedId;
+      }
+      if(appearanceInput){
+        appearanceInput.disabled=!selected;
+        if(selected)appearanceInput.value=String(paletteFor(selected));
+      }
+      if(editToolInput)editToolInput.value=editTool;
+      if(furnitureGroup)furnitureGroup.hidden=editTool!=='place';
+      if(floorGroup)floorGroup.hidden=editTool!=='floor';
+      if(undoButton)undoButton.disabled=!undoStack.length;
+      if(redoButton)redoButton.disabled=!redoStack.length;
+      if(rotateButton)rotateButton.disabled=!selectedFurnitureUid;
+      if(duplicateButton)duplicateButton.disabled=!selectedFurnitureUid;
+      if(toggleEdit)toggleEdit.setAttribute('aria-pressed',String(editMode));
+    }
+    const setPrefs=(key,value)=>{
+      prefs[key]=value;persist();controlsSignature='';syncControls();draw();
+    };
+    function showSettings(show){
+      if(settingPanel)settingPanel.hidden=!show;
+      toggleSettings?.setAttribute('aria-expanded',String(show));
+      if(show&&editorPanel)editorPanel.hidden=true;
+      if(show&&editMode){editMode=false;selectedFurnitureUid=null;}
+      syncControls();
+    }
+    function showEditor(show){
+      if(editorPanel)editorPanel.hidden=!show;
+      if(show&&settingPanel)showSettings(false);
+      editMode=show;
+      selectedFurnitureUid=null;
+      controlsSignature='';
+      if(show)updateEditorHint('點選家具，再點新位置；拖曳空白處仍可移動鏡頭。');
+      syncControls();draw();
+    }
+    listen(toggleSettings,'click',()=>showSettings(settingPanel?.hidden!==false));
+    listen(closeSettings,'click',()=>showSettings(false));
+    listen(toggleEdit,'click',()=>showEditor(!editMode));
+    listen(doneEdit,'click',()=>showEditor(false));
+    listen(labelInput,'change',()=>setPrefs('labelMode',labelInput.value));
+    listen(outlineInput,'change',()=>setPrefs('outline',Boolean(outlineInput.checked)));
+    listen(followInput,'change',()=>setPrefs('followSelection',Boolean(followInput.checked)));
+    listen(interactionInput,'change',()=>setPrefs('interaction',interactionInput.value));
+    listen(petsInput,'change',()=>{
+      setPrefs('showPets',Boolean(petsInput.checked));
+      if(petsInput.checked)loadPets();
+    });
+    listen(appearanceInput,'change',()=>{
+      if(!selectedId||!Number.isInteger(Number(appearanceInput.value)))return;
+      prefs.appearance={...prefs.appearance,[selectedId]:Number(appearanceInput.value)};
+      persist();draw();
+    });
+    listen(editRoleInput,'change',()=>{
+      if(roles.some(r=>r.id===editRoleInput.value))
+        selectRole(editRoleInput.value,{open:false});
+      updateEditorHint('點地板可調整這位角色的座位');
+    });
+    listen(editToolInput,'change',()=>{
+      editTool=editToolInput.value;selectedFurnitureUid=null;syncControls();
+      updateEditorHint(editTool==='role'?'點擊格子，把目前角色移動到該位置':
+        editTool==='place'?'點擊空白位置，放置選擇的家具':
+        editTool==='floor'?'點擊地板格子調整地板':
+        editTool==='wall'?'點擊格子新增牆面':
+        editTool==='erase'?'點擊家具或牆面進行擦除':
+        '先點家具，再點想放置的位置');
+    });
+    const snapshot=()=>JSON.stringify({layout,placements});
+    function capture(){
+      if(!layout)return;
+      undoStack.push(snapshot());
+      if(undoStack.length>30)undoStack.shift();
+      redoStack=[];
+    }
+    function applySnapshot(data){
+      const next=JSON.parse(data);
+      layout=config.validateLayout(next.layout);
+      placements=next.placements||{};
+      selectedFurnitureUid=null;
+      prefs.layout=layout;persist();
+      for(const f of layout.furniture){const ref=resolveFurniture(f.type);if(ref)scheduleAsset(ref.path);}
+      syncControls();draw();
+    }
+    function undo(){
+      if(!undoStack.length)return;
+      redoStack.push(snapshot());applySnapshot(undoStack.pop());
+    }
+    function redo(){
+      if(!redoStack.length)return;
+      undoStack.push(snapshot());applySnapshot(redoStack.pop());
+    }
+    listen(undoButton,'click',undo);
+    listen(redoButton,'click',redo);
+    const rotations={DESK_FRONT:'DESK_SIDE',DESK_SIDE:'DESK_FRONT',
+      SMALL_TABLE_FRONT:'SMALL_TABLE_SIDE',SMALL_TABLE_SIDE:'SMALL_TABLE_FRONT',
+      SOFA_FRONT:'SOFA_SIDE',SOFA_SIDE:'SOFA_FRONT',
+      WOODEN_CHAIR_FRONT:'WOODEN_CHAIR_SIDE',WOODEN_CHAIR_SIDE:'WOODEN_CHAIR_FRONT',
+      CUSHIONED_CHAIR_FRONT:'CUSHIONED_CHAIR_SIDE',
+      CUSHIONED_CHAIR_SIDE:'CUSHIONED_CHAIR_FRONT'};
+    listen(rotateButton,'click',()=>{
+      if(!layout||!selectedFurnitureUid)return;
+      const f=layout.furniture.find(e=>e.uid===selectedFurnitureUid);
+      if(!f)return;
+      const type=rotations[f.type.split(':')[0]];
+      if(!type||!canPutFurniture({...f,type},f.col,f.row,f.uid))
+        return updateEditorHint('此家具無法旋轉或空間不足');
+      capture();f.type=type;prefs.layout=layout;persist();
+      const asset=resolveFurniture(type);if(asset)scheduleAsset(asset.path);
+      draw();syncControls();updateEditorHint('家具已旋轉');
+    });
+    listen(duplicateButton,'click',()=>{
+      if(!layout||!selectedFurnitureUid)return;
+      const f=layout.furniture.find(e=>e.uid===selectedFurnitureUid);
+      if(!f)return;
+      const col=f.col+1,row=f.row+1;
+      if(!canPutFurniture(f,col,row))return updateEditorHint('附近空間不足，無法複製');
+      capture();const item={...f,uid:'f-copy-'+Date.now(),col,row};
+      layout.furniture.push(item);selectedFurnitureUid=item.uid;
+      prefs.layout=layout;persist();draw();syncControls();updateEditorHint('已複製家具');
+    });
+    listen(resetLayoutButton,'click',()=>{
+      if(!layout||!defaultLayout)return;
+      capture();layout=config.validateLayout(defaultLayout);
+      prefs.layout=null;placements={};prefs.placements={};persist();
+      const stable=config.allocateRoles(roles.map(r=>r.id),layout,{});
+      placements={...stable};prefs.layout=layout;persist();
+      syncControls();draw();updateEditorHint('已重設為原版辦公室配置。');
+    });
+    listen(exportButton,'click',()=>{
+      if(!layout||!config)return;
+      const payload={format:'crew-pocket-pixel-office',version:1,
+        layout:config.validateLayout(layout),placements,appearance:prefs.appearance};
+      const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});
+      const url=URL.createObjectURL(blob);
+      const link=document.createElement('a');link.href=url;
+      link.download='crew-pocket-office-layout.json';link.click();
+      URL.revokeObjectURL(url);
+    });
+    listen(importButton,'click',()=>importFile?.click());
+    listen(importFile,'change',async()=>{
+      const file=importFile.files?.[0];if(!file)return;
+      try{
+        if(file.size>180000)throw Error('佈局檔案過大');
+        const incoming=JSON.parse(await file.text());
+        if(incoming.format!=='crew-pocket-pixel-office')throw Error('不是 Crew Pocket 佈局檔案');
+        const next=config.validateLayout(incoming.layout);
+        capture();layout=next;
+        placements=config.allocateRoles(roles.map(r=>r.id),layout,
+          config.normalize({placements:incoming.placements}).placements);
+        prefs.appearance=config.normalize({appearance:incoming.appearance}).appearance;
+        prefs.layout=next;persist();
+        for(const f of layout.furniture){const ref=resolveFurniture(f.type);if(ref)scheduleAsset(ref.path);}
+        syncControls();draw();updateEditorHint('匯入成功');
+      }catch(error){updateEditorHint('匯入失敗：'+error.message);}
+      finally{importFile.value='';}
+    });
+    function furnitureAt(col,row){
+      // Reverse order: top-most item receives the click.
+      return [...layout.furniture].reverse().find(f=>{
+        const dim=config?.shape(f);
+        return dim&&col>=f.col&&col<f.col+dim[0]&&row>=f.row&&row<f.row+dim[1];
+      });
+    }
+    function canPutFurniture(f,col,row,excluding=null){
+      const dim=config?.shape(f);
+      if(!dim||col<0||row<0||col+dim[0]>layout.cols||row+dim[1]>layout.rows)return false;
+      for(let dy=0;dy<dim[1];dy++)for(let dx=0;dx<dim[0];dx++){
+        const tile=layout.tiles[(row+dy)*layout.cols+col+dx];
+        if(tile===0||tile===255)return false;
+      }
+      // Furniture occupies grid cells, but a coffee cup/PC can sit on a desk.
+      if(/^(PC_|COFFEE$)/.test(f.type))return true;
+      for(const other of layout.furniture){
+        if(other.uid===excluding||/^(PC_|COFFEE$)/.test(other.type))continue;
+        const odim=config.shape(other);
+        if(odim&&col<other.col+odim[0]&&col+dim[0]>other.col&&
+          row<other.row+odim[1]&&row+dim[1]>other.row)return false;
+      }
+      return true;
+    }
+    function applyEdit(x,y){
+      if(!editMode||!layout||!config)return;
+      const room=Math.floor(x/(layout.cols*TILE));
+      const col=Math.floor(x/TILE)-room*layout.cols;
+      const row=Math.floor(y/TILE);
+      if(room<0||room>3||col<0||col>=layout.cols||row<0||row>=layout.rows)return;
+      if(editTool==='role'){
+        if(!selectedId)return updateEditorHint('請先選取角色');
+        const next=config.moveRole(selectedId,{room,col,row},placements,layout);
+        if(!next)return updateEditorHint('此位置不可用，可能是牆面或已有角色');
+        capture();placements=next;persist();draw();updateEditorHint('已移動角色');
+        return;
+      }
+      const found=furnitureAt(col,row);
+      if(editTool==='move'){
+        if(!selectedFurnitureUid){
+          if(!found)return updateEditorHint('請先選取家具');
+          selectedFurnitureUid=found.uid;syncControls();
+          draw();updateEditorHint('已選擇家具，點擊新的位置，或使用旋轉／複製');
+          return;
+        }
+        const moving=layout.furniture.find(f=>f.uid===selectedFurnitureUid);
+        if(!moving){selectedFurnitureUid=null;return;}
+        if(!canPutFurniture(moving,col,row,moving.uid))
+          return updateEditorHint('位置不適合，請選別處');
+        capture();layout.furniture=layout.furniture.map(f=>f.uid===moving.uid?{...f,col,row}:f);
+        selectedFurnitureUid=null;prefs.layout=layout;persist();draw();updateEditorHint('已移動家具');
+      }else if(editTool==='place'){
+        const type=furnitureInput?.value||'PLANT';
+        const item={uid:'f-'+Date.now()+'-'+Math.floor(Math.random()*100000),type,col,row};
+        if(!canPutFurniture(item,col,row))return updateEditorHint('這個格子無法放置家具');
+        capture();layout.furniture.push(item);prefs.layout=layout;persist();
+        const ref=resolveFurniture(item.type);if(ref)scheduleAsset(ref.path);
+        draw();updateEditorHint('已放置家具');
+      }else if(editTool==='erase'){
+        if(found){
+          capture();layout.furniture=layout.furniture.filter(f=>f.uid!==found.uid);
+        }else if(layout.tiles[row*layout.cols+col]===0){
+          capture();layout.tiles[row*layout.cols+col]=1;
+        }else return;
+        prefs.layout=layout;persist();draw();
+      }else if(editTool==='floor'||editTool==='wall'){
+        const value=editTool==='wall'?0:Number(floorInput?.value||1);
+        if(layout.tiles[row*layout.cols+col]===value)return;
+        // Do not bury durable Role locations under newly painted walls.
+        if(value===0&&Object.values(placements).some(p=>p.room===room&&p.col===col&&p.row===row))
+          return updateEditorHint('角色正站在此處，無法蓋牆');
+        capture();layout.tiles[row*layout.cols+col]=value;
+        prefs.layout=layout;persist();draw();
+      }
+      syncControls();
+    }
+    function updateWalkers(){
+      if(!layout||reduced||editMode)return;
+      for(const [index,role] of roles.entries()){
+        const seat=roleSeat(role,index);
+        if(role.state!=='idle'){walkers.delete(role.id);continue;}
+        let w=walkers.get(role.id);
+        if(!w)w={x:seat.x,y:seat.y,path:[],pause:hash(role.id)%13};
+        if(w.path.length){
+          const next=w.path.shift();
+          w.x=(seat.room*layout.cols+next.col+.5)*TILE;
+          w.y=(next.row+.5)*TILE;
+        }else if(--w.pause<=0){
+          w.pause=12+(hash(role.id+String(animationTick))%17);
+          const x=Math.floor(w.x/TILE)%layout.cols,y=Math.floor(w.y/TILE);
+          const possibles=[
+            {col:seat.col,row:seat.row},
+            {col:seat.col+1,row:seat.row},{col:seat.col-1,row:seat.row},
+            {col:seat.col,row:seat.row+1},{col:seat.col,row:seat.row-1}
+          ].filter(p=>config.walkable(layout,p.col,p.row));
+          const next=possibles[hash(role.id+String(animationTick))%Math.max(1,possibles.length)];
+          if(next)w.path=config.findPath(layout,{col:x,row:y},next);
+        }
+        walkers.set(role.id,w);
+      }
+    }
+    function loadPets(){
+      if(!prefs.showPets)return;
+      scheduleAsset('pets/gitcat/pet.png');scheduleAsset('pets/claudio/pet.png');
+    }
+
     function onPointerCancel(event){pointers.delete(event.pointerId);}
     function onResize(){if(!disposed&&!paused)draw();}
     canvas.addEventListener('pointerdown',onPointerDown);
@@ -352,13 +786,16 @@
     const zoomIn=document.getElementById('world-zoom-in');
     const zoomOut=document.getElementById('world-zoom-out');
     function resetCamera(){
-      zoom=Math.max(1.05,Math.min(2.4,(width-32)/(21*TILE)));
-      const roleIndex=roles.findIndex(r=>r.id===selectedId);
-      panX=(Math.max(0,Math.floor(Math.max(0,roleIndex)/positions.length))*21+10.5)*TILE;
-      panY=255;draw();
+      const rooms=Math.max(1,Math.ceil(roles.length/positions.length));
+      const worldW=layout.cols*TILE*rooms;
+      zoom=Math.min(3,Math.max(.25,Math.min((width-30)/worldW,(height-60)/(layout.rows*TILE))));
+      panX=worldW/2;panY=layout.rows*TILE/2;snapCamera();draw();
     }
-    function zoomBy(factor){zoom=Math.min(5,Math.max(.9,zoom*factor));snapCamera();draw();}
+    function zoomBy(factor){zoom=Math.min(5,Math.max(.25,zoom*factor));snapCamera();draw();}
     const handleReset=()=>resetCamera(),handleIn=()=>zoomBy(1.25),handleOut=()=>zoomBy(.8);
+    const focusButton=document.getElementById('world-focus');
+    const handleFocus=()=>focusSelected();
+    focusButton?.addEventListener('click',handleFocus);
     reset?.addEventListener('click',handleReset);
     zoomIn?.addEventListener('click',handleIn);
     zoomOut?.addEventListener('click',handleOut);
@@ -379,8 +816,10 @@
       paused=false;
       refreshTimer=window.setInterval(()=>{void sync();},5500);
       if(!reduced)frameTimer=window.setInterval(()=>{
-        if(roles.some(role=>role.state==='working')){
-          animationTick++;draw();
+        if(roles.some(role=>role.state==='working'||role.state==='idle')&&layout){
+          animationTick++;
+          updateWalkers();
+          draw();
         }
       },FRAME_TIME);
       void sync();
@@ -395,7 +834,14 @@
         if(!Number.isInteger(data.cols)||data.cols!==21||data.rows!==22||!Array.isArray(data.tiles)||
           data.tiles.length!==data.cols*data.rows||!Array.isArray(data.furniture))throw Error('invalid Pixel Agents layout');
         if(disposed)return;
-        layout=data;
+        defaultLayout=data;
+        layout=prefs.layout||data;
+        if(config){
+          const stable=config.allocateRoles(roles.map(role=>role.id),layout,placements);
+          const incomplete=roles.some(role=>!placements[role.id]);
+          placements={...placements,...stable};
+          if(incomplete)persist();
+        }
         focusInitialCamera();
         for(let i=0;i<6;i++)scheduleAsset('characters/char_'+i+'.png');
         for(let i=0;i<9;i++)scheduleAsset('floors/floor_'+i+'.png');
@@ -404,7 +850,7 @@
           const ref=resolveFurniture(f.type);if(ref)scheduleAsset(ref.path);
         }
         for(let i=1;i<=3;i++)scheduleAsset('furniture/PC/PC_FRONT_ON_'+i+'.png');
-        ready=true;draw();
+        ready=true;syncControls();loadPets();draw();
         // Do not claim full fidelity while remote asset downloads are incomplete.
         await Promise.allSettled(loadTasks);
         if(!disposed)draw();
@@ -415,6 +861,7 @@
     const dispose=()=>{
       if(disposed)return;
       disposed=true;stopTimers();observer?.disconnect();layer.replaceChildren();
+      for(const [el,event,handler] of controls)el.removeEventListener?.(event,handler);
       canvas.removeEventListener('pointerdown',onPointerDown);
       canvas.removeEventListener('pointermove',onPointerMove);
       canvas.removeEventListener('pointerup',onPointerUp);
@@ -422,6 +869,7 @@
       reset?.removeEventListener('click',handleReset);
       zoomIn?.removeEventListener('click',handleIn);
       zoomOut?.removeEventListener('click',handleOut);
+      focusButton?.removeEventListener('click',handleFocus);
       window.removeEventListener('resize',onResize);
       window.removeEventListener('crew:context-usage-updated',onContextUpdated);
       board.hidden=true;
