@@ -6,10 +6,12 @@ on:
       - 'public/index.html'
       - 'public/js/crew-world-launcher.js'
       - 'public/js/crew-pixel-office.js'
+      - 'public/js/crew-pixel-config.js'
       - 'public/css/crew-pixel-office.css'
       - 'public/css/crew-world-launcher.css'
       - 'public/vendor/pixel-agents/**'
       - 'test/crew-pixel-office.test.js'
+      - 'test/crew-pixel-config.test.js'
       - 'test/crew-world-portal.test.js'
       - 'scripts/sync-pixel-assets.mjs'
       - '.github/workflows/world-lab.yml'
@@ -28,8 +30,10 @@ jobs:
       - name: Check Pixel Office and original Crew Chat integration
         run: |
           node --check public/js/crew-pixel-office.js
+          node --check public/js/crew-pixel-config.js
           node --check public/js/crew-world-launcher.js
           node --check scripts/sync-pixel-assets.mjs
+          node test/crew-pixel-config.test.js
           node test/crew-pixel-office.test.js
           node test/crew-world-portal.test.js
           node test/crew-context-usage.test.js

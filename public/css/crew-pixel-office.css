@@ -78,3 +78,7 @@
  max-height:55vh;max-width:calc(100vw - 16px)}
  .crew-pixel-controls{top:calc(var(--crew-shared-header-height,96px) + 52px)}
 }
+
+.crew-pixel-settings label[hidden],.crew-pixel-editor label[hidden]{display:none!important}
+.crew-pixel-editor button:disabled{opacity:.35;cursor:not-allowed}
+.crew-pixel-editor [aria-pressed="true"]{outline:2px solid #b8efff}
