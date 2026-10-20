@@ -39,3 +39,4 @@ jobs:
         with:
           name: crew-pocket-android-wrapper-debug
           path: android-wrapper/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 7
