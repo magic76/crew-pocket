@@ -3,8 +3,6 @@ const assert = require('node:assert/strict');
 const { test } = require('node:test');
 
 // Load separate copies because binding mode is read from the environment once.
-const savedBind = process.env.CREW_BIND_HOST;
-const savedToken = process.env.CREW_API_TOKEN;
 process.env.CREW_API_TOKEN = 'test-api-token-not-for-production';
 
 function load(bindHost) {
@@ -29,8 +27,7 @@ function cookies(res,name) {
   assert.ok(item,'expected '+name+' cookie');
   return item.split(';')[0];
 }
-try {
-  test('Localhost remains zero-config, foreign Host/Origin requests stay blocked',()=>{
+test('Localhost remains zero-config, foreign Host/Origin requests stay blocked',()=>{
     const security=load('127.0.0.1');
     const local=req({host:'127.0.0.1:8000',address:'127.0.0.1'});
     assert.equal(security.authorizeApiRequest(local,{}).ok,true);
@@ -38,7 +35,7 @@ try {
     assert.equal(security.authorizeApiRequest(req({host:'evil.example',address:'127.0.0.1'}),{}).statusCode,403);
     assert.equal(security.authorizeApiRequest(req({host:'127.0.0.1:8000',address:'127.0.0.1',origin:'http://evil.example'}),{}).statusCode,403);
   });
-  test('LAN REST and WebSocket reject unpaired and stale-cookie clients',()=>{
+test('LAN REST and WebSocket reject unpaired and stale-cookie clients',()=>{
     const security=load('0.0.0.0');
     const guest=req();
     assert.equal(security.authorizeApiRequest(guest,{}).statusCode,401);
@@ -57,7 +54,7 @@ try {
     assert.equal(security.authorizeApiRequest(req({cookie}),{}).statusCode,401);
     assert.equal(security.authorizeWebSocket(req({cookie}),{}).statusCode,401);
   });
-  test('Explicit legacy API token remains accepted; cookies are HttpOnly',()=>{
+test('Explicit legacy API token remains accepted; cookies are HttpOnly',()=>{
     const security=load('0.0.0.0');
     const supplied=req({authorization:'Bearer test-api-token-not-for-production'});
     assert.equal(security.authorizeApiRequest(supplied,{}).ok,true);
@@ -67,8 +64,3 @@ try {
     assert.match(r.getHeader('Set-Cookie')[0],/HttpOnly/);
     assert.equal(security.authorizeApiRequest(req({cookie:cookies(r,'crew_api_token')}),{}).ok,true);
   });
-} finally {
-  if(savedBind===undefined)delete process.env.CREW_BIND_HOST; else process.env.CREW_BIND_HOST=savedBind;
-  if(savedToken===undefined)delete process.env.CREW_API_TOKEN; else process.env.CREW_API_TOKEN=savedToken;
-  delete require.cache[require.resolve('../lib/http-security')];
-}
