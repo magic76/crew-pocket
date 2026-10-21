@@ -64,3 +64,9 @@ test('Explicit legacy API token remains accepted; cookies are HttpOnly',()=>{
     assert.match(r.getHeader('Set-Cookie')[0],/HttpOnly/);
     assert.equal(security.authorizeApiRequest(req({cookie:cookies(r,'crew_api_token')}),{}).ok,true);
   });
+  test('Runtime-generated static media must use the same LAN authorization gate',()=>{
+    const source=require('node:fs').readFileSync(require('node:path').join(__dirname,'../server.js'),'utf8');
+    assert.match(source,/pathname === '\/uploads'/);
+    assert.match(source,/pathname.startsWith\('\/uploads\/'\)/);
+    assert.match(source,/pathname.startsWith\('\/extra\/'\)/);
+  });
