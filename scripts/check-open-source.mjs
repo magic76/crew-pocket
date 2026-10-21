@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 /* Cheap checkout-only hygiene gate; not a replacement for Git history/secret scans. */
 'use strict';
-const { execFileSync } = require('node:child_process');
-const { readFileSync } = require('node:fs');
-const { extname } = require('node:path');
+import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+import { extname } from 'node:path';
 
 const files=execFileSync('git',['ls-files','-z'],{encoding:'utf8'}).split('\0').filter(Boolean);
 const forbidden=[
