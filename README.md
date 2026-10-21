@@ -19,6 +19,15 @@
 
 ---
 
+## 專案定位與開源使用方式
+
+Crew Pocket 是**個人自架的 AI CLI 操作殼**：用手機或瀏覽器操作自己安裝與登入的 Codex CLI、Claude Code CLI、Antigravity CLI，並管理 Role、對話、Memory 與任務。它不是雲端託管 AI Agent 服務，也不代替各 CLI 的帳戶授權或執行沙盒。
+
+- 原始碼採 [MIT License](LICENSE)；第三方素材與程式庫保留各自的授權，詳見 [Third-Party Notices](THIRD_PARTY_NOTICES.md)。
+- Web Server 預設只監聽 `127.0.0.1`；如果啟用手機到電腦的區網連線，請只在可信任的私人網路使用，並確認已套用最新版遠端配對驗證修補。**不要把 Runtime Port 直接暴露到公網。**
+- Crew Pocket 連線的是**你自己的 CLI 登入帳號**；不附帶 Codex、Claude 或 AGY 訂閱、Token 或其他提供者的執行權限。
+- 部署疑慮與安全回報請見 [SECURITY.md](SECURITY.md)，貢獻方式見 [CONTRIBUTING.md](CONTRIBUTING.md)。
+
 ## ⚡ 最小安裝（One-Line Quick Install）
 
 打開 **Termux**，直接貼上並執行以下指令，即可完成所有依賴與環境設定：

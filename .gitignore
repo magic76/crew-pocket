@@ -30,3 +30,26 @@ public/extra/
 
 # Locally-vendored Antigravity CLI package for embedded APK builds.
 android-wrapper/app/src/main/assets/agy-runtime/
+
+# Personal CLI credentials, local Crew state and common secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.p12
+*.pfx
+*.jks
+*.key
+*.mobileprovision
+*.sqlite
+*.sqlite3
+*.db
+**/auth.json
+**/credentials.json
+**/api-token
+**/transcript.jsonl
+**/transcript_full.jsonl
+.crew-pocket/
+.codex/
+.gemini/
+.agy-web.log
