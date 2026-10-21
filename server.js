@@ -3420,15 +3420,22 @@ const server = http.createServer(async (req, res) => {
     return res.end();
   }
 
-  // Runtime-generated uploads/custom tools may contain personal content.
-  // Unlike the public UI bundle, these static paths also need LAN pairing.
-  if (pathname.startsWith('/api/') ||
-      pathname === '/uploads' || pathname.startsWith('/uploads/') ||
-      pathname === '/extra' || pathname.startsWith('/extra/')) {
+  if (pathname.startsWith('/api/')) {
     const authorization = authorizeApiRequest(req, parsedUrl);
     if (!authorization.ok) {
       res.writeHead(authorization.statusCode || 403, { 'Content-Type': 'application/json' });
       return res.end(JSON.stringify({ error: authorization.error || 'Forbidden' }));
+    }
+  }
+
+  // Runtime-generated uploads/custom tools may contain personal content.
+  // Unlike the public UI bundle, these static paths also require LAN pairing.
+  if (pathname === '/uploads' || pathname.startsWith('/uploads/') ||
+      pathname === '/extra' || pathname.startsWith('/extra/')) {
+    const authorization = authorizeApiRequest(req, parsedUrl);
+    if (!authorization.ok) {
+      res.writeHead(authorization.statusCode || 403, { 'Content-Type': 'text/plain', 'Cache-Control': 'no-store' });
+      return res.end('Unauthorized');
     }
   }
 
