@@ -143,6 +143,8 @@ jobs:
           node --check lib/compact.js
           node --check lib/session.js
           node --check lib/auth.js
+          node --check lib/http-security.js
+          node --test test/http-security.test.js
           node --check lib/config.js
           node --check lib/files.js
           node --check lib/sandbox.js

@@ -3285,6 +3285,14 @@ async function handleRemoteAccess(req, res) {
     return res.end(JSON.stringify({ success: true, remote: remoteAccessSnapshot(req) }));
   }
 
+  // Binding the server to 0.0.0.0 must only be changed on the host device.
+  // A paired browser may issue normal CLI commands but cannot change the
+  // network exposure of the host on behalf of the phone owner.
+  if (!isLocalAdminRequest(req)) {
+    res.writeHead(403, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+    return res.end(JSON.stringify({ success: false, error: 'Remote access can only be changed locally' }));
+  }
+
   try {
     const body = await parseJsonBody(req);
     if (typeof body.enabled !== 'boolean') {
@@ -3386,8 +3394,12 @@ async function handleVisualAnswer(req, res) {
 const server = http.createServer(async (req, res) => {
   const parsedUrl = url.parse(req.url, true);
   const pathname = parsedUrl.pathname;
-  maybeSetPairingCookie(req, res, parsedUrl);
-  maybeSetAuthCookie(res, parsedUrl);
+  // Pair only through a deliberate navigation to the office home page, not
+  // by slipping a one-time ticket into an arbitrary API or WebSocket request.
+  if (req.method === 'GET' && (pathname === '/' || pathname === '/index.html')) {
+    maybeSetPairingCookie(req, res, parsedUrl);
+    maybeSetAuthCookie(res, parsedUrl);
+  }
   applyCors(req, res);
 
   if (pathname === '/healthz') {
@@ -3413,6 +3425,17 @@ const server = http.createServer(async (req, res) => {
     if (!authorization.ok) {
       res.writeHead(authorization.statusCode || 403, { 'Content-Type': 'application/json' });
       return res.end(JSON.stringify({ error: authorization.error || 'Forbidden' }));
+    }
+  }
+
+  // Runtime-generated uploads/custom tools may contain personal content.
+  // Unlike the public UI bundle, these static paths also require LAN pairing.
+  if (pathname === '/uploads' || pathname.startsWith('/uploads/') ||
+      pathname === '/extra' || pathname.startsWith('/extra/')) {
+    const authorization = authorizeApiRequest(req, parsedUrl);
+    if (!authorization.ok) {
+      res.writeHead(authorization.statusCode || 403, { 'Content-Type': 'text/plain', 'Cache-Control': 'no-store' });
+      return res.end('Unauthorized');
     }
   }
 
