@@ -29,7 +29,8 @@ body[data-primary-tab="crew"] #chat-composer-footer { display: none !important; 
   background: var(--cp-bg) !important;
   border-bottom: 1px solid var(--cp-border);
 }
-.crew-home-top { display: flex; align-items: flex-start; gap: 10px; justify-content: space-between; }
+.crew-home-top { display: flex; align-items: center; gap: 10px; justify-content: space-between; }
+.crew-home-brand { min-width: 0; }
 .crew-home-kicker {
   font-size: 10px; font-weight: 730;
   letter-spacing: .14em; color: var(--cp-accent-strong);
@@ -50,19 +51,24 @@ body[data-primary-tab="crew"] #chat-composer-footer { display: none !important; 
 #drawer-new-role-btn { color: var(--cp-accent-strong); background: var(--cp-accent-soft); border-color: var(--cp-accent); }
 #drawer-new-role-btn:active, #cockpit-refresh-btn:active { transform: scale(.96); }
 .crew-home-summary {
-  display: flex; flex-wrap: wrap; align-items: center;
-  column-gap: 11px; row-gap: 4px;
-  font-size: 11px; margin-top: 13px;
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px;
+  font-size: 11px; margin-top: 12px;
   color: var(--cp-text-secondary);
 }
-.crew-summary-item { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; }
-.crew-summary-item[data-kind="working"] { color: var(--cp-success); }
-.crew-summary-item[data-kind="attention"] { color: var(--cp-warning); }
-.crew-summary-item::before {
-  content: ''; width: 6px; height: 6px; border-radius: 99px;
-  background: currentColor;
+.crew-summary-item {
+  display: flex; flex-direction: column; gap: 4px; min-width: 0;
+  padding: 9px 10px; background: var(--cp-surface);
+  border: 1px solid var(--cp-border); border-radius: 12px;
 }
-.crew-summary-item[data-kind="roles"]::before { background: var(--cp-accent); }
+.crew-summary-item strong {
+  color: var(--cp-text); font-size: 18px; line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.crew-summary-item span { color: var(--cp-muted); font-size: 10px; white-space: nowrap; }
+.crew-summary-item[data-kind="roles"] strong { color: var(--cp-accent-strong); }
+.crew-summary-item[data-kind="working"] strong { color: var(--cp-success); }
+.crew-summary-item[data-kind="waiting"] strong,
+.crew-summary-item[data-kind="attention"] strong { color: var(--cp-warning); }
 .crew-home-sync { font-size: 10px; color: var(--cp-muted); margin-top: 6px; }
 .crew-home-sync[data-verified="false"] { color: var(--cp-warning); }
 #role-nav-view #cockpit-scroll {

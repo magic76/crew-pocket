@@ -20,6 +20,7 @@
         ? tr('Runtime 已同步', 'Runtime synced')
         : tr('Runtime 尚未同步，狀態未知', 'Runtime unavailable; status unknown');
       statusLine.dataset.verified = String(data.verified);
+      statusLine.hidden = false;
     }
     const attention = data.verified ? data.attention : [];
     const html = attention.length ? '<section class="crew-attention-card">' +
@@ -32,6 +33,8 @@
             '<small>' + (role.queue ? role.queue + tr(' 項排隊', ' queued') : '') +
               (role.queue && role.unread ? ' · ' : '') +
               (role.unread ? role.unread + tr(' 則未讀', ' unread') : '') +
+              ((role.queue || role.unread) && role.failed ? ' · ' : '') +
+              (role.failed ? role.failed + tr(' 項失敗', ' failed') : '') +
             '</small></span>' +
           '<span class="crew-attention-chevron" aria-hidden="true">›</span></button>').join('') +
       (attention.length > 4 ? '<p class="crew-home-footnote">' +

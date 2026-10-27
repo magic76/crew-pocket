@@ -54,9 +54,6 @@
   <link rel="stylesheet" href="/css/crew-home.css">
   <link rel="stylesheet" href="/css/crew-room.css">
   <link rel="stylesheet" href="/css/crew-cinematic.css">
-  <link rel="stylesheet" href="/css/crew-world-launcher.css">
-  <link rel="stylesheet" href="/css/crew-pixel-office.css">
-  <link rel="stylesheet" href="/css/crew-pixel-shell.css">
   <link rel="stylesheet" href="/css/visual-inspector.css">
 </head>
 <body data-primary-tab="crew" class="bg-slate-950 text-slate-100 flex flex-col h-[100dvh] w-full max-w-full overflow-hidden">
@@ -516,9 +513,10 @@
   <div id="crew-home-header-host">
     <div id="crew-home-header" class="crew-home-header">
           <div class="crew-home-top">
-            <div id="crew-home-view-toggle" class="crew-home-view-toggle" role="group" aria-label="首頁檢視模式" data-view="map">
-              <button id="crew-world-open-btn" type="button" aria-label="像素辦公室主畫面" title="Pixel Office" aria-pressed="true" class="is-active"><span class="crew-home-toggle-icon" aria-hidden="true">◇</span></button>
-              <button id="crew-home-dashboard-btn" type="button" aria-label="Dashboard 輔助總覽" title="Dashboard" aria-pressed="false"><span class="crew-home-toggle-icon" aria-hidden="true">▦</span></button>
+            <div class="crew-home-brand">
+              <div class="crew-home-kicker">CREW DASHBOARD</div>
+              <h1>小隊總覽</h1>
+              <p class="crew-home-subtitle">工作狀態、待處理訊息與最近協作</p>
             </div>
             <div class="crew-home-actions">
               <button id="cockpit-refresh-btn" type="button" aria-label="重新同步小隊狀態" title="重新同步小隊狀態">↻</button>
@@ -536,8 +534,8 @@
   <!-- MAIN CHAT CONTAINER -->
   <div id="crew-main-layout" class="relative flex-1 flex min-h-0 w-full max-w-full overflow-hidden">
 
-    <!-- Secondary Dashboard: Role management and detailed summaries remain available beside the map-first home. -->
-    <section id="drawer" class="crew-home-view hidden min-h-0 min-w-0 flex-1 flex-col overflow-hidden" aria-label="AI 小隊首頁">
+    <!-- Primary dashboard: verified work status, attention items, Roles and recent activity. -->
+    <section id="drawer" class="crew-home-view hidden min-h-0 min-w-0 flex-1 flex-col overflow-hidden" aria-label="AI 小隊 Dashboard">
       <section id="role-nav-view" class="flex min-h-0 flex-1 flex-col">
         <div id="cockpit-scroll" class="min-h-0 flex-1 overflow-y-auto overscroll-contain">
           <div id="crew-attention-panel" aria-label="待處理的角色訊息"></div>
@@ -1790,164 +1788,6 @@
   </div>
 
 
-  <!-- Pixel Agents art/layout; one original Crew Chat DOM and Runtime. -->
-  <section id="crew-world-modal" class="crew-world-modal" aria-label="Crew Pixel Office 小隊主畫面" hidden>
-    <div id="world-app" class="world-app">
-      <div class="world-stage-frame">
-        <section id="crew-pixel-office" class="crew-pixel-office" aria-label="像素小隊辦公室">
-          <canvas id="crew-pixel-canvas" tabindex="0" aria-label="可拖曳、雙指縮放的 Pixel Agents 辦公室"></canvas>
-          <div id="crew-pixel-roles" class="crew-pixel-roles" aria-label="選擇 Crew 角色"></div>
-        </section>
-      </div>
-      <p id="crew-pixel-feedback" class="crew-pixel-feedback" role="status" aria-live="polite">正在載入 Pixel Agents 辦公室…</p>
-      <div id="crew-pixel-controls" class="crew-pixel-controls">
-        <button id="crew-pixel-settings-toggle" type="button" aria-label="像素辦公室設定" aria-expanded="false">⚙</button>
-        <button id="crew-pixel-edit-toggle" type="button" aria-label="開啟佈置辦公室" title="佈置辦公室" aria-pressed="false">佈置</button>
-      </div>
-      <section id="crew-pixel-settings" class="crew-pixel-settings" aria-label="辦公室顯示設定" hidden>
-        <div class="crew-pixel-settings-head"><strong>辦公室設定</strong><button id="crew-pixel-settings-close" type="button" aria-label="關閉設定">✕</button></div>
-        <label>人物名稱
-          <select id="crew-pixel-label-mode">
-            <option value="always">全部顯示</option>
-            <option value="selected">僅選取／懸停</option>
-            <option value="hidden">全部隱藏</option>
-          </select>
-        </label>
-        <label class="crew-pixel-setting-check"><input id="crew-pixel-outline" type="checkbox" checked> 人物像素輪廓高亮</label>
-        <label class="crew-pixel-setting-check"><input id="crew-pixel-follow" type="checkbox" checked> 切換角色時聚焦</label>
-        <label>點擊角色
-          <select id="crew-pixel-interaction"><option value="direct">直接開啟對話</option><option value="two-tap">先選取，再點進對話</option></select>
-        </label>
-        <label>人物造型 <small class="crew-pixel-appearance-note">6 種官方人物 × 4 款服裝配色</small>
-          <div class="crew-pixel-avatar-row">
-            <canvas id="crew-pixel-avatar-preview" width="48" height="96" aria-label="目前選取人物的造型預覽"></canvas>
-            <select id="crew-pixel-appearance" aria-label="切換人物造型">
-              <optgroup label="原版造型">
-                <option value="0">人物 1 · 原版</option><option value="1">人物 2 · 原版</option>
-                <option value="2">人物 3 · 原版</option><option value="3">人物 4 · 原版</option>
-                <option value="4">人物 5 · 原版</option><option value="5">人物 6 · 原版</option>
-              </optgroup>
-              <optgroup label="深藍服裝">
-                <option value="6">人物 1 · 深藍</option><option value="7">人物 2 · 深藍</option>
-                <option value="8">人物 3 · 深藍</option><option value="9">人物 4 · 深藍</option>
-                <option value="10">人物 5 · 深藍</option><option value="11">人物 6 · 深藍</option>
-              </optgroup>
-              <optgroup label="森林綠服裝">
-                <option value="12">人物 1 · 森林綠</option><option value="13">人物 2 · 森林綠</option>
-                <option value="14">人物 3 · 森林綠</option><option value="15">人物 4 · 森林綠</option>
-                <option value="16">人物 5 · 森林綠</option><option value="17">人物 6 · 森林綠</option>
-              </optgroup>
-              <optgroup label="珊瑚紅服裝">
-                <option value="18">人物 1 · 珊瑚紅</option><option value="19">人物 2 · 珊瑚紅</option>
-                <option value="20">人物 3 · 珊瑚紅</option><option value="21">人物 4 · 珊瑚紅</option>
-                <option value="22">人物 5 · 珊瑚紅</option><option value="23">人物 6 · 珊瑚紅</option>
-              </optgroup>
-            </select>
-          </div>
-        </label>
-        <label class="crew-pixel-setting-check"><input id="crew-pixel-pets" type="checkbox"> 顯示辦公室寵物</label>
-      </section>
-      <section id="crew-pixel-editor" class="crew-pixel-editor" aria-label="編輯辦公室" hidden>
-        <div class="crew-pixel-editor-head">
-          <div><strong>佈置辦公室</strong><small>自動儲存 · 可復原</small></div>
-          <button id="crew-pixel-edit-done" type="button">完成 ✓</button>
-        </div>
-        <nav class="crew-pixel-editor-modes" aria-label="選擇編輯內容">
-          <button id="crew-pixel-mode-furniture" type="button" aria-pressed="true">家具</button>
-          <button id="crew-pixel-mode-role" type="button" aria-pressed="false">人物</button>
-          <button id="crew-pixel-mode-tile" type="button" aria-pressed="false">地板</button>
-        </nav>
-        <p id="crew-pixel-editor-hint" role="status" aria-live="polite">點一下選家具，按住拖到新位置；空白處拖曳可平移畫面。</p>
-        <div id="crew-pixel-furniture-actions" class="crew-pixel-editor-context">
-          <button id="crew-pixel-add" type="button" class="crew-pixel-primary-action">＋ 加家具</button>
-          <button id="crew-pixel-rotate" type="button" disabled>↻ 旋轉</button>
-          <button id="crew-pixel-duplicate" type="button" disabled>複製</button>
-          <button id="crew-pixel-delete" type="button" disabled>刪除</button>
-        </div>
-        <label id="crew-pixel-furniture-group" hidden>要新增的家具
-          <select id="crew-pixel-furniture-type">
-            <option value="DESK_FRONT">辦公桌</option><option value="CUSHIONED_CHAIR_FRONT">辦公椅</option>
-            <option value="SOFA_FRONT">沙發</option><option value="SMALL_TABLE_FRONT">小桌子</option>
-            <option value="PLANT">盆栽</option><option value="PLANT_2">植物</option>
-            <option value="BOOKSHELF">書架</option><option value="PC_FRONT_OFF">電腦</option>
-            <option value="COFFEE">咖啡杯</option><option value="WHITEBOARD">白板</option>
-          </select>
-        </label>
-        <label id="crew-pixel-edit-role-group" hidden>移動哪個角色？
-          <select id="crew-pixel-edit-role" aria-label="選擇要移動的角色"></select>
-        </label>
-        <label id="crew-pixel-floor-group" hidden>地板樣式
-          <select id="crew-pixel-floor-type">
-            <option value="1">地板 1</option><option value="2">地板 2</option>
-            <option value="3">地板 3</option><option value="4">地板 4</option>
-            <option value="5">地板 5</option><option value="6">地板 6</option>
-            <option value="7">地板 7</option><option value="8">地板 8</option><option value="9">地板 9</option>
-          </select>
-        </label>
-        <div id="crew-pixel-tile-actions" class="crew-pixel-editor-context" hidden>
-          <button id="crew-pixel-floor-paint" type="button" aria-pressed="true">塗地板</button>
-          <button id="crew-pixel-wall-paint" type="button" aria-pressed="false">蓋牆</button>
-          <button id="crew-pixel-erase-tile" type="button" aria-pressed="false">擦除</button>
-        </div>
-        <div class="crew-pixel-editor-footer">
-          <button id="crew-pixel-undo" type="button">↶ 復原</button>
-          <button id="crew-pixel-redo" type="button">↷ 重做</button>
-          <details id="crew-pixel-more">
-            <summary>更多</summary>
-            <div class="crew-pixel-more-actions">
-              <label>進階工具
-                <select id="crew-pixel-edit-tool">
-                  <option value="move">選取與移動家具</option>
-                  <option value="place">放置家具</option>
-                  <option value="role">移動人物</option>
-                  <option value="floor">塗地板</option>
-                  <option value="wall">繪製牆壁</option>
-                  <option value="erase">擦除家具／牆面</option>
-                </select>
-              </label>
-              <button id="crew-pixel-export" type="button">匯出佈局 JSON</button>
-              <button id="crew-pixel-import" type="button">匯入佈局 JSON</button>
-              <button id="crew-pixel-reset-layout" type="button">重設原始辦公室</button>
-              <input id="crew-pixel-import-file" type="file" accept=".json,application/json" hidden>
-            </div>
-          </details>
-        </div>
-      </section>
-      <nav class="world-quick-tools crew-pixel-tools" aria-label="辦公室鏡頭操作">
-        <button id="world-zoom-out" type="button" aria-label="縮小辦公室">−</button>
-        <button id="world-reset" type="button" aria-label="辦公室全景">⌗</button>
-        <button id="world-focus" type="button" aria-label="聚焦選取的角色">◎</button>
-        <button id="world-zoom-in" type="button" aria-label="放大辦公室">＋</button>
-      </nav>
-    </div>
-    <section id="crew-world-chat-panel" class="crew-world-chat-panel" aria-label="地圖指揮與原有 Role 對話" hidden>
-      <div class="crew-world-command-head">
-        <label for="crew-world-command-role">指揮角色</label>
-        <select id="crew-world-command-role" aria-label="地圖指令發送目標角色"></select>
-        <span id="crew-world-role-spinner" class="crew-world-role-spinner" aria-label="正在切換角色" hidden></span>
-        <button id="crew-world-command-retry" type="button" title="重新嘗試切換角色" aria-label="重新嘗試切換角色" hidden>重試</button>
-        <span id="crew-world-command-state" role="status" aria-live="polite">載入目前角色…</span>
-        <button id="crew-world-command-context" type="button" data-context-tone="unknown" aria-label="Context token 使用量尚無資料 · 點擊查看 Context Health" title="Context token 使用量尚無資料 · 點擊查看 Context Health" disabled>—</button>
-        <button id="crew-world-command-read" type="button" aria-label="展開地圖對話" aria-pressed="false">對話</button>
-      </div>
-      <button id="crew-world-result-peek" class="crew-world-result-peek" type="button" aria-label="展開目前角色的原始回覆" hidden>
-        <span id="crew-world-result-peek-kind" class="crew-world-result-peek-kind">最新回覆</span>
-        <span id="crew-world-result-peek-text" class="crew-world-result-peek-text"></span>
-        <span class="crew-world-result-peek-more" aria-hidden="true">›</span>
-      </button>
-      <div class="crew-world-chat-top">
-        <div class="crew-world-chat-identity">
-          <strong id="crew-world-chat-role-name">Role 對話</strong>
-          <small>原本 Chat · 即時串流與工具結果</small>
-        </div>
-        <button id="crew-world-chat-expand" type="button" aria-label="切換全螢幕聊天">展開</button>
-        <button id="crew-world-chat-hide" type="button" aria-label="收合聊天，返回地圖">收合</button>
-      </div>
-      <div id="crew-world-chat-messages-slot" class="crew-world-chat-messages-slot"></div>
-      <div id="crew-world-chat-composer-slot" class="crew-world-chat-composer-slot"></div>
-    </section>
-  </section>
-
   <!-- CREW HOME MODAL -->
   <div id="crew-home-modal" class="fixed inset-0 bg-black/75 z-50 flex items-center justify-center p-3 sm:p-4 opacity-0 pointer-events-none transition-opacity duration-200">
     <div class="bg-slate-900 border border-indigo-500/35 rounded-3xl w-full max-w-2xl max-h-[90vh] overflow-hidden shadow-2xl flex flex-col">
@@ -2090,10 +1930,7 @@
   <script src="/js/i18n.js"></script>
   <script src="/js/crew-room.js"></script>
   <script src="/js/crew-cinematic.js"></script>
-  <!-- The Pixel Agents asset renderer loads on first visit; no 3D/WebGL dependency. -->
   <script src="/js/crew-context-usage.js"></script>
-  <script src="/js/crew-pixel-config.js"></script>
-  <script src="/js/crew-world-launcher.js"></script>
   <script src="/js/ui.js"></script>
   <script src="/js/memory-xray.js"></script>
   <script src="/js/role-dna.js"></script>

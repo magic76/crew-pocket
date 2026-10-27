@@ -967,12 +967,23 @@ function renderRoleNavigation() {
   if (!roleNavList) return;
   const roles = availableRoles.length ? availableRoles : [];
   const statuses = crewStatusVerified ? roles.map(role => crewStatusForRole(role.id)).filter(Boolean) : [];
+  const count = value => Number.isFinite(Number(value))
+    ? Math.max(0, Math.trunc(Number(value))) : 0;
   const workingCount = statuses.filter(status => status.state === 'working').length;
+  const waitingCount = statuses.filter(status => status.state === 'waiting').length;
+  const attentionCount = statuses.reduce((total, status) => total +
+    count(status.queuedMessageCount) + count(status.queuedRequestCount) +
+    count(status.unreadReplyCount) + count(status.failedRequestCount), 0);
   if (crewRoomSummary) {
     crewRoomSummary.innerHTML = [
-      '<span class="crew-summary-item" data-kind="roles">' + roles.length + ' 位成員</span>',
-      '<span class="crew-summary-item" data-kind="working">' +
-        (crewStatusVerified ? workingCount : '—') + ' 工作中</span>'
+      '<span class="crew-summary-item" data-kind="roles"><strong>' + roles.length +
+        '</strong><span>角色</span></span>',
+      '<span class="crew-summary-item" data-kind="working"><strong>' +
+        (crewStatusVerified ? workingCount : '—') + '</strong><span>工作中</span></span>',
+      '<span class="crew-summary-item" data-kind="waiting"><strong>' +
+        (crewStatusVerified ? waitingCount : '—') + '</strong><span>等待中</span></span>',
+      '<span class="crew-summary-item" data-kind="attention"><strong>' +
+        (crewStatusVerified ? attentionCount : '—') + '</strong><span>待處理</span></span>'
     ].join('');
   }
 

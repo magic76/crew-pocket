@@ -17,6 +17,7 @@
       const state = status ? (STATES.has(status.state) ? status.state : 'unknown') : 'unknown';
       const queue = status ? positive(status.queuedMessageCount) + positive(status.queuedRequestCount) : 0;
       const unread = status ? positive(status.unreadReplyCount) : 0;
+      const failed = status ? positive(status.failedRequestCount) : 0;
       const title = status?.currentWork?.title || status?.conversationTitle || role.latestTitle || '';
       return {
         id: String(role.id || ''),
@@ -24,7 +25,7 @@
         project: String(role.project || ''),
         icon: String(role.icon || '●'),
         state, busy: status?.busy === true,
-        queue, unread, attention: queue + unread,
+        queue, unread, failed, attention: queue + unread + failed,
         title: String(title),
         lastActivityAt: positive(status?.lastActivityAt || role.latestUpdatedAt),
         isSelected: role.id === snapshot?.activeRoleId
