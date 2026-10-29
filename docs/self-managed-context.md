@@ -23,7 +23,7 @@ Post-turn, the existing AutoCompact engine rechecks Role locks, provider support
 
 The sidecar stores readable, complete tool results up to 256 KiB each in private files under ~/.crew-pocket/context-archive/<role>/<provider>/<conversation>/.
 
-Contents are immutable SHA-256-named blobs; index updates are atomic; archived source results are not overwritten by curation notes. Up to 24 recent results are inspected per finished turn. Oversized, opaque or unrecognized tool output is **not** archived. Archive entries are not guaranteed to cover every tool invocation or provider-internal/opaque item; only an entry actually present in the index is losslessly recallable. Original transcripts and Role Memory are never edited by this module.
+Contents are immutable SHA-256-named blobs; index updates are atomic; archived source results are not overwritten by curation notes. Up to 24 recent results are inspected per finished turn. Each conversation has a 64 MiB capture ceiling; reaching it skips new outputs rather than deleting existing archived data. Oversized, opaque or unrecognized tool output is **not** archived. Archive entries are not guaranteed to cover every tool invocation or provider-internal/opaque item; only an entry actually present in the index is losslessly recallable. Original transcripts and Role Memory are never edited by this module.
 
 The archive can contain private project files, shell output and secret-bearing data. Keep the directory and device private, protect local backups, and do not expose it as a public static asset.
 
