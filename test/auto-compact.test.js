@@ -153,7 +153,7 @@ async function run() {
   assert.ok(server.includes("body.confirmed !== true"));
   assert.ok(server.includes("pathname === '/api/context/auto-compact-settings'"));
   assert.ok(server.includes("mode: 'manual'"));
-  assert.ok(server.includes("mode: 'automatic'"));
+  assert.ok(server.includes("freshProposal ? 'agent_proposal' : 'automatic'"));
   assert.ok(chat.includes('window.executeSafeContextCompaction = executeSafeContextCompaction'));
   assert.ok(html.includes('id="auto-compact-enabled"'));
   assert.ok(html.includes('id="context-compact-preview-modal"'));
