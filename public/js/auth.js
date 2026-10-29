@@ -1,6 +1,11 @@
 // 🔐 Provider Authentication & Login Manager (Codex Device Auth + AGY Token)
 let activeAuthPollInterval = null;
 let currentAuthSessionId = null;
+let activeAgyLoginPollTimeout = null;
+let currentAgyLoginSessionId = null;
+let agyLoginPollSessionId = null;
+let agyLoginResumePromise = null;
+let agyLoginMenuInputPending = false;
 
 function isAuthErrorMessage(msg = '') {
   if (!msg || typeof msg !== 'string') return false;
@@ -16,6 +21,7 @@ function openAuthModal() {
   if (typeof window.haptic === 'function') window.haptic('light');
   refreshAuthStatus();
   refreshProviderRuntime();
+  resumeAgyLoginSession();
 }
 
 function closeAuthModal() {
@@ -23,6 +29,7 @@ function closeAuthModal() {
   if (!authModal) return;
   authModal.classList.add('opacity-0', 'pointer-events-none');
   stopDeviceAuthPolling();
+  stopAgyLoginPolling();
 }
 
 async function refreshProviderRuntime() {
@@ -147,10 +154,263 @@ async function refreshAuthStatus() {
         agyStatusDesc.textContent = data.antigravity?.message || '尚未建立 OAuth 憑證';
       }
     }
+    return data;
 
   } catch (err) {
     if (codexStatusDesc) codexStatusDesc.textContent = '查詢失敗: ' + err.message;
     if (agyStatusDesc) agyStatusDesc.textContent = '查詢失敗: ' + err.message;
+    return null;
+  }
+}
+
+function setAgyLoginMessage(message, state = 'waiting') {
+  const status = document.getElementById('agy-login-live-status');
+  if (!status) return;
+  const styles = {
+    waiting: 'text-[11px] leading-relaxed text-amber-300',
+    success: 'text-[11px] leading-relaxed text-emerald-300',
+    error: 'text-[11px] leading-relaxed text-rose-300'
+  };
+  status.className = styles[state] || styles.waiting;
+  status.textContent = message;
+}
+
+function renderAgyLoginSnapshot(snapshot = {}) {
+  const startBtn = document.getElementById('agy-login-start-btn');
+  const sessionEl = document.getElementById('agy-login-session');
+  const link = document.getElementById('agy-login-link');
+  const choiceRow = document.getElementById('agy-login-choice-row');
+  const codeRow = document.getElementById('agy-login-code-row');
+  const cancelBtn = document.getElementById('agy-login-cancel-btn');
+  const refreshBtn = document.getElementById('agy-login-refresh-btn');
+  const state = String(snapshot.status || 'idle');
+  const active = ['starting', 'awaiting_choice', 'awaiting_code', 'verifying'].includes(state);
+  const messages = {
+    starting: '正在啟動 AGY，等待 Google 授權連結…',
+    awaiting_choice: 'AGY 正在等待選擇登入方式。用上一個／下一個移動，再按「確認選取」。',
+    awaiting_code: snapshot.error || '請開啟授權頁登入 Google；若頁面顯示驗證碼，貼到下方送出。',
+    verifying: '驗證碼已送出，正在確認 Google 授權…',
+    completed: '登入流程完成，正在確認 AGY 憑證…',
+    failed: `登入失敗：${String(snapshot.error || 'AGY 登入程序已結束。')}`,
+    cancelled: '登入已取消。'
+  };
+
+  if (snapshot.sessionId) currentAgyLoginSessionId = snapshot.sessionId;
+  else if (state === 'idle') currentAgyLoginSessionId = null;
+  if (sessionEl) sessionEl.classList.toggle('hidden', state === 'idle');
+  if (startBtn) {
+    startBtn.classList.toggle('hidden', active);
+    startBtn.disabled = false;
+    startBtn.innerHTML = state === 'completed' ? '<span>🔑</span><span>再次登入 Google</span>' : '<span>🔑</span><span>在此登入 Google 帳號</span>';
+  }
+
+  let safeUrl = '';
+  try {
+    const parsed = new URL(snapshot.url || '', window.location.href);
+    if (parsed.protocol === 'https:') safeUrl = parsed.toString();
+  } catch (_) {}
+  if (link) {
+    if (safeUrl) {
+      link.href = safeUrl;
+      link.classList.remove('hidden');
+    } else {
+      link.removeAttribute('href');
+      link.classList.add('hidden');
+    }
+  }
+  if (codeRow) codeRow.classList.toggle('hidden', state !== 'awaiting_code');
+  if (choiceRow) {
+    choiceRow.classList.toggle('hidden', state !== 'awaiting_choice');
+    choiceRow.querySelectorAll('button').forEach(button => { button.disabled = agyLoginMenuInputPending; });
+  }
+  if (cancelBtn) cancelBtn.classList.toggle('hidden', !active);
+  if (refreshBtn) refreshBtn.classList.toggle('hidden', state === 'idle');
+
+  if (messages[state]) setAgyLoginMessage(messages[state], state === 'failed' ? 'error' : state === 'completed' ? 'success' : 'waiting');
+  else if (state === 'idle') setAgyLoginMessage('尚未啟動登入。', 'waiting');
+}
+
+function isAgyLoginActive(status) {
+  return ['starting', 'awaiting_choice', 'awaiting_code', 'verifying'].includes(status);
+}
+
+function stopAgyLoginPolling() {
+  if (activeAgyLoginPollTimeout) clearTimeout(activeAgyLoginPollTimeout);
+  activeAgyLoginPollTimeout = null;
+  agyLoginPollSessionId = null;
+}
+
+async function finishAgyLogin(snapshot, { announce = true } = {}) {
+  stopAgyLoginPolling();
+  if (snapshot.status === 'completed') {
+    const authStatus = await refreshAuthStatus();
+    if (authStatus?.antigravity?.loggedIn) {
+      setAgyLoginMessage('✅ Google 授權成功，AGY 已可使用。', 'success');
+      if (announce) {
+        if (typeof window.haptic === 'function') window.haptic([40, 80, 40]);
+        notifyAuthRecoverySuccess('antigravity');
+      }
+    } else {
+      setAgyLoginMessage('登入程序已結束，但尚未確認憑證；請按「重新整理狀態」確認。', 'error');
+    }
+  }
+}
+
+function pollAgyLoginStatus(sessionId) {
+  stopAgyLoginPolling();
+  agyLoginPollSessionId = sessionId;
+  const poll = async () => {
+    if (agyLoginPollSessionId !== sessionId) return;
+    try {
+      const res = await fetch('/api/auth/agy/login-status?sessionId=' + encodeURIComponent(sessionId), { cache: 'no-store' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || '無法讀取 AGY 登入狀態');
+      if (agyLoginPollSessionId !== sessionId) return;
+      renderAgyLoginSnapshot(data);
+      if (data.status === 'idle') {
+        stopAgyLoginPolling();
+        renderAgyLoginSnapshot({ sessionId, status: 'failed', error: '登入工作階段已失效，請重新啟動登入。' });
+        return;
+      }
+      if (['completed', 'failed', 'cancelled'].includes(data.status)) {
+        await finishAgyLogin(data);
+        return;
+      }
+    } catch (error) {
+      setAgyLoginMessage('登入狀態暫時無法讀取：' + String(error.message || error), 'error');
+    }
+    if (agyLoginPollSessionId === sessionId) {
+      activeAgyLoginPollTimeout = setTimeout(poll, 1500);
+    }
+  };
+  activeAgyLoginPollTimeout = setTimeout(poll, 0);
+}
+
+async function resumeAgyLoginSession() {
+  if (agyLoginResumePromise) return agyLoginResumePromise;
+  agyLoginResumePromise = (async () => {
+    try {
+      const res = await fetch('/api/auth/agy/login-status', { cache: 'no-store' });
+      const snapshot = await res.json();
+      if (!res.ok) throw new Error(snapshot.error || '無法讀取 AGY 登入狀態');
+      renderAgyLoginSnapshot(snapshot);
+      if (isAgyLoginActive(snapshot.status) && snapshot.sessionId) pollAgyLoginStatus(snapshot.sessionId);
+      else if (snapshot.status === 'completed') await finishAgyLogin(snapshot, { announce: false });
+      return snapshot;
+    } catch (error) {
+      setAgyLoginMessage('登入狀態暫時無法讀取：' + String(error.message || error), 'error');
+      return null;
+    } finally {
+      agyLoginResumePromise = null;
+    }
+  })();
+  return agyLoginResumePromise;
+}
+
+async function refreshAgyLoginStatus() {
+  const button = document.getElementById('agy-login-refresh-btn');
+  if (button) { button.disabled = true; button.textContent = '正在更新…'; }
+  try {
+    await resumeAgyLoginSession();
+  } finally {
+    if (button) { button.disabled = false; button.textContent = '重新整理登入狀態'; }
+  }
+}
+
+async function startAgyLoginFlow() {
+  const startBtn = document.getElementById('agy-login-start-btn');
+  const sessionEl = document.getElementById('agy-login-session');
+  if (startBtn) {
+    startBtn.disabled = true;
+    startBtn.textContent = '正在啟動 Google 登入…';
+  }
+  if (sessionEl) sessionEl.classList.remove('hidden');
+  setAgyLoginMessage('正在啟動 AGY，等待 Google 授權連結…', 'waiting');
+
+  try {
+    const res = await fetch('/api/auth/agy/login-start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    const data = await res.json();
+    if (!res.ok || !data.success) throw new Error(data.error || '無法啟動 AGY 登入');
+    currentAgyLoginSessionId = data.sessionId || '';
+    renderAgyLoginSnapshot(data);
+    if (isAgyLoginActive(data.status) && currentAgyLoginSessionId) pollAgyLoginStatus(currentAgyLoginSessionId);
+    else if (data.status === 'completed') await finishAgyLogin(data);
+    if (typeof window.haptic === 'function') window.haptic([30, 50, 30]);
+  } catch (error) {
+    if (sessionEl) sessionEl.classList.remove('hidden');
+    setAgyLoginMessage('啟動登入失敗：' + String(error.message || error), 'error');
+    if (startBtn) {
+      startBtn.classList.remove('hidden');
+      startBtn.disabled = false;
+      startBtn.innerHTML = '<span>🔑</span><span>重新啟動 Google 登入</span>';
+    }
+  }
+}
+
+async function submitAgyLoginCode() {
+  const input = document.getElementById('agy-login-code');
+  const button = document.getElementById('agy-login-code-submit-btn');
+  const code = String(input?.value || '').replace(/\s+/gu, '');
+  if (!currentAgyLoginSessionId || !code) {
+    setAgyLoginMessage('請先完成瀏覽器授權並輸入驗證碼。', 'error');
+    return;
+  }
+  if (button) { button.disabled = true; button.textContent = '正在送出…'; }
+  try {
+    const res = await fetch('/api/auth/agy/login-code', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId: currentAgyLoginSessionId, code })
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) throw new Error(data.error || '驗證碼送出失敗');
+    if (input) input.value = '';
+    renderAgyLoginSnapshot(data);
+    pollAgyLoginStatus(currentAgyLoginSessionId);
+  } catch (error) {
+    setAgyLoginMessage('驗證碼送出失敗：' + String(error.message || error), 'error');
+  } finally {
+    if (button) { button.disabled = false; button.textContent = '送出驗證碼'; }
+  }
+}
+
+async function sendAgyLoginMenuInput(action) {
+  if (!currentAgyLoginSessionId || !['up', 'down', 'select'].includes(action) || agyLoginMenuInputPending) return;
+  agyLoginMenuInputPending = true;
+  const choiceRow = document.getElementById('agy-login-choice-row');
+  if (choiceRow) choiceRow.querySelectorAll('button').forEach(button => { button.disabled = true; });
+  try {
+    const res = await fetch('/api/auth/agy/login-input', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId: currentAgyLoginSessionId, action })
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) throw new Error(data.error || '無法操作 AGY 登入選單');
+    renderAgyLoginSnapshot(data);
+  } catch (error) {
+    setAgyLoginMessage('操作登入選單失敗：' + String(error.message || error), 'error');
+  } finally {
+    agyLoginMenuInputPending = false;
+    if (choiceRow) choiceRow.querySelectorAll('button').forEach(button => { button.disabled = false; });
+  }
+}
+
+async function cancelAgyLoginFlow() {
+  if (!currentAgyLoginSessionId) return;
+  const button = document.getElementById('agy-login-cancel-btn');
+  if (button) { button.disabled = true; button.textContent = '正在取消…'; }
+  try {
+    const res = await fetch('/api/auth/agy/login-cancel', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId: currentAgyLoginSessionId })
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) throw new Error(data.error || '取消登入失敗');
+    stopAgyLoginPolling();
+    renderAgyLoginSnapshot({ ...data, sessionId: currentAgyLoginSessionId });
+  } catch (error) {
+    setAgyLoginMessage('取消登入失敗：' + String(error.message || error), 'error');
+  } finally {
+    if (button) { button.disabled = false; button.textContent = '取消登入'; }
   }
 }
 
@@ -491,6 +751,11 @@ window.startCodexDeviceFlow = startCodexDeviceFlow;
 window.copyCodexUserCode = copyCodexUserCode;
 window.saveCodexApiKey = saveCodexApiKey;
 window.saveAgyToken = saveAgyToken;
+window.startAgyLoginFlow = startAgyLoginFlow;
+window.submitAgyLoginCode = submitAgyLoginCode;
+window.sendAgyLoginMenuInput = sendAgyLoginMenuInput;
+window.cancelAgyLoginFlow = cancelAgyLoginFlow;
+window.refreshAgyLoginStatus = refreshAgyLoginStatus;
 window.refreshProviderRuntime = refreshProviderRuntime;
 window.updateRuntimeProvider = updateRuntimeProvider;
 window.renderAuthRecoveryCard = renderAuthRecoveryCard;
@@ -501,6 +766,11 @@ function initAuthUI() {
   const authMenuBtn = document.getElementById('auth-menu-btn');
   const closeAuthModalBtn = document.getElementById('close-auth-modal-btn');
   const authModal = document.getElementById('auth-modal');
+  const resumeVisibleAuth = () => {
+    if (!document.hidden && authModal && !authModal.classList.contains('opacity-0')) {
+      resumeAgyLoginSession();
+    }
+  };
 
   if (authMenuBtn) {
     authMenuBtn.addEventListener('click', (e) => {
@@ -519,6 +789,8 @@ function initAuthUI() {
       if (e.target === authModal) closeAuthModal();
     });
   }
+  document.addEventListener('visibilitychange', resumeVisibleAuth);
+  window.addEventListener('pageshow', resumeVisibleAuth);
 }
 
 if (document.readyState === 'loading') {

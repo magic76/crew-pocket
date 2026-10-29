@@ -3,6 +3,16 @@ set -euo pipefail
 
 export PATH="$HOME/.local/bin:${PREFIX:-/data/data/com.termux/files/usr}/bin:$PATH"
 
+# Keep social OAuth callback configuration outside the WebView and repository.
+SOCIAL_CONFIG_FILE="$HOME/.config/crew-pocket/social.env"
+if [ -f "$SOCIAL_CONFIG_FILE" ]; then
+    chmod 600 "$SOCIAL_CONFIG_FILE" 2>/dev/null || true
+    set -a
+    # shellcheck disable=SC1090
+    . "$SOCIAL_CONFIG_FILE"
+    set +a
+fi
+
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LOG_FILE="$HOME/.agy-web.log"
 STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/crew-pocket"

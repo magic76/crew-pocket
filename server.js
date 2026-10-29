@@ -13,6 +13,7 @@ const RUNTIME_HOME = path.resolve(process.env.HOME || '/data/data/com.termux/fil
 const REUSABLE_TOOL_DIR = process.env.CREW_REUSABLE_TOOL_DIR || path.join(__dirname, 'public', 'extra');
 const TURN_METRICS_DIR = path.join(os.homedir(), '.crew-pocket');
 const TURN_METRICS_FILE = path.join(TURN_METRICS_DIR, 'turn-metrics.jsonl');
+const { normalizeClientTiming, appendClientTiming } = require('./lib/client-timing');
 
 const {
   PORT,
@@ -110,6 +111,8 @@ const { getDefaultModel } = require('./lib/model-runtime');
 const { buildTurnResult, normalizeResultStatus } = require('./lib/turn-result');
 const { saveExecutionFeedback, enrichExecutionHistory } = require('./lib/execution-feedback');
 const { renderVisualAnswer } = require('./lib/visual-answer');
+const { createSocialAccounts } = require('./lib/social-accounts');
+const { createSocialDraftGenerator } = require('./lib/social-draft');
 
 
 const crewTaskRunner = new CrewTaskRunner({
@@ -123,6 +126,23 @@ const dreamingManager = new DreamingManager({
   memoryProvider: defaultMemoryProvider,
   getRole,
   getProvider
+});
+
+const socialAccounts = createSocialAccounts({ homeDir: RUNTIME_HOME });
+const generateSocialDraft = createSocialDraftGenerator({
+  getProvider,
+  getDefaultModel,
+  getAuthenticatedProviders: async () => {
+    const [codexResult, antigravityResult] = await Promise.allSettled([
+      getProvider('codex').getAuthStatus(),
+      auth.getAuthStatus()
+    ]);
+    const providers = [];
+    if (codexResult.status === 'fulfilled' && codexResult.value?.loggedIn) providers.push('codex');
+    if (antigravityResult.status === 'fulfilled' && antigravityResult.value?.antigravity?.loggedIn) providers.push('antigravity');
+    return providers;
+  },
+  workspace: RUNTIME_HOME
 });
 
 async function handleDreaming(req, res) {
@@ -2914,6 +2934,29 @@ async function handleChatTurn(req, res, submittedBody = null) {
   }
 }
 
+async function handleClientTiming(req, res) {
+  try {
+    const contentLength = Number(req.headers['content-length']);
+    if (Number.isFinite(contentLength) && contentLength > 8192) {
+      res.writeHead(413, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+      return res.end(JSON.stringify({ success: false, error: 'Client timing payload is too large' }));
+    }
+    const body = await parseJsonBody(req);
+    const record = normalizeClientTiming(body);
+    if (!record) {
+      res.writeHead(400, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+      return res.end(JSON.stringify({ success: false, error: 'Invalid client timing record' }));
+    }
+    await appendClientTiming(record);
+    res.writeHead(204, { 'Cache-Control': 'no-store' });
+    return res.end();
+  } catch (error) {
+    console.warn('[Client Timing] Save failed:', error.message);
+    res.writeHead(500, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+    return res.end(JSON.stringify({ success: false, error: 'Unable to save client timing' }));
+  }
+}
+
 // 🛑 Abort Active Generation
 async function handleStop(req, res) {
   try {
@@ -3147,6 +3190,127 @@ async function handleCodexDeviceStart(req, res) {
   } catch (err) {
     res.writeHead(500, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ success: false, error: err.message }));
+  }
+}
+
+function publicAgyLoginSnapshot(snapshot = {}) {
+  const validStatuses = new Set(['idle', 'starting', 'awaiting_choice', 'awaiting_code', 'verifying', 'completed', 'failed', 'cancelled']);
+  const result = {
+    status: validStatuses.has(snapshot.status) ? snapshot.status : 'idle',
+    sessionId: typeof snapshot.sessionId === 'string' ? snapshot.sessionId.slice(0, 120) : ''
+  };
+  if (typeof snapshot.url === 'string') {
+    try {
+      const url = new URL(snapshot.url);
+      const required = ['response_type', 'client_id', 'redirect_uri', 'scope'];
+      const isGoogleOAuthUrl = url.protocol === 'https:'
+        && url.hostname === 'accounts.google.com'
+        && !url.username
+        && !url.password
+        && /\/o\/oauth2(?:\/|$)/i.test(url.pathname)
+        && url.searchParams.get('response_type') === 'code'
+        && required.every(name => Boolean(url.searchParams.get(name)));
+      if (isGoogleOAuthUrl) result.url = url.toString().slice(0, 4096);
+    } catch (_) {}
+  }
+  if (typeof snapshot.error === 'string' && snapshot.error) result.error = snapshot.error.slice(0, 600);
+  const diagnostic = snapshot.diagnostic;
+  if (diagnostic && typeof diagnostic === 'object') {
+    const responseMarkers = new Set([
+      'none', 'invalid_state', 'exchange_rejected', 'exchange_succeeded_message',
+      'prompt_repeated', 'credential_created', 'unclassified_output', 'no_output'
+    ]);
+    const processStates = new Set(['unknown', 'running', 'terminating', 'exited']);
+    const credentialStates = new Set(['unknown', 'valid', 'invalid', 'missing', 'unreadable']);
+    result.diagnostic = {
+      elapsedSeconds: Number.isFinite(diagnostic.elapsedSeconds)
+        ? Math.max(0, Math.min(86400, Math.floor(diagnostic.elapsedSeconds))) : 0,
+      postSubmitOutputReceived: diagnostic.postSubmitOutputReceived === true,
+      postSubmitOutputBytes: Number.isFinite(diagnostic.postSubmitOutputBytes)
+        ? Math.max(0, Math.min(1000000, Math.floor(diagnostic.postSubmitOutputBytes))) : 0,
+      submittedCodeLength: Number.isFinite(diagnostic.submittedCodeLength)
+        ? Math.max(0, Math.min(4096, Math.floor(diagnostic.submittedCodeLength))) : 0,
+      responseMarker: responseMarkers.has(diagnostic.responseMarker) ? diagnostic.responseMarker : 'none',
+      processState: processStates.has(diagnostic.processState) ? diagnostic.processState : 'unknown',
+      credentialState: credentialStates.has(diagnostic.credentialState) ? diagnostic.credentialState : 'unknown'
+    };
+  }
+  return result;
+}
+
+async function handleAgyLoginStart(req, res) {
+  try {
+    const session = await getProvider('antigravity').startLogin();
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+    res.end(JSON.stringify({ success: true, ...publicAgyLoginSnapshot(session) }));
+  } catch (err) {
+    const status = /runtime is not available/i.test(err.message) ? 503 : 500;
+    const message = /runtime is not available/i.test(err.message)
+      ? '找不到可用的 AGY 執行程式，請確認 Termux 已安裝 AGY。'
+      : String(err.message || err).slice(0, 600);
+    res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+    res.end(JSON.stringify({ success: false, error: message }));
+  }
+}
+
+function handleAgyLoginStatus(parsedUrl, res) {
+  const sessionId = String(parsedUrl.query?.sessionId || '').slice(0, 120);
+  const status = getProvider('antigravity').getLoginStatus(sessionId || undefined);
+  res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+  res.end(JSON.stringify(publicAgyLoginSnapshot(status)));
+}
+
+async function handleAgyLoginCode(req, res) {
+  try {
+    const body = await parseJsonBody(req);
+    const sessionId = String(body?.sessionId || '').trim();
+    const rawCode = String(body?.code || '');
+    const code = rawCode.replace(/\s+/gu, '');
+    if (!sessionId || sessionId.length > 120 || !code || rawCode.length > 8192 || code.length > 4096) {
+      res.writeHead(400, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+      return res.end(JSON.stringify({ success: false, error: 'Invalid AGY login session or authorization code' }));
+    }
+    const snapshot = getProvider('antigravity').submitLoginCode(sessionId, code);
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+    res.end(JSON.stringify({ success: true, ...publicAgyLoginSnapshot(snapshot) }));
+  } catch (err) {
+    res.writeHead(400, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+    res.end(JSON.stringify({ success: false, error: String(err.message || err).slice(0, 600) }));
+  }
+}
+
+async function handleAgyLoginInput(req, res) {
+  try {
+    const body = await parseJsonBody(req);
+    const sessionId = String(body?.sessionId || '').trim();
+    const action = String(body?.action || '').trim();
+    if (!sessionId || sessionId.length > 120 || !['up', 'down', 'select'].includes(action)) {
+      res.writeHead(400, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+      return res.end(JSON.stringify({ success: false, error: 'Invalid AGY login session or menu action' }));
+    }
+    const snapshot = getProvider('antigravity').sendLoginMenuInput(sessionId, action);
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+    res.end(JSON.stringify({ success: true, ...publicAgyLoginSnapshot(snapshot) }));
+  } catch (err) {
+    res.writeHead(400, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+    res.end(JSON.stringify({ success: false, error: String(err.message || err).slice(0, 600) }));
+  }
+}
+
+async function handleAgyLoginCancel(req, res) {
+  try {
+    const body = await parseJsonBody(req).catch(() => ({}));
+    const sessionId = String(body?.sessionId || '').trim().slice(0, 120);
+    if (!sessionId) {
+      res.writeHead(400, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+      return res.end(JSON.stringify({ success: false, error: 'AGY login session is required' }));
+    }
+    const result = getProvider('antigravity').cancelLogin(sessionId);
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+    res.end(JSON.stringify({ success: true, ...result }));
+  } catch (err) {
+    res.writeHead(400, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+    res.end(JSON.stringify({ success: false, error: String(err.message || err).slice(0, 600) }));
   }
 }
 
@@ -3420,6 +3584,69 @@ async function handleVisualAnswer(req, res) {
   }
 }
 
+async function handleSocialApi(req, res, parsedUrl) {
+  const pathname = parsedUrl.pathname;
+  const json = (statusCode, payload) => {
+    res.writeHead(statusCode, {
+      'Content-Type': 'application/json; charset=utf-8',
+      'Cache-Control': 'no-store'
+    });
+    return res.end(JSON.stringify(payload));
+  };
+
+  try {
+    let result;
+    let body;
+    if (pathname === '/api/social/status' && req.method === 'GET') {
+      result = await socialAccounts.getStatus();
+    } else if (pathname === '/api/social/config' && req.method === 'POST') {
+      body = await parseJsonBody(req);
+      if (Object.prototype.hasOwnProperty.call(body || {}, 'appSecret')) {
+        const error = new Error('此 API 不接受 App Secret；請使用 Termux CLI 安全設定');
+        error.statusCode = 400;
+        throw error;
+      }
+      result = { provider: await socialAccounts.saveCredentials(body.platform, { appId: body.appId }) };
+    } else if (pathname === '/api/social/connect' && req.method === 'POST') {
+      body = await parseJsonBody(req);
+      result = await socialAccounts.beginOAuth(body.platform);
+    } else if (pathname === '/api/social/facebook/pages' && req.method === 'GET') {
+      result = await socialAccounts.getFacebookPages({ after: parsedUrl.query.after });
+    } else if (pathname === '/api/social/facebook/page' && req.method === 'POST') {
+      body = await parseJsonBody(req);
+      result = { page: await socialAccounts.selectFacebookPage(body) };
+    } else if (pathname === '/api/social/facebook/posts' && req.method === 'GET') {
+      result = await socialAccounts.getFacebookPosts({ after: parsedUrl.query.after });
+    } else if (pathname === '/api/social/facebook/comments' && req.method === 'GET') {
+      result = await socialAccounts.getFacebookComments({ postId: parsedUrl.query.postId, after: parsedUrl.query.after });
+    } else if (pathname === '/api/social/facebook/comment-replies' && req.method === 'GET') {
+      result = await socialAccounts.getFacebookCommentReplies({ commentId: parsedUrl.query.commentId, after: parsedUrl.query.after });
+    } else if (pathname === '/api/social/threads/posts' && req.method === 'GET') {
+      result = await socialAccounts.getThreadsPosts({ after: parsedUrl.query.after });
+    } else if (pathname === '/api/social/threads/replies' && req.method === 'GET') {
+      result = await socialAccounts.getThreadsReplies({ threadId: parsedUrl.query.threadId, after: parsedUrl.query.after });
+    } else if (pathname === '/api/social/draft' && req.method === 'POST') {
+      body = await parseJsonBody(req);
+      result = await generateSocialDraft(body);
+    } else if (pathname === '/api/social/publish' && req.method === 'POST') {
+      body = await parseJsonBody(req);
+      result = await socialAccounts.publish(body);
+    } else if (pathname === '/api/social/disconnect' && req.method === 'POST') {
+      body = await parseJsonBody(req);
+      result = { provider: await socialAccounts.disconnect(body.platform) };
+    } else {
+      return json(404, { success: false, error: '找不到社群功能路由' });
+    }
+    return json(200, { success: true, ...result });
+  } catch (error) {
+    const statusCode = Number(error.statusCode) || 400;
+    return json(statusCode >= 400 && statusCode <= 599 ? statusCode : 400, {
+      success: false,
+      error: String(error.message || '社群功能發生錯誤').slice(0, 240)
+    });
+  }
+}
+
 // 🌐 HTTP Server Request Dispatcher
 const server = http.createServer(async (req, res) => {
   const parsedUrl = url.parse(req.url, true);
@@ -3446,6 +3673,37 @@ const server = http.createServer(async (req, res) => {
     return res.end();
   }
 
+  const socialCallback = pathname.match(/^\/oauth\/meta\/(facebook|threads)\/callback$/);
+  if (socialCallback && req.method === 'GET') {
+    const result = await socialAccounts.handleOAuthCallback(socialCallback[1], parsedUrl.query);
+    res.writeHead(result.ok ? 200 : 400, {
+      'Content-Type': 'text/html; charset=utf-8',
+      'Cache-Control': 'no-store',
+      'Referrer-Policy': 'no-referrer',
+      'X-Content-Type-Options': 'nosniff',
+      'X-Frame-Options': 'DENY',
+      'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'"
+    });
+    return res.end(result.html);
+  }
+  if (pathname === '/oauth/meta/complete' && req.method === 'GET') {
+    const platform = String(parsedUrl.query.platform || '');
+    const allowedPlatform = platform === 'facebook' || platform === 'threads';
+    const status = allowedPlatform ? await socialAccounts.getStatus() : null;
+    const feedback = allowedPlatform ? status.providers[platform]?.oauth : null;
+    const completed = feedback?.status === 'connected';
+    const message = feedback?.message || 'Meta 沒有完成這次授權。請切回 Crew Pocket 查看狀態並重新嘗試。';
+    res.writeHead(completed ? 200 : 400, {
+      'Content-Type': 'text/html; charset=utf-8',
+      'Cache-Control': 'no-store',
+      'Referrer-Policy': 'no-referrer',
+      'X-Content-Type-Options': 'nosniff',
+      'X-Frame-Options': 'DENY',
+      'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'"
+    });
+    return res.end(socialAccounts.callbackHtml(completed, message));
+  }
+
   if (pathname.startsWith('/api/')) {
     const authorization = authorizeApiRequest(req, parsedUrl);
     if (!authorization.ok) {
@@ -3456,6 +3714,8 @@ const server = http.createServer(async (req, res) => {
 
   if (pathname === '/api/visual-answer' && req.method === 'POST') {
     return handleVisualAnswer(req, res);
+  } else if (pathname.startsWith('/api/social/')) {
+    return handleSocialApi(req, res, parsedUrl);
   } else if (pathname === '/api/crew-context-usage' && req.method === 'GET') {
     return handleCrewContextUsage(res);
   } else if (pathname === '/api/home' && req.method === 'GET') {
@@ -3530,6 +3790,8 @@ const server = http.createServer(async (req, res) => {
     return handleRoleSubmit(req, res);
   } else if (pathname === '/api/chat' && req.method === 'POST') {
     return handleChat(req, res);
+  } else if (pathname === '/api/client-timing' && req.method === 'POST') {
+    return handleClientTiming(req, res);
   } else if (pathname === '/api/stop' && req.method === 'POST') {
     return handleStop(req, res);
   } else if (pathname === '/api/upload' && req.method === 'POST') {
@@ -3587,6 +3849,16 @@ const server = http.createServer(async (req, res) => {
     return handleCodexDeviceCancel(req, res);
   } else if (pathname === '/api/auth/codex/api-key' && req.method === 'POST') {
     return handleCodexApiKey(req, res);
+  } else if (pathname === '/api/auth/agy/login-start' && req.method === 'POST') {
+    return handleAgyLoginStart(req, res);
+  } else if (pathname === '/api/auth/agy/login-status' && req.method === 'GET') {
+    return handleAgyLoginStatus(parsedUrl, res);
+  } else if (pathname === '/api/auth/agy/login-code' && req.method === 'POST') {
+    return handleAgyLoginCode(req, res);
+  } else if (pathname === '/api/auth/agy/login-input' && req.method === 'POST') {
+    return handleAgyLoginInput(req, res);
+  } else if (pathname === '/api/auth/agy/login-cancel' && req.method === 'POST') {
+    return handleAgyLoginCancel(req, res);
   } else if (pathname === '/api/auth/agy/token' && req.method === 'POST') {
     return handleAgyToken(req, res);
   } else if (pathname === '/api/turn-status' && req.method === 'GET') {

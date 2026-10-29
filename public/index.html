@@ -1286,7 +1286,7 @@
           <div class="w-8 h-8 rounded-xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400 text-base">🔐</div>
           <div>
             <h2 id="auth-modal-title" class="text-xs sm:text-sm font-bold text-white tracking-wide">Provider 帳號認證與登入</h2>
-            <div class="text-[10px] text-slate-400">管理 Codex 與 AGY 認證</div>
+            <div class="text-[10px] text-slate-400">管理 AI Provider 與社群帳號</div>
           </div>
         </div>
         <button id="close-auth-modal-btn" type="button" class="min-w-9 min-h-9 flex items-center justify-center text-slate-400 hover:text-white rounded-xl hover:bg-slate-800 transition text-xs font-mono">✕</button>
@@ -1384,6 +1384,29 @@
             載入狀態中...
           </p>
 
+          <button id="agy-login-start-btn" type="button" class="w-full min-h-10 rounded-xl bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition" onclick="startAgyLoginFlow()">
+            <span>🔑</span><span>在此登入 Google 帳號</span>
+          </button>
+
+          <div id="agy-login-session" class="hidden space-y-2 p-2.5 rounded-xl bg-slate-900 border border-indigo-500/40">
+            <a id="agy-login-link" href="#" target="_blank" rel="noopener noreferrer" class="hidden w-full min-h-10 rounded-xl bg-slate-800 hover:bg-slate-700 text-indigo-200 font-semibold text-xs flex items-center justify-center gap-2 cursor-pointer transition">
+              <span>🌐</span><span>開啟 Google 授權頁</span>
+            </a>
+            <p id="agy-login-live-status" class="text-[11px] leading-relaxed text-amber-300" role="status" aria-live="polite">正在啟動登入流程…</p>
+            <div id="agy-login-choice-row" class="hidden grid grid-cols-3 gap-1.5" aria-label="選擇 AGY 登入方式">
+              <button type="button" class="min-h-10 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs cursor-pointer" onclick="sendAgyLoginMenuInput('up')" aria-label="上一個登入選項">▲ 上一個</button>
+              <button type="button" class="min-h-10 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold cursor-pointer" onclick="sendAgyLoginMenuInput('select')">確認選取</button>
+              <button type="button" class="min-h-10 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs cursor-pointer" onclick="sendAgyLoginMenuInput('down')" aria-label="下一個登入選項">▼ 下一個</button>
+            </div>
+            <button id="agy-login-refresh-btn" type="button" class="hidden w-full min-h-9 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs cursor-pointer" onclick="refreshAgyLoginStatus()">重新整理登入狀態</button>
+            <div id="agy-login-code-row" class="hidden space-y-1.5">
+              <label for="agy-login-code" class="text-[10px] text-slate-400">完成瀏覽器授權後，貼上頁面提供的驗證碼</label>
+              <input id="agy-login-code" type="text" inputmode="text" autocomplete="one-time-code" autocapitalize="off" autocorrect="off" spellcheck="false" maxlength="8192" placeholder="貼上授權驗證碼" class="w-full min-h-10 bg-slate-950 border border-slate-700 rounded-xl px-3 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 font-mono">
+              <button id="agy-login-code-submit-btn" type="button" class="w-full min-h-10 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs cursor-pointer" onclick="submitAgyLoginCode()">送出驗證碼</button>
+            </div>
+            <button id="agy-login-cancel-btn" type="button" class="w-full min-h-9 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs cursor-pointer" onclick="cancelAgyLoginFlow()">取消登入</button>
+          </div>
+
           <!-- Foldable AGY Token JSON Section -->
           <details class="group text-[11px]">
             <summary class="cursor-pointer text-indigo-300 hover:text-indigo-200 py-1 transition list-none flex items-center gap-1 font-mono">
@@ -1398,6 +1421,120 @@
             </div>
           </details>
         </div>
+
+        <!-- Social Account Workbench -->
+        <section id="social-workbench" class="p-3 rounded-2xl bg-slate-950/80 border border-sky-500/30 space-y-3">
+          <div class="flex items-center justify-between gap-2">
+            <div>
+              <div class="font-bold text-slate-100 text-sm">Facebook + Threads 社群工作台</div>
+              <div class="mt-0.5 text-[10px] text-slate-400">AI 只擬稿；按確認後才會發布</div>
+            </div>
+            <span id="social-workbench-status" class="shrink-0 px-2 py-0.5 rounded-full text-[10px] bg-slate-800 text-slate-400">載入中</span>
+          </div>
+
+          <p class="text-[10px] leading-relaxed text-slate-400">Facebook API 僅支援你管理的粉絲專頁，不能代替個人檔案發文。Threads 可讀取自己的串文和串文回覆。V1 僅處理文字；Meta 可能要求外部使用者權限經 App Review / Advanced Access。</p>
+
+          <details id="social-app-config" class="group rounded-xl border border-slate-800 bg-slate-900/70 p-2.5">
+            <summary class="cursor-pointer list-none flex items-center justify-between gap-2 text-[11px] font-semibold text-slate-200">
+              <span>⚙️ Meta App ID 設定</span>
+              <span class="text-[9px] text-slate-500 group-open:rotate-180 transition-transform">▼</span>
+            </summary>
+            <div class="pt-2.5 space-y-3">
+              <p class="text-[9px] leading-relaxed text-amber-200/80">App Secret 不會經過 WebView 或 HTTP API。請在 Termux 專案目錄執行 <code>node scripts/configure-social-secret.cjs facebook</code> 或 <code>node scripts/configure-social-secret.cjs threads</code>，以隱藏輸入並加密儲存。</p>
+              <div class="space-y-1.5 rounded-lg border border-slate-800 p-2">
+                <div class="text-[10px] font-bold text-blue-300">Facebook</div>
+                <input id="social-facebook-app-id" type="text" inputmode="numeric" autocomplete="off" placeholder="Facebook App ID" class="w-full min-h-10 rounded-lg border border-slate-700 bg-slate-950 px-2.5 text-[11px] text-slate-100 placeholder:text-slate-500">
+                <div class="text-[9px] text-slate-500">Meta OAuth 回呼網址</div>
+                <div class="flex items-start gap-1.5"><code id="social-facebook-callback" class="min-w-0 flex-1 break-all select-text text-[9px] text-slate-300"></code><button type="button" data-social-copy="facebook" class="min-h-8 shrink-0 rounded-lg bg-slate-800 px-2 text-[9px] text-slate-200">複製</button></div>
+                <button id="social-facebook-save-config" type="button" class="min-h-9 w-full rounded-lg bg-slate-800 text-[10px] font-semibold text-slate-100">儲存 Facebook App 設定</button>
+              </div>
+              <div class="space-y-1.5 rounded-lg border border-slate-800 p-2">
+                <div class="text-[10px] font-bold text-purple-300">Threads</div>
+                <input id="social-threads-app-id" type="text" inputmode="numeric" autocomplete="off" placeholder="Threads App ID" class="w-full min-h-10 rounded-lg border border-slate-700 bg-slate-950 px-2.5 text-[11px] text-slate-100 placeholder:text-slate-500">
+                <div class="text-[9px] text-slate-500">Meta OAuth 回呼網址</div>
+                <div class="flex items-start gap-1.5"><code id="social-threads-callback" class="min-w-0 flex-1 break-all select-text text-[9px] text-slate-300"></code><button type="button" data-social-copy="threads" class="min-h-8 shrink-0 rounded-lg bg-slate-800 px-2 text-[9px] text-slate-200">複製</button></div>
+                <button id="social-threads-save-config" type="button" class="min-h-9 w-full rounded-lg bg-slate-800 text-[10px] font-semibold text-slate-100">儲存 Threads App 設定</button>
+              </div>
+              <p class="text-[9px] leading-relaxed text-amber-200/80">將回呼網址加入 Meta App 的 OAuth redirect allowlist。localhost 供本機開發測試；若 Live App 不接受，需設定能轉回手機 Runtime 的 HTTPS 回呼網址。移除連線只會清除手機副本，不會撤銷 Meta App 授權。</p>
+              <p class="text-[9px] leading-relaxed text-slate-400">Facebook App 需啟用 Facebook Login；Threads App 需選 Threads API 使用案例。<a class="text-sky-300 underline" href="https://developers.facebook.com/apps/">前往 Meta Developers 管理 App</a></p>
+              <p class="text-[9px] leading-relaxed text-slate-500">要求權限：Facebook pages_show_list、pages_read_engagement、pages_read_user_content、pages_manage_posts、pages_manage_engagement；Threads threads_basic、threads_content_publish、threads_read_replies、threads_manage_replies。</p>
+            </div>
+          </details>
+
+          <label class="flex items-center justify-between gap-2 rounded-lg border border-slate-800 bg-slate-900/60 px-2.5 py-2 text-[10px] text-slate-300">
+            <span>AI 草稿供應商</span>
+            <select id="social-draft-provider" class="min-h-8 rounded-md border border-slate-700 bg-slate-950 px-2 text-[10px] text-slate-100">
+              <option value="auto">自動選擇（Codex 優先）</option>
+              <option value="codex">Codex 優先</option>
+              <option value="antigravity">AGY 優先</option>
+            </select>
+          </label>
+
+          <div class="grid grid-cols-2 gap-1.5" role="tablist" aria-label="社群平台">
+            <button type="button" data-social-tab="facebook" class="min-h-10 rounded-lg bg-blue-600 text-[11px] font-bold text-white" role="tab" aria-selected="true">Facebook 粉專</button>
+            <button type="button" data-social-tab="threads" class="min-h-10 rounded-lg bg-slate-800 text-[11px] font-bold text-slate-300" role="tab" aria-selected="false">Threads</button>
+          </div>
+
+          <section id="social-panel-facebook" class="space-y-2.5" role="tabpanel">
+            <div class="flex items-center justify-between gap-2">
+              <span id="social-facebook-status" class="text-[10px] text-slate-400">尚未連線</span>
+              <div class="flex gap-1.5">
+                <button id="social-facebook-connect" type="button" class="min-h-9 rounded-lg bg-blue-600 px-2.5 text-[10px] font-semibold text-white">連接 Facebook</button>
+                <button id="social-facebook-disconnect" type="button" class="hidden min-h-9 rounded-lg bg-slate-800 px-2.5 text-[10px] text-slate-300">移除連線</button>
+              </div>
+            </div>
+            <div class="flex gap-1.5">
+              <select id="social-facebook-page" aria-label="選擇 Facebook 粉絲專頁" class="min-h-10 min-w-0 flex-1 rounded-lg border border-slate-700 bg-slate-900 px-2 text-[10px] text-slate-100"><option value="">先載入粉絲專頁</option></select>
+              <button id="social-facebook-load-pages" type="button" class="min-h-10 shrink-0 rounded-lg bg-slate-800 px-2 text-[10px] text-slate-200">載入粉專</button>
+            </div>
+            <button id="social-facebook-more-pages" type="button" data-more-label="載入更多粉專" class="hidden min-h-9 w-full rounded-lg bg-slate-800 text-[10px] text-slate-200">載入更多粉專</button>
+            <div class="grid grid-cols-2 gap-1.5">
+              <button id="social-facebook-new-post" type="button" class="min-h-9 rounded-lg bg-slate-800 text-[10px] font-semibold text-slate-200">＋ 新貼文</button>
+              <button id="social-facebook-load-posts" type="button" class="min-h-9 rounded-lg bg-slate-800 text-[10px] font-semibold text-slate-200">讀取粉專貼文</button>
+            </div>
+            <div id="social-facebook-posts" class="max-h-48 space-y-1.5 overflow-y-auto"></div>
+            <button id="social-facebook-more-posts" type="button" data-more-label="載入更多貼文" class="hidden min-h-9 w-full rounded-lg bg-slate-800 text-[10px] text-slate-200">載入更多貼文</button>
+            <div id="social-facebook-comments" class="max-h-56 space-y-1.5 overflow-y-auto"></div>
+            <button id="social-facebook-more-comments" type="button" data-more-label="載入更多留言" class="hidden min-h-9 w-full rounded-lg bg-slate-800 text-[10px] text-slate-200">載入更多留言</button>
+            <div class="rounded-xl border border-slate-800 bg-slate-900/70 p-2.5 space-y-2">
+              <div id="social-facebook-compose-mode" class="text-[10px] font-semibold text-blue-200">先選「新貼文」或一則留言</div>
+              <div id="social-facebook-compose-context" class="hidden max-h-20 overflow-y-auto whitespace-pre-wrap rounded-lg bg-slate-950 p-2 text-[9px] text-slate-400"></div>
+              <textarea id="social-facebook-compose" rows="3" maxlength="50000" placeholder="輸入貼文重點或編輯 AI 草稿" class="w-full resize-y rounded-lg border border-slate-700 bg-slate-950 p-2 text-[11px] text-slate-100 placeholder:text-slate-500"></textarea>
+              <div class="grid grid-cols-2 gap-1.5">
+                <button id="social-facebook-draft" type="button" class="min-h-10 rounded-lg bg-indigo-600 text-[10px] font-bold text-white">✦ 用 AI 擬稿</button>
+                <button id="social-facebook-publish" type="button" class="min-h-10 rounded-lg bg-blue-600 text-[10px] font-bold text-white">確認後發布</button>
+              </div>
+            </div>
+          </section>
+
+          <section id="social-panel-threads" class="hidden space-y-2.5" role="tabpanel">
+            <div class="flex items-center justify-between gap-2">
+              <span id="social-threads-status" class="text-[10px] text-slate-400">尚未連線</span>
+              <div class="flex gap-1.5">
+                <button id="social-threads-connect" type="button" class="min-h-9 rounded-lg bg-purple-600 px-2.5 text-[10px] font-semibold text-white">連接 Threads</button>
+                <button id="social-threads-disconnect" type="button" class="hidden min-h-9 rounded-lg bg-slate-800 px-2.5 text-[10px] text-slate-300">移除連線</button>
+              </div>
+            </div>
+            <div class="grid grid-cols-2 gap-1.5">
+              <button id="social-threads-new-post" type="button" class="min-h-9 rounded-lg bg-slate-800 text-[10px] font-semibold text-slate-200">＋ 新串文</button>
+              <button id="social-threads-load-posts" type="button" class="min-h-9 rounded-lg bg-slate-800 text-[10px] font-semibold text-slate-200">讀取我的串文</button>
+            </div>
+            <div id="social-threads-posts" class="max-h-48 space-y-1.5 overflow-y-auto"></div>
+            <button id="social-threads-more-posts" type="button" data-more-label="載入更多串文" class="hidden min-h-9 w-full rounded-lg bg-slate-800 text-[10px] text-slate-200">載入更多串文</button>
+            <div id="social-threads-replies" class="max-h-56 space-y-1.5 overflow-y-auto"></div>
+            <button id="social-threads-more-replies" type="button" data-more-label="載入更多回覆" class="hidden min-h-9 w-full rounded-lg bg-slate-800 text-[10px] text-slate-200">載入更多回覆</button>
+            <div class="rounded-xl border border-slate-800 bg-slate-900/70 p-2.5 space-y-2">
+              <div id="social-threads-compose-mode" class="text-[10px] font-semibold text-purple-200">先選「新串文」或一則回覆</div>
+              <div id="social-threads-compose-context" class="hidden max-h-20 overflow-y-auto whitespace-pre-wrap rounded-lg bg-slate-950 p-2 text-[9px] text-slate-400"></div>
+              <textarea id="social-threads-compose" rows="3" maxlength="500" placeholder="輸入串文重點或編輯 AI 草稿（最多 500 字元）" class="w-full resize-y rounded-lg border border-slate-700 bg-slate-950 p-2 text-[11px] text-slate-100 placeholder:text-slate-500"></textarea>
+              <div class="grid grid-cols-2 gap-1.5">
+                <button id="social-threads-draft" type="button" class="min-h-10 rounded-lg bg-indigo-600 text-[10px] font-bold text-white">✦ 用 AI 擬稿</button>
+                <button id="social-threads-publish" type="button" class="min-h-10 rounded-lg bg-purple-600 text-[10px] font-bold text-white">確認後發布</button>
+              </div>
+            </div>
+          </section>
+          <div id="social-operation-status" class="hidden rounded-lg border border-slate-800 bg-slate-900 px-2.5 py-2 text-[10px] leading-relaxed text-slate-300" role="status" aria-live="polite"></div>
+        </section>
 
         <!-- 4. Termux Runtime Providers -->
         <div class="p-3 rounded-2xl bg-slate-950/80 border border-slate-700/70 space-y-2.5">
@@ -1438,7 +1575,7 @@
 
       <!-- Footer -->
       <div class="p-3 border-t border-slate-800 bg-slate-950/70 flex items-center justify-between shrink-0">
-        <button type="button" class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-300 text-xs font-semibold flex items-center gap-1.5 cursor-pointer" onclick="refreshAuthStatus()">
+        <button type="button" class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-300 text-xs font-semibold flex items-center gap-1.5 cursor-pointer" onclick="refreshAuthStatus(); refreshSocialStatus?.()">
           <span>🔄</span><span>重新整理狀態</span>
         </button>
         <button type="button" class="px-4 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-95 text-white text-xs font-semibold cursor-pointer" onclick="closeAuthModal()">
@@ -1949,6 +2086,7 @@
   <script src="/js/home.js"></script>
   <script src="/js/live.js"></script>
   <script src="/js/auth.js"></script>
+  <script src="/js/social.js"></script>
   <script src="/js/app.js"></script>
   <script src="/js/dreaming-settings.js"></script>
   <script src="/js/auto-compact-settings.js"></script>

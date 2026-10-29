@@ -296,8 +296,13 @@ function getLiveExecutionStatus(tools, phase, now, lastEventAt, reportedTool = n
   const running = tools.filter(tool => toolProgressState(tool) === 'running');
   const active = running[running.length - 1];
   const detail = active ? getPassiveToolProgress(active).text : '';
-  if (now - lastEventAt >= 8000) {
-    return { stage: '等待更新', text: active ? detail : '尚未收到新的串流事件', waiting: true };
+  const quietSeconds = Math.max(0, Math.floor((now - lastEventAt) / 1000));
+  if (quietSeconds >= 8) {
+    return {
+      stage: active ? '工具執行中' : 'AI 仍在處理',
+      text: active ? `${detail} · ${quietSeconds} 秒沒有新進度` : `目前沒有新進度 · ${quietSeconds} 秒`,
+      waiting: true
+    };
   }
   if (active) return { stage: '工具執行', text: `${detail}${running.length > 1 ? ` · ${running.length} 項進行中` : ''}`, waiting: false };
   if (phase === 'writing') return { stage: '回覆輸出', text: '正在輸出回覆內容', waiting: false };
@@ -315,8 +320,8 @@ function buildLiveProgressPeekHtml(tools, activity, now, lastEventAt, note = '')
   const idleSeconds = Math.max(0, Math.floor((now - lastEventAt) / 1000));
   const operationSeconds = runningActivity ? Math.max(0, Math.floor((now - runningActivity.startedAt) / 1000)) : 0;
   const wait = running && operationSeconds >= 3
-    ? `目前操作已執行 ${operationSeconds} 秒${idleSeconds >= 8 ? ' · 等待工具更新' : ''}`
-    : idleSeconds >= 8 ? `等待下一個串流事件 · ${idleSeconds} 秒` : '';
+    ? `目前操作已執行 ${operationSeconds} 秒${idleSeconds >= 8 ? ` · ${idleSeconds} 秒沒有新進度` : ''}`
+    : idleSeconds >= 8 ? `AI 仍在處理 · ${idleSeconds} 秒沒有新進度` : '';
   const recent = tools.map(tool => ({ tool, activity: activity.get(getToolGroupKey(tool)) }))
     .filter(entry => entry.activity?.finishedAt !== undefined && toolProgressState(entry.tool) !== 'running')
     .sort((a, b) => a.activity.finishedAt - b.activity.finishedAt)
@@ -3679,10 +3684,154 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
     && (!streamConversationId ? currentConversationId === null : currentConversationId === streamConversationId);
   const stickyExecution = isBtwQuery ? null : createExecutionStickyController(assistantMsgDiv, isStreamVisible);
 
+  const clientTiming = {
+    request_id: streamRequestId,
+    provider: streamProvider,
+    model: currentModel,
+    execution_mode: null,
+    client_class: 'unknown',
+    client_shell: 'unknown',
+    network_type: 'unknown',
+    fetch_headers_ms: null,
+    first_event_ms: null,
+    server_init_ms: null,
+    first_text_ms: null,
+    first_render_ms: null,
+    first_frame_ms: null,
+    done_event_ms: null,
+    finalize_ui_ms: null,
+    client_total_ms: null,
+    render_total_ms: 0,
+    render_max_ms: 0,
+    render_count: 0,
+    chunk_count: 0,
+    response_chars: 0,
+    hidden_ms: 0,
+    hidden_during_turn: false,
+    started_at: null,
+    hidden_at: null,
+    frame_pending: false,
+    persisted: false
+  };
+  const clientShortSide = Math.min(
+    Number(window.screen?.width) || window.innerWidth || 0,
+    Number(window.screen?.height) || window.innerHeight || 0
+  );
+  const mobileHint = navigator.userAgentData?.mobile === true || /Android.*Mobile|iPhone|iPod|Mobile/i.test(navigator.userAgent || '');
+  clientTiming.client_class = mobileHint ? 'mobile' : clientShortSide < 700 ? 'tablet' : 'desktop';
+  clientTiming.client_shell = /\bwv\b/i.test(navigator.userAgent || '') ? 'webview' : 'browser';
+  const effectiveNetworkType = navigator.connection?.effectiveType;
+  if (['slow-2g', '2g', '3g', '4g'].includes(effectiveNetworkType)) {
+    clientTiming.network_type = effectiveNetworkType;
+  }
+  function clientElapsedMs() {
+    return clientTiming.started_at === null ? null : Math.max(0, performance.now() - clientTiming.started_at);
+  }
+  function markClientTiming(field) {
+    if (clientTiming[field] === null && clientTiming.started_at !== null) {
+      clientTiming[field] = Math.round(clientElapsedMs());
+    }
+  }
+  function handleClientVisibilityChange() {
+    if (clientTiming.started_at === null) return;
+    const now = performance.now();
+    if (document.hidden) {
+      if (clientTiming.hidden_at === null) clientTiming.hidden_at = now;
+      clientTiming.hidden_during_turn = true;
+    } else if (clientTiming.hidden_at !== null) {
+      clientTiming.hidden_ms += Math.max(0, now - clientTiming.hidden_at);
+      clientTiming.hidden_at = null;
+    }
+  }
+  function beginClientTiming() {
+    clientTiming.started_at = performance.now();
+    if (document.hidden) {
+      clientTiming.hidden_at = clientTiming.started_at;
+      clientTiming.hidden_during_turn = true;
+    }
+    document.addEventListener('visibilitychange', handleClientVisibilityChange);
+  }
+  function renderFormattedContent(content) {
+    const renderStartedAt = performance.now();
+    contentElem.innerHTML = formatMessageContent(content);
+    const renderEndedAt = performance.now();
+    if (clientTiming.started_at !== null) {
+      const duration = Math.max(0, renderEndedAt - renderStartedAt);
+      clientTiming.render_total_ms += duration;
+      clientTiming.render_max_ms = Math.max(clientTiming.render_max_ms, duration);
+      clientTiming.render_count += 1;
+      markClientTiming('first_render_ms');
+      if (clientTiming.first_frame_ms === null && !clientTiming.frame_pending) {
+        clientTiming.frame_pending = true;
+        const markFirstFrame = () => {
+          clientTiming.frame_pending = false;
+          markClientTiming('first_frame_ms');
+        };
+        if (typeof requestAnimationFrame === 'function') requestAnimationFrame(markFirstFrame);
+        else setTimeout(markFirstFrame, 0);
+      }
+    }
+  }
+  function persistClientTiming(doneData, finalizeStartedAt) {
+    if (clientTiming.persisted || clientTiming.started_at === null) return;
+    clientTiming.persisted = true;
+    const now = performance.now();
+    if (clientTiming.hidden_at !== null) {
+      clientTiming.hidden_ms += Math.max(0, now - clientTiming.hidden_at);
+      clientTiming.hidden_at = null;
+    }
+    clientTiming.client_total_ms = Math.round(now - clientTiming.started_at);
+    clientTiming.finalize_ui_ms = finalizeStartedAt === null
+      ? null : Math.max(0, Math.round(now - finalizeStartedAt));
+    clientTiming.response_chars = typeof accumulatedText === 'string' ? accumulatedText.length : 0;
+    const rawStatus = String(doneData?.status || doneData?.turn_result?.status || doneData?.completionState || '').toLowerCase();
+    clientTiming.status = doneData?.error || ['failed', 'error'].includes(rawStatus)
+      ? 'failed'
+      : ['interrupted', 'cancelled', 'canceled', 'aborted'].includes(rawStatus)
+      ? 'interrupted'
+      : !doneData || rawStatus === 'unknown'
+      ? 'unknown'
+      : 'completed';
+    document.removeEventListener('visibilitychange', handleClientVisibilityChange);
+    const payload = {
+      request_id: clientTiming.request_id,
+      provider: clientTiming.provider,
+      model: clientTiming.model,
+      execution_mode: clientTiming.execution_mode,
+      client_class: clientTiming.client_class,
+      client_shell: clientTiming.client_shell,
+      network_type: clientTiming.network_type,
+      status: clientTiming.status,
+      fetch_headers_ms: clientTiming.fetch_headers_ms,
+      first_event_ms: clientTiming.first_event_ms,
+      server_init_ms: clientTiming.server_init_ms,
+      first_text_ms: clientTiming.first_text_ms,
+      first_render_ms: clientTiming.first_render_ms,
+      first_frame_ms: clientTiming.first_frame_ms,
+      done_event_ms: clientTiming.done_event_ms,
+      finalize_ui_ms: clientTiming.finalize_ui_ms,
+      client_total_ms: clientTiming.client_total_ms,
+      render_total_ms: Math.round(clientTiming.render_total_ms),
+      render_max_ms: Math.round(clientTiming.render_max_ms),
+      render_count: clientTiming.render_count,
+      chunk_count: clientTiming.chunk_count,
+      response_chars: clientTiming.response_chars,
+      hidden_ms: Math.round(clientTiming.hidden_ms),
+      hidden_during_turn: clientTiming.hidden_during_turn
+    };
+    fetch('/api/client-timing', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      keepalive: true
+    }).catch(() => {});
+  }
+
   let turnFinalized = false;
   let reconcileSilentStream = null;
   function finalizeTurn(doneData = null) {
     if (turnFinalized) return;
+    const finalizeStartedAt = performance.now();
     turnFinalized = true;
     if (liveProgressPeekElem) liveProgressPeekElem.remove();
     liveStageElem?.remove();
@@ -3749,15 +3898,15 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
         renderAuthRecoveryCard(contentElem, streamProvider, doneData.error, { text, imagePath: imgPath });
       } else {
         accumulatedText = `⚠️ ${doneData.error}`;
-        contentElem.innerHTML = formatMessageContent(accumulatedText);
+        renderFormattedContent(accumulatedText);
       }
     } else if (doneData?.response) {
       accumulatedText = doneData.response;
-      contentElem.innerHTML = formatMessageContent(accumulatedText);
+      renderFormattedContent(accumulatedText);
     } else if (!accumulatedText || !String(accumulatedText).trim()) {
       contentElem.innerHTML = incomplete ? '<p class="text-slate-400 text-xs">沒有可顯示的完整回覆。</p>' : buildEmptyTurnFallbackHtml();
     } else {
-      contentElem.innerHTML = formatMessageContent(accumulatedText);
+      renderFormattedContent(accumulatedText);
     }
 
     const structuredTurnResult = isStructuredExecutionResult(doneData?.turn_result)
@@ -3858,6 +4007,7 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
     if (isNewConversation && targetDoneConvId && text) {
       applyInitialConversationTitle(targetDoneConvId, text, { updateHeader: isStreamVisible() });
     }
+    persistClientTiming(doneData, finalizeStartedAt);
   }
 
   scrollToBottom();
@@ -4007,6 +4157,7 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
 
   try {
     headerTimer = setTimeout(() => { headerTimedOut = true; streamAbortController.abort(); }, 45000);
+    beginClientTiming();
     const response = await fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -4025,6 +4176,7 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
       }),
       signal: streamAbortController.signal
     });
+    clientTiming.fetch_headers_ms = Math.round(clientElapsedMs());
 
     clearTimeout(headerTimer);
     if (turnFinalized) { await response.body?.cancel(); }
@@ -4060,6 +4212,7 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
             const data = JSON.parse(rawData);
             if (requestTrackingAvailable && data.request_id && data.request_id !== streamRequestId) continue;
             if (data.request_id === streamRequestId) requestTrackingAvailable = true;
+            markClientTiming('first_event_ms');
             lastProgressEventAt = performance.now();
             if (providerNotice && ['init', 'thought', 'tool', 'chunk'].includes(currentEvent)) {
               providerNotice = null;
@@ -4074,6 +4227,9 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
               upsertProgress('phase:provider-recovery', { icon: '↻', text: providerNotice.text, state: 'running' });
               renderLiveState();
             } else if (currentEvent === 'init' && data.conversation_id) {
+              markClientTiming('server_init_ms');
+              if (typeof data.model === 'string') clientTiming.model = data.model;
+              if (typeof data.execution_mode === 'string') clientTiming.execution_mode = data.execution_mode.toUpperCase();
               streamConversationId = data.conversation_id;
               updateActiveRoleStream(streamRoleId, { conversationId: data.conversation_id });
               if (queuedDelivery) acceptQueuedDelivery();
@@ -4153,6 +4309,8 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
               stickyExecution?.enable(activeProgress.text);
               renderLiveState();
             } else if (currentEvent === 'chunk' && (data.accumulated !== undefined || data.delta !== undefined)) {
+              markClientTiming('first_text_ms');
+              clientTiming.chunk_count += 1;
               if (!isWritingPhase) {
                 isWritingPhase = true;
                 markProgressDone('phase:analysis');
@@ -4174,7 +4332,7 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
                 renderPending = true;
                 renderTimer = setTimeout(() => {
                   renderTimer = null;
-                  contentElem.innerHTML = formatMessageContent(accumulatedText);
+                  renderFormattedContent(accumulatedText);
                   renderPending = false;
                   if (userScrolledUp) {
                     const scrollBadge = document.getElementById('scroll-bottom-badge');
@@ -4185,6 +4343,7 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
               }
 
             } else if (currentEvent === 'done') {
+              markClientTiming('done_event_ms');
               if (queuedDelivery && !deliveryAccepted) {
                 if (!data.error && data.conversation_id && data.status !== 'interrupted') {
                   acceptQueuedDelivery();

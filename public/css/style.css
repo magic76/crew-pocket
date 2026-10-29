@@ -497,8 +497,7 @@ footer {
 
   /* High-frequency actions live in the first row; hide their duplicate long-form entries. */
   #tools-menu-dropdown > #new-chat-btn,
-  #tools-menu-dropdown > #files-btn,
-  #tools-menu-dropdown > #auth-menu-btn {
+  #tools-menu-dropdown > #files-btn {
     display: none !important;
   }
 
