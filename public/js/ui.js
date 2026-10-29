@@ -920,6 +920,7 @@ async function prepareNewRoleRuntime(roleId = currentRoleId || DEFAULT_ROLE_ID) 
     queuedMessageCount: Number(previous.queuedMessageCount || 0),
     queuedRequestCount: Number(previous.queuedRequestCount || 0),
     unreadReplyCount: Number(previous.unreadReplyCount || 0),
+    unreadTaskResultCount: Number(previous.unreadTaskResultCount || 0),
     attentionCount: Number(previous.attentionCount || 0),
     lastActivityAt: Number(data.runtime.updatedAt || Date.now())
   });
@@ -973,7 +974,8 @@ function renderRoleNavigation() {
   const waitingCount = statuses.filter(status => status.state === 'waiting').length;
   const attentionCount = statuses.reduce((total, status) => total +
     count(status.queuedMessageCount) + count(status.queuedRequestCount) +
-    count(status.unreadReplyCount) + count(status.failedRequestCount), 0);
+    count(status.unreadReplyCount) + count(status.unreadTaskResultCount) +
+    count(status.failedRequestCount), 0);
   if (crewRoomSummary) {
     crewRoomSummary.innerHTML = [
       '<span class="crew-summary-item" data-kind="roles"><strong>' + roles.length +
@@ -1000,19 +1002,36 @@ function renderRoleNavigation() {
     const state = reported === 'working' && status?.busy !== true ? 'unknown' : reported;
     const queued = Number(status?.queuedMessageCount || 0) + Number(status?.queuedRequestCount || 0);
     const unread = Number(status?.unreadReplyCount || 0);
+    const unreadTaskResults = Number(status?.unreadTaskResultCount || 0);
     const failed = Number(status?.failedRequestCount || 0);
-    const attention = queued + unread + failed;
+    const attention = queued + unread + unreadTaskResults + failed;
     const currentTitle = status?.currentWork?.title || status?.conversationTitle || '';
     const latestTitle = latest?.title || '';
+    const queueAgeMs = Math.max(0, Number(status?.oldestQueuedRequestAgeMs) || 0);
+    const queueAgeMinutes = Math.floor(queueAgeMs / 60000);
+    const queueAgeLabel = queueAgeMinutes >= 60
+      ? `${Math.floor(queueAgeMinutes / 60)} 小時 ${queueAgeMinutes % 60} 分`
+      : queueAgeMinutes > 0 ? `${queueAgeMinutes} 分` : '';
+    const queueReasonLabel = ({
+      role_busy: '角色正在忙碌',
+      role_auto_response_busy: '正在處理其他訊息',
+      provider_unavailable: 'Provider 暫不可用',
+      retry_backoff: '等待重試',
+      provider_error: 'Provider 回覆失敗，稍後重試'
+    })[status?.oldestQueuedRequestReason] || '';
     // A past conversation title is not evidence that work is underway.
     const workDescription = failed && state !== 'working'
       ? failed + ' 則訊息自動回覆失敗，已停止重試'
       : state === 'working'
       ? '正在處理 · ' + (currentTitle || '目前對話')
       : state === 'waiting'
-        ? (attention ? attention + ' 則訊息待處理' : '等待處理')
+        ? ((queued ? queued + ' 則訊息待處理' : '等待處理') +
+          (queueAgeLabel ? ' · 已等 ' + queueAgeLabel : '') +
+          (queueReasonLabel ? ' · ' + queueReasonLabel : ''))
         : state === 'idle'
-          ? (latestTitle ? '最近對話 · ' + latestTitle : '目前待命')
+          ? (unreadTaskResults
+            ? unreadTaskResults + ' 則任務結果未讀'
+            : latestTitle ? '最近對話 · ' + latestTitle : '目前待命')
           : state === 'new' ? '尚未開始工作'
           : 'Runtime 狀態尚未同步';
     const tone = window.CrewCinematic?.toneFor({ ...role, project: roleProjectLabel(role) }) || 'general';
@@ -1031,7 +1050,7 @@ function renderRoleNavigation() {
           escapeHtml(stateName(state)) + '</span>' +
         '<span class="crew-role-work">' + escapeHtml(workDescription) + '</span>' +
       '</button>' +
-      (attention ? '<span class="crew-role-attention" aria-label="' + attention + ' 則待處理">' +
+      (attention ? '<span class="crew-role-attention" aria-label="' + attention + ' 項待查看">' +
         attention + '</span>' : '') +
       '<button type="button" data-role-menu-btn="' + escapeHtml(role.id) +
         '" aria-label="管理 ' + escapeHtml(role.name) + '" title="角色管理"><span aria-hidden="true">⋯</span></button>' +

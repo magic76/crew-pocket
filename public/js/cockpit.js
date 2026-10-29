@@ -33,7 +33,9 @@
             '<small>' + (role.queue ? role.queue + tr(' 項排隊', ' queued') : '') +
               (role.queue && role.unread ? ' · ' : '') +
               (role.unread ? role.unread + tr(' 則未讀', ' unread') : '') +
-              ((role.queue || role.unread) && role.failed ? ' · ' : '') +
+              ((role.queue || role.unread) && role.results ? ' · ' : '') +
+              (role.results ? role.results + tr(' 則任務結果', ' task results') : '') +
+              ((role.queue || role.unread || role.results) && role.failed ? ' · ' : '') +
               (role.failed ? role.failed + tr(' 項失敗', ' failed') : '') +
             '</small></span>' +
           '<span class="crew-attention-chevron" aria-hidden="true">›</span></button>').join('') +

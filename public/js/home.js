@@ -99,6 +99,13 @@
       const queued = Number(role.queuedMessageCount || 0) + Number(role.queuedRequestCount || 0);
       if (queued > 0) badges.push(`${queued} 排隊`);
       if (Number(role.unreadReplyCount || 0) > 0) badges.push(`${Number(role.unreadReplyCount)} 未讀`);
+      if (Number(role.unreadTaskResultCount || 0) > 0) badges.push(`${Number(role.unreadTaskResultCount)} 任務結果`);
+      const waitMinutes = Math.floor(Math.max(0, Number(role.oldestQueuedRequestAgeMs) || 0) / 60000);
+      if (queued > 0 && waitMinutes >= 1) {
+        badges.push(waitMinutes >= 60
+          ? `等待 ${Math.floor(waitMinutes / 60)} 小時 ${waitMinutes % 60} 分`
+          : `等待 ${waitMinutes} 分`);
+      }
       return `<div class="px-3 py-2.5 flex items-start gap-2.5">
         <div class="min-w-0 flex-1">
           <div class="flex items-center gap-1.5 min-w-0">
