@@ -2360,7 +2360,10 @@ async function handleChatTurn(req, res, submittedBody = null) {
       console.warn('[Memory Context] Build failed:', error.message);
     }
 
-    const capabilityGuide = buildCapabilityGuide(finalPrompt);
+    const selfManagedGuide = providerId === 'codex' && (await getAutoCompactSettings()).enabled
+      ? 'Self-managed Context: when a substantial task stage is complete, you may use crew_context_list and crew_context_curate to annotate already archived tool outputs, and crew_context_propose with a precise summary of goals, decisions, verified results and open issues. A proposal is not an immediate compact: Runtime applies native compaction only after this turn and its safety checks. crew_context_recall retrieves only outputs that were actually archived. Do not claim that curation changed Codex native context.'
+      : '';
+    const capabilityGuide = [buildCapabilityGuide(finalPrompt), selfManagedGuide].filter(Boolean).join('\\n');
     if (capabilityGuide) {
       assembledContextContributions.push(contributionFromText({
         id: 'capability-guide',
