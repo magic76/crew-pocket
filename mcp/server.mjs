@@ -80,6 +80,23 @@ addTool('crew_propose_memory', 'Propose a Role memory candidate for later review
     })).max(5).optional()
   }), args => tools.crew_propose_memory(args));
 
+// Context tools are opt-in and always resolve Role/Conversation from the trusted runtime.
+addTool('crew_context_propose', 'Propose a milestone handoff; native compaction only happens post-turn after safety checks.',
+  z.object({ summary: bounded(2500).refine(text => text.trim().length >= 40),
+    keepIds: z.array(bounded(180)).max(12).optional() }),
+  args => tools.crew_context_propose(args));
+addTool('crew_context_list', 'List archived tool result IDs for this Role and active conversation.',
+  z.object({ limit: z.number().int().min(1).max(30).optional() }),
+  args => tools.crew_context_list(args));
+addTool('crew_context_curate', 'Note which archived tool outputs have already been acted on; never deletes native context.',
+  z.object({ items: z.array(z.object({ id: bounded(64),
+    note: bounded(240) })).min(1).max(20) }),
+  args => tools.crew_context_curate(args));
+addTool('crew_context_recall', 'Recall a page of an original archived tool output, restricted to this Role and conversation.',
+  z.object({ id: bounded(64), offset: z.number().int().min(0).optional(),
+    maxChars: z.number().int().min(1).max(12000).optional() }),
+  args => tools.crew_context_recall(args));
+
 addTool('crew_handoff', 'Queue a delegated read-only task for another Role.',
   z.object({ toRoleId: bounded(160), task: bounded(4000),
     parentTaskId: bounded(80).optional(), timeoutMinutes: z.number().int().min(5).max(60).optional() }),
