@@ -1075,8 +1075,9 @@ async function finishAutoCompactTurn(providerId, conversationId, recentTools, st
       })
     });
     try {
-      await operation;
-      if (freshProposal) await settleCompaction(freshIdentity, freshProposal.id, 'applied');
+      const outcome = await operation;
+      if (freshProposal) await settleCompaction(freshIdentity, freshProposal.id,
+        outcome.statusCode === 200 && outcome.result?.success === true ? 'applied' : 'failed');
     } catch (error) {
       if (freshProposal) await settleCompaction(freshIdentity, freshProposal.id, 'failed');
       throw error;
