@@ -71,23 +71,18 @@ const health=(used,cap,exact=true)=>({
   assert.equal(ui.describe(ui.get('a')).tone,'warning');
   assert.equal(ui.describe(ui.get('b')).label,'—');
   assert.equal(ui.describe(health(120000,100000)).known,false,'only projected summary objects render');
-  await ui.load();assert.equal(fetches,1,'Dashboard and Map share the same client cache');
+  await ui.load();assert.equal(fetches,1,'Dashboard uses the shared cached Context projection');
   assert.ok(events.includes('crew:context-usage-updated'));
-  const uiFile=fs.readFileSync(path.join(__dirname,'..','public/js/ui.js'),'utf8');
-  const scene=fs.readFileSync(path.join(__dirname,'..','public/js/crew-pixel-office.js'),'utf8');
+  const roleUi=fs.readFileSync(path.join(__dirname,'..','public/js/ui.js'),'utf8');
   const page=fs.readFileSync(path.join(__dirname,'..','public/index.html'),'utf8');
   const server=fs.readFileSync(path.join(__dirname,'..','server.js'),'utf8');
-  assert.match(scene,/contextUsageByRole\.set\(role\.id,description\)/,
-    'Context warning is scoped to durable Role ID');
-  assert.match(scene,/contextUsageByRole\.get\(role\.id\)/,
-    'pixel nameplates use Role-only pressure entries');
-  assert.match(scene,/note\.dataset\.contextWarningCount/,
-    'Context pressure count comes from verified Context Health data');
-  assert.match(scene,/crew:context-usage-updated/,
-    'react to shared Context cache updates');
+  assert.match(roleUi,/function renderRoleNavigation\(\)/,
+    'Dashboard must retain the Role-scoped state renderer');
+  assert.match(roleUi,/role-nav-card/,
+    'Context availability must not remove the Role cards');
   assert.match(page,/\/js\/crew-context-usage.js/);
   assert.doesNotMatch(page,/id="world-info"/,
     'hosted World does not recreate a second selected-Role detail bar');
   assert.match(server,/pathname === '\/api\/crew-context-usage'/);
-  console.log('crew-context-usage: exact/estimated/unknown, Role isolation, caching and map alerts passed');
+  console.log('crew-context-usage: exact/estimated/unknown, Role isolation and Dashboard cache passed');
 })().catch(err=>{console.error(err);process.exitCode=1;});
