@@ -64,6 +64,7 @@ test('CTXAgent-inspired sidecar archives complete readable outputs with role/ses
     assert.equal(await store.pendingCompaction(owner), null);
     await assert.rejects(store.proposeCompaction(owner, { summary: 'short' }), /summary/);
     await assert.rejects(store.listArchive({ ...owner, conversationId: '../outside' }), /identity/);
+    await assert.rejects(store.listArchive({ ...owner, roleId: '..' }), /identity/);
   } finally {
     await fs.rm(root, { recursive: true, force: true });
   }
