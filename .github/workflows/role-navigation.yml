@@ -5,7 +5,6 @@ on:
       - 'public/js/ui.js'
       - 'public/js/chat.js'
       - 'public/js/app.js'
-      - 'public/js/crew-world-launcher.js'
       - 'public/index.html'
       - 'lib/providers/antigravity.js'
       - 'lib/session.js'
@@ -31,7 +30,6 @@ jobs:
           node --check public/js/ui.js
           node --check public/js/chat.js
           node --check public/js/app.js
-          node --check public/js/crew-world-launcher.js
           node --check lib/providers/antigravity.js
           node --check lib/session.js
           node --check server.js

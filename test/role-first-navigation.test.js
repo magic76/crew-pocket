@@ -68,16 +68,13 @@ const history = {
   replaceState(value){states[index]=value;},
   back(){if(index>0){ index--; callbacks.popstate?.({state:states[index]}); }}
 };
-let settingsVisible=false;let crewRenders=0;let worldRestores=0;let bootRoleDefers=0;
+let settingsVisible=false;let crewRenders=0;
 const window = {
   history, setTimeout:()=>0,
   addEventListener(name,fn){callbacks[name]=fn;},
   dispatchEvent(){},
-  renderRoleNavigation(){crewRenders++;},
-  CrewWorldHost:{
-    deferInitialRole(){bootRoleDefers++;},
-    restoreHomeView(){worldRestores++;}
-  }
+  renderRoleNavigation(){crewRenders++;}
+
 };
 const customEvent = class {constructor(type,init){this.type=type;this.detail=init?.detail;}};
 vm.runInNewContext(app.slice(start,end),{
@@ -87,8 +84,7 @@ vm.runInNewContext(app.slice(start,end),{
 },{filename:'app-role-first-router.js'});
 assert.equal(document.body.dataset.primaryTab,'crew');
 assert.equal(history.state.crewPage,'crew');
-assert.equal(bootRoleDefers,1,'startup defers Role selection until original history is restored');
-assert.equal(worldRestores,1,'Crew section now restores the primary map on cold launch');
+assert.equal(drawer.classList.contains('hidden'),false,'Dashboard is the default Crew view');
 assert.equal(drawer.classList.contains('hidden'),false);
 assert.equal(elements['chat-composer-footer'].classList.contains('hidden'),true);
 assert.equal(settingsVisible,false);
@@ -99,7 +95,7 @@ assert.equal(history.state.crewPage,'settings');
 elements['crew-settings-back-btn'].listeners.click();
 assert.equal(document.body.dataset.primaryTab,'crew');
 assert.equal(settingsVisible,false);
-assert.equal(worldRestores,2,'Android Back from settings restores the previous Crew home surface');
+assert.equal(drawer.classList.contains('hidden'),false,'Android Back restores Dashboard');
 
 window.setPrimaryTab('chat');
 assert.equal(document.body.dataset.primaryTab,'chat');
@@ -116,7 +112,7 @@ assert.equal(history.state.crewOverlay,null);
 elements['crew-back-home-btn'].listeners.click();
 assert.equal(document.body.dataset.primaryTab,'crew');
 assert.equal(elements['chat-composer-footer'].classList.contains('hidden'),true);
-assert.equal(worldRestores,3,'Android Back from full Chat restores the previous map/dashboard mode');
+assert.equal(drawer.classList.contains('hidden'),false,'Android Back from Chat restores Dashboard');
 
 window.CrewNavigation.openOverlay('role-editor-modal');
 const count2=states.length;

@@ -1,4 +1,4 @@
-/* Shared read-only Context gauge data for Dashboard and Crew World.
+/* Shared read-only Context gauge data for the Crew Dashboard.
  * Never mistake provider credit quota for the active conversation window. */
 (() => {
   'use strict';
