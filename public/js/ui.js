@@ -147,6 +147,7 @@ const toolsMenuBtn = document.getElementById('tools-menu-btn');
 const toolsMenuDropdown = document.getElementById('tools-menu-dropdown');
 const headerTitle = document.getElementById('header-title');
 const workspaceSelectorBtn = document.getElementById('workspace-selector-btn');
+const roleSwitcherDropdown = document.getElementById('role-switcher-dropdown');
 const workspaceModal = document.getElementById('workspace-modal');
 const workspaceOptions = document.getElementById('workspace-options');
 const closeWorkspaceModalBtn = document.getElementById('close-workspace-modal-btn');
@@ -697,6 +698,18 @@ function roleMeta(roleId = currentRoleId) {
   return availableRoles.find(item => item.id === roleId) || null;
 }
 
+function roleAvatarMarkup(role, state = 'unknown') {
+  const project = projectMeta(role?.projectId);
+  const portrait = window.CrewRoomVisual?.portraitMarkup(role) || escapeHtml(project?.icon || '🧠');
+  return '<span class="crew-role-avatar" data-state="' + escapeHtml(state) + '">' + portrait +
+    '<span class="crew-role-dot" data-state="' + escapeHtml(state) + '" aria-hidden="true"></span></span>';
+}
+
+function roleStateLabel(state) {
+  return ({ working: '工作中', waiting: '等待處理', idle: '待命', new: '新工作', unknown: '狀態未同步' })[state]
+    || '狀態未同步';
+}
+
 function compactWorkspaceLabel(meta) {
   const raw = String(meta?.label || '').trim();
   if (!raw || raw === 'Home') return 'Home';
@@ -724,14 +737,20 @@ function updateWorkspaceUI() {
       localStorage.setItem('crew_current_workspace', currentWorkspace);
     }
     const projectLabel = project?.name || (role.projectId ? role.projectId : 'General');
-    if (workspaceIcon) workspaceIcon.textContent = project?.icon || '🧠';
+    const status = crewStatusForRole(role.id);
+    const reportedState = status ? String(status.state || 'unknown') : 'unknown';
+    const avatarState = reportedState === 'working' && status?.busy !== true ? 'unknown' : reportedState;
+    if (workspaceIcon) workspaceIcon.innerHTML = roleAvatarMarkup(role, avatarState);
     if (workspaceLabel) workspaceLabel.textContent = role.name;
     if (headerRoleProject) headerRoleProject.textContent = projectLabel;
-    const status = crewStatusForRole(role.id);
     const latest = roleLatestConversation(role.id);
     const workTitle = status?.currentWork?.title || status?.conversationTitle || latest?.title || '新工作';
     if (headerCurrentTask) headerCurrentTask.textContent = workTitle;
-    if (workspaceSelectorBtn) workspaceSelectorBtn.title = `目前 Role · ${role.name} · ${projectLabel}`;
+    if (workspaceSelectorBtn) {
+      workspaceSelectorBtn.title = `切換角色 · 目前 ${role.name} · ${projectLabel}`;
+      workspaceSelectorBtn.setAttribute('aria-label', `切換角色，目前為 ${role.name}`);
+      workspaceSelectorBtn.dataset.state = avatarState;
+    }
     return;
   }
 
@@ -740,7 +759,11 @@ function updateWorkspaceUI() {
   if (workspaceLabel) workspaceLabel.textContent = 'General';
   if (headerRoleProject) headerRoleProject.textContent = compactWorkspaceLabel(meta);
   if (headerCurrentTask) headerCurrentTask.textContent = '新工作';
-  if (workspaceSelectorBtn) workspaceSelectorBtn.title = '目前 Role · General';
+  if (workspaceSelectorBtn) {
+    workspaceSelectorBtn.title = '切換角色 · General';
+    workspaceSelectorBtn.setAttribute('aria-label', '切換角色，目前為 General');
+    workspaceSelectorBtn.dataset.state = 'unknown';
+  }
 }
 
 window.getCurrentRoleId = () => currentRoleId || DEFAULT_ROLE_ID;
@@ -995,7 +1018,6 @@ function renderRoleNavigation() {
 
   const markup = roles.length ? roles.map(role => {
     const selected = role.id === (currentRoleId || DEFAULT_ROLE_ID);
-    const project = projectMeta(role.projectId);
     const latest = roleLatestConversation(role.id);
     const status = crewStatusVerified ? crewStatusForRole(role.id) : null;
     const reported = status ? String(status.state || 'unknown') : 'unknown';
@@ -1041,10 +1063,7 @@ function renderRoleNavigation() {
       '<button type="button" data-role-nav-id="' + escapeHtml(role.id) +
         '" aria-label="進入 ' + escapeHtml(role.name) + ' 的目前對話">' +
         (selected ? '<span class="crew-role-eyebrow">目前使用的 Agent</span>' : '') +
-        '<span class="crew-role-avatar" data-state="' + escapeHtml(state) + '">' +
-          (window.CrewRoomVisual?.portraitMarkup(role) || escapeHtml(project?.icon || '🧠')) +
-          '<span class="crew-role-dot" data-state="' + escapeHtml(state) +
-          '" aria-hidden="true"></span></span>' +
+        roleAvatarMarkup(role, state) +
         '<span class="crew-role-name">' + escapeHtml(role.name) + '</span>' +
         '<span class="crew-role-state" data-state="' + escapeHtml(state) + '">' +
           escapeHtml(stateName(state)) + '</span>' +
@@ -1071,6 +1090,72 @@ function renderRoleNavigation() {
   }
   window.dispatchEvent(new CustomEvent('crew:roster-updated'));
 }
+
+function renderRoleSwitcherOptions() {
+  if (!roleSwitcherDropdown) return;
+  roleSwitcherDropdown.innerHTML = availableRoles.map(role => {
+    const selected = role.id === (currentRoleId || DEFAULT_ROLE_ID);
+    const status = crewStatusVerified ? crewStatusForRole(role.id) : null;
+    const reportedState = status ? String(status.state || 'unknown') : 'unknown';
+    const state = reportedState === 'working' && status?.busy !== true ? 'unknown' : reportedState;
+    const projectLabel = roleProjectLabel(role);
+    return '<button type="button" role="menuitemradio" aria-checked="' + selected +
+      '" data-role-switch-id="' + escapeHtml(role.id) + '" class="crew-role-switcher-option' +
+      (selected ? ' is-selected' : '') + '">' + roleAvatarMarkup(role, state) +
+      '<span class="crew-role-switcher-copy"><strong>' + escapeHtml(role.name) +
+      '</strong><small>' + escapeHtml(projectLabel) + ' · ' + escapeHtml(roleStateLabel(state)) +
+      '</small></span>' + (selected ? '<span class="crew-role-switcher-check" aria-hidden="true">✓</span>' : '') +
+      '</button>';
+  }).join('') || '<div class="crew-role-switcher-empty">尚未建立角色</div>';
+}
+
+function closeRoleSwitcher({ restoreFocus = false } = {}) {
+  if (!roleSwitcherDropdown || roleSwitcherDropdown.classList.contains('hidden')) return;
+  roleSwitcherDropdown.classList.add('hidden');
+  workspaceSelectorBtn?.setAttribute('aria-expanded', 'false');
+  if (restoreFocus) workspaceSelectorBtn?.focus({ preventScroll: true });
+}
+
+function openRoleSwitcher() {
+  if (!roleSwitcherDropdown || !workspaceSelectorBtn) return;
+  renderRoleSwitcherOptions();
+  roleSwitcherDropdown.classList.remove('hidden');
+  workspaceSelectorBtn.setAttribute('aria-expanded', 'true');
+  const selected = [...roleSwitcherDropdown.querySelectorAll('[data-role-switch-id]')]
+    .find(button => button.getAttribute('aria-checked') === 'true');
+  (selected || roleSwitcherDropdown.querySelector('[data-role-switch-id]'))?.focus({ preventScroll: true });
+}
+
+workspaceSelectorBtn?.addEventListener('click', () => {
+  if (roleSwitcherDropdown?.classList.contains('hidden')) openRoleSwitcher();
+  else closeRoleSwitcher();
+});
+roleSwitcherDropdown?.addEventListener('click', event => {
+  const option = event.target.closest('[data-role-switch-id]');
+  if (!option) return;
+  closeRoleSwitcher({ restoreFocus: true });
+  void selectRole(option.dataset.roleSwitchId);
+});
+document.addEventListener('pointerdown', event => {
+  if (roleSwitcherDropdown?.classList.contains('hidden')) return;
+  if (workspaceSelectorBtn?.contains(event.target) || roleSwitcherDropdown?.contains(event.target)) return;
+  closeRoleSwitcher();
+});
+document.addEventListener('keydown', event => {
+  if (roleSwitcherDropdown?.classList.contains('hidden')) return;
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    closeRoleSwitcher({ restoreFocus: true });
+    return;
+  }
+  if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+  const options = [...roleSwitcherDropdown.querySelectorAll('[data-role-switch-id]')];
+  if (!options.length) return;
+  const current = options.indexOf(document.activeElement);
+  const step = event.key === 'ArrowDown' ? 1 : -1;
+  options[(current + step + options.length) % options.length].focus({ preventScroll: true });
+  event.preventDefault();
+});
 
 // Delegation is stable across roster refreshes and avoids duplicating handlers.
 roleNavList?.addEventListener('click', event => {

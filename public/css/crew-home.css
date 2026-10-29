@@ -153,6 +153,57 @@ body[data-primary-tab="crew"] #chat-composer-footer { display: none !important; 
 .crew-role-dot[data-state="waiting"] { background: var(--cp-warning); }
 .crew-role-dot[data-state="new"] { background: var(--cp-accent); }
 @keyframes crew-breath { 50% { opacity: .5; } }
+
+.crew-header-role-trigger { position: relative; }
+.crew-header-role-trigger:focus-visible {
+  outline: 2px solid var(--cp-accent-strong);
+  outline-offset: 2px;
+}
+.crew-header-role-trigger .crew-role-avatar {
+  width: 40px; height: 40px; border-radius: 10px;
+  border-color: transparent; background: transparent;
+}
+.crew-header-role-trigger .crew-role-sprite { width: 36px; height: 36px; }
+.crew-header-role-trigger .crew-role-dot {
+  width: 8px; height: 8px; right: -1px; bottom: -1px;
+}
+.crew-header-role-caret {
+  position: absolute; top: -3px; right: -3px;
+  display: grid; place-items: center;
+  width: 15px; height: 15px; border-radius: 99px;
+  border: 1px solid var(--cp-border); background: var(--cp-surface);
+  color: var(--cp-text-secondary); font-size: 11px; line-height: 1;
+}
+.crew-role-switcher-dropdown {
+  position: absolute; z-index: 60; top: calc(100% + 7px); left: 0;
+  width: min(300px, calc(100vw - 16px));
+  max-height: min(64vh, 440px); overflow-y: auto; overscroll-behavior: contain;
+  padding: 6px; border: 1px solid var(--cp-border); border-radius: 14px;
+  background: var(--cp-surface); color: var(--cp-text);
+  box-shadow: 0 16px 40px rgba(0,0,0,.48);
+}
+.crew-role-switcher-option {
+  display: flex; width: 100%; min-width: 0; align-items: center; gap: 10px;
+  padding: 8px; border: 1px solid transparent; border-radius: 10px;
+  background: transparent; color: var(--cp-text); text-align: left;
+}
+.crew-role-switcher-option:hover,
+.crew-role-switcher-option:focus-visible { background: var(--cp-surface-2); outline: none; }
+.crew-role-switcher-option.is-selected {
+  border-color: var(--cp-accent); background: var(--cp-accent-soft);
+}
+.crew-role-switcher-option .crew-role-avatar {
+  width: 40px; height: 40px; flex: none; border-radius: 10px;
+}
+.crew-role-switcher-option .crew-role-sprite { width: 36px; height: 36px; }
+.crew-role-switcher-copy { display: grid; min-width: 0; flex: 1; gap: 3px; }
+.crew-role-switcher-copy strong,
+.crew-role-switcher-copy small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.crew-role-switcher-copy strong { color: var(--cp-text); font-size: 12px; font-weight: 720; }
+.crew-role-switcher-copy small { color: var(--cp-muted); font-size: 10px; }
+.crew-role-switcher-check { color: var(--cp-accent-strong); font-size: 14px; font-weight: 800; }
+.crew-role-switcher-empty { padding: 16px 10px; color: var(--cp-muted); text-align: center; font-size: 12px; }
+
 .crew-role-name {
   max-width: 100%; margin-top: 9px;
   font-size: 13px; font-weight: 740;
