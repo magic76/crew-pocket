@@ -72,6 +72,7 @@ const {
   getAutoCompactSettings, setAutoCompactSettings, getAutoCompactState,
   recordAutoCompactTurn, recordAutoCompactSuccess, appendAutoCompactTelemetry
 } = require('./lib/context/auto-compact-store');
+const { captureToolOutputs, pendingCompaction, settleCompaction } = require('./lib/context/self-managed');
 const { contributionFromText } = require('./lib/context/estimator');
 const { readFingerprint } = require('./lib/context/tool-fingerprint');
 const { ContextSourceType, ContextPriority } = require('./lib/context/types');
@@ -1025,6 +1026,16 @@ async function handleAutoCompactSettings(req, res) {
   }
 }
 
+function agentCompactionEligible(assessment, proposal) {
+  // A proposal is advisory. Never override native provider support, cooldown,
+  // a busy Role, required context, or the existing safe-compaction planner.
+  if (!proposal || !assessment.canCompact || !assessment.decision.safeNow ||
+      !assessment.plan.hasActionableWork) return false;
+  const { signals } = assessment;
+  return (signals.contextPressure !== null && signals.contextPressure >= 0.45) ||
+    signals.staleContextRatio >= 0.25 || signals.taskStageTransition === true;
+}
+
 async function finishAutoCompactTurn(providerId, conversationId, recentTools, status) {
   if (!conversationId || /fail|abort|cancel|interrupt|error/i.test(String(status || ''))) return;
   try {
@@ -1033,23 +1044,45 @@ async function finishAutoCompactTurn(providerId, conversationId, recentTools, st
       recentTools, recordTelemetry: true
     });
     await recordAutoCompactTurn(providerId, conversationId, assessment.signals.currentStage);
-    if (!(await getAutoCompactSettings()).enabled || assessment.decision.recommendation !== 'auto' ||
-        !assessment.decision.safeNow) return;
-    // Revalidation and the per-Role lock prevent compaction during a new turn,
-    // another role's work, a tool operation or a concurrent manual compact.
+    const settings = await getAutoCompactSettings();
+    if (!settings.enabled) return;
+
+    const identity = { roleId: assessment.roleId, provider: providerId, conversationId };
+    // Archive only readable, complete tool outputs. Original provider history remains untouched.
+    await captureToolOutputs(identity, bundle.history).catch(error =>
+      console.warn('[Context Archive] Capture skipped:', error.message));
+    const proposal = await pendingCompaction(identity);
+    if (proposal && !assessment.canCompact) {
+      await settleCompaction(identity, proposal.id, 'unsupported');
+    }
+    if (assessment.decision.recommendation !== 'auto' &&
+        !agentCompactionEligible(assessment, proposal)) return;
+
+    // Revalidate all provider and Role locks after reading the sidecar proposal.
     const freshBundle = await getConversationContextHealth(providerId, conversationId);
     const fresh = await assessAutoCompact(providerId, conversationId, freshBundle);
-    if (fresh.decision.recommendation !== 'auto' || !fresh.decision.safeNow) return;
+    const freshIdentity = { roleId: fresh.roleId, provider: providerId, conversationId };
+    const freshProposal = await pendingCompaction(freshIdentity);
+    if (fresh.decision.recommendation !== 'auto' &&
+        !agentCompactionEligible(fresh, freshProposal)) return;
     const { operation } = startTrackedCompaction({
-      providerId, conversationId, source: 'auto_compact',
-      roleId: freshBundle.conversationSettings?.roleId || DEFAULT_ROLE_ID,
+      providerId, conversationId, source: freshProposal ? 'agent_proposal' : 'auto_compact',
+      roleId: fresh.roleId,
       run: (onEvent, requestId) => performSafeContextCompact(providerId, conversationId, {
-        mode: 'automatic', bundle: freshBundle, assessment: fresh, onEvent, requestId
+        mode: freshProposal ? 'agent_proposal' : 'automatic',
+        focus: freshProposal?.summary || '',
+        bundle: freshBundle, assessment: fresh, onEvent, requestId
       })
     });
-    await operation;
+    try {
+      await operation;
+      if (freshProposal) await settleCompaction(freshIdentity, freshProposal.id, 'applied');
+    } catch (error) {
+      if (freshProposal) await settleCompaction(freshIdentity, freshProposal.id, 'failed');
+      throw error;
+    }
   } catch (error) {
-    // Background opt-in evaluation must never break a user turn.
+    // An optional post-turn sidecar must never break the provider's conversation.
     console.warn('[AutoCompact] Post-turn evaluation skipped:', error.message);
   }
 }
