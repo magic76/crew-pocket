@@ -65,6 +65,9 @@ jobs:
           node --check lib/context/auto-compact-store.js
           node --check test/auto-compact.test.js
           node test/auto-compact.test.js
+          node --check lib/context/self-managed.js
+          node --check test/self-managed-context.test.js
+          node --test test/self-managed-context.test.js
           node --check lib/context/index.js
           node --check lib/memory/types.js
           node --check lib/memory/provider.js

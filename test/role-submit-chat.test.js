@@ -29,6 +29,7 @@ const sandbox = {
   roleProjectFingerprint: () => 'target-fingerprint', memoryStoreRevision: async () => 'target-revision',
   buildAgentContext: async input => { memoryReads.push(input); return { contributions: [], memories: [], role: { id: input.roleId } }; },
   formatAgentContext: context => 'OWN MEMORY FOR ' + context.role.id,
+  getAutoCompactSettings: async () => ({ enabled: false }),
   memoryEvidenceSignatures: () => ({}), buildCapabilityGuide: () => '',
   buildCrewToolGuide: role => 'OWN GUIDE ' + role.id, formatCrewInbox: () => '', contributionFromText: input => input,
   ContextSourceType: {}, ContextPriority: {},

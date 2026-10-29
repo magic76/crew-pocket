@@ -38,6 +38,8 @@ jobs:
           node --check test/mcp-core.test.js
           node --check test/mcp-stdio.test.js
           node --check test/mcp-codex-integration.test.js
+          node --check lib/context/self-managed.js
+          node --check test/self-managed-context.test.js
       - name: Install isolated MCP dependencies
         run: npm install --prefix mcp --omit=dev --no-audit --no-fund
       - name: Run MCP and affected memory/role regressions
