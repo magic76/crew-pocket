@@ -236,7 +236,7 @@
   <div id="role-dna-modal" class="fixed inset-0 z-[80] hidden items-end justify-center bg-black/75 p-2 opacity-0 transition-opacity duration-150 sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-labelledby="role-dna-title">
     <section class="role-dna-sheet">
       <header class="role-dna-heading">
-        <div><div class="role-dna-kicker">ROLE DNA</div><h2 id="role-dna-title">技能 DNA</h2><p id="role-dna-subtitle">候選技能來自 Dreaming，驗證與啟用由你控制。</p></div>
+        <div><div class="role-dna-kicker">ROLE DNA</div><h2 id="role-dna-title">技能 DNA</h2><p id="role-dna-subtitle">候選會在匹配任務時自動試用；有可核對的檢查證據時自動啟用。</p></div>
         <button id="role-dna-close" type="button" aria-label="關閉技能管理">✕</button>
       </header>
       <div class="role-dna-toolbar">
@@ -520,7 +520,7 @@
             <div class="crew-home-brand">
               <div class="crew-home-kicker">CREW DASHBOARD</div>
               <h1>小隊總覽</h1>
-              <p class="crew-home-subtitle">工作狀態、待處理訊息與最近協作</p>
+              <p class="crew-home-subtitle">工作狀態、需查看項目與最近協作</p>
             </div>
             <div class="crew-home-actions">
               <button id="cockpit-refresh-btn" type="button" aria-label="重新同步小隊狀態" title="重新同步小隊狀態">↻</button>
@@ -542,7 +542,7 @@
     <section id="drawer" class="crew-home-view hidden min-h-0 min-w-0 flex-1 flex-col overflow-hidden" aria-label="AI 小隊 Dashboard">
       <section id="role-nav-view" class="flex min-h-0 flex-1 flex-col">
         <div id="cockpit-scroll" class="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-          <div id="crew-attention-panel" aria-label="待處理的角色訊息"></div>
+          <div id="crew-attention-panel" aria-label="需要查看的角色項目"></div>
           <div class="cockpit-roster-heading">
             <span>小隊成員</span><span>點擊角色繼續目前對話</span>
           </div>

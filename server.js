@@ -45,7 +45,7 @@ const { listWorkspaces, resolveWorkspace, createWorkspace } = require('./lib/wor
 const { listCrewMembers, saveCrewMember } = require('./lib/crew-members');
 const { DEFAULT_ROLE_ID, roleIdForProject, listRoles, getRole, saveRole } = require('./lib/roles');
 const { deleteRoleLifecycle } = require('./lib/role-delete');
-const { listCrewRoles, sendCrewMessage, getCrewInbox, getCrewMessageActivity, getCrewRoomEvents, markCrewMessagesDelivered, updateCrewAutoResponse } = require('./lib/crew-messages');
+const { listCrewRoles, sendCrewMessage, getCrewInbox, getCrewInboxSummaryByRole, getCrewMessageActivity, getCrewRoomEvents, markCrewMessagesDelivered, updateCrewAutoResponse } = require('./lib/crew-messages');
 const { createCrewAutoResponder } = require('./lib/crew-auto-response');
 const { getRoleRuntime, listRoleRuntimes, activateRoleConversation, prepareNewRoleConversation, clearRoleConversation, clearRoleConversationByConversation } = require('./lib/role-runtime');
 const { buildCrewStatus } = require('./lib/crew-status');
@@ -55,7 +55,7 @@ const { makeMissionGraph, MAX_GRAPH_EVENTS } = require('./lib/mission-graph');
 const { listProjects, getProject } = require('./lib/projects');
 const { defaultRoleMessageQueueStore, listRoleQueuedMessages, enqueueRoleMessage, removeRoleQueuedMessage, clearRoleMessageQueue } = require('./lib/role-message-queue');
 const { defaultMemoryProvider } = require('./lib/memory');
-const { defaultSkillRegistry } = require('./lib/skills/registry');
+const { defaultSkillRegistry, skillContext } = require('./lib/skills/registry');
 const { DreamingManager } = require('./lib/memory/dreaming');
 const { CrewTaskRunner } = require('./lib/mcp/task-runner');
 const { defaultCrewTaskStore } = require('./lib/mcp/tasks');
@@ -1469,6 +1469,7 @@ async function handleCrewStatus(res) {
       listRoleRuntimes,
       getConversationSettings,
       getCrewInbox,
+      getCrewInboxSummaryByRole,
       getCrewMessageActivity,
       getProvider,
       getRoleActivity: roleId => publicTurnActivity(chatTurns.latestForRole(roleId)),
@@ -2059,6 +2060,52 @@ function isPollingToolEvent(event) {
   return name.includes('write_stdin') || name.includes('poll') || parameters.includes('session_id') || parameters.includes('yield_time_ms');
 }
 
+function commandText(value) {
+  if (typeof value === 'string') return value;
+  if (Array.isArray(value)) return value.map(commandText).filter(Boolean).join(' ');
+  if (value && typeof value === 'object') {
+    return Object.entries(value).map(([key, item]) => key + ' ' + commandText(item)).join(' ');
+  }
+  return '';
+}
+
+function runtimeCheckCategory(event) {
+  const info = event?.info || {};
+  const parameters = info.parameters || {};
+  const command = commandText(parameters.command ?? parameters.cmd ?? parameters.script ?? info.command).trim();
+  if (!command || command.length > 4000) return null;
+  const segments = command.split(/&&|\|\||[;\n]/).map(part => part.trim()).filter(Boolean);
+  const patterns = [
+    ['test', /^(?:(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?test(?::[\w-]+)?|(?:\S*\/)?node(?:js)?\s+--test|(?:python\d?(?:\.\d+)?\s+-m\s+)?(?:pytest|unittest)|(?:npx|bunx|pnpm\s+exec)\s+(?:vitest|jest|mocha|ava|tap)|pytest|vitest|jest|mocha|ava|tap|phpunit|cargo\s+test|go\s+test|(?:\.\/)?gradlew?\s+.*\btest\b|(?:mvn|mvnw)\s+.*\btest\b|make\s+test)(?:\s|$)/i],
+    ['syntax', /^(?:\S*\/)?node(?:js)?\s+--check(?:\s|$)/i],
+    ['lint', /^(?:(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?lint|(?:npx|bunx|pnpm\s+exec)\s+(?:eslint|stylelint)|eslint|stylelint|ruff\s+check|prettier\s+--check|golangci-lint\s+run|cargo\s+clippy)(?:\s|$)/i],
+    ['typecheck', /^(?:(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?(?:typecheck|type-check)|tsc\s+--noEmit|mypy|pyright)(?:\s|$)/i],
+    ['build', /^(?:(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?build|cargo\s+(?:build|check)|(?:\.\/)?gradlew?\s+.*\b(?:build|assemble|compile)\b|(?:mvn|mvnw)\s+.*\bcompile\b)(?:\s|$)/i],
+    ['diff', /^git\s+diff\s+--check(?:\s|$)/i]
+  ];
+  for (let segment of segments) {
+    segment = segment.replace(/^\(+\s*/, '').trim();
+    const shellCommand = segment.match(/^(?:[^\s]*\/)?(?:bash|sh|zsh)\s+-[A-Za-z]*c\s+([\s\S]*)$/i);
+    if (shellCommand) segment = shellCommand[1].trim().replace(/^(['"])([\s\S]*)\1$/, '$2');
+    const match = patterns.find(([, pattern]) => pattern.test(segment));
+    if (match) return match[0];
+  }
+  return null;
+}
+
+function runtimeCheckResult(event) {
+  const info = event?.info || {};
+  if (!Number.isInteger(info.exitCode)) return null;
+  const state = String(event.state || '').toLowerCase();
+  if (!['completed', 'complete', 'done', 'success', 'succeeded', 'failed', 'error'].includes(state)) return null;
+  const category = runtimeCheckCategory(event);
+  if (!category) return null;
+  return {
+    category,
+    outcome: info.error || info.exitCode !== 0 || ['failed', 'error'].includes(state) ? 'failed' : 'passed'
+  };
+}
+
 function collectChangedFiles(event, target) {
   if (!target || !(target instanceof Set)) return;
   const name = String(event.name || event.tool_name || '').toLowerCase();
@@ -2482,6 +2529,35 @@ async function handleChatTurn(req, res, submittedBody = null) {
     finalPrompt = '<ADDITIONAL_METADATA>\n' + crewMetadata + '\n</ADDITIONAL_METADATA>\n' + finalPrompt;
   }
 
+  // Add newly matched Role skills once per conversation. This also lets an
+  // existing conversation trial a candidate when a later user turn matches it.
+  let matchedRoleSkills = [];
+  try {
+    const skillQuery = [approvedExecutionIntent?.summary, prompt].map(value => String(value || '').trim())
+      .filter(Boolean).join('\n');
+    matchedRoleSkills = await defaultSkillRegistry.matchForTrial(role?.id || DEFAULT_ROLE_ID, skillQuery, 2);
+    const knownSkillRefs = new Set(assembledContextContributions
+      .filter(item => item.type === ContextSourceType.SKILL).map(item => item.sourceRef));
+    const newlyMatched = matchedRoleSkills.filter(skill => !knownSkillRefs.has('skill:' + skill.id));
+    if (newlyMatched.length) {
+      const skillContributions = buildStaticContextContributions({ roleSkills: newlyMatched })
+        .filter(item => item.type === ContextSourceType.SKILL);
+      assembledContextContributions.push(...skillContributions);
+      finalPrompt = '<ADDITIONAL_METADATA>\n[Matched Role Skills · follow the verification limits stated per skill]\n' +
+        newlyMatched.map(skillContext).join('\n\n') + '\n</ADDITIONAL_METADATA>\n' + finalPrompt;
+    }
+  } catch (error) {
+    console.warn('[Role DNA] Matched skill lookup failed:', String(error?.message || error).slice(0, 120));
+  }
+  const contextSkillRefs = new Set(assembledContextContributions
+    .filter(item => item.type === ContextSourceType.SKILL).map(item => item.sourceRef));
+  const trialSkillIdsForTurn = matchedRoleSkills
+    .filter(skill => (
+      skill.status === 'candidate' ||
+      (skill.status === 'active' && skill.verification?.method === 'runtime-observed')
+    ) && contextSkillRefs.has('skill:' + skill.id))
+    .map(skill => skill.id).slice(0, 1);
+
   if (image_path) {
     finalPrompt = `[Uploaded Image: ${image_path}]\n${finalPrompt}`;
   }
@@ -2491,6 +2567,7 @@ async function handleChatTurn(req, res, submittedBody = null) {
   try {
     const provider = getProvider(providerId);
     const toolRuns = new Map();
+    const runtimeSkillChecks = new Map();
     const changedFiles = new Set();
     const readFingerprints = new Set();
     let toolEventCount = 0;
@@ -2592,6 +2669,9 @@ async function handleChatTurn(req, res, submittedBody = null) {
       toolEventCount += 1;
       const info = event.info || {};
       const effectiveState = info.error || (Number.isInteger(info.exitCode) && info.exitCode !== 0) ? 'failed' : state;
+      if (state === 'running') runtimeSkillChecks.delete(key);
+      const runtimeCheck = runtimeCheckResult(event);
+      if (runtimeCheck) runtimeSkillChecks.set(key, runtimeCheck);
       feedbackTools.set(key, {
         tool_group_id: key,
         tool_name: event.name || event.tool_name,
@@ -2643,6 +2723,20 @@ async function handleChatTurn(req, res, submittedBody = null) {
         intent_review: intentReview || undefined,
         turn_timing: turnTiming
       };
+      const latestChecks = new Map();
+      for (const check of runtimeSkillChecks.values()) latestChecks.set(check.category, check);
+      const recordableChecks = finalPayload.status === 'completed'
+        ? [...latestChecks.values()]
+        : finalPayload.status === 'failed'
+          ? [...latestChecks.values()].filter(item => item.outcome === 'failed')
+          : [];
+      if (recordableChecks.length && trialSkillIdsForTurn.length) {
+        setImmediate(() => defaultSkillRegistry.recordRuntimeCheck(
+          role?.id || DEFAULT_ROLE_ID,
+          trialSkillIdsForTurn,
+          { turnId: requestId, checks: recordableChecks }
+        ).catch(error => console.warn('[Role DNA] Runtime check save failed:', String(error.message || error).slice(0, 120))));
+      }
       const terminalRecord = chatTurns.finish(requestId, finalPayload);
       // Notify the UI independently of feedback persistence. HTTP finish only
       // means the server flushed its response, not that a WebView rendered it.
@@ -2888,7 +2982,8 @@ async function handleChatTurn(req, res, submittedBody = null) {
               conversationId: event.conversationId || activeConversationId || conversation_id,
               prompt: cleanUserContent(prompt || ''),
               response: event.response,
-              status: event.status
+              status: event.status,
+              runtimeChecks: [...runtimeSkillChecks.values()]
             }).catch(error => console.warn('[Dreaming] checkpoint failed:', error.message)));
           }
           broadcastCrewStatusEvent('turn-complete', role?.id || null);
@@ -3410,6 +3505,7 @@ async function handleCrewHome(req, res) {
       listRoleRuntimes,
       getConversationSettings,
       getCrewInbox,
+      getCrewInboxSummaryByRole,
       getCrewMessageActivity,
       getProvider,
       getRoleActivity: roleId => publicTurnActivity(chatTurns.latestForRole(roleId)),

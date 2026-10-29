@@ -1,5 +1,5 @@
 /* Role DNA skill inspector. Candidate proposals are not verified results.
- * This UI never independently confirms a test or Git result; users attest evidence.
+ * Runtime observations use tool-reported exit codes; human evidence is user-attested.
  */
 (() => {
   'use strict';
@@ -16,16 +16,13 @@
   let busy = false;
   const esc = value => String(value ?? '').replace(/[&<>"']/g,
     char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
-  const labels = {
-    candidate: '候選 · 未驗證',
-    verified: '已確認證據 · 待啟用',
-    active: '已啟用 · 任務匹配時載入',
-    retired: '已停用'
-  };
   const human = name => ({
     proposed: 'Dreaming 提案', 'evidence-added': '附加證據',
     'failure-recorded': '失敗／撤銷驗證', verify: '使用者確認',
-    activate: '啟用技能', retire: '停用技能', 'more-sources': '新增來源'
+    activate: '啟用技能', retire: '停用技能', 'more-sources': '新增來源',
+    'runtime-check-passed': 'Runtime 檢查通過',
+    'runtime-check-failed': 'Runtime 檢查失敗',
+    'auto-activated': '自動啟用'
   })[name] || name;
 
   function card(skill) {
@@ -35,26 +32,47 @@
     const isVerified = skill.status === 'verified';
     const isRetired = skill.status === 'retired';
     const lastFailure = evidence.findLastIndex(item => item.outcome === 'failed');
-    const proofs = evidence.slice(lastFailure + 1).filter(item =>
+    const recentEvidence = evidence.slice(lastFailure + 1);
+    const proofs = recentEvidence.filter(item =>
       ['test', 'ci'].includes(item.kind) && item.outcome === 'passed').length;
+    const runtimePasses = new Set(recentEvidence.filter(item =>
+      item.kind === 'runtime-check' && item.outcome === 'passed').map(item => item.reference)).size;
+    const statusLabel = isCandidate
+      ? '候選 · 未驗證 · 自動試用' + (runtimePasses ? ` · 檢查 ${Math.min(2, runtimePasses)}/2` : '')
+        : isVerified ? '已確認證據 · 待啟用'
+        : skill.status === 'active' && skill.verification?.method === 'runtime-observed'
+          ? '已自動啟用 · 兩回合檢查通過'
+          : skill.status === 'active' ? '已啟用 · 任務匹配時載入'
+            : '已停用';
+    const verificationLabel = skill.verification?.method === 'runtime-observed'
+      ? 'Runtime 在 ' + (Number(skill.verification.successfulTurns) || 2) + ' 個不同回合觀察到符合此技能驗收類型的檢查命令成功；依實際退出碼判定，不代表檢查內容另經獨立審核。'
+      : skill.verification?.method === 'user-attested'
+        ? '使用者已確認；不等於 CI 或工具獨立驗證。'
+        : '尚未確認。Dreaming 提案會在匹配任務中安全試用。';
+    const evidenceKind = kind => kind === 'runtime-check' ? 'Runtime 檢查'
+      : ({ test: '測試', ci: 'CI', commit: 'Commit', manual: '手動', failure: '失敗' })[kind] || kind;
+    const runtimeCategory = category => ({
+      test: '測試', syntax: '語法', lint: 'Lint', typecheck: '型別', build: '建置', diff: '差異'
+    })[category] || category;
     return '<article class="role-dna-card" data-skill-id="' + esc(skill.id) + '">' +
       '<div class="role-dna-row"><strong>' + esc(skill.title) + '</strong>' +
         '<span class="role-dna-badge" data-state="' + esc(skill.status) + '">' +
-          esc(labels[skill.status] || skill.status) + '</span></div>' +
+          esc(statusLabel) + '</span></div>' +
       '<p>' + esc(skill.problem) + '</p>' +
       '<div class="role-dna-lines"><b>觸發條件</b><span>' + esc((skill.triggers || []).join(' · ')) + '</span></div>' +
       '<div class="role-dna-lines"><b>操作步驟</b><ol>' +
         (skill.steps || []).map(item => '<li>' + esc(item) + '</li>').join('') + '</ol></div>' +
       '<div class="role-dna-lines"><b>驗收檢查</b><ul>' +
         (skill.checks || []).map(item => '<li>' + esc(item) + '</li>').join('') + '</ul></div>' +
-      '<details class="role-dna-proof"><summary>來源與驗證紀錄 · ' + evidence.length + ' 筆</summary>' +
+      '<details class="role-dna-proof"><summary>來源與檢查紀錄 · ' + evidence.length + ' 筆</summary>' +
         '<div><b>來源對話</b><p>' + (source.length ? source.map(esc).join('、') : '無來源') + '</p></div>' +
-        '<div><b>審核方式</b><p>' + (skill.verification?.method === 'user-attested'
-          ? '使用者已確認；不等於 CI 或工具獨立驗證。'
-          : '未確認。AI 提供的任務成功敘述不算證據。') + '</p></div>' +
+        '<div><b>啟用依據</b><p>' + esc(verificationLabel) + '</p></div>' +
         (evidence.length ? '<ul>' + evidence.map(item =>
-          '<li><b>' + esc(item.kind) + ' / ' + esc(item.outcome) + '</b> · ' +
-          esc(item.reference) + '<small>' + esc(item.note || '') + '</small></li>').join('') +
+          '<li><b>' + esc(evidenceKind(item.kind)) + ' / ' + esc(item.outcome) + '</b> · ' +
+          esc(item.kind === 'runtime-check'
+            ? '自動記錄 · ' + (item.categories || []).map(runtimeCategory).join('、')
+            : item.reference) +
+          '<small>' + esc(item.note || '') + '</small></li>').join('') +
           '</ul>' : '<p>沒有測試證據。</p>') +
       '</details>' +
       (!isRetired ? '<details class="role-dna-form"><summary>記錄測試 / Commit 證據</summary>' +
@@ -72,10 +90,11 @@
           '<label>測試名稱 / Commit / CI URL<input maxlength="250" data-skill-ref placeholder="例如 npm test 或 SHA" /></label>' +
           '<label>說明<textarea data-skill-note maxlength="350" rows="2" placeholder="實際檢查了什麼？"></textarea></label>' +
           '<button type="button" data-skill-action="evidence">記錄證據</button>' +
+          '<p class="role-dna-notice">只有 Test／CI 通過可供人工確認；Commit／手動備註只作參考。自動檢查則以 Runtime 工具回報的退出碼記錄。</p>' +
         '</div></details>' : '') +
       '<div class="role-dna-actions">' +
         (isCandidate ? '<button type="button" data-skill-action="verify" ' +
-          (proofs ? '' : 'disabled ') + '>確認已測試（' + proofs + '）</button>' : '') +
+          (proofs ? '' : 'disabled ') + '>人工確認 Test/CI（' + proofs + '）</button>' : '') +
         (isVerified ? '<button type="button" data-skill-action="activate">啟用技能</button>' : '') +
         (!isRetired ? '<button type="button" data-skill-action="retire">停用</button>' : '') +
       '</div>' +
@@ -84,13 +103,13 @@
   function render(data) {
     const skills = data.skills || [];
     const active = skills.filter(skill => skill.status === 'active').length;
-    const pending = skills.filter(skill => skill.status === 'candidate').length;
+    const trial = skills.filter(skill => skill.status === 'candidate').length;
     summary.textContent = skills.length + ' 項技能 · ' + active +
-      ' 已啟用 · ' + pending + ' 待驗證';
+      ' 已啟用 · ' + trial + ' 自動試用候選';
     list.innerHTML = skills.length
-      ? '<p class="role-dna-notice">Dreaming 只產生候選技能，不會自動升級。以下證據由使用者自行確認，不代表自動測試已通過。</p>' +
+      ? '<p class="role-dna-notice">候選會在匹配任務時自動試用。符合技能驗收項目的檢查在不同回合中兩次通過，Runtime 會自動啟用；只計入工具明確回報退出碼的檢查。無法辨識驗收類型或沒有退出碼的情況會繼續試用。其他證據仍可由你確認。</p>' +
         skills.map(card).join('')
-      : '<div class="role-dna-empty">尚無技能。Dreaming 整理到可重複的工程流程時，會在這裡提出候選技能；不會額外呼叫模型。</div>';
+      : '<div class="role-dna-empty">尚無技能。Dreaming 整理到可重複的流程時，會提出候選；候選會在匹配任務時自動試用。</div>';
   }
   async function load() {
     if (!roleId) return;

@@ -1008,7 +1008,7 @@ function renderRoleNavigation() {
       '<span class="crew-summary-item" data-kind="waiting"><strong>' +
         (crewStatusVerified ? waitingCount : '—') + '</strong><span>等待中</span></span>',
       '<span class="crew-summary-item" data-kind="attention"><strong>' +
-        (crewStatusVerified ? attentionCount : '—') + '</strong><span>待處理</span></span>'
+        (crewStatusVerified ? attentionCount : '—') + '</strong><span>需查看</span></span>'
     ].join('');
   }
 
@@ -1069,7 +1069,7 @@ function renderRoleNavigation() {
           escapeHtml(stateName(state)) + '</span>' +
         '<span class="crew-role-work">' + escapeHtml(workDescription) + '</span>' +
       '</button>' +
-      (attention ? '<span class="crew-role-attention" aria-label="' + attention + ' 項待查看">' +
+      (attention ? '<span class="crew-role-attention" aria-label="' + attention + ' 項需查看">' +
         attention + '</span>' : '') +
       '<button type="button" data-role-menu-btn="' + escapeHtml(role.id) +
         '" aria-label="管理 ' + escapeHtml(role.name) + '" title="角色管理"><span aria-hidden="true">⋯</span></button>' +

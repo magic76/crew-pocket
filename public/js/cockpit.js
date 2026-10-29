@@ -24,8 +24,8 @@
     }
     const attention = data.verified ? data.attention : [];
     const html = attention.length ? '<section class="crew-attention-card">' +
-      '<div class="crew-attention-head"><strong>' + tr('待你處理', 'Needs your attention') + '</strong>' +
-        '<span>' + data.totals.attention + tr(' 則訊息', ' messages') + '</span></div>' +
+      '<div class="crew-attention-head"><strong>' + tr('需要你查看', 'Needs your attention') + '</strong>' +
+        '<span>' + data.totals.attention + tr(' 個項目', ' items') + '</span></div>' +
       attention.slice(0, 4).map(role =>
         '<button type="button" class="crew-attention-row" data-crew-attention-role="' + escape(role.id) + '">' +
           '<span class="crew-attention-dot" aria-hidden="true"></span>' +
