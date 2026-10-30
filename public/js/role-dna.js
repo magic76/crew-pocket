@@ -39,10 +39,10 @@
       ['test', 'ci'].includes(item.kind) && item.outcome === 'passed').length;
     const runtimePasses = new Set(recentEvidence.filter(item =>
       item.kind === 'runtime-check' && item.outcome === 'passed').map(item => item.reference)).size;
-    const lastCheckFailed = evidence.at(-1)?.outcome === 'failed';
+    const needsReverification = lastFailure >= 0 && runtimePasses === 0;
     const statusLabel = isCandidate
       ? runtimePasses ? '驗證中 · ' + Math.min(2, runtimePasses) + '/2'
-        : lastCheckFailed ? '需重新驗證'
+        : needsReverification ? '需重新驗證'
           : injectedCount ? '已送入 Context · ' + injectedCount + ' 次'
             : usage.length ? '已匹配 · ' + usage.length + ' 回合'
               : '等待適合任務'
