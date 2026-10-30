@@ -28,6 +28,8 @@
   function card(skill) {
     const evidence = skill.evidence || [];
     const source = skill.sourceConversationIds || [];
+    const usage = Array.isArray(skill.usage) ? [...skill.usage].reverse() : [];
+    const injectedCount = usage.filter(item => item.delivery === 'injected').length;
     const isCandidate = skill.status === 'candidate';
     const isVerified = skill.status === 'verified';
     const isRetired = skill.status === 'retired';
@@ -37,8 +39,13 @@
       ['test', 'ci'].includes(item.kind) && item.outcome === 'passed').length;
     const runtimePasses = new Set(recentEvidence.filter(item =>
       item.kind === 'runtime-check' && item.outcome === 'passed').map(item => item.reference)).size;
+    const needsReverification = lastFailure >= 0 && runtimePasses === 0;
     const statusLabel = isCandidate
-      ? '候選 · 未驗證 · 自動試用' + (runtimePasses ? ` · 檢查 ${Math.min(2, runtimePasses)}/2` : '')
+      ? runtimePasses ? '驗證中 · ' + Math.min(2, runtimePasses) + '/2'
+        : needsReverification ? '需重新驗證'
+          : injectedCount ? '已送入 Context · ' + injectedCount + ' 次'
+            : usage.length ? '已匹配 · ' + usage.length + ' 回合'
+              : '等待適合任務'
         : isVerified ? '已確認證據 · 待啟用'
         : skill.status === 'active' && skill.verification?.method === 'runtime-observed'
           ? '已自動啟用 · 兩回合檢查通過'
@@ -48,12 +55,24 @@
       ? 'Runtime 在 ' + (Number(skill.verification.successfulTurns) || 2) + ' 個不同回合觀察到符合此技能驗收類型的檢查命令成功；依實際退出碼判定，不代表檢查內容另經獨立審核。'
       : skill.verification?.method === 'user-attested'
         ? '使用者已確認；不等於 CI 或工具獨立驗證。'
-        : '尚未確認。Dreaming 提案會在匹配任務中安全試用。';
+        : '尚未確認；符合任務才會送入 Context，載入不代表 AI 實際採用。';
     const evidenceKind = kind => kind === 'runtime-check' ? 'Runtime 檢查'
       : ({ test: '測試', ci: 'CI', commit: 'Commit', manual: '手動', failure: '失敗' })[kind] || kind;
     const runtimeCategory = category => ({
       test: '測試', syntax: '語法', lint: 'Lint', typecheck: '型別', build: '建置', diff: '差異'
     })[category] || category;
+    const usageItem = item => {
+      const date = Number.isFinite(item.at) ? new Date(item.at).toLocaleString('zh-TW') : '時間不明';
+      const delivery = item.delivery === 'injected' ? '本回合已送入 Context' : '匹配既有 Context';
+      const result = item.check === 'passed' ? '同回合檢查通過'
+        : item.check === 'failed' ? '同回合檢查失敗' : '尚無可辨識檢查';
+      const categories = (item.categories || []).map(runtimeCategory).join('、');
+      return '<li><b>' + esc(date) + ' · ' + esc(delivery) + '</b>' +
+        '<span>' + esc(result + (categories ? ' · ' + categories : '')) + '</span>' +
+        '<small>Role ' + esc(skill.roleId) + ' · ' + esc(item.providerId) +
+        ' · Conversation ' + esc(item.conversationId) +
+        ' · Turn ' + esc(item.turnId) + '</small></li>';
+    };
     return '<article class="role-dna-card" data-skill-id="' + esc(skill.id) + '">' +
       '<div class="role-dna-row"><strong>' + esc(skill.title) + '</strong>' +
         '<span class="role-dna-badge" data-state="' + esc(skill.status) + '">' +
@@ -75,6 +94,10 @@
           '<small>' + esc(item.note || '') + '</small></li>').join('') +
           '</ul>' : '<p>沒有測試證據。</p>') +
       '</details>' +
+      '<details class="role-dna-usage"><summary>最近使用紀錄 · ' + usage.length + ' 回合</summary>' +
+        '<p>只證明 Skill 被選進模型 Context 或匹配既有 Context；不代表 AI 照步驟執行。檢查結果只代表同回合工具退出碼。</p>' +
+        (usage.length ? '<ol>' + usage.slice(0, 8).map(usageItem).join('') + '</ol>'
+          : '<p>尚無匹配的 Provider 回合紀錄。</p>') + '</details>' +
       (!isRetired ? '<details class="role-dna-form"><summary>記錄測試 / Commit 證據</summary>' +
         '<div class="role-dna-form-fields">' +
           '<label>證據類型<select data-skill-kind>' +
@@ -105,11 +128,11 @@
     const active = skills.filter(skill => skill.status === 'active').length;
     const trial = skills.filter(skill => skill.status === 'candidate').length;
     summary.textContent = skills.length + ' 項技能 · ' + active +
-      ' 已啟用 · ' + trial + ' 自動試用候選';
+      ' 已啟用 · ' + trial + ' 待驗證候選';
     list.innerHTML = skills.length
-      ? '<p class="role-dna-notice">候選會在匹配任務時自動試用。符合技能驗收項目的檢查在不同回合中兩次通過，Runtime 會自動啟用；只計入工具明確回報退出碼的檢查。無法辨識驗收類型或沒有退出碼的情況會繼續試用。其他證據仍可由你確認。</p>' +
+      ? '<p class="role-dna-notice">符合任務時，候選 Skill 會作為選用指引送給模型。最近使用紀錄區分新加入 Context 與既有 Context；不能證明 AI 真正採用。僅在兩個不同回合觀察到符合驗收類型且具有退出碼的成功檢查，才會自動啟用。</p>' +
         skills.map(card).join('')
-      : '<div class="role-dna-empty">尚無技能。Dreaming 整理到可重複的流程時，會提出候選；候選會在匹配任務時自動試用。</div>';
+      : '<div class="role-dna-empty">尚無技能。Dreaming 整理到可重複流程時會提出候選；只有匹配任務才會送進 Context。</div>';
   }
   async function load() {
     if (!roleId) return;

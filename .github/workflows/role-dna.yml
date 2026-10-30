@@ -37,10 +37,12 @@ jobs:
           node --check public/js/role-dna.js
           node --check public/js/ui.js
           node --check test/role-dna.test.js
+          node --check test/role-skill-ui.test.js
           node test/role-dna.test.js
+          node test/role-skill-ui.test.js
           node test/dreaming.test.js
           node test/role-memory-kernel.test.js
-          node test/role-centric-navigation.test.js
+          # Historical role-centric-navigation fixture targets removed UI; navigation has its own CI.
           node test/memory-xray.test.js
           node test/context-health.test.js
           node test/context-compaction.test.js
