@@ -2403,6 +2403,7 @@ async function handleChatTurn(req, res, submittedBody = null) {
     ? [...contextSnapshot.contributions]
     : [];
   let memoryRefreshConsumed = false;
+  let initialRoleSkills = [];
   const currentIdentityFingerprint = roleProjectFingerprint(role, project);
   const currentMemoryRevision = await memoryStoreRevision();
   let nextMemorySignatures = { ...(contextSnapshot?.memorySignatures || {}) };
@@ -2421,6 +2422,7 @@ async function handleChatTurn(req, res, submittedBody = null) {
         currentPrompt: finalPrompt
       });
       roleMemoryContext = formatAgentContext(agentContext);
+      initialRoleSkills = [...(agentContext.roleSkills || [])];
       assembledContextContributions = [...agentContext.contributions];
       nextMemorySignatures = memoryEvidenceSignatures(agentContext.memories);
     } catch (error) {
@@ -2532,6 +2534,7 @@ async function handleChatTurn(req, res, submittedBody = null) {
   // Add newly matched Role skills once per conversation. This also lets an
   // existing conversation trial a candidate when a later user turn matches it.
   let matchedRoleSkills = [];
+  const freshSkillRefs = new Set(initialRoleSkills.map(skill => 'skill:' + skill.id));
   try {
     const skillQuery = [approvedExecutionIntent?.summary, prompt].map(value => String(value || '').trim())
       .filter(Boolean).join('\n');
@@ -2540,6 +2543,7 @@ async function handleChatTurn(req, res, submittedBody = null) {
       .filter(item => item.type === ContextSourceType.SKILL).map(item => item.sourceRef));
     const newlyMatched = matchedRoleSkills.filter(skill => !knownSkillRefs.has('skill:' + skill.id));
     if (newlyMatched.length) {
+      for (const skill of newlyMatched) freshSkillRefs.add('skill:' + skill.id);
       const skillContributions = buildStaticContextContributions({ roleSkills: newlyMatched })
         .filter(item => item.type === ContextSourceType.SKILL);
       assembledContextContributions.push(...skillContributions);
@@ -2551,11 +2555,19 @@ async function handleChatTurn(req, res, submittedBody = null) {
   }
   const contextSkillRefs = new Set(assembledContextContributions
     .filter(item => item.type === ContextSourceType.SKILL).map(item => item.sourceRef));
-  const trialSkillIdsForTurn = matchedRoleSkills
-    .filter(skill => (
-      skill.status === 'candidate' ||
-      (skill.status === 'active' && skill.verification?.method === 'runtime-observed')
-    ) && contextSkillRefs.has('skill:' + skill.id))
+  // The new-conversation builder may inject a Skill before the second lookup.
+  // Track only matches known to be in the provider-bound Context, with a
+  // separate flag for newly injected versus already present in the thread.
+  const contextSkillsForTurn = [...new Map([...initialRoleSkills, ...matchedRoleSkills]
+    .map(skill => [skill.id, skill])).values()]
+    .filter(skill => contextSkillRefs.has('skill:' + skill.id)).slice(0, 4);
+  const skillUsageForTurn = contextSkillsForTurn.map(skill => ({
+    id: skill.id,
+    delivery: freshSkillRefs.has('skill:' + skill.id) ? 'injected' : 'existing'
+  }));
+  const trialSkillIdsForTurn = contextSkillsForTurn
+    .filter(skill => skill.status === 'candidate' ||
+      (skill.status === 'active' && skill.verification?.method === 'runtime-observed'))
     .map(skill => skill.id).slice(0, 1);
 
   if (image_path) {
@@ -2866,6 +2878,15 @@ async function handleChatTurn(req, res, submittedBody = null) {
         markOnce('to_first_event_ms');
         if (event.type === 'session_started') {
           chatTurns.update(requestId, { conversation_id: event.conversationId, accepted: true, status: 'running' });
+          if (event.conversationId && skillUsageForTurn.length) {
+            // Session start confirms a provider turn exists; does not prove
+            // the model followed the Skill, or that any checks passed.
+            void defaultSkillRegistry.recordUsage(
+              role?.id || DEFAULT_ROLE_ID, skillUsageForTurn,
+              { turnId: requestId, conversationId: event.conversationId, providerId }
+            ).catch(error => console.warn('[Role DNA] Usage record failed:',
+              String(error?.message || error).slice(0, 120)));
+          }
           markOnce('to_session_ms');
           activeConversationId = event.conversationId || activeConversationId;
           // A new thread only has an id after its provider starts. Persist here

@@ -65,3 +65,13 @@
 @media (prefers-color-scheme: light) {
   .role-dna-badge[data-state="active"] { color: #047857; }
 }
+
+/* Actual per-turn context delivery; distinct from validation evidence. */
+.role-dna-usage { margin-top: 10px; border-top: 1px solid var(--cp-border, #475569);
+  padding-top: 10px; font-size: 11px; line-height: 1.55; }
+.role-dna-usage summary { cursor: pointer; font-weight: 700; }
+.role-dna-usage > p { margin: 6px 0; color: var(--cp-muted, #94a3b8); }
+.role-dna-usage ol { margin: 7px 0; padding-left: 18px; }
+.role-dna-usage li { margin: 7px 0; overflow-wrap: anywhere; }
+.role-dna-usage li span, .role-dna-usage li small { display: block; margin-top: 3px; }
+.role-dna-usage li small { color: var(--cp-muted, #94a3b8); }

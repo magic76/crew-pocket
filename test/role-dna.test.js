@@ -29,6 +29,52 @@ async function run() {
     await assert.rejects(() => registry.propose('teacher', { title: 'Too short' }, source), /requires/);
     await assert.rejects(() => registry.propose('teacher', example, []), /source/);
 
+    // The usage log is independent of verified evidence; a provider turn
+    // can receive context without proving that the model used the guidance.
+    const usageRegistry = new SkillRegistry({ storagePath: path.join(dir, 'usage.json') });
+    const pending = await usageRegistry.propose('developer', {
+      ...example, checkCategories: ['test']
+    }, ['source-one']);
+    const requestA = 'request-usage-turn-0001';
+    const requestB = 'request-usage-turn-0002';
+    const conv = 'developer-conversation-1';
+    assert.deepEqual(await usageRegistry.recordUsage('developer', [
+      { id: pending.id, delivery: 'injected' }
+    ], { turnId: requestA, conversationId: conv, providerId: 'codex' }), [pending.id]);
+    assert.deepEqual(await usageRegistry.recordUsage('developer', [
+      { id: pending.id, delivery: 'injected' }
+    ], { turnId: requestA, conversationId: conv, providerId: 'codex' }), [],
+      'same provider turn cannot inflate usage');
+    assert.deepEqual(await usageRegistry.recordUsage('other', [
+      { id: pending.id, delivery: 'injected' }
+    ], { turnId: requestB, conversationId: 'private', providerId: 'codex' }), [],
+      'another Role cannot attach usage to the skill');
+    assert.equal((await usageRegistry.list('developer')).skills[0].usage.length, 1);
+    assert.equal((await usageRegistry.list('developer')).skills[0].status, 'candidate');
+    assert.equal((await usageRegistry.list('developer')).skills[0].evidence.length, 0);
+    await usageRegistry.recordRuntimeCheck('developer', [pending.id], {
+      turnId: requestA, checks: [{ category: 'test', outcome: 'passed' }]
+    });
+    assert.equal((await usageRegistry.list('developer')).skills[0].usage[0].check, 'passed');
+    assert.equal((await usageRegistry.list('developer')).skills[0].status, 'candidate',
+      'one successful check cannot auto-activate');
+    await usageRegistry.recordUsage('developer', [
+      { id: pending.id, delivery: 'existing' }
+    ], { turnId: requestB, conversationId: conv, providerId: 'codex' });
+    await usageRegistry.recordRuntimeCheck('developer', [pending.id], {
+      turnId: requestB, checks: [{ category: 'test', outcome: 'passed' }]
+    });
+    const promoted = (await usageRegistry.list('developer')).skills[0];
+    assert.equal(promoted.status, 'active', 'two different turn checks auto-activate');
+    assert.equal(promoted.usage.length, 2);
+    assert.equal(promoted.usage[1].delivery, 'existing');
+    assert.equal(promoted.usage[1].check, 'passed');
+    assert.equal((await new SkillRegistry({ storagePath: path.join(dir, 'usage.json') })
+      .list('developer')).skills[0].usage.length, 2, 'usage survives a restart');
+    assert.equal((await usageRegistry.list('other')).skills.length, 0);
+    assert.match(file('server.js'), /defaultSkillRegistry\.recordUsage\(/);
+    assert.match(file('public/js/role-dna.js'), /最近使用紀錄/);
+
     const skill = await registry.propose('teacher', example, source);
     assert.equal(skill.status, 'candidate');
     assert.equal(skill.sourceConversationIds[0], source[0]);
