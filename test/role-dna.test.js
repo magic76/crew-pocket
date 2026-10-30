@@ -119,7 +119,7 @@ async function run() {
     const contribution = context.contributions.find(hit => hit.type === ContextSourceType.SKILL);
     assert.ok(contribution && contribution.sourceRef === 'skill:' + skill.id);
     assert.ok(formatAgentContext(context).includes('user-attested'));
-    assert.match(skillContext(skill), /NOT independently test-verified/);
+    assert.match(skillContext(active), /NOT independently test-verified/);
     const unrelated = await buildAgentContext({
       roleId: 'teacher', currentPrompt: 'Refactor postgres migrations',
       skillRegistry: registry,
