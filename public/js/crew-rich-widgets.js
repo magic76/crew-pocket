@@ -196,7 +196,7 @@
   function mount(pre, spec, context, fillComposer) {
     if (!pre || !spec || !['chart', 'scenario', 'calculator'].includes(spec.type)) return false;
     const widget = document.createElement('section');
-    widget.className = 'crew-interactive crew-rich-widget';
+    widget.className = 'crew-interactive crew-rich-widget crew-reply-revealed';
     widget.dataset.crewInteractive = spec.type;
     widget.setAttribute('aria-label', spec.title);
     widget.innerHTML = widgetHtml(spec);
