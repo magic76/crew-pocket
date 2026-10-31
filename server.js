@@ -110,6 +110,7 @@ const { normalizeExecutionIntent } = require('./lib/execution-intent');
 const { getDefaultModel } = require('./lib/model-runtime');
 const { buildTurnResult, normalizeResultStatus } = require('./lib/turn-result');
 const { saveExecutionFeedback, enrichExecutionHistory } = require('./lib/execution-feedback');
+const { defaultToolImprovementStore } = require('./lib/tool-improvement/store');
 const { renderVisualAnswer } = require('./lib/visual-answer');
 const { createSocialAccounts } = require('./lib/social-accounts');
 const { createSocialDraftGenerator } = require('./lib/social-draft');
@@ -1824,6 +1825,36 @@ async function handleImageProxy(parsedUrl, res) {
   }
 }
 
+// The API is read-only except for explicit rejection. No promotion endpoint.
+// Offline evaluation requires a locally trusted replay runner and pinned tool versions.
+async function handleToolImprovements(req, res, pathname) {
+  const json = (status, body) => {
+    res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+    return res.end(JSON.stringify(body));
+  };
+  try {
+    if (pathname === '/api/tool-improvements' && req.method === 'GET') {
+      return json(200, { candidates: await defaultToolImprovementStore.list() });
+    }
+    const match = pathname.match(/^\/api\/tool-improvements\/(tool-improvement-[a-f0-9]{24})(?:\/(evaluate|reject))?$/);
+    if (!match) return json(404, { error: 'Tool improvement endpoint not found' });
+    const candidate = await defaultToolImprovementStore.get(match[1]);
+    if (!candidate) return json(404, { error: 'Candidate not found' });
+    if (req.method === 'GET' && !match[2]) return json(200, { candidate });
+    if (req.method === 'POST' && match[2] === 'reject') {
+      return json(200, { candidate: await defaultToolImprovementStore.reject(match[1]) });
+    }
+    if (req.method === 'POST' && match[2] === 'evaluate') {
+      return json(422, { candidateId: candidate.id, verdict: 'insufficient-data',
+        reason: 'No trusted offline historical replay runner is configured. No evaluation or validation was recorded.' });
+    }
+    return json(405, { error: 'Method not allowed' });
+  } catch (error) {
+    console.warn('[Tool Improvements] API error:', error.message);
+    return json(500, { error: 'Tool improvement request failed' });
+  }
+}
+
 // 📷 Safe Image Upload Handler
 async function handleUpload(req, res) {
   try {
@@ -2681,14 +2712,37 @@ async function handleChatTurn(req, res, submittedBody = null) {
       toolEventCount += 1;
       const info = event.info || {};
       const effectiveState = info.error || (Number.isInteger(info.exitCode) && info.exitCode !== 0) ? 'failed' : state;
+      if (isFailedToolState(effectiveState)) {
+        run.hadFailure = true;
+        if (typeof info.error === 'string') run.failureError = info.error.slice(0, 4000);
+      }
       if (state === 'running') runtimeSkillChecks.delete(key);
       const runtimeCheck = runtimeCheckResult(event);
       if (runtimeCheck) runtimeSkillChecks.set(key, runtimeCheck);
+      const toolOutput = typeof info.output === 'string' ? info.output :
+        typeof info.aggregatedOutput === 'string' ? info.aggregatedOutput : '';
+      const errorCode = info.error_code || info.errorCode ||
+        (Number.isInteger(info.exitCode) && info.exitCode !== 0 &&
+        /(?:npm (?:ERR!|error)\s+)?Missing script:/i.test(toolOutput) ? 'SCRIPT_NOT_FOUND' : null);
+      if (isFailedToolState(effectiveState) && errorCode) run.failureCode = errorCode;
       feedbackTools.set(key, {
         tool_group_id: key,
         tool_name: event.name || event.tool_name,
         state: effectiveState,
-        tool_info: { parameters: info.parameters, exitCode: info.exitCode, error: info.error },
+        had_failure: run.hadFailure === true,
+        tool_info: {
+          parameters: info.parameters, exitCode: info.exitCode,
+          error: info.error || run.failureError || null,
+          // Only retain bounded deterministic metadata; never copy raw output.
+          error_code: errorCode || run.failureCode || null,
+          root_cause: info.root_cause,
+          schema_invalid: info.schema_invalid === true,
+          selection_mismatch: info.selection_mismatch === true,
+          output_bytes: Number.isSafeInteger(info.output_bytes) ? info.output_bytes :
+            (toolOutput ? Buffer.byteLength(toolOutput) : null),
+          reread_count: Number.isSafeInteger(info.reread_count) ? info.reread_count : null,
+          tool_hash: /^[a-f0-9]{64}$/i.test(String(info.tool_hash || '')) ? info.tool_hash : null
+        },
         duration_seconds: event.durationSeconds,
         attempts: run.attempts,
         poll_count: run.pollCount
@@ -2766,7 +2820,14 @@ async function handleChatTurn(req, res, submittedBody = null) {
         durationMs: terminalRecord.result.duration_ms,
         turnResult,
         tools: [...feedbackTools.values()]
-      })).catch(error => console.warn('[Execution Feedback] Save failed:', error.message)).finally(() => {
+      })).then(() => defaultToolImprovementStore.observeTurn({
+        request_id: requestId,
+        conversation_id: finalPayload.conversation_id || activeConversationId,
+        provider: providerId, status: finalPayload.status,
+        failureAttribution: finalPayload.failureAttribution || null,
+        elapsed_ms: terminalRecord.result.duration_ms,
+        tools: [...feedbackTools.values()]
+      })).catch(error => console.warn('[Execution Feedback / Tool Improvement] Save failed:', error.message)).finally(() => {
         console.log('[TurnPersistence] ' + JSON.stringify({ request_id: requestId, at: Date.now(),
           feedback_settled_ms: elapsed() }));
         if (!finalPayload.error && (finalPayload.conversation_id || activeConversationId)) {
@@ -2987,6 +3048,7 @@ async function handleChatTurn(req, res, submittedBody = null) {
           }
           broadcastCrewStatusEvent('turn-error', role?.id || null);
           finish({ error: event.message, error_code: event.errorCode, response: event.response,
+            failureAttribution: event.failureAttribution,
             status: event.status || 'failed', provider: providerId,
             conversation_id: event.conversationId || activeConversationId || conversation_id });
           if (role?.id) {
@@ -3017,7 +3079,8 @@ async function handleChatTurn(req, res, submittedBody = null) {
             error: event.error,
             conversation_id: event.conversationId,
             provider: providerId,
-            status: event.status
+            status: event.status,
+            failureAttribution: event.failureAttribution
           });
           if (role?.id) {
             setImmediate(() => crewAutoResponder.drain(role.id)
@@ -3889,6 +3952,8 @@ const server = http.createServer(async (req, res) => {
     return handleRoleMemoryInspect(parsedUrl, res);
   } else if (pathname === '/api/memories' && ['GET', 'POST', 'DELETE'].includes(req.method)) {
     return handleMemories(req, res, parsedUrl);
+  } else if (pathname === '/api/tool-improvements' || pathname.startsWith('/api/tool-improvements/')) {
+    return handleToolImprovements(req, res, pathname);
   } else if (pathname === '/api/role-skills' && ['GET', 'POST'].includes(req.method)) {
     return handleRoleSkills(req, res, parsedUrl);
   } else if (pathname === '/api/dreaming' && ['GET', 'POST'].includes(req.method)) {
