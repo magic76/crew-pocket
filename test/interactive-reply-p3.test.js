@@ -67,7 +67,7 @@ for (const option of options) {
 assert.equal(presentationKind('比較方案 A 和 B', { executionMode: 'INSPECT' }), 'scenario');
 assert.equal(presentationKind('比較方案 A 和 B', { executionMode: 'CHAT' }), 'scenario');
 assert.equal(presentationKind('比較方案 A 和 B', { executionMode: '' }), 'scenario');
-assert.equal(presentationKind('比較'.repeat(1000)), null, 'no hint for oversized user input');
+assert.equal(presentationKind('比較'.repeat(1600)), null, 'no hint for oversized user input');
 
 const created = [];
 const originalDocument = global.document;
