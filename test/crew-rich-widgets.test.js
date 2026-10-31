@@ -119,7 +119,14 @@ function prepare(kind) {
     requests.push(message);
     return true;
   };
-  const accepted = rich.mount(pre, rich.normalizeSpec(kind), context, fill);
+  const originalCreate = global.document.createElement;
+  global.document.createElement = () => node;
+  let accepted;
+  try {
+    accepted = rich.mount(pre, rich.normalizeSpec(kind), context, fill);
+  } finally {
+    global.document.createElement = originalCreate;
+  }
   assert.equal(accepted, true);
   assert.equal(pre.replacement, node);
   return { node, tabNodes, panel, apply, slider, inputValue, outputValue, requests };
