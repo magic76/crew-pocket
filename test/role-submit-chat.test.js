@@ -24,6 +24,7 @@ const sandbox = {
   resolveWorkspace: async candidate => candidate,
   normalizeProviderId: id => id, getDefaultModel: () => 'default-model',
   prepareTurnExecution: async () => ({}),
+  buildInteractiveReplyGuide: require('../lib/interactive-reply-guide').buildInteractiveReplyGuide,
   getCrewInbox: async () => [], markCrewMessagesDelivered: async () => {},
   getContextSnapshot: async (providerId, id) => { contextReads.push([providerId, id]); return { crewToolGuideVersion: 1 }; },
   roleProjectFingerprint: () => 'target-fingerprint', memoryStoreRevision: async () => 'target-revision',
