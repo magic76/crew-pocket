@@ -160,6 +160,9 @@ jobs:
           node test/visual-answer.test.js
           node --check test/visual-answer-inline.test.js
           node test/visual-answer-inline.test.js
+          node --check public/js/crew-interactive.js
+          node --check test/crew-interactive.test.js
+          node test/crew-interactive.test.js
           node --check test/ui-theme-design.test.js
           node test/ui-theme-design.test.js
           node --check public/js/cockpit-model.js
