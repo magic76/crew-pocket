@@ -1,0 +1,82 @@
+/* Native reply controls live in the original message flow, not a second reader. */
+.assistant-article .crew-interactive {
+  min-width: 0; margin: 12px 0;
+  border: 1px solid var(--cp-border, #334155);
+  border-radius: 14px; padding: 12px;
+  color: var(--cp-text, #f1f5f9);
+  background: var(--cp-surface-2, #1e293b);
+  font-size: 13px; line-height: 1.5;
+}
+.assistant-article .crew-interactive-heading {
+  display: flex; justify-content: space-between; align-items: baseline;
+  flex-wrap: wrap; gap: 7px;
+}
+.assistant-article .crew-interactive-heading strong { font-size: 14px; color: var(--cp-text, #f1f5f9); }
+.assistant-article .crew-interactive-heading span { color: var(--cp-muted, #94a3b8); font-size: 10px; }
+.assistant-article .crew-interactive-question {
+  margin: 6px 0 10px; color: var(--cp-text-secondary, #cbd5e1);
+  overflow-wrap: anywhere;
+}
+.assistant-article .crew-interactive-options { display: grid; gap: 7px; margin: 11px 0; }
+.assistant-article .crew-interactive-option {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 10px; min-height: 44px; cursor: pointer;
+  border-radius: 10px; border: 1px solid var(--cp-border, #334155);
+  background: var(--cp-surface, #0f172a);
+  color: var(--cp-text-secondary, #cbd5e1);
+}
+.assistant-article .crew-interactive-option:has(input:checked) {
+  border-color: var(--cp-accent, #14b8a6);
+  background: var(--cp-accent-soft, rgba(20, 184, 166, .11));
+  color: var(--cp-text, #f1f5f9);
+}
+.assistant-article .crew-interactive-option input {
+  flex: none; width: 17px; height: 17px; margin: 1px 0 0;
+  accent-color: var(--cp-accent, #14b8a6);
+}
+.assistant-article .crew-interactive-option span { overflow-wrap: anywhere; }
+.assistant-article .crew-interactive-actions {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 10px;
+  margin-top: 12px;
+}
+.assistant-article .crew-interactive-actions button {
+  min-height: 42px; padding: 9px 14px; border-radius: 10px;
+  color: var(--cp-text, #fff); background: var(--cp-accent, #0d9488);
+  border: 1px solid var(--cp-accent, #0d9488);
+  font-size: 12px; font-weight: 700; cursor: pointer;
+}
+.assistant-article .crew-interactive-actions button:focus-visible,
+.assistant-article .crew-interactive-followup:focus-visible {
+  outline: 2px solid var(--cp-accent, #14b8a6); outline-offset: 3px;
+}
+.assistant-article .crew-interactive-footnote,
+.assistant-article .crew-interactive-feedback { color: var(--cp-muted, #94a3b8); font-size: 11px; }
+.assistant-article .crew-interactive-feedback:empty { display: none; }
+.assistant-article .crew-interactive-feedback { margin: 5px 0 0; }
+.assistant-article .crew-interactive-metrics {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(85px, 1fr));
+  gap: 8px; margin-top: 10px;
+}
+.assistant-article .crew-interactive-metric {
+  display: flex; flex-direction: column; min-width: 0; gap: 4px;
+  background: var(--cp-surface, #0f172a);
+  border: 1px solid var(--cp-border, #334155);
+  border-radius: 10px; padding: 10px;
+}
+.assistant-article .crew-interactive-metric strong {
+  color: var(--cp-text, #f1f5f9);
+  font-variant-numeric: tabular-nums; font-size: 19px;
+  overflow-wrap: anywhere;
+}
+.assistant-article .crew-interactive-metric span { color: var(--cp-muted, #94a3b8); font-size: 11px; }
+.assistant-article .crew-interactive-followup {
+  min-height: 34px; border: 1px solid var(--cp-border, #334155);
+  color: var(--cp-text-secondary, #cbd5e1);
+  border-radius: 8px; padding: 5px 10px;
+  font-size: 11px; cursor: pointer; background: transparent;
+  margin: 0 0 8px;
+}
+@media (max-width: 420px) {
+  .assistant-article .crew-interactive { padding: 10px; }
+  .assistant-article .crew-interactive-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
