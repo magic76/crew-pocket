@@ -1,4 +1,4 @@
-# Crew Pocket · Inline Interactive Replies (P0 / P1)
+# Crew Pocket · Inline Interactive Replies (P0 / P1 / P2)
 
 The existing Role-owned Markdown transcript remains the single source of truth.
 This feature adds **native UI inside completed assistant messages** without generating
@@ -31,6 +31,37 @@ actions when its **actual** rendered Markdown has an unambiguous structure:
 
 Implementation: `public/js/crew-reply-discovery.js` with
 `test/crew-reply-discovery.test.js`; loaded before `crew-interactive.js`.
+
+## P2: Visual data and live parameters
+
+The same `crew-ui` code fence now supports **three more allowlisted types**:
+
+- `chart`: 2–10 points, `kind: "bar"` or `"line"`, numeric values 0–1e9.
+  Responsive native bars/SVG, with a collapsible numeric data table.
+- `scenario`: 2–4 tabs. Each has a description and up to four comparison facts.
+  Switching tabs is immediate and local; “以此方案繼續” only fills a draft.
+- `calculator`: a single bounded range input with a deterministic **linear**
+  formula `base + (selectedValue - initialValue) * perUnit`. The supplied
+  assumption is prominently shown as a **model assumption**, not a verified
+  forecast. “用這個數值繼續” fills a draft including the assumption.
+
+All charts and calculations show **AI 回覆資料 · 未驗證**. The widget never
+uses `eval`, model-authored script, chart plugins, network requests, or a
+second transcript. Manual device QA is still required.
+
+The following single-line JSON objects are examples for fenced `crew-ui` blocks:
+
+    {"version":1,"type":"chart","title":"延遲比較","kind":"bar","unit":"ms","items":[{"label":"舊版","value":85},{"label":"新版","value":42}]}
+
+    {"version":1,"type":"scenario","title":"部署方案","options":[{"label":"穩健","description":"維持既有部署流程","facts":[{"label":"變更範圍","value":"小"}]},{"label":"快速","description":"簡化部署流程","facts":[{"label":"變更範圍","value":"中"}]}]}
+
+    {"version":1,"type":"calculator","title":"費用示意","assumption":"每增加一單位，加收 12 元；僅供估算","input":{"label":"使用量","min":10,"max":100,"step":10,"value":30,"unit":"次"},"output":{"label":"費用","base":360,"perUnit":12,"unit":"元","precision":0}}
+
+Implementation is `public/js/crew-rich-widgets.js` and
+`public/css/crew-rich-widgets.css` with `test/crew-rich-widgets.test.js`.
+Invalid data stays in its code fence rather than being rendered.
+Unlike P1's conservative Markdown inference, P2 charts/calculators are
+**explicitly requested via data** and are never guessed from ordinary prose.
 
 ## Opt-in structured widget format
 
@@ -69,6 +100,9 @@ trusted `turn_result` through the existing Living UI renderer.
 
 ## Verification
 
+    node --check public/js/crew-rich-widgets.js
+    node --check test/crew-rich-widgets.test.js
+    node test/crew-rich-widgets.test.js
     node --check public/js/crew-reply-discovery.js
     node --check test/crew-reply-discovery.test.js
     node test/crew-reply-discovery.test.js
