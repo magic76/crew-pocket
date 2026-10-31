@@ -1,5 +1,13 @@
 // Antigravity Web UI - Chat Messaging, SSE Streaming, and History Management
 
+// Inline reply controls can only draft into the Role/conversation that produced them.
+window.crewInteractiveContextMatches = function (context = {}) {
+  if (context.roleId && context.roleId !== window.getCurrentRoleId?.()) return false;
+  if (context.provider && context.provider !== currentProvider) return false;
+  if (context.conversationId && context.conversationId !== currentConversationId) return false;
+  return true;
+};
+
 // Configure marked.js to render all Markdown links with target="_blank" and rel="noopener noreferrer"
 if (typeof marked !== 'undefined' && marked.use) {
   marked.use({
