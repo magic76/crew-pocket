@@ -35,6 +35,7 @@ async function run() {
   const person = visual.portraitMarkup(role);
   assert.equal(person, visual.portraitMarkup(role), 'Role portrait must remain stable across re-renders');
   assert.match(person, /shape-rendering="crispEdges"/);
+  assert.match(person, /viewBox="0 0 48 48"/, 'Roster uses the new chibi grid');
   assert.match(person, /crew-pixel-hand/);
   assert.doesNotMatch(person, /Private|<script>|http:|https:/, 'never embed untrusted labels or external sprites');
   const distinct = new Set(['helper', 'story', 'teacher', 'fortune'].map(id =>

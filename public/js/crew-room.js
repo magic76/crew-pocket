@@ -66,58 +66,153 @@
     };
   }
 
-  // Compact, detailed busts remain legible at 29px in the mobile chat header.
-  // Role ID keeps auto-generated attributes deterministic across reloads.
+  // 48×48 chibi portrait. The larger grid improves facial details while
+  // deliberately keeping bold 2–4px shapes for 29px mobile header rendering.
+  // Rendering remains deterministic and uses only allowlisted colors/options.
   function portraitMarkup(role) {
     const a = resolvedAvatar(role);
     const p = PALETTES[a.palette];
-    const skinShade = a.face === 2 ? '#a66b57' : '#9b624b';
+    const shade = ['#d9977c', '#a76d58', '#c78b72', '#945c48', '#d5a88c', '#b87e63'][a.palette];
+    const blush = ['#e89f99', '#ad7069', '#e39a93', '#a96365', '#e9b0a3', '#c98783'][a.palette];
+    const shine = ['#ffe0c0', '#e0a17d', '#ffd6b2', '#d39d78', '#ffebd1', '#efba98'][a.palette];
+    const line = '#27354d';
     const parts = [
-      '<svg class="crew-role-sprite" viewBox="0 0 32 32" width="40" height="40" shape-rendering="crispEdges" aria-hidden="true" focusable="false" data-avatar-outfit="' + a.outfit + '" data-avatar-accessory="' + a.accessory + '">',
-      rect(6, 30, 20, 2, '#45526b'),
-      rect(12, 21, 8, 6, p.skin),
-      rect(6, 25, 20, 7, p.coat),
-      rect(3, 28, 6, 4, p.coat),
-      rect(23, 28, 6, 4, p.coat),
-      rect(4, 30, 3, 2, p.skin, 'crew-pixel-hand'),
-      rect(25, 30, 3, 2, p.skin, 'crew-pixel-hand'),
-      rect(9, 24, 14, 2, p.accent),
-      rect(10, 9, 12, 12, p.skin)
+      '<svg class="crew-role-sprite" viewBox="0 0 48 48" width="48" height="48" shape-rendering="crispEdges" aria-hidden="true" focusable="false" data-avatar-outfit="' + a.outfit + '" data-avatar-accessory="' + a.accessory + '">',
+      // Rounded, short torso and tiny hands: head occupies ~60% of portrait.
+      rect(12, 46, 24, 2, '#47546b'),
+      rect(9, 39, 30, 9, p.coat),
+      rect(6, 42, 8, 6, p.coat),
+      rect(34, 42, 8, 6, p.coat),
+      rect(7, 45, 5, 3, p.skin, 'crew-pixel-hand'),
+      rect(36, 45, 5, 3, p.skin, 'crew-pixel-hand'),
+      rect(19, 33, 10, 7, shade),
+      rect(20, 33, 8, 5, p.skin),
+      rect(15, 37, 18, 4, p.accent)
     ];
-    if (a.face === 0) parts.push(rect(9, 12, 2, 7, p.skin), rect(21, 12, 2, 7, p.skin));
-    if (a.face === 1) parts.push(rect(8, 12, 3, 9, p.skin), rect(21, 12, 3, 9, p.skin));
-    if (a.face === 2) parts.push(rect(11, 20, 10, 3, p.skin), rect(9, 12, 2, 7, p.skin), rect(21, 12, 2, 7, p.skin));
-    parts.push(
-      rect(9, 18, 2, 3, skinShade), rect(21, 18, 2, 3, skinShade),
-      rect(13, 16, 2, 2, '#253046', 'crew-avatar-eye'),
-      rect(19, 16, 2, 2, '#253046', 'crew-avatar-eye'),
-      rect(15, 21, 3, 1, '#9f5a58')
+
+    // Long hair falls behind the head instead of hiding the big eyes.
+    if (a.hair === 3) parts.push(
+      rect(9, 12, 30, 25, p.hair), rect(8, 20, 6, 20, p.hair),
+      rect(34, 20, 6, 20, p.hair), rect(10, 36, 5, 5, p.hair),
+      rect(33, 36, 5, 5, p.hair)
     );
-    // Six visibly different silhouettes, rather than recolors of one haircut.
-    if (a.hair === 0) parts.push(rect(8, 6, 16, 5, p.hair), rect(8, 10, 3, 5, p.hair));
-    if (a.hair === 1) parts.push(rect(8, 7, 16, 4, p.hair), rect(10, 5, 9, 3, p.hair), rect(22, 9, 3, 7, p.hair));
-    if (a.hair === 2) parts.push(rect(9, 8, 14, 3, p.hair), rect(12, 6, 9, 3, p.hair), rect(8, 11, 3, 7, p.hair));
-    if (a.hair === 3) parts.push(rect(8, 7, 16, 5, p.hair), rect(7, 11, 3, 12, p.hair), rect(22, 11, 3, 12, p.hair));
-    if (a.hair === 4) parts.push(rect(9, 9, 14, 2, p.hair), rect(12, 7, 8, 2, p.hair));
-    if (a.hair === 5) parts.push(rect(7, 8, 18, 4, p.hair), rect(9, 5, 5, 4, p.hair), rect(17, 5, 6, 4, p.hair), rect(23, 11, 2, 5, p.hair));
-    if (a.outfit === 'engineer') parts.push(rect(15, 26, 2, 6, '#27384f'), rect(11, 27, 2, 2, p.accent));
-    if (a.outfit === 'researcher') parts.push(rect(9, 25, 4, 7, '#eff1e5'), rect(19, 25, 4, 7, '#eff1e5'), rect(15, 27, 2, 4, '#4c8098'));
-    if (a.outfit === 'planner') parts.push(rect(12, 26, 3, 6, '#29344f'), rect(18, 26, 3, 6, '#29344f'), rect(15, 26, 3, 4, '#dcb673'));
-    if (a.outfit === 'designer') parts.push(rect(9, 28, 4, 2, '#f3c36d'), rect(20, 26, 3, 5, '#a9dbdd'));
-    if (a.outfit === 'assistant') parts.push(rect(13, 27, 6, 2, p.accent), rect(14, 30, 4, 1, '#37465e'));
-    if (a.outfit === 'explorer') parts.push(rect(10, 26, 12, 2, '#745341'), rect(15, 26, 2, 6, '#e0bb70'));
+
+    // Face silhouettes are distinct: round / square / tapered.
+    if (a.face === 0) parts.push(
+      rect(14, 10, 20, 27, shade, 'crew-avatar-face'),
+      rect(11, 14, 26, 19, shade),
+      rect(13, 11, 22, 24, p.skin),
+      rect(12, 16, 24, 16, p.skin),
+      rect(16, 35, 16, 2, p.skin)
+    );
+    if (a.face === 1) parts.push(
+      rect(11, 11, 26, 25, shade, 'crew-avatar-face'),
+      rect(12, 10, 24, 24, p.skin),
+      rect(12, 30, 24, 5, p.skin),
+      rect(14, 35, 20, 2, shade)
+    );
+    if (a.face === 2) parts.push(
+      rect(12, 12, 24, 21, shade, 'crew-avatar-face'),
+      rect(14, 31, 20, 4, shade),
+      rect(13, 12, 22, 19, p.skin),
+      rect(15, 30, 18, 4, p.skin),
+      rect(18, 34, 12, 3, p.skin)
+    );
+
+    // Little ears, big expressive eyes, pastel cheek pixels and small mouth.
+    parts.push(
+      rect(9, 23, 3, 6, p.skin), rect(36, 23, 3, 6, p.skin),
+      rect(13, 28, 4, 2, blush),
+      rect(31, 28, 4, 2, blush),
+      rect(17, 22, 4, 5, line, 'crew-avatar-eye'),
+      rect(27, 22, 4, 5, line, 'crew-avatar-eye'),
+      rect(18, 22, 1, 2, '#ffffff'),
+      rect(28, 22, 1, 2, '#ffffff'),
+      rect(22, 31, 4, 1, '#a55e67'),
+      rect(20, 17, 8, 1, shine)
+    );
+
+    // Six expressive silhouettes; wider crowns and larger bangs read at 32px.
+    if (a.hair === 0) parts.push(
+      rect(11, 8, 26, 7, p.hair), rect(14, 6, 19, 4, p.hair),
+      rect(10, 13, 5, 9, p.hair), rect(33, 13, 5, 7, p.hair),
+      rect(15, 14, 11, 5, p.hair), rect(15, 7, 11, 2, p.accent)
+    );
+    if (a.hair === 1) parts.push(
+      rect(11, 9, 27, 6, p.hair), rect(15, 6, 21, 5, p.hair),
+      rect(10, 13, 5, 9, p.hair), rect(31, 13, 7, 5, p.hair),
+      rect(15, 14, 18, 4, p.hair), rect(15, 9, 9, 2, p.accent)
+    );
+    if (a.hair === 2) parts.push(
+      rect(10, 8, 28, 7, p.hair), rect(13, 5, 8, 6, p.hair),
+      rect(23, 5, 10, 6, p.hair), rect(8, 12, 7, 10, p.hair),
+      rect(33, 12, 7, 9, p.hair), rect(14, 14, 16, 4, p.hair),
+      rect(16, 7, 4, 2, p.accent)
+    );
+    if (a.hair === 3) parts.push(
+      rect(11, 8, 26, 8, p.hair), rect(14, 6, 20, 5, p.hair),
+      rect(10, 13, 6, 10, p.hair), rect(32, 13, 6, 10, p.hair),
+      rect(15, 14, 10, 5, p.hair), rect(17, 8, 7, 2, p.accent)
+    );
+    if (a.hair === 4) parts.push(
+      rect(14, 10, 20, 4, p.hair), rect(17, 8, 14, 3, p.hair),
+      rect(12, 14, 3, 5, p.hair), rect(33, 14, 3, 5, p.hair),
+      rect(18, 9, 8, 1, p.accent)
+    );
+    if (a.hair === 5) parts.push(
+      rect(10, 9, 28, 7, p.hair), rect(10, 5, 9, 8, p.hair),
+      rect(20, 4, 10, 9, p.hair), rect(31, 6, 9, 9, p.hair),
+      rect(8, 13, 7, 10, p.hair), rect(34, 13, 7, 10, p.hair),
+      rect(18, 13, 8, 6, p.hair), rect(21, 6, 5, 2, p.accent)
+    );
+
+    // Professional identity is visible from the collar/chest, not just hue.
+    if (a.outfit === 'engineer') parts.push(
+      rect(15, 39, 18, 3, '#35455e'), rect(21, 41, 6, 7, '#28374c'),
+      rect(13, 42, 5, 5, p.accent), rect(15, 43, 2, 2, '#ffffff')
+    );
+    if (a.outfit === 'researcher') parts.push(
+      rect(12, 39, 9, 9, '#f1f5ef'), rect(27, 39, 9, 9, '#f1f5ef'),
+      rect(21, 40, 6, 8, '#4d869c'),
+      rect(14, 42, 4, 2, '#9dc6cb'), rect(29, 42, 4, 2, '#9dc6cb')
+    );
+    if (a.outfit === 'planner') parts.push(
+      rect(15, 39, 18, 3, '#34445e'), rect(22, 40, 4, 8, '#efbf73'),
+      rect(21, 40, 6, 2, '#fff1c8'), rect(32, 43, 3, 3, '#f5d384')
+    );
+    if (a.outfit === 'designer') parts.push(
+      rect(13, 40, 22, 3, '#f3bd81'), rect(15, 43, 6, 4, '#f2a65f'),
+      rect(29, 42, 4, 6, '#a8e3e8'), rect(31, 40, 2, 4, '#f9d58d')
+    );
+    if (a.outfit === 'assistant') parts.push(
+      rect(18, 40, 12, 3, p.accent), rect(21, 44, 6, 3, '#3c506b'),
+      rect(23, 43, 2, 2, '#ffffff')
+    );
+    if (a.outfit === 'explorer') parts.push(
+      rect(12, 40, 24, 3, '#be985a'), rect(15, 39, 5, 9, '#7d5e42'),
+      rect(30, 39, 5, 9, '#7d5e42'), rect(23, 44, 4, 4, '#e8c877')
+    );
+
+    // Accessories sit on top and are intentionally chunky for mobile use.
     if (a.accessory === 'glasses') parts.push(
-      rect(11, 15, 6, 1, '#394458'), rect(18, 15, 5, 1, '#394458'), rect(16, 16, 3, 1, '#394458')
+      rect(14, 21, 10, 2, '#33445c'), rect(25, 21, 10, 2, '#33445c'),
+      rect(14, 23, 2, 5, '#33445c'), rect(22, 23, 2, 5, '#33445c'),
+      rect(25, 23, 2, 5, '#33445c'), rect(33, 23, 2, 5, '#33445c'),
+      rect(23, 22, 3, 2, '#33445c')
     );
     if (a.accessory === 'headphones') parts.push(
-      rect(7, 10, 2, 10, '#35465e'), rect(23, 10, 2, 10, '#35465e'),
-      rect(9, 5, 14, 2, '#35465e'), rect(6, 15, 3, 5, p.accent), rect(23, 15, 3, 5, p.accent)
+      rect(8, 13, 4, 14, line), rect(36, 13, 4, 14, line),
+      rect(11, 6, 26, 3, line), rect(7, 19, 5, 9, p.accent),
+      rect(36, 19, 5, 9, p.accent), rect(9, 21, 2, 5, '#ffffff'),
+      rect(37, 21, 2, 5, '#ffffff')
     );
     if (a.accessory === 'cap') parts.push(
-      rect(8, 5, 16, 5, p.coat), rect(7, 9, 19, 2, p.accent)
+      rect(10, 7, 28, 7, p.coat), rect(14, 4, 20, 4, p.coat),
+      rect(8, 13, 32, 3, p.accent), rect(17, 8, 12, 2, p.accent)
     );
     if (a.accessory === 'earpiece') parts.push(
-      rect(23, 16, 3, 4, '#344153'), rect(23, 21, 2, 1, p.accent)
+      rect(37, 22, 5, 7, line), rect(39, 24, 3, 3, p.accent),
+      rect(35, 30, 5, 2, line), rect(33, 31, 3, 2, p.accent)
     );
     parts.push('</svg>');
     return parts.join('');

@@ -8,6 +8,29 @@ const { portraitMarkup, resolvedAvatar } = require('../public/js/crew-room');
 async function run() {
   const engineer = { id: 'role-engineer', name: 'Pocket Developer', projectId: 'project-pocket' };
   const first = portraitMarkup(engineer);
+  assert.match(first, /viewBox="0 0 48 48"/, 'Q portrait should have 48x48 logical pixels');
+  assert.match(first, /class="crew-avatar-face"/, 'Face must be a distinct chibi silhouette');
+  assert.match(first, /class="crew-avatar-eye"/, 'Large eyes retain blinking hook');
+  assert.match(first, /class="crew-pixel-hand"/, 'Existing Crew Room contract remains intact');
+  for (let hair = 0; hair < 6; hair++) {
+    assert.match(portraitMarkup({ ...engineer, avatar: { hair: String(hair) } }), /viewBox="0 0 48 48"/);
+  }
+  const hairSprites = new Set(Array.from({ length: 6 }, (_, hair) =>
+    portraitMarkup({ ...engineer, avatar: { hair: String(hair), accessory: 'none' } })));
+  assert.equal(hairSprites.size, 6, 'All six hairstyles should be visually distinct');
+  const faceSprites = new Set(Array.from({ length: 3 }, (_, face) =>
+    portraitMarkup({ ...engineer, avatar: { face: String(face), accessory: 'none' } })));
+  assert.equal(faceSprites.size, 3, 'All three face silhouettes should differ');
+  const outfitSprites = new Set(['engineer','researcher','planner','designer','assistant','explorer']
+    .map(outfit => portraitMarkup({ ...engineer, avatar: { outfit, accessory: 'none' } })));
+  assert.equal(outfitSprites.size, 6, 'Different jobs should have recognizable outfits');
+  const accessorySprites = new Set(['none','glasses','headphones','cap','earpiece']
+    .map(accessory => portraitMarkup({ ...engineer, avatar: { accessory } })));
+  assert.equal(accessorySprites.size, 5, 'Accessories should have distinct silhouettes');
+  const spriteRectangles = [...first.matchAll(/<rect x="(\d+)" y="(\d+)" width="(\d+)" height="(\d+)"/g)];
+  assert.ok(spriteRectangles.length >= 20, 'Chibi portrait should contain facial and clothing detail');
+  assert.ok(spriteRectangles.every(([,x,y,w,h]) => +x >= 0 && +y >= 0 &&
+    +w > 0 && +h > 0 && +x + +w <= 48 && +y + +h <= 48), 'All pixels stay in viewBox');
   assert.equal(first, portraitMarkup({ ...engineer }), 'Auto avatar must be stable by ID');
   assert.match(first, /data-avatar-outfit="engineer"/);
   assert.match(portraitMarkup({ id: 'role-lab', name: 'Research Agent' }), /data-avatar-outfit="researcher"/);
@@ -49,6 +72,10 @@ async function run() {
     await fs.rm(dir, { recursive: true, force: true });
   }
 
+  const style = await fs.readFile(path.join(__dirname, '../public/css/role-avatar.css'), 'utf8');
+  assert.match(style, /width: 76px; height: 76px/, 'Editor preview should show more detail');
+  assert.match(style, /color-scheme: light/, 'Keep the recently fixed light-theme select contrast');
+  assert.match(style, /prefers-reduced-motion: reduce/, 'Honor reduced-motion setting');
   const html = await fs.readFile(path.join(__dirname, '../public/index.html'), 'utf8');
   for (const key of ['role-avatar-preview', 'role-avatar-random', 'role-avatar-reset', 'role-avatar-outfit', 'role-avatar-hair']) {
     assert.ok(html.includes('id="' + key + '"'), key + ' should exist in Role editor');
