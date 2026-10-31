@@ -1380,6 +1380,38 @@ function renderRoleProjectOptions(selectedProjectId = '') {
   updateRoleEditorWorkspace(roleEditorProject.value);
 }
 
+const ROLE_AVATAR_FIELDS = ['outfit', 'hair', 'face', 'accessory', 'palette'];
+let roleAvatarDraft = null;
+function avatarEditorSelect(field) {
+  return document.getElementById('role-avatar-' + field);
+}
+function updateAvatarEditorPreview() {
+  const preview = document.getElementById('role-avatar-preview');
+  if (!preview) return;
+  const role = {
+    id: roleEditorId?.value || '',
+    name: roleEditorName?.value || '',
+    description: roleEditorDescription?.value || '',
+    projectId: roleEditorProject?.value || '',
+    avatar: roleAvatarDraft
+  };
+  preview.innerHTML = window.CrewRoomVisual?.portraitMarkup(role) || '🧠';
+}
+function syncAvatarEditorControls() {
+  for (const field of ROLE_AVATAR_FIELDS) {
+    const control = avatarEditorSelect(field);
+    if (control) control.value = roleAvatarDraft?.[field] || 'auto';
+  }
+  updateAvatarEditorPreview();
+}
+function readAvatarEditorControls() {
+  const next = Object.fromEntries(ROLE_AVATAR_FIELDS.map(field => [
+    field, avatarEditorSelect(field)?.value || 'auto'
+  ]));
+  roleAvatarDraft = Object.values(next).every(value => value === 'auto') ? null : next;
+  updateAvatarEditorPreview();
+}
+
 let roleDeleteTarget = null;
 
 function openRoleEditor(roleId = '') {
@@ -1392,7 +1424,9 @@ function openRoleEditor(roleId = '') {
   if (roleEditorDescription) roleEditorDescription.value = role?.description || '';
   if (roleEditorSkills) roleEditorSkills.value = Array.isArray(role?.skills) ? role.skills.join(', ') : '';
   if (roleEditorSystemContext) roleEditorSystemContext.value = role?.systemContext || '';
+  roleAvatarDraft = role?.avatar ? { ...role.avatar } : null;
   renderRoleProjectOptions(role?.projectId || '');
+  syncAvatarEditorControls();
 
   if (roleDangerZone) roleDangerZone.classList.toggle('hidden', !role);
   if (role && roleDangerCopy) {
@@ -1488,7 +1522,8 @@ async function saveRoleEditor(event) {
     projectId: roleEditorProject?.value || null,
     description: roleEditorDescription?.value?.trim() || '',
     skills: String(roleEditorSkills?.value || '').split(',').map(item => item.trim()).filter(Boolean),
-    systemContext: roleEditorSystemContext?.value?.trim() || ''
+    systemContext: roleEditorSystemContext?.value?.trim() || '',
+    avatar: roleAvatarDraft
   };
   if (!payload.name) return alert('請輸入 Role 名稱');
 
@@ -1544,7 +1579,33 @@ window.openRoleDNA = openRoleDNA;
 window.openRoleEditor = openRoleEditor;
 window.openRoleMemory = openRoleMemory;
 
-if (roleEditorProject) roleEditorProject.addEventListener('change', () => updateRoleEditorWorkspace(roleEditorProject.value));
+if (roleEditorProject) roleEditorProject.addEventListener('change', () => {
+  updateRoleEditorWorkspace(roleEditorProject.value);
+  updateAvatarEditorPreview();
+});
+roleEditorName?.addEventListener('input', updateAvatarEditorPreview);
+roleEditorDescription?.addEventListener('input', updateAvatarEditorPreview);
+for (const field of ROLE_AVATAR_FIELDS) {
+  avatarEditorSelect(field)?.addEventListener('change', readAvatarEditorControls);
+}
+document.getElementById('role-avatar-reset')?.addEventListener('click', () => {
+  roleAvatarDraft = null;
+  syncAvatarEditorControls();
+});
+document.getElementById('role-avatar-random')?.addEventListener('click', () => {
+  const options = {
+    outfit: ['engineer', 'researcher', 'planner', 'designer', 'assistant', 'explorer'],
+    hair: ['0', '1', '2', '3', '4', '5'],
+    face: ['0', '1', '2'],
+    accessory: ['none', 'glasses', 'headphones', 'cap', 'earpiece'],
+    palette: ['0', '1', '2', '3', '4', '5']
+  };
+  roleAvatarDraft = Object.fromEntries(ROLE_AVATAR_FIELDS.map(field => {
+    const items = options[field];
+    return [field, items[Math.floor(Math.random() * items.length)]];
+  }));
+  syncAvatarEditorControls();
+});
 if (drawerNewRoleBtn) drawerNewRoleBtn.addEventListener('click', () => openRoleEditor());
 if (closeRoleEditorBtn) closeRoleEditorBtn.addEventListener('click', closeRoleEditor);
 if (cancelRoleEditorBtn) cancelRoleEditorBtn.addEventListener('click', closeRoleEditor);

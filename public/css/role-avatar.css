@@ -1,0 +1,40 @@
+/* Role avatar studio: small-screen-first, no image downloads or external assets. */
+.crew-avatar-editor {
+  padding: 12px; border-radius: 16px; border: 1px solid #334155;
+  background: rgba(15, 23, 42, .55); color: #e2e8f0;
+}
+.crew-avatar-editor-heading { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.crew-avatar-editor-heading strong { display: block; font-size: 13px; font-weight: 750; }
+.crew-avatar-editor-heading p { margin-top: 4px; font-size: 11px; line-height: 1.5; color: #94a3b8; }
+.crew-avatar-preview {
+  display: grid; place-items: center; width: 66px; height: 66px; flex: 0 0 66px;
+  border: 1px solid #475569; border-radius: 17px;
+  background: linear-gradient(140deg, #28334e, #101827);
+}
+.crew-avatar-preview .crew-role-sprite { width: 60px; height: 60px; }
+.crew-avatar-editor-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+.crew-avatar-editor-fields label { display: grid; gap: 5px; min-width: 0; color: #cbd5e1; font-size: 11px; }
+.crew-avatar-editor-fields select {
+  min-width: 0; width: 100%; height: 42px; border: 1px solid #475569;
+  border-radius: 11px; padding: 0 8px; background: #0f172a; color: #f1f5f9; font-size: 12px;
+}
+.crew-avatar-editor-fields select:focus-visible, .crew-avatar-editor-actions button:focus-visible {
+  outline: 2px solid #5eead4; outline-offset: 2px;
+}
+.crew-avatar-editor-actions { display: flex; gap: 8px; margin-top: 12px; }
+.crew-avatar-editor-actions button {
+  min-height: 42px; padding: 9px 14px; border-radius: 11px;
+  border: 1px solid #475569; color: #cbd5e1; font-size: 12px; font-weight: 700;
+  background: #1e293b; touch-action: manipulation;
+}
+.crew-avatar-editor-actions button:first-child { color: #99f6e4; border-color: #0f766e; background: #115e59; }
+.crew-role-avatar .crew-avatar-eye { transform-box: fill-box; transform-origin: center; }
+.crew-role-avatar[data-state="idle"] .crew-avatar-eye,
+.crew-role-avatar[data-state="new"] .crew-avatar-eye { animation: crew-avatar-blink 8s steps(1, end) infinite; }
+.crew-role-avatar[data-state="working"] .crew-role-sprite { animation: crew-avatar-thinking 3.5s ease-in-out infinite; }
+@keyframes crew-avatar-blink { 0%, 96%, 100% { transform: scaleY(1); } 97%, 98% { transform: scaleY(.2); } }
+@keyframes crew-avatar-thinking { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-1px); } }
+@media (prefers-reduced-motion: reduce) {
+  .crew-role-avatar .crew-avatar-eye,
+  .crew-role-avatar .crew-role-sprite { animation: none !important; }
+}

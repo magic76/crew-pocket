@@ -56,6 +56,7 @@
   <link rel="stylesheet" href="/css/crew-home.css">
   <link rel="stylesheet" href="/css/crew-room.css">
   <link rel="stylesheet" href="/css/crew-cinematic.css">
+  <link rel="stylesheet" href="/css/role-avatar.css">
   <link rel="stylesheet" href="/css/visual-inspector.css">
 </head>
 <body data-primary-tab="crew" class="bg-slate-950 text-slate-100 flex flex-col h-[100dvh] w-full max-w-full overflow-hidden">
@@ -187,6 +188,33 @@
         <input id="role-editor-id" type="hidden">
         <label class="block"><span class="mb-1 block text-[10px] font-bold text-slate-400">名稱</span><input id="role-editor-name" maxlength="120" required placeholder="例如：Crew Helper Developer" class="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-white outline-none focus:border-teal-500"></label>
         <label class="block"><span class="mb-1 block text-[10px] font-bold text-slate-400">專案</span><select id="role-editor-project" class="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-xs text-slate-200 outline-none focus:border-teal-500"><option value="">General / 不綁定專案</option></select><span id="role-editor-workspace" class="mt-1.5 block truncate text-[10px] font-mono text-slate-500">工作目錄：—</span></label>
+        <section id="role-avatar-editor" class="crew-avatar-editor" aria-label="角色頭像造型">
+          <div class="crew-avatar-editor-heading">
+            <span id="role-avatar-preview" class="crew-avatar-preview" aria-hidden="true"></span>
+            <div><strong>角色頭像</strong><p>預設依職責產生造型，也能自行調整；儲存後會同步到小隊與對話。</p></div>
+          </div>
+          <div class="crew-avatar-editor-fields">
+            <label>服裝<select id="role-avatar-outfit">
+              <option value="auto">依角色自動</option><option value="engineer">工程師</option><option value="researcher">研究員</option><option value="planner">策劃者</option><option value="designer">設計師</option><option value="assistant">助手</option><option value="explorer">探險家</option>
+            </select></label>
+            <label>髮型<select id="role-avatar-hair">
+              <option value="auto">自動</option><option value="0">俐落短髮</option><option value="1">側分</option><option value="2">蓬鬆短髮</option><option value="3">長髮</option><option value="4">極短髮</option><option value="5">捲髮</option>
+            </select></label>
+            <label>臉型<select id="role-avatar-face">
+              <option value="auto">自動</option><option value="0">圓潤</option><option value="1">方正</option><option value="2">尖下巴</option>
+            </select></label>
+            <label>配件<select id="role-avatar-accessory">
+              <option value="auto">依職責自動</option><option value="none">無</option><option value="glasses">眼鏡</option><option value="headphones">耳機</option><option value="cap">帽子</option><option value="earpiece">通訊器</option>
+            </select></label>
+            <label>配色<select id="role-avatar-palette">
+              <option value="auto">自動</option><option value="0">靛藍</option><option value="1">薄荷綠</option><option value="2">莓紫</option><option value="3">暖金</option><option value="4">海藍</option><option value="5">霧紫</option>
+            </select></label>
+          </div>
+          <div class="crew-avatar-editor-actions">
+            <button id="role-avatar-random" type="button">隨機換裝</button>
+            <button id="role-avatar-reset" type="button">恢復自動</button>
+          </div>
+        </section>
         <label class="block"><span class="mb-1 block text-[10px] font-bold text-slate-400">一句話定位</span><textarea id="role-editor-description" maxlength="1200" rows="2" placeholder="這位 Role 長期負責什麼？" class="w-full resize-none rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-xs text-slate-200 outline-none focus:border-teal-500"></textarea></label>
         <label class="block"><span class="mb-1 block text-[10px] font-bold text-slate-400">Skills</span><input id="role-editor-skills" placeholder="React, Android, Debugging" class="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-xs text-slate-200 outline-none focus:border-teal-500"></label>
         <label class="block"><span class="mb-1 block text-[10px] font-bold text-slate-400">Role 指引</span><textarea id="role-editor-system-context" maxlength="6000" rows="5" placeholder="長期背景、偏好、責任邊界…" class="w-full resize-none rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-xs leading-relaxed text-slate-200 outline-none focus:border-teal-500"></textarea></label>

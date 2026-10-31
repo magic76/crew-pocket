@@ -29,36 +29,95 @@
     '" fill="' + fill + '"' + (classes ? ' class="' + classes + '"' : '') + '/>';
 
   // Original, procedurally generated pixel people: no third-party art assets.
+  // All input is resolved into a small allowlist before it reaches SVG markup.
+  const OUTFITS = ['engineer', 'researcher', 'planner', 'designer', 'assistant', 'explorer'];
+  const ACCESSORIES = ['none', 'glasses', 'headphones', 'cap', 'earpiece'];
+  const choice = (value, options, fallback) => options.includes(String(value)) ? String(value) : fallback;
+  const variant = (value, count, fallback) => choice(value, Array.from({ length: count }, (_, i) => String(i)), fallback);
+
+  function inferOutfit(role) {
+    const roleText = [role?.name, role?.description, role?.projectId].join(' ').toLowerCase();
+    if (/research|science|study|data|lab|研究|分析/.test(roleText)) return 'researcher';
+    if (/design|art|visual|style|ui|ux|設計|美術/.test(roleText)) return 'designer';
+    if (/plan|manage|strategy|lead|product|規劃|管理|指揮/.test(roleText)) return 'planner';
+    if (/travel|explor|discover|探索|旅行/.test(roleText)) return 'explorer';
+    if (/dev|engineer|code|web|android|backend|frontend|程式|開發/.test(roleText)) return 'engineer';
+    return 'assistant';
+  }
+
+  function resolvedAvatar(role) {
+    const seed = hashId(role?.id || role?.name);
+    const settings = role?.avatar && typeof role.avatar === 'object' ? role.avatar : {};
+    const outfit = choice(settings.outfit, ['auto', ...OUTFITS], 'auto');
+    const resolvedOutfit = outfit === 'auto' ? inferOutfit(role) : outfit;
+    const accessory = choice(settings.accessory, ['auto', ...ACCESSORIES], 'auto');
+    return {
+      seed,
+      palette: Number(variant(settings.palette, PALETTES.length, String(seed % PALETTES.length))),
+      face: Number(variant(settings.face, 3, String((seed >>> 8) % 3))),
+      hair: Number(variant(settings.hair, 6, String((seed >>> 5) % 6))),
+      outfit: resolvedOutfit,
+      accessory: accessory === 'auto'
+        ? (resolvedOutfit === 'engineer' ? 'headphones'
+          : resolvedOutfit === 'researcher' ? 'glasses'
+          : resolvedOutfit === 'explorer' ? 'cap'
+          : (seed % 5 === 0 ? 'glasses' : 'none'))
+        : accessory
+    };
+  }
+
+  // Compact, detailed busts remain legible at 29px in the mobile chat header.
+  // Role ID keeps auto-generated attributes deterministic across reloads.
   function portraitMarkup(role) {
-    const seed = hashId(role && role.id);
-    const p = PALETTES[seed % PALETTES.length];
-    const hair = seed % 3;
-    const glasses = seed % 4 === 0;
+    const a = resolvedAvatar(role);
+    const p = PALETTES[a.palette];
+    const skinShade = a.face === 2 ? '#a66b57' : '#9b624b';
     const parts = [
-      '<svg class="crew-role-sprite" viewBox="0 0 32 32" width="40" height="40" shape-rendering="crispEdges" aria-hidden="true" focusable="false">',
-      rect(5, 29, 22, 2, '#536176'),
-      rect(11, 23, 4, 7, '#354357'),
-      rect(18, 23, 4, 7, '#354357'),
-      rect(10, 20, 13, 9, p.coat),
-      rect(14, 21, 4, 8, p.accent),
-      rect(7, 22, 3, 6, p.coat),
-      rect(23, 22, 3, 6, p.coat),
-      rect(7, 26, 3, 2, p.skin, 'crew-pixel-hand'),
-      rect(23, 26, 3, 2, p.skin, 'crew-pixel-hand'),
-      rect(10, 9, 13, 12, p.skin),
-      rect(10, 17, 2, 3, '#9b624b'),
-      rect(21, 17, 2, 3, '#9b624b'),
-      rect(13, 15, 2, 2, '#252b39'),
-      rect(19, 15, 2, 2, '#252b39'),
-      rect(15, 19, 3, 1, '#995c57'),
-      rect(9, 7, 15, 4, p.hair),
-      rect(9, 11, 2, hair === 0 ? 6 : 3, p.hair),
-      rect(22, 11, 2, hair === 1 ? 6 : 3, p.hair)
+      '<svg class="crew-role-sprite" viewBox="0 0 32 32" width="40" height="40" shape-rendering="crispEdges" aria-hidden="true" focusable="false" data-avatar-outfit="' + a.outfit + '" data-avatar-accessory="' + a.accessory + '">',
+      rect(6, 30, 20, 2, '#45526b'),
+      rect(12, 21, 8, 6, p.skin),
+      rect(6, 25, 20, 7, p.coat),
+      rect(3, 28, 6, 4, p.coat),
+      rect(23, 28, 6, 4, p.coat),
+      rect(4, 30, 3, 2, p.skin, 'crew-pixel-hand'),
+      rect(25, 30, 3, 2, p.skin, 'crew-pixel-hand'),
+      rect(9, 24, 14, 2, p.accent),
+      rect(10, 9, 12, 12, p.skin)
     ];
-    if (hair === 2) parts.push(rect(13, 6, 7, 2, p.hair), rect(11, 8, 3, 4, p.hair));
-    if (glasses) parts.push(
-      rect(12, 14, 5, 1, '#46505e'), rect(18, 14, 5, 1, '#46505e'),
-      rect(16, 15, 3, 1, '#46505e')
+    if (a.face === 0) parts.push(rect(9, 12, 2, 7, p.skin), rect(21, 12, 2, 7, p.skin));
+    if (a.face === 1) parts.push(rect(8, 12, 3, 9, p.skin), rect(21, 12, 3, 9, p.skin));
+    if (a.face === 2) parts.push(rect(11, 20, 10, 3, p.skin), rect(9, 12, 2, 7, p.skin), rect(21, 12, 2, 7, p.skin));
+    parts.push(
+      rect(9, 18, 2, 3, skinShade), rect(21, 18, 2, 3, skinShade),
+      rect(13, 16, 2, 2, '#253046', 'crew-avatar-eye'),
+      rect(19, 16, 2, 2, '#253046', 'crew-avatar-eye'),
+      rect(15, 21, 3, 1, '#9f5a58')
+    );
+    // Six visibly different silhouettes, rather than recolors of one haircut.
+    if (a.hair === 0) parts.push(rect(8, 6, 16, 5, p.hair), rect(8, 10, 3, 5, p.hair));
+    if (a.hair === 1) parts.push(rect(8, 7, 16, 4, p.hair), rect(10, 5, 9, 3, p.hair), rect(22, 9, 3, 7, p.hair));
+    if (a.hair === 2) parts.push(rect(9, 8, 14, 3, p.hair), rect(12, 6, 9, 3, p.hair), rect(8, 11, 3, 7, p.hair));
+    if (a.hair === 3) parts.push(rect(8, 7, 16, 5, p.hair), rect(7, 11, 3, 12, p.hair), rect(22, 11, 3, 12, p.hair));
+    if (a.hair === 4) parts.push(rect(9, 9, 14, 2, p.hair), rect(12, 7, 8, 2, p.hair));
+    if (a.hair === 5) parts.push(rect(7, 8, 18, 4, p.hair), rect(9, 5, 5, 4, p.hair), rect(17, 5, 6, 4, p.hair), rect(23, 11, 2, 5, p.hair));
+    if (a.outfit === 'engineer') parts.push(rect(15, 26, 2, 6, '#27384f'), rect(11, 27, 2, 2, p.accent));
+    if (a.outfit === 'researcher') parts.push(rect(9, 25, 4, 7, '#eff1e5'), rect(19, 25, 4, 7, '#eff1e5'), rect(15, 27, 2, 4, '#4c8098'));
+    if (a.outfit === 'planner') parts.push(rect(12, 26, 3, 6, '#29344f'), rect(18, 26, 3, 6, '#29344f'), rect(15, 26, 3, 4, '#dcb673'));
+    if (a.outfit === 'designer') parts.push(rect(9, 28, 4, 2, '#f3c36d'), rect(20, 26, 3, 5, '#a9dbdd'));
+    if (a.outfit === 'assistant') parts.push(rect(13, 27, 6, 2, p.accent), rect(14, 30, 4, 1, '#37465e'));
+    if (a.outfit === 'explorer') parts.push(rect(10, 26, 12, 2, '#745341'), rect(15, 26, 2, 6, '#e0bb70'));
+    if (a.accessory === 'glasses') parts.push(
+      rect(11, 15, 6, 1, '#394458'), rect(18, 15, 5, 1, '#394458'), rect(16, 16, 3, 1, '#394458')
+    );
+    if (a.accessory === 'headphones') parts.push(
+      rect(7, 10, 2, 10, '#35465e'), rect(23, 10, 2, 10, '#35465e'),
+      rect(9, 5, 14, 2, '#35465e'), rect(6, 15, 3, 5, p.accent), rect(23, 15, 3, 5, p.accent)
+    );
+    if (a.accessory === 'cap') parts.push(
+      rect(8, 5, 16, 5, p.coat), rect(7, 9, 19, 2, p.accent)
+    );
+    if (a.accessory === 'earpiece') parts.push(
+      rect(23, 16, 3, 4, '#344153'), rect(23, 21, 2, 1, p.accent)
     );
     parts.push('</svg>');
     return parts.join('');
@@ -291,5 +350,5 @@
     return { synchronize, showActivity };
   }
 
-  return { portraitMarkup, planNewEvents, activityRows, activityMarkup, init };
+  return { portraitMarkup, resolvedAvatar, inferOutfit, planNewEvents, activityRows, activityMarkup, init };
 });
