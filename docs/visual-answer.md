@@ -44,6 +44,15 @@ follow-up controls and parse explicitly fenced `crew-ui` JSON blocks into
 choice, checklist, or read-only metrics cards. It never runs model HTML or
 sends messages itself. See [Interactive Replies](interactive-replies.md).
 
+## P1: contextual actions from plain Markdown
+
+`public/js/crew-reply-discovery.js` recognizes explicit option headings/list rows
+or comparison-table rows (`方案 A/B`, `Option A/B`) and short checklists under
+`下一步` / `待辦` / `Next Steps` headings. Buttons use the existing current-Role
+composer gate, never autosend, never infer tool outcomes, and leave the original
+Markdown on screen. The feature is limited to one choice group and one checklist
+per reply, and defers to any explicit `crew-ui` card.
+
 ## Compatibility
 
 `lib/visual-answer.js` and `POST /api/visual-answer` remain available for
