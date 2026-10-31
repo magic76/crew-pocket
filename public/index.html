@@ -1474,6 +1474,31 @@
 
           <p class="text-[10px] leading-relaxed text-slate-400">Facebook API 僅支援你管理的粉絲專頁，不能代替個人檔案發文。Threads 可讀取自己的串文和串文回覆。V1 僅處理文字；Meta 可能要求外部使用者權限經 App Review / Advanced Access。</p>
 
+          <section class="rounded-xl border border-emerald-500/25 bg-slate-900/70 p-2.5 space-y-2" aria-labelledby="social-publisher-title">
+            <div>
+              <div id="social-publisher-title" class="text-[11px] font-semibold text-emerald-200">本機 Social Publisher 排程</div>
+              <p class="mt-0.5 text-[9px] leading-relaxed text-slate-400">啟用時先同步 Queue，之後優先在已知貼文的排定時間執行；下方間隔用來探測新加入的 Queue。到期且 publish_permitted=true 的項目可能直接發布。手機 Runtime 關閉或 Android 暫停 Termux 時可能延遲；同一狀態目錄雖有跨程序鎖，仍建議只留一個排程來源，避免重複同步與鎖競爭。</p>
+            </div>
+            <div id="social-publisher-pending" class="hidden rounded-lg border border-amber-500/30 bg-amber-950/20 p-2 space-y-1.5">
+              <p id="social-publisher-pending-label" class="text-[9px] leading-relaxed text-amber-100"></p>
+              <button id="social-publisher-confirm-request" type="button" class="min-h-9 w-full rounded-lg bg-amber-600 text-[10px] font-bold text-white">確認並啟用這個排程</button>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <label for="social-publisher-interval" class="shrink-0 text-[9px] text-slate-400">新稿探測備援</label>
+              <select id="social-publisher-interval" class="min-h-9 min-w-0 flex-1 rounded-lg border border-slate-700 bg-slate-950 px-2 text-[10px] text-slate-100">
+                <option value="5">5 分鐘</option>
+                <option value="15">15 分鐘</option>
+                <option value="30" selected>30 分鐘</option>
+                <option value="60">60 分鐘</option>
+                <option value="120">120 分鐘</option>
+              </select>
+              <button id="social-publisher-enable" type="button" class="min-h-9 rounded-lg bg-emerald-700 px-2.5 text-[9px] font-semibold text-white">啟用</button>
+              <button id="social-publisher-disable" type="button" class="hidden min-h-9 rounded-lg bg-slate-800 px-2.5 text-[9px] font-semibold text-slate-200">暫停</button>
+            </div>
+            <button id="social-publisher-run-now" type="button" class="min-h-9 w-full rounded-lg bg-slate-800 text-[10px] font-semibold text-slate-200">現在檢查 Queue</button>
+            <div id="social-publisher-status" class="text-[9px] leading-relaxed text-slate-400" role="status" aria-live="polite">正在讀取排程狀態…</div>
+          </section>
+
           <details id="social-app-config" class="group rounded-xl border border-slate-800 bg-slate-900/70 p-2.5">
             <summary class="cursor-pointer list-none flex items-center justify-between gap-2 text-[11px] font-semibold text-slate-200">
               <span>⚙️ Meta App ID 設定</span>

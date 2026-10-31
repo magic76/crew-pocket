@@ -115,6 +115,7 @@ const { defaultToolImprovementStore } = require('./lib/tool-improvement/store');
 const { renderVisualAnswer } = require('./lib/visual-answer');
 const { createSocialAccounts } = require('./lib/social-accounts');
 const { createSocialDraftGenerator } = require('./lib/social-draft');
+const { defaultSocialPublisherScheduler } = require('./lib/social-publisher-scheduler');
 
 
 const crewTaskRunner = new CrewTaskRunner({
@@ -1928,6 +1929,21 @@ async function handleCrewTool(req, res) {
       return res.end(JSON.stringify({ success: true, roles }));
     }
 
+    if (action === 'request_social_publisher_schedule') {
+      const roleId = String(body.from_role_id || body.fromRoleId || '').trim();
+      if (!roleId || !(await getRole(roleId))) throw new Error('Role does not exist');
+      const schedule = await defaultSocialPublisherScheduler.requestSchedule({
+        roleId,
+        intervalMinutes: body.interval_minutes ?? body.intervalMinutes ?? 30
+      });
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+      return res.end(JSON.stringify({ success: true, publisher_schedule: {
+        status: 'pending_user_confirmation',
+        intervalMinutes: schedule.requestedSchedule?.intervalMinutes || 30,
+        enabled: schedule.enabled
+      } }));
+    }
+
     if (action === 'send_message') {
       const message = await sendCrewMessage({
         fromRoleId: body.from_role_id || body.fromRoleId,
@@ -1941,7 +1957,7 @@ async function handleCrewTool(req, res) {
       return res.end(JSON.stringify({ success: true, message, auto_response: autoResponse }));
     }
 
-    throw new Error('Crew tool action must be list_roles or send_message');
+    throw new Error('Crew tool action must be list_roles, send_message, or request_social_publisher_schedule');
   } catch (error) {
     res.writeHead(400, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ success: false, error: error.message }));
@@ -1956,7 +1972,9 @@ function buildCrewToolGuide(role) {
     'Current Role: ' + role.name + ' (' + role.id + ')',
     'List Roles: node ' + JSON.stringify(scriptPath) + ' roles',
     'Send plain-text message: node ' + JSON.stringify(scriptPath) + ' send ' + role.id + ' <target-role-id> "<message>"',
-    'Fallback API: POST http://127.0.0.1:' + PORT + '/api/crew-tool with action=list_roles or action=send_message.',
+    'Request local Social Publisher schedule (pending user confirmation only): node ' + JSON.stringify(scriptPath) + ' publisher-schedule ' + role.id + ' [interval-minutes]',
+    'Fallback API: POST http://127.0.0.1:' + PORT + '/api/crew-tool with action=list_roles, action=send_message, or action=request_social_publisher_schedule.',
+    'A Publisher schedule request never enables publishing by itself; the user must confirm it in the Social Workbench.',
     'Only the explicit message text is copied from the sender. The recipient handles it inside their own current conversation; do not attach or infer the sender\'s Context, Memory, Conversation, Project or workspace data.'
   ].join('\n');
 }
@@ -2542,9 +2560,9 @@ async function handleChatTurn(req, res, submittedBody = null) {
     }
   }
 
-  // Every Role can discover the Crew tool. The guide is intentionally tiny:
-  // discovery + plain-text messaging only, never implicit context transfer.
-  const crewToolGuide = (!conversation_id || contextSnapshot?.crewToolGuideVersion !== 1 ||
+  // Every Role can discover the Crew tool. Version changes refresh this small
+  // guide on existing conversations without rebuilding their prior history.
+  const crewToolGuide = (!conversation_id || contextSnapshot?.crewToolGuideVersion !== 2 ||
     (contextSnapshot?.identityFingerprint && contextSnapshot.identityFingerprint !== currentIdentityFingerprint))
     ? buildCrewToolGuide(role)
     : '';
@@ -2998,7 +3016,7 @@ async function handleChatTurn(req, res, submittedBody = null) {
             .catch(err => console.warn('[Conversation Settings] Save/activate failed:', err.message));
           saveContextSnapshot(providerId, event.conversationId, {
             contributions: assembledContextContributions,
-            crewToolGuideVersion: 1,
+            crewToolGuideVersion: 2,
             identityFingerprint: currentIdentityFingerprint,
             memoryRevision: memoryRefreshConsumed || !conversation_id
               ? currentMemoryRevision
@@ -3803,7 +3821,23 @@ async function handleSocialApi(req, res, parsedUrl) {
   try {
     let result;
     let body;
-    if (pathname === '/api/social/status' && req.method === 'GET') {
+    if (pathname === '/api/social/publisher-scheduler' && req.method === 'GET') {
+      result = { publisherScheduler: await defaultSocialPublisherScheduler.status() };
+    } else if (pathname === '/api/social/publisher-scheduler' && req.method === 'POST') {
+      body = await parseJsonBody(req);
+      const action = String(body?.action || '').trim();
+      if (action === 'enable') {
+        if (body.confirmed !== true) throw new Error('啟用排程前需要使用者確認');
+        result = { publisherScheduler: await defaultSocialPublisherScheduler.enable(body.intervalMinutes) };
+      } else if (action === 'disable') {
+        result = { publisherScheduler: await defaultSocialPublisherScheduler.disable() };
+      } else if (action === 'run_once') {
+        if (body.confirmed !== true) throw new Error('執行 Publisher 前需要使用者確認');
+        result = { publisherScheduler: await defaultSocialPublisherScheduler.launchRunOnce('manual') };
+      } else {
+        throw new Error('Publisher scheduler action must be enable, disable, or run_once');
+      }
+    } else if (pathname === '/api/social/status' && req.method === 'GET') {
       result = await socialAccounts.getStatus();
     } else if (pathname === '/api/social/config' && req.method === 'POST') {
       body = await parseJsonBody(req);
@@ -4129,6 +4163,8 @@ process.on('unhandledRejection', (reason) => {
 
 server.listen(PORT, HOST, () => {
   dreamingManager.start();
+  defaultSocialPublisherScheduler.status()
+    .catch(error => console.warn('[Social Publisher Scheduler] Startup failed:', error.message));
   crewTaskRunner.start().catch(error => console.warn('[Crew Tasks] Startup failed:', error.message));
   listRoles().then(roles => Promise.allSettled(roles.map(role => crewAutoResponder.drain(role.id))))
     .catch(error => console.warn('[Crew Auto Response] Recovery failed:', error.message));

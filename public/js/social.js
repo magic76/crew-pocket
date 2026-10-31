@@ -1,6 +1,8 @@
 (() => {
   const state = {
     status: null,
+    publisherScheduler: null,
+    publisherIntervalTouched: false,
     activePlatform: 'facebook',
     facebookPages: [],
     facebookPosts: [],
@@ -117,6 +119,151 @@
     updateMoreButton('social-facebook-more-comments', state.pagination.facebookComments, 'facebook:comments');
     updateMoreButton('social-threads-more-posts', state.pagination.threadsPosts, 'threads:load');
     updateMoreButton('social-threads-more-replies', state.pagination.threadsReplies, 'threads:replies');
+    updatePublisherControls();
+  }
+
+  function updatePublisherControls() {
+    const scheduler = state.publisherScheduler;
+    const busy = state.busy.has('publisher:enable') || state.busy.has('publisher:run');
+    const available = Boolean(scheduler?.available);
+    const running = Boolean(scheduler?.running);
+    const enable = byId('social-publisher-enable');
+    const disable = byId('social-publisher-disable');
+    const runNow = byId('social-publisher-run-now');
+    const interval = byId('social-publisher-interval');
+    const pending = byId('social-publisher-pending');
+    const pendingLabel = byId('social-publisher-pending-label');
+    const confirmRequest = byId('social-publisher-confirm-request');
+    if (enable) {
+      enable.classList.toggle('hidden', Boolean(scheduler?.enabled));
+      enable.disabled = !available || busy || running;
+    }
+    if (disable) {
+      disable.classList.toggle('hidden', !scheduler?.enabled);
+      disable.disabled = busy;
+    }
+    if (runNow) {
+      runNow.disabled = !available || busy || running;
+      runNow.textContent = running ? 'Publisher 執行中…' : (state.publisherScheduler?.lastRun?.status === 'failed' ? '重試／現在檢查 Queue' : '現在檢查 Queue');
+    }
+    if (interval) interval.disabled = busy || running;
+    const request = scheduler?.requestedSchedule;
+    if (pending) pending.classList.toggle('hidden', !request);
+    if (pendingLabel && request) {
+      pendingLabel.textContent = (request.requestedByRoleId || 'Crew Role') + ' 請求在 Queue 排定時間執行，並每 ' + request.intervalMinutes + ' 分鐘探測新稿。尚未啟用。';
+    }
+    if (confirmRequest) confirmRequest.disabled = !available || busy || running;
+  }
+
+  function shortRunCounts(counts) {
+    if (!counts || typeof counts !== 'object') return '';
+    return Object.entries(counts).map(([name, count]) => name + ' ' + count).join(' · ');
+  }
+
+  function displayPublisherScheduler(scheduler) {
+    state.publisherScheduler = scheduler || null;
+    const label = byId('social-publisher-status');
+    if (label) {
+      if (!scheduler) label.textContent = '無法讀取 Publisher 排程狀態。';
+      else if (!scheduler.available) label.textContent = '找不到本機 Publisher 或 .env；請確認 ~/crew-social-agent 已設定。';
+      else if (scheduler.running) label.textContent = 'Publisher 執行中；完成後會更新結果。';
+      else if (scheduler.enabled) {
+        const next = scheduler.nextRunAt ? new Date(scheduler.nextRunAt).toLocaleString() : '待安排';
+        const reason = scheduler.nextRunReason === 'queue_time' ? 'Queue 發文時間'
+          : scheduler.nextRunReason === 'initial_sync' ? '啟用後首次同步'
+            : scheduler.nextRunReason === 'recovery' ? '恢復探測'
+              : '新稿備援探測';
+        label.textContent = '已啟用：Queue 時間優先；每 ' + scheduler.intervalMinutes + ' 分鐘備援探測。下次：' + next + '（' + reason + '）。';
+      } else label.textContent = '自動排程目前暫停。你仍可手動檢查 Queue。';
+
+      const last = scheduler?.lastRun;
+      if (last) {
+        const when = last.finishedAt ? new Date(last.finishedAt).toLocaleString() : new Date(last.startedAt).toLocaleString();
+        const status = last.status === 'completed' ? '完成' : last.status === 'failed' ? '失敗' : last.status === 'interrupted' ? '中斷' : '執行中';
+        const summary = last.summary;
+        const resultText = summary
+          ? '；Queue ' + summary.queueItems + ' 項' + (summary.queueErrors ? '，錯誤 ' + summary.queueErrors : '') +
+            (shortRunCounts(summary.results) ? '；貼文：' + shortRunCounts(summary.results) : '') +
+            (shortRunCounts(summary.videoResults) ? '；影片：' + shortRunCounts(summary.videoResults) : '') +
+            '；模式 ' + summary.agentMode
+          : '';
+        label.textContent += '\n最近執行：' + when + ' · ' + status + resultText + (last.error ? '；' + last.error : '');
+      }
+    }
+    const select = byId('social-publisher-interval');
+    if (select && scheduler?.intervalMinutes && !scheduler.requestedSchedule && !state.publisherIntervalTouched) {
+      select.value = String(scheduler.intervalMinutes);
+    }
+    updatePublisherControls();
+  }
+
+  async function refreshPublisherScheduler() {
+    try {
+      const data = await request('/api/social/publisher-scheduler');
+      displayPublisherScheduler(data.publisherScheduler);
+      return data.publisherScheduler;
+    } catch (error) {
+      displayPublisherScheduler(null);
+      showStatus('無法讀取 Publisher 排程：' + error.message, true);
+      return null;
+    }
+  }
+
+  async function enablePublisherSchedule(requestedInterval = null) {
+    const interval = Number(requestedInterval || byId('social-publisher-interval')?.value || 30);
+    const confirmed = await confirmInWorkbench({
+      title: '確認啟用本機 Publisher 排程？',
+      note: '啟用後會先同步 Queue，接著在已知貼文排定時間執行；每 ' + interval + ' 分鐘另做一次新稿探測。到期且 publish_permitted=true 的項目可能直接發文。Android 省電可能延遲執行。',
+      confirmLabel: '確認啟用'
+    });
+    if (!confirmed) return;
+    setBusy('publisher:enable', true);
+    try {
+      const data = await post('/api/social/publisher-scheduler', { action: 'enable', intervalMinutes: interval, confirmed: true });
+      state.publisherIntervalTouched = false;
+      displayPublisherScheduler(data.publisherScheduler);
+      showStatus('本機 Social Publisher 排程已啟用。');
+    } catch (error) {
+      showStatus('啟用 Publisher 排程失敗：' + error.message, true);
+    } finally {
+      setBusy('publisher:enable', false);
+    }
+  }
+
+  async function disablePublisherSchedule() {
+    setBusy('publisher:enable', true);
+    try {
+      const data = await post('/api/social/publisher-scheduler', { action: 'disable' });
+      displayPublisherScheduler(data.publisherScheduler);
+      showStatus('本機 Social Publisher 自動排程已暫停。');
+    } catch (error) {
+      showStatus('暫停 Publisher 排程失敗：' + error.message, true);
+    } finally {
+      setBusy('publisher:enable', false);
+    }
+  }
+
+  async function runPublisherOnce() {
+    const confirmed = await confirmInWorkbench({
+      title: '現在檢查並處理 Queue？',
+      note: '會同步 GitHub Queue 並執行本機 Publisher。已到期、處於 live 模式且 publish_permitted=true 的項目可能直接發文。',
+      confirmLabel: '確認執行'
+    });
+    if (!confirmed) return;
+    setBusy('publisher:run', true);
+    showStatus('正在同步 Queue 並執行本機 Publisher…');
+    try {
+      const data = await post('/api/social/publisher-scheduler', { action: 'run_once', confirmed: true });
+      displayPublisherScheduler(data.publisherScheduler);
+      const last = data.publisherScheduler?.lastRun;
+      if (last?.status === 'completed') showStatus('Publisher 執行完成；請查看排程區的項目統計。');
+      else if (last?.status === 'running') showStatus('Publisher 已啟動；狀態會在執行期間持續更新。');
+      else showStatus('Publisher 執行未完成：' + (last?.error || '請查看排程狀態。'), true);
+    } catch (error) {
+      showStatus('Publisher 執行失敗：' + error.message, true);
+    } finally {
+      setBusy('publisher:run', false);
+    }
   }
 
   function displayProviderStatus(platform, info) {
@@ -837,11 +984,28 @@
       }
     });
     document.addEventListener('visibilitychange', () => {
-      if (!document.hidden) refreshStatus();
+      if (!document.hidden) {
+        refreshStatus();
+        refreshPublisherScheduler();
+      }
     });
-    window.addEventListener('focus', refreshStatus);
+    window.addEventListener('focus', () => {
+      refreshStatus();
+      refreshPublisherScheduler();
+    });
+    byId('social-publisher-enable')?.addEventListener('click', () => enablePublisherSchedule());
+    byId('social-publisher-disable')?.addEventListener('click', disablePublisherSchedule);
+    byId('social-publisher-run-now')?.addEventListener('click', runPublisherOnce);
+    byId('social-publisher-interval')?.addEventListener('change', () => { state.publisherIntervalTouched = true; });
+    byId('social-publisher-confirm-request')?.addEventListener('click', () => {
+      enablePublisherSchedule(state.publisherScheduler?.requestedSchedule?.intervalMinutes || 30);
+    });
     switchPlatform('facebook');
     refreshStatus();
+    refreshPublisherScheduler();
+    setInterval(() => {
+      if (!document.hidden) refreshPublisherScheduler();
+    }, 60000);
   }
 
   window.refreshSocialStatus = refreshStatus;

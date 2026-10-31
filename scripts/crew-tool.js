@@ -47,6 +47,7 @@ function usage() {
     '',
     '  crew-tool roles',
     '  crew-tool send <from-role-id> <to-role-id> <message...>',
+    '  crew-tool publisher-schedule <from-role-id> [interval-minutes]',
     '',
     'Only the explicit message text is copied from the sender. The recipient handles it inside their own current conversation.'
   ].join('\n');
@@ -89,6 +90,20 @@ async function main() {
         process.stdout.write('recipient_conversation\t' + response.conversationId + '\n');
       }
     }
+    return;
+  }
+
+  if (command === 'publisher-schedule') {
+    const fromRoleId = args.shift();
+    const intervalMinutes = args.length ? Number(args.shift()) : 30;
+    if (!fromRoleId || args.length || !Number.isInteger(intervalMinutes)) fail(usage(), 2);
+    const data = await post({
+      action: 'request_social_publisher_schedule',
+      from_role_id: fromRoleId,
+      interval_minutes: intervalMinutes
+    });
+    const schedule = data.publisher_schedule || {};
+    process.stdout.write('pending_user_confirmation\t' + (schedule.intervalMinutes || intervalMinutes) + '\t' + (schedule.enabled ? 'already_enabled' : 'not_enabled') + '\n');
     return;
   }
 
