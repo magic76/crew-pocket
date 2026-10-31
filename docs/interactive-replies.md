@@ -100,6 +100,9 @@ trusted `turn_result` through the existing Living UI renderer.
 
 ## Verification
 
+    node --check public/js/crew-rich-widgets.js
+    node --check test/crew-rich-widgets.test.js
+    node test/crew-rich-widgets.test.js
     node --check public/js/crew-reply-discovery.js
     node --check test/crew-reply-discovery.test.js
     node test/crew-reply-discovery.test.js
