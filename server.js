@@ -2824,6 +2824,7 @@ async function handleChatTurn(req, res, submittedBody = null) {
         request_id: requestId,
         conversation_id: finalPayload.conversation_id || activeConversationId,
         provider: providerId, status: finalPayload.status,
+        failureAttribution: finalPayload.failureAttribution || null,
         elapsed_ms: terminalRecord.result.duration_ms,
         tools: [...feedbackTools.values()]
       })).catch(error => console.warn('[Execution Feedback / Tool Improvement] Save failed:', error.message)).finally(() => {
@@ -3047,6 +3048,7 @@ async function handleChatTurn(req, res, submittedBody = null) {
           }
           broadcastCrewStatusEvent('turn-error', role?.id || null);
           finish({ error: event.message, error_code: event.errorCode, response: event.response,
+            failureAttribution: event.failureAttribution,
             status: event.status || 'failed', provider: providerId,
             conversation_id: event.conversationId || activeConversationId || conversation_id });
           if (role?.id) {
@@ -3077,7 +3079,8 @@ async function handleChatTurn(req, res, submittedBody = null) {
             error: event.error,
             conversation_id: event.conversationId,
             provider: providerId,
-            status: event.status
+            status: event.status,
+            failureAttribution: event.failureAttribution
           });
           if (role?.id) {
             setImmediate(() => crewAutoResponder.drain(role.id)

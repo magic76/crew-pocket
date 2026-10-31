@@ -99,6 +99,12 @@ test('explicit harness failure produces runtime candidate, not tool candidate', 
   assert.equal(result[0].type, 'runtime');
   assert.equal(result[0].toolId, null);
 });
+test('explicit tool-side harness classification is a runtime candidate on failed turn', () => {
+  const t = trace({ root_cause: 'HARNESS', error: 'failed' }, { status: 'failed' });
+  const result = proposalsFromTrace(t);
+  assert.equal(result.length, 1);
+  assert.equal(result[0].type, 'runtime');
+});
 test('environment attribution is diagnostic, not tool improvement', () => {
   const t = trace({ error: 'failed' }, { failureAttribution: 'environment' });
   assert.equal(classifyRootCause(t.tools[0], t), 'ENVIRONMENT');
