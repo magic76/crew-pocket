@@ -1,4 +1,4 @@
-# Crew Pocket · Inline Interactive Replies (P0 / P1)
+# Crew Pocket · Inline Interactive Replies (P0 / P1 / P2)
 
 The existing Role-owned Markdown transcript remains the single source of truth.
 This feature adds **native UI inside completed assistant messages** without generating
