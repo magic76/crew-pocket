@@ -151,7 +151,7 @@
     if (panels.length < 2) return;
     panels.slice(0, 6).forEach(panel => {
       const heading = panel.querySelector('h2');
-      if (!heading || heading.dataset.crewFollowup === 'true') return;
+      if (!heading || heading.dataset.crewFollowup === 'true' || panel.dataset.crewAutoEnhanced) return;
       const title = plain(heading.textContent, 90);
       if (!title) return;
       heading.dataset.crewFollowup = 'true';
@@ -185,6 +185,9 @@
       mount(pre, spec, context);
       count++;
     }
+    // P1: conservatively discover options/checklists in ordinary Markdown.
+    // Explicit crew-ui widgets take precedence; both use the same scoped draft gate.
+    if (!count) window.CrewReplyDiscovery?.enhance(container, context, fillComposer);
     sectionActions(container, context);
     return count;
   }
