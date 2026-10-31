@@ -18,7 +18,7 @@ assert.ok(html.includes('id="crew-room-summary"'));
 assert.equal(html.includes('id="conversation-workspaces"'), false);
 
 // Header shows who is active; Project/work title are kept out of the visible header.
-assert.ok(html.includes('<div id="workspace-selector-btn"'));
+assert.ok(html.includes('<button id="workspace-selector-btn"'), 'Role switcher is an accessible button');
 assert.ok(html.includes('id="workspace-label"'));
 assert.ok(html.includes('General'));
 assert.ok(html.includes('id="header-current-task"'));

@@ -28,7 +28,7 @@ assert.equal(app.includes('setTaskCenterVisible'), false);
 // Header has no duplicate navigation triggers. Role identity remains primary.
 assert.equal(html.includes('id="menu-btn"'), false);
 assert.equal(html.includes('id="tools-menu-btn"'), false);
-assert.ok(html.includes('<div id="workspace-selector-btn"'));
+assert.ok(html.includes('<button id="workspace-selector-btn"'), 'Role switcher remains the primary header control');
 assert.ok(html.includes('id="workspace-label"'));
 assert.ok(html.includes('id="header-current-task"'));
 assert.ok(ui.includes("const workTitle = status?.currentWork?.title || status?.conversationTitle || latest?.title || '新工作'"));

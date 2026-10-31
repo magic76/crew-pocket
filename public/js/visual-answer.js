@@ -69,7 +69,9 @@
   }
 
   function attachVisualAnswerAction(messageNode, rawMarkdown, options = {}) {
-    if (!messageNode || options.failed || !visualAnswerEligible(rawMarkdown)) return;
+    if (!messageNode || options.failed) return;
+    const eligible = visualAnswerEligible(rawMarkdown);
+    if (!eligible && !window.CrewInteractive) return;
     const article = messageNode.querySelector('.assistant-article');
     if (!article) return;
 
@@ -77,7 +79,12 @@
     const decorate = () => {
       const response = card ? article.querySelector('.execution-result-response') : article;
       if (!response) return false;
-      enhanceContent(response.querySelector('.msg-content'), rawMarkdown);
+      const content = response.querySelector('.msg-content');
+      if (!content) return false;
+      if (eligible) enhanceContent(content, rawMarkdown);
+      window.CrewInteractive?.enhance(content, {
+        roleId: options.roleId, provider: options.provider, conversationId: options.conversationId
+      });
       return true;
     };
 
