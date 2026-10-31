@@ -20,6 +20,14 @@
   };
   const record = value => value && typeof value === 'object' && !Array.isArray(value);
 
+  function richApi() {
+    // Browser global and Node test export share the same validator; neither
+    // dynamically loads remote code or allows model-authored HTML.
+    if (typeof window !== 'undefined' && window.CrewRichWidgets) return window.CrewRichWidgets;
+    if (typeof module !== 'undefined' && module.exports) return require('./crew-rich-widgets.js');
+    return null;
+  }
+
   function normalizeSpec(value) {
     if (!record(value) || value.version !== 1) return null;
     const title = plain(value.title, 90);
@@ -51,7 +59,7 @@
       });
       return items.every(Boolean) ? { version: 1, type: 'metrics', title, question, items } : null;
     }
-    return null;
+    return richApi()?.normalizeSpec(value) || null;
   }
 
   function parseSpec(raw) {
@@ -61,6 +69,8 @@
 
   let nextId = 0;
   function widgetHtml(spec) {
+    if (['chart', 'scenario', 'calculator'].includes(spec.type))
+      return richApi()?.widgetHtml(spec) || '';
     const heading = '<div class="crew-interactive-heading"><strong>' + escapeHtml(spec.title) + '</strong>' +
       '<span>' + (spec.type === 'metrics' ? 'AI 回覆資料 · 未驗證' : '互動卡片') + '</span></div>';
     const hint = spec.question ? '<p class="crew-interactive-question">' + escapeHtml(spec.question) + '</p>' : '';
@@ -124,6 +134,9 @@
   }
 
   function mount(pre, spec, context) {
+    if (['chart', 'scenario', 'calculator'].includes(spec.type)) {
+      return richApi()?.mount(pre, spec, context, fillComposer);
+    }
     const widget = document.createElement('section');
     widget.className = 'crew-interactive';
     widget.dataset.crewInteractive = spec.type;
