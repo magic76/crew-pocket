@@ -134,6 +134,9 @@ trusted `turn_result` through the existing Living UI renderer.
 
 ## Verification
 
+    node --check lib/interactive-reply-guide.js
+    node --check test/interactive-reply-p3.test.js
+    node test/interactive-reply-p3.test.js
     node --check public/js/crew-rich-widgets.js
     node --check test/crew-rich-widgets.test.js
     node test/crew-rich-widgets.test.js
