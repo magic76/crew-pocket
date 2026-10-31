@@ -63,6 +63,40 @@ Invalid data stays in its code fence rather than being rendered.
 Unlike P1's conservative Markdown inference, P2 charts/calculators are
 **explicitly requested via data** and are never guessed from ordinary prose.
 
+## P3: The Agent can opt into the right format
+
+The server adds a **small, optional per-turn hint** only when the current user
+asks for comparing alternatives, drawing a graph, estimating a linear scenario
+or preparing a selectable checklist. The hint picks **one** preferred UI kind
+and shows the model a valid JSON example. The model may still respond in normal
+Markdown; Crew never invents values or makes a second model call to generate UI.
+
+- Routing: `lib/interactive-reply-guide.js`, called inside `server.js`
+  after Role/context assembly using the original current user prompt.
+- Never inject the hint for code-generation, edits/builds, merge/deploy tasks,
+  side conversations, image uploads, or tool-execution modes other than
+  `CHAT` / `INSPECT`. Normal conversations stay unchanged.
+- The guide is placed inside `<ADDITIONAL_METADATA>` and attributed as an
+  optional, compactable SYSTEM context contribution. It is not a permanent
+  Role skill or Memory, and is not stored as transcript text.
+- A model-generated `crew-ui` block is inert data, not an approval, evidence,
+  trusted Runtime status or an instruction to execute anything.
+
+### Streaming experience
+
+While the Assistant is still streaming, incomplete `crew-ui` fenced code
+is shown as a compact “正在準備互動卡片…” placeholder instead of flashing
+raw JSON. When the turn completes, the existing one-pass final Markdown
+renderer validates and hydrates the card in-place with a short, reduced-motion
+aware reveal. Invalid or unsupported JSON returns to ordinary visible code.
+Failures/interruptions keep the original Markdown; no speculative cards
+are hydrated. Historical replies still hydrate only through existing
+Role/conversation-aware paths.
+
+Validation: `node test/interactive-reply-p3.test.js` and existing
+P0/P1/P2, visual-answer-inline and Runtime regression tests.
+Manual Android/WebView visual QA remains required.
+
 ## Opt-in structured widget format
 
 An agent can produce a fenced Markdown code block whose language is `crew-ui`.
