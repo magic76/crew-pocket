@@ -1,4 +1,4 @@
-# Crew Pocket · Inline Interactive Replies (P0)
+# Crew Pocket · Inline Interactive Replies (P0 / P1)
 
 The existing Role-owned Markdown transcript remains the single source of truth.
 This feature adds **native UI inside completed assistant messages** without generating
@@ -10,6 +10,27 @@ HTML, calling another model, adding an iframe, or changing provider prompts.
 - Where two or more section panels exist, each of the first six sections has a small `追問這段` control.
 - Clicking a section action **fills the current chat composer**. The user inspects and sends it explicitly.
 - Short conversational answers and streaming text keep their existing appearance.
+
+## P1: Native controls from ordinary Markdown
+
+Without any `crew-ui` block, a completed assistant reply can now show contextual
+actions when its **actual** rendered Markdown has an unambiguous structure:
+
+- A comparison with 2–6 explicitly labeled `方案 A/B`, `選項 A/B`, or `Option A/B` headings,
+  list entries, or table rows gets compact choice chips. A click fills a draft about
+  that exact option; it does not send, run tools or imply the option is approved.
+- A heading labeled `下一步`, `待辦`, `行動項目`, `Next Steps`, etc. with 2–8 short
+  list items gets checkboxes **inside the original list** and a button to draft
+  the checked items. Code-heavy and nested lists are skipped.
+- Only one automatic choice group and one automatic checklist are allowed per
+  reply. Explicit `crew-ui` components override automatic discovery.
+- Original text, headings, lists and tables are retained in place. Ordinary prose
+  and ambiguous options are not transformed; no extra model call or storage is added.
+- Actions use the P0 Role/provider/conversation guard and never overwrite an
+  existing draft. HTML/SVG sandboxes, streaming and failed turns remain unchanged.
+
+Implementation: `public/js/crew-reply-discovery.js` with
+`test/crew-reply-discovery.test.js`; loaded before `crew-interactive.js`.
 
 ## Opt-in structured widget format
 
@@ -48,6 +69,9 @@ trusted `turn_result` through the existing Living UI renderer.
 
 ## Verification
 
+    node --check public/js/crew-reply-discovery.js
+    node --check test/crew-reply-discovery.test.js
+    node test/crew-reply-discovery.test.js
     node --check public/js/crew-interactive.js
     node --check public/js/visual-answer.js
     node --check public/js/chat.js

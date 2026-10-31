@@ -163,6 +163,9 @@ jobs:
           node --check public/js/crew-interactive.js
           node --check test/crew-interactive.test.js
           node test/crew-interactive.test.js
+          node --check public/js/crew-reply-discovery.js
+          node --check test/crew-reply-discovery.test.js
+          node test/crew-reply-discovery.test.js
           node --check test/ui-theme-design.test.js
           node test/ui-theme-design.test.js
           node --check public/js/cockpit-model.js
