@@ -66,7 +66,7 @@ assert.match(elements['cockpit-status-line'].textContent,/尚未同步/);
 current=snapshot;
 callbacks.get('crew:status-updated')();
 const output=elements['crew-attention-panel'].innerHTML;
-assert.match(output,/待你處理/);
+assert.match(output,/需要你查看/);
 assert.match(output,/Helper &lt;script&gt;alert/);
 assert.doesNotMatch(output,/<script>/);
 assert.equal((output.match(/class="crew-attention-row"/g)||[]).length,2);
