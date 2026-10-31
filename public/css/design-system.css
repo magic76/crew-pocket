@@ -109,9 +109,7 @@ textarea:focus-visible, select:focus-visible {
   color: var(--cp-text) !important;
 }
 #messages-container > div.justify-start > .assistant-article::before {
-  background: var(--cp-accent) !important;
-  opacity: .60;
-  box-shadow: none !important;
+  display: none !important;
 }
 #messages-container > div.justify-end > div {
   background: var(--cp-accent-soft) !important;

@@ -137,6 +137,48 @@ const closeDrawerBtn = document.getElementById('close-drawer-btn');
 const convList = document.getElementById('conv-list');
 const roleNavList = document.getElementById('role-nav-list');
 const crewRoomSummary = document.getElementById('crew-room-summary');
+const crewHomeHeader = document.getElementById('crew-home-header');
+const crewHomeDetails = document.getElementById('crew-home-details');
+const crewSummaryToggle = document.getElementById('crew-summary-toggle');
+const cockpitScroll = document.getElementById('cockpit-scroll');
+function setCrewHomeDetailsExpanded(expanded) {
+  if (!crewHomeHeader || !crewSummaryToggle) return;
+  crewHomeHeader.classList.toggle('is-compact', !expanded);
+  if (crewHomeDetails) {
+    crewHomeDetails.setAttribute('aria-hidden', String(!expanded));
+    crewHomeDetails.inert = !expanded;
+  }
+  crewSummaryToggle.setAttribute('aria-expanded', String(expanded));
+  const label = expanded ? '收合小隊詳細資訊' : '展開小隊詳細資訊';
+  crewSummaryToggle.setAttribute('aria-label', label);
+  crewSummaryToggle.title = label;
+}
+crewSummaryToggle?.addEventListener('click', () => {
+  setCrewHomeDetailsExpanded(crewSummaryToggle.getAttribute('aria-expanded') !== 'true');
+});
+function bindCrewHeaderScrollCollapse(container) {
+  if (!container) return;
+  const collapse = () => {
+    if (crewSummaryToggle?.getAttribute('aria-expanded') === 'true') {
+      setCrewHomeDetailsExpanded(false);
+    }
+  };
+  container.addEventListener('wheel', event => {
+    if (event.deltaY > 0) collapse();
+  }, { passive: true });
+  let previousTouchY = null;
+  container.addEventListener('touchstart', event => {
+    previousTouchY = Number(event.touches?.[0]?.clientY);
+  }, { passive: true });
+  container.addEventListener('touchmove', event => {
+    const touchY = Number(event.touches?.[0]?.clientY);
+    if (Number.isFinite(previousTouchY) && touchY < previousTouchY - 5) collapse();
+    previousTouchY = touchY;
+  }, { passive: true });
+  container.addEventListener('touchend', () => { previousTouchY = null; }, { passive: true });
+  container.addEventListener('touchcancel', () => { previousTouchY = null; }, { passive: true });
+}
+[messagesContainer, cockpitScroll].forEach(bindCrewHeaderScrollCollapse);
 const roleNavView = document.getElementById('role-nav-view');
 const roleHistoryView = document.getElementById('role-history-view');
 const roleHistoryTitle = document.getElementById('role-history-title');
@@ -994,9 +1036,9 @@ function renderRoleNavigation() {
   const count = value => Number.isFinite(Number(value))
     ? Math.max(0, Math.trunc(Number(value))) : 0;
   const workingCount = statuses.filter(status => status.state === 'working').length;
-  const waitingCount = statuses.filter(status => status.state === 'waiting').length;
+  const queuedCount = statuses.reduce((total, status) => total +
+    count(status.queuedMessageCount) + count(status.queuedRequestCount), 0);
   const attentionCount = statuses.reduce((total, status) => total +
-    count(status.queuedMessageCount) + count(status.queuedRequestCount) +
     count(status.unreadReplyCount) + count(status.unreadTaskResultCount) +
     count(status.failedRequestCount), 0);
   if (crewRoomSummary) {
@@ -1005,10 +1047,10 @@ function renderRoleNavigation() {
         '</strong><span>角色</span></span>',
       '<span class="crew-summary-item" data-kind="working"><strong>' +
         (crewStatusVerified ? workingCount : '—') + '</strong><span>工作中</span></span>',
-      '<span class="crew-summary-item" data-kind="waiting"><strong>' +
-        (crewStatusVerified ? waitingCount : '—') + '</strong><span>等待中</span></span>',
-      '<span class="crew-summary-item" data-kind="attention"><strong>' +
-        (crewStatusVerified ? attentionCount : '—') + '</strong><span>需查看</span></span>'
+      '<span class="crew-summary-item" data-kind="waiting" title="排隊中的角色訊息與自動回覆請求"><strong>' +
+        (crewStatusVerified ? queuedCount : '—') + '</strong><span>排隊中</span></span>',
+      '<span class="crew-summary-item" data-kind="attention" title="未讀回覆、未讀任務結果與失敗項目"><strong>' +
+        (crewStatusVerified ? attentionCount : '—') + '</strong><span>未讀／失敗</span></span>'
     ].join('');
   }
 

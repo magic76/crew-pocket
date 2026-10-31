@@ -87,21 +87,8 @@ body.ai-streaming #send-btn {
   border: 0 !important;
   border-radius: 0.35rem !important;
   box-shadow: none !important;
-  padding: 0.55rem 0.3rem 0.7rem 0.85rem !important;
+  padding: 0.55rem 0.3rem 0.7rem 0.3rem !important;
   animation: bubble-enter 0.22s ease-out !important;
-}
-
-#messages-container > div.justify-start > .assistant-article::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 0.35rem;
-  bottom: 0.35rem;
-  width: 2px;
-  border-radius: 9999px;
-  background: linear-gradient(180deg, #6366f1, #38bdf8 58%, #8b5cf6);
-  opacity: 0.82;
-  box-shadow: none;
 }
 
 .assistant-article .agent-execution-details,
@@ -124,7 +111,7 @@ body.ai-streaming #send-btn {
 
 @media (max-width: 640px) {
   #messages-container > div.justify-start > .assistant-article {
-    padding-left: 0.72rem !important;
+    padding-left: 0.25rem !important;
     padding-right: 0.12rem !important;
     padding-top: 0.42rem !important;
     padding-bottom: 0.58rem !important;

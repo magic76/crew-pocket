@@ -366,3 +366,77 @@ html[data-crew-theme="light"] :is(#crew-chat-role-state,.crew-activity-kind,.cre
   }
   .crew-neural-link,.crew-focus-orb {display:none !important;}
 }
+
+/* Keep the four Crew status counters visible while the full header collapses. */
+.crew-home-details {
+  max-height: 180px;
+  overflow: hidden;
+  opacity: 1;
+  transition: max-height .18s ease, opacity .14s ease, visibility .18s linear;
+}
+.crew-home-header.is-compact {
+  padding: 7px 10px 8px;
+}
+.crew-home-header.is-compact .crew-home-details {
+  max-height: 0;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+.crew-home-status-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+}
+.crew-home-header.is-compact .crew-home-status-row { margin-top: 0; }
+.crew-home-header #crew-room-summary {
+  flex: 1;
+  min-width: 0;
+  margin-top: 0;
+  gap: 5px;
+}
+#crew-room-summary .crew-summary-item {
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+  padding: 5px 3px;
+  text-align: center;
+}
+#crew-room-summary .crew-summary-item strong { font-size: 16px; }
+#crew-room-summary .crew-summary-item span {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 9px;
+  text-overflow: ellipsis;
+}
+.crew-summary-toggle {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 34px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--cp-border);
+  border-radius: 9px;
+  background: var(--cp-surface);
+  color: var(--cp-muted);
+  touch-action: manipulation;
+}
+.crew-summary-toggle svg { transition: transform .18s ease; }
+.crew-summary-toggle[aria-expanded="true"] svg { transform: rotate(180deg); }
+.crew-summary-toggle:active { background: var(--cp-accent-soft); color: var(--cp-accent-strong); }
+.crew-summary-toggle:focus-visible {
+  outline: 2px solid var(--cp-accent-strong);
+  outline-offset: 2px;
+}
+@media(max-width:350px) {
+  .crew-home-header.is-compact { padding-right: 8px; padding-left: 8px; }
+  .crew-home-header #crew-room-summary { gap: 4px; }
+  #crew-room-summary .crew-summary-item { padding-right: 2px; padding-left: 2px; }
+  #crew-room-summary .crew-summary-item span { font-size: 8px; }
+  .crew-summary-toggle { width: 30px; }
+}
+@media(prefers-reduced-motion:reduce) {
+  .crew-home-details, .crew-summary-toggle svg { transition: none !important; }
+}

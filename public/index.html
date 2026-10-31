@@ -517,7 +517,8 @@
       </section>
 
   <div id="crew-home-header-host">
-    <div id="crew-home-header" class="crew-home-header">
+    <div id="crew-home-header" class="crew-home-header is-compact">
+      <div id="crew-home-details" class="crew-home-details" aria-hidden="true" inert>
           <div class="crew-home-top">
             <div class="crew-home-brand">
               <div class="crew-home-kicker">CREW DASHBOARD</div>
@@ -530,10 +531,15 @@
               <button id="drawer-new-role-btn" type="button" aria-label="新增 Role" title="新增 Role">＋</button>
             </div>
           </div>
-          <div class="crew-home-status-row">
-            <div id="crew-room-summary" class="crew-home-summary" aria-live="polite">載入小隊狀態…</div>
-          </div>
           <div id="cockpit-status-line" class="crew-home-sync" role="status" hidden>Runtime 尚未同步</div>
+      </div>
+      <div class="crew-home-status-row">
+        <div id="crew-room-summary" class="crew-home-summary" aria-live="polite">載入小隊狀態…</div>
+        <button id="crew-summary-toggle" class="crew-summary-toggle" type="button"
+          aria-label="展開小隊詳細資訊" aria-controls="crew-home-details" aria-expanded="false" title="展開小隊詳細資訊">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+        </button>
+      </div>
     </div>
   </div>
 
@@ -642,7 +648,7 @@
     </div>
 
     <!-- MESSAGES SCROLL AREA -->    <!-- MESSAGES SCROLL AREA -->
-    <main id="messages-container" class="flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-4 space-y-3.5 select-text min-h-0 w-full max-w-full">
+    <main id="messages-container" class="flex-1 overflow-y-auto overflow-x-hidden px-2 py-3 sm:px-2 sm:py-4 space-y-3.5 select-text min-h-0 w-full max-w-full">
       <!-- Welcome Message -->
       <div class="flex gap-2.5 w-full max-w-2xl mx-auto justify-start min-w-0">
         <div class="w-7 h-7 rounded-full bg-indigo-600/30 border border-indigo-500/50 flex items-center justify-center text-indigo-400 shrink-0 text-xs font-bold mt-0.5">
