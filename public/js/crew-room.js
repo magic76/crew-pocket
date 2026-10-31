@@ -79,6 +79,8 @@
       rect(6, 25, 20, 7, p.coat),
       rect(3, 28, 6, 4, p.coat),
       rect(23, 28, 6, 4, p.coat),
+      rect(4, 30, 3, 2, p.skin, 'crew-pixel-hand'),
+      rect(25, 30, 3, 2, p.skin, 'crew-pixel-hand'),
       rect(9, 24, 14, 2, p.accent),
       rect(10, 9, 12, 12, p.skin)
     ];
