@@ -138,7 +138,7 @@
       return richApi()?.mount(pre, spec, context, fillComposer);
     }
     const widget = document.createElement('section');
-    widget.className = 'crew-interactive';
+    widget.className = 'crew-interactive crew-reply-revealed';
     widget.dataset.crewInteractive = spec.type;
     widget.setAttribute('aria-label', spec.title);
     widget.innerHTML = widgetHtml(spec);
@@ -185,6 +185,25 @@
     });
   }
 
+  function maskStreaming(container) {
+    // A half-written fenced JSON block is not useful to read while streaming.
+    // Every stream render recreates its DOM; completed/failed replies keep
+    // the original Markdown and the final renderer decides what is valid.
+    if (!container || typeof document === 'undefined') return 0;
+    let count = 0;
+    for (const code of container.querySelectorAll('pre > code.language-crew-ui')) {
+      const pre = code.parentElement;
+      if (!pre) continue;
+      const placeholder = document.createElement('div');
+      placeholder.className = 'crew-interactive-placeholder';
+      placeholder.setAttribute('role', 'status');
+      placeholder.textContent = '正在準備互動卡片…';
+      pre.replaceWith(placeholder);
+      count++;
+    }
+    return count;
+  }
+
   function enhance(container, context = {}) {
     if (!container) return 0;
     let count = 0;
@@ -205,5 +224,5 @@
     return count;
   }
 
-  return { normalizeSpec, parseSpec, buildDraft, widgetHtml, enhance };
+  return { normalizeSpec, parseSpec, buildDraft, widgetHtml, maskStreaming, enhance };
 });

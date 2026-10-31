@@ -3762,6 +3762,7 @@ window.clearAndResetCurrentConversation = clearAndResetCurrentConversation;
   function renderFormattedContent(content) {
     const renderStartedAt = performance.now();
     contentElem.innerHTML = formatMessageContent(content);
+    if (!turnFinalized && !isBtwQuery) window.CrewInteractive?.maskStreaming(contentElem);
     const renderEndedAt = performance.now();
     if (clientTiming.started_at !== null) {
       const duration = Math.max(0, renderEndedAt - renderStartedAt);

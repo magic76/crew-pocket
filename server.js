@@ -66,6 +66,7 @@ const {
   formatMemoryEvidence,
   formatAgentContext
 } = require('./lib/context-builder');
+const { buildInteractiveReplyGuide } = require('./lib/interactive-reply-guide');
 const { analyzeConversationContext } = require('./lib/context/health');
 const { planContextCompaction } = require('./lib/context/compaction');
 const { buildAutoCompactSignals, autoCompactCooldown, evaluateAutoCompact, summarizeRepeatedTools } = require('./lib/context/auto-compact');
@@ -2600,6 +2601,31 @@ async function handleChatTurn(req, res, submittedBody = null) {
     .filter(skill => skill.status === 'candidate' ||
       (skill.status === 'active' && skill.verification?.method === 'runtime-observed'))
     .map(skill => skill.id).slice(0, 1);
+
+  // P3: optional per-turn presentation hint, never a permanent Role identity.
+  // Only lightweight CHAT/INSPECT requests qualify. Existing draft/approval
+  // boundaries and trusted tool outcomes remain governed by their own paths.
+  const interactiveReplyGuide = buildInteractiveReplyGuide(prompt, {
+    executionMode: executionPolicy?.mode || '',
+    imagePath: image_path || '',
+    background: Boolean(body.is_btw || body.isBtw)
+  });
+  if (interactiveReplyGuide) {
+    assembledContextContributions = assembledContextContributions.filter(
+      item => item.id !== 'interactive-reply-guide'
+    );
+    assembledContextContributions.push(contributionFromText({
+      id: 'interactive-reply-guide',
+      type: ContextSourceType.SYSTEM,
+      text: interactiveReplyGuide,
+      label: 'Optional reply presentation',
+      priority: ContextPriority.NORMAL,
+      compactable: true,
+      sourceRef: 'system:interactive-reply-guide'
+    }));
+    finalPrompt = '<ADDITIONAL_METADATA>\n' + interactiveReplyGuide +
+      '\n</ADDITIONAL_METADATA>\n' + finalPrompt;
+  }
 
   if (image_path) {
     finalPrompt = `[Uploaded Image: ${image_path}]\n${finalPrompt}`;
