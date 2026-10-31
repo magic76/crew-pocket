@@ -140,6 +140,11 @@
       checkbox.setAttribute('aria-label', '選取待辦項目：' + labels[index]);
       item.insertBefore(checkbox, item.firstChild || null);
       item.classList.add('crew-auto-task');
+      // Make the whole row a comfortable touch target, but preserve real links.
+      item.addEventListener('click', event => {
+        if (event.target?.closest?.('input, button, a, label, summary')) return;
+        checkbox.checked = !checkbox.checked;
+      });
     });
     const button = element('button', 'crew-auto-apply', '依勾選項目繼續');
     button.type = 'button';
