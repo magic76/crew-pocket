@@ -120,7 +120,9 @@
   margin: 0 8px 0 0; vertical-align: text-bottom;
   accent-color: var(--cp-accent, #14b8a6);
 }
-.assistant-article .crew-auto-task { padding-block: 4px; }
+.assistant-article .crew-auto-task {
+  min-height: 44px; padding-block: 10px; cursor: pointer;
+}
 @media (prefers-reduced-motion: reduce) {
   .assistant-article .crew-auto-chip,
   .assistant-article .crew-auto-apply { transition: none; }
