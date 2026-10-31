@@ -2712,6 +2712,10 @@ async function handleChatTurn(req, res, submittedBody = null) {
       toolEventCount += 1;
       const info = event.info || {};
       const effectiveState = info.error || (Number.isInteger(info.exitCode) && info.exitCode !== 0) ? 'failed' : state;
+      if (isFailedToolState(effectiveState)) {
+        run.hadFailure = true;
+        if (typeof info.error === 'string') run.failureError = info.error.slice(0, 4000);
+      }
       if (state === 'running') runtimeSkillChecks.delete(key);
       const runtimeCheck = runtimeCheckResult(event);
       if (runtimeCheck) runtimeSkillChecks.set(key, runtimeCheck);
@@ -2720,14 +2724,17 @@ async function handleChatTurn(req, res, submittedBody = null) {
       const errorCode = info.error_code || info.errorCode ||
         (Number.isInteger(info.exitCode) && info.exitCode !== 0 &&
         /(?:npm (?:ERR!|error)\s+)?Missing script:/i.test(toolOutput) ? 'SCRIPT_NOT_FOUND' : null);
+      if (isFailedToolState(effectiveState) && errorCode) run.failureCode = errorCode;
       feedbackTools.set(key, {
         tool_group_id: key,
         tool_name: event.name || event.tool_name,
         state: effectiveState,
+        had_failure: run.hadFailure === true,
         tool_info: {
-          parameters: info.parameters, exitCode: info.exitCode, error: info.error,
+          parameters: info.parameters, exitCode: info.exitCode,
+          error: info.error || run.failureError || null,
           // Only retain bounded deterministic metadata; never copy raw output.
-          error_code: errorCode,
+          error_code: errorCode || run.failureCode || null,
           root_cause: info.root_cause,
           schema_invalid: info.schema_invalid === true,
           selection_mismatch: info.selection_mismatch === true,

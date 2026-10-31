@@ -72,6 +72,13 @@ test('large re-read output generates output candidate without copying raw data',
   assert.equal(proposalsFromTrace(t)[0].type, 'output');
   assert.doesNotMatch(JSON.stringify(proposalsFromTrace(t)), /SECRET_RAW_TOOL_OUTPUT/);
 });
+test('recovered tool retains historical failed-attempt signal', () => {
+  const t = trace({ error: 'failed' }, {
+    tools: [{ tool_group_id: 'tool-1', tool_name: 'run_npm_script',
+      state: 'completed', had_failure: true, attempts: 2, tool_info: { error: 'failed' } }]
+  });
+  assert.equal(proposalsFromTrace(t)[0].type, 'error');
+});
 test('missing script produces preflight proposal', () => {
   assert.match(proposalsFromTrace(trace({ error_code: 'SCRIPT_NOT_FOUND' }))[0].proposal, /package\.json/);
 });
