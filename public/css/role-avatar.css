@@ -7,11 +7,11 @@
 .crew-avatar-editor-heading strong { display: block; font-size: 15px; font-weight: 750; }
 .crew-avatar-editor-heading p { margin-top: 4px; font-size: 12px; line-height: 1.5; color: #cbd5e1; }
 .crew-avatar-preview {
-  display: grid; place-items: center; width: 66px; height: 66px; flex: 0 0 66px;
+  display: grid; place-items: center; width: 76px; height: 76px; flex: 0 0 76px;
   border: 1px solid #475569; border-radius: 17px;
   background: linear-gradient(140deg, #28334e, #101827);
 }
-.crew-avatar-preview .crew-role-sprite { width: 60px; height: 60px; }
+.crew-avatar-preview .crew-role-sprite { width: 70px; height: 70px; }
 .crew-avatar-editor-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
 .crew-avatar-editor-fields label { display: grid; gap: 5px; min-width: 0; color: #f1f5f9; font-size: 12px; }
 .crew-avatar-editor-fields select {

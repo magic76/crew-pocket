@@ -195,7 +195,7 @@ body[data-primary-tab="crew"] #chat-composer-footer { display: none !important; 
 .crew-role-switcher-option .crew-role-avatar {
   width: 40px; height: 40px; flex: none; border-radius: 10px;
 }
-.crew-role-switcher-option .crew-role-sprite { width: 36px; height: 36px; }
+.crew-role-switcher-option .crew-role-sprite { width: 37px; height: 37px; }
 .crew-role-switcher-copy { display: grid; min-width: 0; flex: 1; gap: 3px; }
 .crew-role-switcher-copy strong,
 .crew-role-switcher-copy small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
