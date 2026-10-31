@@ -134,7 +134,7 @@ function prepare(kind) {
 const originalDocument = global.document;
 global.document = { createElement() { return new FakeNode(); } };
 let tabs = prepare(scenario);
-assert.match(tabs.panel.innerHTML, /只調整 UI/);
+assert.match(tabs.node.innerHTML, /只調整 UI/, 'initial panel is part of static HTML');
 tabs.tabNodes[1].handlers.click();
 assert.match(tabs.panel.innerHTML, /優化完整操作流程/);
 assert.equal(tabs.tabNodes[1].attrs['aria-selected'], 'true');
