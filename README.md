@@ -54,6 +54,7 @@ Claude Code 必須安裝在 **執行 Crew Runtime 的主機上**，而不是只�
 ## 🌟 核心特色 (Key Features)
 
 - 🌐 **原生無縫內嵌沙盒 2.0 (Seamless Inline Sandboxes)**：HTML / SVG / Web Audio / Chart.js 產物直接在對話中滿版動態渲染，高度智慧自適應，支援觸控互動、全螢幕大視野與代碼一鍵複製。
+- 🧩 **對話內原生互動回覆（P0）**：長篇報告可直接針對段落追問，支援 `crew-ui` 單選、清單及數據卡；所有操作先填入當前 Role 的輸入框，確認後才發送。詳見 [互動回覆規格](docs/interactive-replies.md)。
 - 📱 **滿版極致視野 (Full-Width Top-Header Layout)**：捨棄傳統側邊頭像縮排，採用頂部精緻抬頭，釋放 100% 手機螢幕橫向空間，讓代碼與視覺組件更開闊。
 - ⚡ **賽博朋克即時思考跑馬燈 (Cyberpunk Live Ticker)**：AI 思考推理（CoT）、工具呼叫（Tool Call）與文字生成脈絡即時滾動展示。
 - 📦 **深度記憶提煉壓縮 (`/compact`)**：一鍵精簡長篇對話核心脈絡，同時無縫繼承上下文。
