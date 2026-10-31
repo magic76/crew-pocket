@@ -24,7 +24,7 @@
     if (!record(value) || value.version !== 1) return null;
     const title = plain(value.title, 90);
     if (!title) return null;
-    const question = value.question == null ? '' : plain(value.question, 220);
+    const question = value.question == null || value.question === '' ? '' : plain(value.question, 220);
     if (question === null) return null;
     if (value.type === 'choice') {
       if (!Array.isArray(value.options) || value.options.length < 2 || value.options.length > 8) return null;
@@ -62,7 +62,7 @@
   let nextId = 0;
   function widgetHtml(spec) {
     const heading = '<div class="crew-interactive-heading"><strong>' + escapeHtml(spec.title) + '</strong>' +
-      '<span>互動卡片</span></div>';
+      '<span>' + (spec.type === 'metrics' ? 'AI 回覆資料 · 未驗證' : '互動卡片') + '</span></div>';
     const hint = spec.question ? '<p class="crew-interactive-question">' + escapeHtml(spec.question) + '</p>' : '';
     if (spec.type === 'metrics') {
       return heading + hint + '<div class="crew-interactive-metrics">' + spec.items.map(item =>
