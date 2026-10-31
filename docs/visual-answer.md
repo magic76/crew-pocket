@@ -36,6 +36,14 @@ change memory, provider prompts, transcript text, or source tool events.
   grouping, original-node preservation, and lazy history coverage.
 - `test/execution-result-ui.test.js`: task card invariants.
 
+## Native inline interactions (P0)
+
+`public/js/crew-interactive.js` adds bounded, declarative UI to an existing
+finished Markdown message. It can enrich normal report sections with draft-only
+follow-up controls and parse explicitly fenced `crew-ui` JSON blocks into
+choice, checklist, or read-only metrics cards. It never runs model HTML or
+sends messages itself. See [Interactive Replies](interactive-replies.md).
+
 ## Compatibility
 
 `lib/visual-answer.js` and `POST /api/visual-answer` remain available for
