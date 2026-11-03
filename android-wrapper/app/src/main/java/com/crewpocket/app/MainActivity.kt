@@ -65,6 +65,7 @@ class MainActivity : Activity() {
     private val pageLoaded = AtomicBoolean(false)
     private lateinit var runtimeHealthMonitor: RuntimeHealthMonitor
     private lateinit var wirelessDebugController: WirelessDebugController
+    private lateinit var wirelessAdbAutoReconnect: WirelessAdbAutoReconnect
 
     private var pendingWebPermission: PermissionRequest? = null
     private var pendingWebResources: Array<String> = emptyArray()
@@ -96,7 +97,8 @@ class MainActivity : Activity() {
         captureConversationIntent(intent)
         captureSharedImageIntent(intent)
         buildUi()
-        wirelessDebugController = WirelessDebugController(this)
+        wirelessAdbAutoReconnect = WirelessAdbAutoReconnect(this)
+        wirelessDebugController = WirelessDebugController(this, wirelessAdbAutoReconnect)
         runtimeHealthMonitor = RuntimeHealthMonitor(
             onHealthy = {
                 runOnUiThread {
@@ -133,9 +135,11 @@ class MainActivity : Activity() {
         super.onStart()
         startCrewRuntime()
         runtimeHealthMonitor.start()
+        wirelessAdbAutoReconnect.start()
     }
 
     override fun onStop() {
+        wirelessAdbAutoReconnect.stop()
         runtimeHealthMonitor.stop()
         notifyRuntimeBackground()
         super.onStop()
@@ -144,12 +148,14 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         refreshSetupStatus()
+        wirelessAdbAutoReconnect.refresh()
     }
 
     override fun onDestroy() {
         unregisterReceiver(runtimeReloadReceiver)
         runtimeHealthMonitor.close()
         wirelessDebugController.close()
+        wirelessAdbAutoReconnect.close()
         sharedImportExecutor.shutdownNow()
         webView.destroy()
         super.onDestroy()

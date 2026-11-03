@@ -98,6 +98,40 @@ object TermuxBridge {
         return runCrewScript(context, command)
     }
 
+
+    /**
+     * Reconnect to this phone's loopback ADB TLS port using the existing Termux
+     * ADB identity. No pairing or code prompts. Persist only on verified success.
+     */
+    fun reconnectPairedAdb(context: Context, port: Int): Result<Unit> {
+        require(port in 1..65535) { "Invalid local ADB port" }
+        val command = """
+            set -eu
+            umask 077
+            mkdir -p "${'$'}HOME/.crew-pocket"
+            if [ ! -s "${'$'}HOME/.android/adbkey" ]; then
+                printf '%s\n' 'reconnect: no prior Termux ADB identity' > "${'$'}HOME/.crew-pocket/adb-last-result"
+                exit 0
+            fi
+            if ! command -v adb >/dev/null 2>&1; then
+                printf '%s\n' 'reconnect: adb unavailable' > "${'$'}HOME/.crew-pocket/adb-last-result"
+                exit 0
+            fi
+            if command -v timeout >/dev/null 2>&1; then
+                timeout 8 adb connect '127.0.0.1:$port' >/dev/null 2>&1 || true
+            else
+                adb connect '127.0.0.1:$port' >/dev/null 2>&1 || true
+            fi
+            if adb devices | grep -E '^127[.]0[.]0[.]1:$port[[:space:]]+device([[:space:]]|$)' >/dev/null; then
+                printf '%s\n' '127.0.0.1:$port' > "${'$'}HOME/.adb_port"
+                printf '%s\n' 'reconnect: connected' > "${'$'}HOME/.crew-pocket/adb-last-result"
+            else
+                printf '%s\n' 'reconnect: not authorized; enable Wireless Debugging or pair once' > "${'$'}HOME/.crew-pocket/adb-last-result"
+            fi
+        """.trimIndent()
+        return runCrewScript(context, command)
+    }
+
     private fun validateAdbEndpoint(target: String): String {
         val normalized = target.trim().replace('：', ':').replace(" ", "")
         require(normalized.matches(Regex("(?:[A-Za-z0-9._-]+|\\[[0-9A-Fa-f:]+\\]):[1-9][0-9]{0,4}"))) {
