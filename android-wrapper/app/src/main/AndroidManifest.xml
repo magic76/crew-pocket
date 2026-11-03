@@ -48,6 +48,15 @@
         </activity>
 
         <service
+            android:name=".WirelessPairingService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Temporary user-initiated local ADB pairing discovery while the user views Android Wireless Debugging settings and enters a pairing code via notification." />
+        </service>
+
+        <service
             android:name=".CrewRuntimeService"
             android:exported="false"
             android:foregroundServiceType="specialUse">
