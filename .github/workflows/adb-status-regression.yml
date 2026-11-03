@@ -1,0 +1,22 @@
+name: ADB status regression
+on:
+  pull_request:
+    paths:
+      - 'server.js'
+      - 'lib/adb-status.js'
+      - 'test/adb-status.test.js'
+      - '.github/workflows/adb-status-regression.yml'
+  workflow_dispatch:
+
+jobs:
+  adb-status:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check status module syntax
+        run: node --check lib/adb-status.js
+      - name: Check exact authorized ADB device matching
+        run: node --test test/adb-status.test.js
