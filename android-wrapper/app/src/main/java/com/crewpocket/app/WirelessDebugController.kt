@@ -26,7 +26,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
 
-class WirelessDebugController(
+internal class WirelessDebugController(
     private val activity: Activity,
     private val autoReconnect: WirelessAdbAutoReconnect
 ) {
@@ -71,8 +71,8 @@ class WirelessDebugController(
             textSize = 15f
         }
         val helperText = TextView(activity).apply {
-            text = "已配對的手機會自動重連，不必每次輸入六位碼。首次使用或授權遭撤銷時，才需要快速配對。"
-                + "若無法重連，請先確認 Android 無線偵錯已開啟。"
+            text = "已配對的手機會自動重連，不必每次輸入六位碼。首次使用或授權遭撤銷時，才需要快速配對。" +
+                "若無法重連，請先確認 Android 無線偵錯已開啟。"
             setTextColor(Color.rgb(100, 116, 139))
             textSize = 12f
             setPadding(0, dp(4), 0, dp(4))
