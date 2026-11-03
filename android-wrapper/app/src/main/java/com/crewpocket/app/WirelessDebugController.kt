@@ -13,6 +13,7 @@ import android.provider.Settings
 import android.text.InputType
 import android.view.Gravity
 import android.widget.Button
+import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -25,7 +26,10 @@ import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
 
-class WirelessDebugController(private val activity: Activity) {
+class WirelessDebugController(
+    private val activity: Activity,
+    private val autoReconnect: WirelessAdbAutoReconnect
+) {
     companion object {
         private const val SERVER_URL = "http://127.0.0.1:8000/"
     }
@@ -67,8 +71,8 @@ class WirelessDebugController(private val activity: Activity) {
             textSize = 15f
         }
         val helperText = TextView(activity).apply {
-            text = "推薦使用快捷配對：系統會自動尋找本機配對埠，直接在通知輸入 6 位驗證碼，不需要填 IP。" +
-                "原本 IP:Port 操作保留在手動設定中。"
+            text = "已配對的手機會自動重連，不必每次輸入六位碼。首次使用或授權遭撤銷時，才需要快速配對。"
+                + "若無法重連，請先確認 Android 無線偵錯已開啟。"
             setTextColor(Color.rgb(100, 116, 139))
             textSize = 12f
             setPadding(0, dp(4), 0, dp(4))
@@ -78,6 +82,15 @@ class WirelessDebugController(private val activity: Activity) {
             setTextColor(Color.rgb(148, 163, 184))
             textSize = 12f
             setPadding(0, dp(8), 0, dp(8))
+        }
+        val autoReconnectToggle = CheckBox(activity).apply {
+            text = "自動重連（已配對裝置，推薦開啟）"
+            isChecked = autoReconnect.enabled()
+            setOnCheckedChangeListener { _, enabled -> autoReconnect.setEnabled(enabled) }
+        }
+        val reconnectButton = Button(activity).apply {
+            text = "立即檢查並重連"
+            minHeight = dp(48)
         }
         val quickPairButton = Button(activity).apply {
             text = "快速配對（通知輸入 6 位碼）"
@@ -131,8 +144,10 @@ class WirelessDebugController(private val activity: Activity) {
         manualFields.addView(pairButton)
         manualFields.addView(secondaryRow)
         container.addView(helperText)
-        container.addView(quickPairButton)
+        container.addView(autoReconnectToggle)
+        container.addView(reconnectButton)
         container.addView(statusText)
+        container.addView(quickPairButton)
         container.addView(manualToggleButton)
         container.addView(manualFields)
         val scrollContainer = ScrollView(activity).apply {
@@ -151,6 +166,12 @@ class WirelessDebugController(private val activity: Activity) {
             adbDialog = null
         }
     
+        reconnectButton.setOnClickListener {
+            autoReconnect.refresh()
+            statusText.text = "正在搜尋已配對的本機 ADB 連線埠…"
+            statusText.setTextColor(Color.rgb(148, 163, 184))
+            refreshAdbStatus(targetInput, statusText, retries = 10, delayMs = 800L)
+        }
         manualToggleButton.setOnClickListener {
             val expanded = manualFields.visibility != android.view.View.VISIBLE
             manualFields.visibility = if (expanded) android.view.View.VISIBLE else android.view.View.GONE
@@ -274,7 +295,8 @@ class WirelessDebugController(private val activity: Activity) {
         }
     
         dialog.setOnShowListener {
-            refreshAdbStatus(targetInput, statusText)
+            autoReconnect.refresh()
+            refreshAdbStatus(targetInput, statusText, retries = 8, delayMs = 1000L)
         }
         dialog.show()
     }
