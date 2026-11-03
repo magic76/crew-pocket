@@ -89,6 +89,7 @@ internal class WirelessAdbAutoReconnect(context: Context) {
 
     fun stop() {
         started = false
+        connecting = false
         if (networkRegistered) {
             try { network.unregisterNetworkCallback(callback) } catch (_: Exception) { }
             networkRegistered = false
@@ -228,11 +229,16 @@ internal class WirelessAdbAutoReconnect(context: Context) {
         worker.execute {
             val dispatched = TermuxBridge.reconnectPairedAdb(app, port).isSuccess
             if (dispatched) {
-                // RunCommand is asynchronous; verify before reporting success.
+                // RunCommand is asynchronous; verify before considering it connected.
+                var verified = false
                 repeat(10) {
-                    if (alreadyConnected()) return@execute
-                    try { Thread.sleep(900) } catch (_: InterruptedException) {
-                        return@execute
+                    if (!verified) {
+                        verified = alreadyConnected()
+                        if (!verified) {
+                            try { Thread.sleep(900) } catch (_: InterruptedException) {
+                                verified = false
+                            }
+                        }
                     }
                 }
             }
@@ -245,7 +251,10 @@ internal class WirelessAdbAutoReconnect(context: Context) {
     }
 
     private fun stopScan(invalidate: Boolean = true) {
-        if (invalidate) generation++
+        if (invalidate) {
+            generation++
+            connecting = false
+        }
         deadline?.let { main.removeCallbacks(it) }
         deadline = null
         listener?.let { active ->
