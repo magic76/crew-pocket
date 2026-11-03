@@ -67,8 +67,8 @@ class WirelessDebugController(private val activity: Activity) {
             textSize = 15f
         }
         val helperText = TextView(activity).apply {
-            text = "推薦使用快捷配對：系統會自動尋找本機配對埠，直接在通知輸入 6 位驗證碼，不需要填 IP。"
-                    + "原本 IP:Port 操作保留在手動設定中。"
+            text = "推薦使用快捷配對：系統會自動尋找本機配對埠，直接在通知輸入 6 位驗證碼，不需要填 IP。" +
+                "原本 IP:Port 操作保留在手動設定中。"
             setTextColor(Color.rgb(100, 116, 139))
             textSize = 12f
             setPadding(0, dp(4), 0, dp(4))
