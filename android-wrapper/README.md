@@ -36,12 +36,34 @@ Both requirements are mandatory for Termux's official `RUN_COMMAND` integration.
 
 ## Wireless debugging setup from the APK
 
-Open the Crew Pocket tools menu and choose **無線偵錯設定**. The native setup
-sheet can save the debug `IP:Port`, run `adb connect` through Termux, show the
-current ADB status, open Android's developer settings, and copy a matching
-command for Termux. For a new pairing, enter the pairing `IP:Port` and the
-six-digit pairing code, then choose **配對並連線**. The endpoint is stored in
-`~/.adb_port`, so `~/install-apk.sh` uses the same setting afterward.
+Open the Crew Pocket tools menu and choose **無線偵錯設定**.
+
+On Android 11+, the default **快速配對（通知輸入 6 位碼）** works similarly
+to Shizuku's setup without requiring Shizuku itself:
+
+1. Allow Crew Pocket notifications and the Termux Run Command permission.
+2. Tap 快速配對. Crew Pocket starts a temporary foreground mDNS discovery
+   service, shows a pairing-code notification, and opens Developer Options.
+3. Enable Wireless debugging, select **Pair device with pairing code**.
+   Keep Android's pairing dialog open.
+4. Pull down the notification shade and enter the six-digit code in the
+   Crew Pocket notification. Neither a pairing IP nor a connect IP is needed.
+5. Crew Pocket discovers `_adb-tls-pairing._tcp` and
+   `_adb-tls-connect._tcp`, probes their **local loopback** ports, sends
+   `adb pair` and `adb connect` through the existing Termux bridge, and
+   verifies the connection via `/api/adb`.
+
+The six-digit code is not saved in Crew Pocket preferences or notification
+text. The discovery times out after two minutes. The user must enable
+Wireless debugging in Android Settings; Crew Pocket cannot enable it silently.
+This requires a Wi-Fi network and may need repeating after reboot or network
+changes. If discovery or notifications fail, expand **手動 IP:Port 設定**
+to use the previous pairing, connection and diagnostic commands.
+
+The confirmed connection endpoint is stored in `~/.adb_port`, so
+`~/install-apk.sh` uses the same setting afterward. The Android wrapper
+continues to use Termux for the ADB binary; this change does not embed
+ADB, grant privileges, or install Shizuku.
 
 ## Build
 
