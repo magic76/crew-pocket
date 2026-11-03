@@ -1,6 +1,5 @@
 package com.crewpocket.app
 
-import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -9,7 +8,6 @@ import android.app.RemoteInput
 import android.app.Service
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
 import android.os.Build
@@ -53,6 +51,9 @@ class WirelessPairingService : Service() {
     }
 
     private val main = Handler(Looper.getMainLooper())
+    private val notifications: NotificationManager by lazy {
+        getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+    }
     private val discoveries = mutableMapOf<String, NsdManager.DiscoveryListener>()
     private val resolvingQueue = ArrayDeque<Pair<String, NsdServiceInfo>>()
     private val discoveredNames = mutableMapOf<String, String>()
@@ -69,7 +70,6 @@ class WirelessPairingService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        val notifications = getSystemService(NotificationManager::class.java)
         notifications.createNotificationChannel(
             NotificationChannel(CHANNEL, "Crew Pocket 無線偵錯配對", NotificationManager.IMPORTANCE_DEFAULT)
         )
@@ -96,6 +96,7 @@ class WirelessPairingService : Service() {
     }
 
     private fun discover(type: String) {
+        if (finished) return
         val listener = object : NsdManager.DiscoveryListener {
             override fun onDiscoveryStarted(serviceType: String) = Unit
             override fun onStartDiscoveryFailed(serviceType: String, errorCode: Int) {
@@ -188,8 +189,7 @@ class WirelessPairingService : Service() {
                 "配對埠已找到，正在等待無線偵錯連線埠…"
             else -> "請在「無線偵錯」按「使用配對碼配對裝置」…"
         }
-        getSystemService(NotificationManager::class.java)
-            .notify(NOTIFICATION_ID, notification(message, true))
+        notifications.notify(NOTIFICATION_ID, notification(message, true))
     }
 
     private fun notification(message: String, allowCode: Boolean): Notification {
@@ -228,20 +228,20 @@ class WirelessPairingService : Service() {
     private fun submitCode(code: String) {
         if (finished || processing || !started) return
         if (!code.matches(Regex("[0-9]{6}"))) {
-            getSystemService(NotificationManager::class.java).notify(
+            notifications.notify(
                 NOTIFICATION_ID, notification("配對碼需為 6 位數字，請重新輸入。", true))
             return
         }
         val pair = pairingPort
         val connect = connectionPort
         if (pair == 0 || connect == 0) {
-            getSystemService(NotificationManager::class.java).notify(
+            notifications.notify(
                 NOTIFICATION_ID, notification(
                     "尚未找到兩個本機 ADB 端點。請維持系統配對視窗開啟，稍後重試。", true))
             return
         }
         processing = true
-        getSystemService(NotificationManager::class.java).notify(
+        notifications.notify(
             NOTIFICATION_ID, notification("正在透過 Termux 執行本機 ADB 配對…", false))
         Thread {
             if (!isLocalPortOpen(pair) || !isLocalPortOpen(connect)) {
@@ -270,7 +270,7 @@ class WirelessPairingService : Service() {
                 }
             }
             main.post {
-                if (confirmed) finish("ADB 配對並連線成功。", true)
+                if (confirmed) finish("ADB 已確認連線，可返回 Crew Pocket 使用。", true)
                 else finish("配對指令已送出但尚未確認連線；請回 Crew Pocket 查看狀態。", false)
             }
         }.start()
@@ -298,7 +298,7 @@ class WirelessPairingService : Service() {
         if (finished) return
         finished = true
         main.removeCallbacks(expire)
-        getSystemService(NotificationManager::class.java).notify(
+        notifications.notify(
             NOTIFICATION_ID, notification(message, false))
         stopForeground(STOP_FOREGROUND_DETACH)
         stopSelf()
