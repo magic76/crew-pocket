@@ -229,6 +229,7 @@ async function handleStorageThumbnail(parsedUrl, res) {
 // 🔌 Central ADB Wireless Debugging Handlers (~/.adb_port)
 const ADB_PORT_FILE = path.join(os.homedir(), '.adb_port');
 const ADB_RESULT_FILE = path.join(os.homedir(), '.crew-pocket', 'adb-last-result');
+const { isAdbTargetConnected } = require('./lib/adb-status');
 
 async function handleAdbStatus(res) {
   try {
@@ -246,11 +247,7 @@ async function handleAdbStatus(res) {
     try {
       const { stdout } = await execFileAsync('adb', ['devices', '-l']);
       devicesOutput = stdout;
-      if (target) {
-        connected = stdout.includes(target) && stdout.includes('device');
-      } else {
-        connected = stdout.split('\n').slice(1).some(line => line.includes('device '));
-      }
+      connected = isAdbTargetConnected(stdout, target);
     } catch (_) {}
 
     res.writeHead(200, { 'Content-Type': 'application/json' });
