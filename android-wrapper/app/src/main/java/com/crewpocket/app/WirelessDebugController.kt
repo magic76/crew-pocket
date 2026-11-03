@@ -1,11 +1,14 @@
 package com.crewpocket.app
 
+import android.Manifest
 import android.app.Activity
 import android.app.AlertDialog
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Color
+import android.os.Build
 import android.provider.Settings
 import android.text.InputType
 import android.view.Gravity
@@ -64,7 +67,8 @@ class WirelessDebugController(private val activity: Activity) {
             textSize = 15f
         }
         val helperText = TextView(activity).apply {
-            text = "輸入連線 IP:Port；第一次配對時再填配對 IP:Port 與 6 位配對碼。"
+            text = "推薦使用快捷配對：系統會自動尋找本機配對埠，直接在通知輸入 6 位驗證碼，不需要填 IP。"
+                    + "原本 IP:Port 操作保留在手動設定中。"
             setTextColor(Color.rgb(100, 116, 139))
             textSize = 12f
             setPadding(0, dp(4), 0, dp(4))
@@ -74,6 +78,18 @@ class WirelessDebugController(private val activity: Activity) {
             setTextColor(Color.rgb(148, 163, 184))
             textSize = 12f
             setPadding(0, dp(8), 0, dp(8))
+        }
+        val quickPairButton = Button(activity).apply {
+            text = "快速配對（通知輸入 6 位碼）"
+            minHeight = dp(52)
+        }
+        val manualToggleButton = Button(activity).apply {
+            text = "展開手動 IP:Port 設定（備援）"
+            minHeight = dp(44)
+        }
+        val manualFields = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            visibility = android.view.View.GONE
         }
         val saveButton = Button(activity).apply {
             text = "儲存並連線"
@@ -108,14 +124,17 @@ class WirelessDebugController(private val activity: Activity) {
             }
         )
     
-        container.addView(targetInput)
-        container.addView(pairingTargetInput)
-        container.addView(pairingCodeInput)
+        manualFields.addView(targetInput)
+        manualFields.addView(pairingTargetInput)
+        manualFields.addView(pairingCodeInput)
+        manualFields.addView(saveButton)
+        manualFields.addView(pairButton)
+        manualFields.addView(secondaryRow)
         container.addView(helperText)
+        container.addView(quickPairButton)
         container.addView(statusText)
-        container.addView(saveButton)
-        container.addView(pairButton)
-        container.addView(secondaryRow)
+        container.addView(manualToggleButton)
+        container.addView(manualFields)
         val scrollContainer = ScrollView(activity).apply {
             addView(container)
         }
@@ -132,6 +151,38 @@ class WirelessDebugController(private val activity: Activity) {
             adbDialog = null
         }
     
+        manualToggleButton.setOnClickListener {
+            val expanded = manualFields.visibility != android.view.View.VISIBLE
+            manualFields.visibility = if (expanded) android.view.View.VISIBLE else android.view.View.GONE
+            manualToggleButton.text = if (expanded) "收合手動設定" else "展開手動 IP:Port 設定（備援）"
+        }
+        quickPairButton.setOnClickListener {
+            when {
+                Build.VERSION.SDK_INT < Build.VERSION_CODES.R -> {
+                    statusText.text = "快捷配對需要 Android 11 以上。請使用手動設定。"
+                }
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                    activity.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
+                    PackageManager.PERMISSION_GRANTED -> {
+                    statusText.text = "請先允許 Crew Pocket 通知權限，才能從通知輸入配對碼。"
+                    manualFields.visibility = android.view.View.VISIBLE
+                    manualToggleButton.text = "收合手動設定"
+                }
+                !TermuxBridge.isInstalled(activity) ||
+                    !TermuxBridge.hasRunCommandPermission(activity) -> {
+                    statusText.text = "需要先安裝 Termux，並允許 Crew Pocket 執行 Termux 指令。"
+                }
+                else -> {
+                    val started = runCatching { WirelessPairingService.begin(activity) }
+                    if (started.isFailure) {
+                        statusText.text = "快捷配對啟動失敗，請使用手動設定。"
+                    } else {
+                        statusText.text = "已開啟快捷配對通知。請在系統無線偵錯頁選擇「使用配對碼配對裝置」，從通知輸入 6 位碼。"
+                        openWirelessDebugSystemSettings()
+                    }
+                }
+            }
+        }
         openSettingsButton.setOnClickListener { openWirelessDebugSystemSettings() }
         copyButton.setOnClickListener {
             val raw = targetInput.text.toString().trim()
