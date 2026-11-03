@@ -56,14 +56,45 @@ to Shizuku's setup without requiring Shizuku itself:
 The six-digit code is not saved in Crew Pocket preferences or notification
 text. The discovery times out after two minutes. The user must enable
 Wireless debugging in Android Settings; Crew Pocket cannot enable it silently.
-This requires a Wi-Fi network and may need repeating after reboot or network
-changes. If discovery or notifications fail, expand **手動 IP:Port 設定**
+This requires Wi-Fi. After reboot or network changes, an already trusted
+ADB host key can be reused without entering a new pairing code. If discovery or notifications fail, expand **手動 IP:Port 設定**
 to use the previous pairing, connection and diagnostic commands.
 
 The confirmed connection endpoint is stored in `~/.adb_port`, so
 `~/install-apk.sh` uses the same setting afterward. The Android wrapper
 continues to use Termux for the ADB binary; this change does not embed
 ADB, grant privileges, or install Shizuku.
+
+
+## Automatic reconnect for an already paired phone
+
+On Android 11+ the **無線偵錯設定** sheet now defaults to **自動重連**.
+Once you have paired this Termux installation with the phone, subsequent
+reconnections need no new six-digit code as long as the same ADB identity
+remains trusted by Android.
+
+- On opening/resuming the APK and when Wi-Fi comes back, Crew Pocket checks
+  the local /api/adb status. If already connected, it does nothing.
+- Otherwise, a bounded (12-second) Android NSD scan looks for the
+  _adb-tls-connect._tcp. service and verifies the endpoint on loopback.
+  Advertised hosts of other LAN devices are never used.
+- Termux runs adb connect using its existing key, never adb pair. The new
+  endpoint in ~/.adb_port is saved only if its exact transport state is device,
+  never offline or unauthorized.
+- Scanning stops when Crew Pocket leaves the foreground, the user disables
+  the option, or discovery times out. There is no unlimited retry loop,
+  constant background polling or silent enabling of Developer Options.
+- If Wi-Fi or Android Wireless Debugging is off, the app cannot switch it
+  back on. Returning from Settings starts another bounded scan.
+- If Android revoked the pairing authorization (or Termux's ADB keys changed),
+  the user must choose 快速配對 and enter a six-digit code.
+- Original manual IP:Port mode remains accessible.
+
+**Real-device acceptance:** Pair once, reopen the APK, change Wi-Fi, toggle
+Wireless Debugging, and reboot. Confirm existing authorization is reused,
+the current endpoint is saved only when connected, and untrusted/offline
+transports are never reported as connected. Samsung One UI and Termux mDNS
+behavior require physical-device verification.
 
 ## Build
 
