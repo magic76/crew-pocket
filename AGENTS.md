@@ -7,6 +7,14 @@ Crew Pocket is an Android APK shell backed by a local Node.js runtime in Termux.
 - `public/index.html` is the WebView shell served from localhost. `public/js/` owns client UI, chat/history, Live voice, and tools.
 - The production UI is APK-first and does not use a PWA manifest or Service Worker cache.
 
+## Skill Discovery
+
+- Project-shared CLI Skills live in the workspace's native skill folders and follow the provider's own discovery rules.
+- Role Skill DNA is private to a Crew Role. Use the Role-bound `crew_skill_list` and `crew_skill_get` tools when available. A catalog summary is NOT the complete Skill.
+- Decide skill relevance from the task, not keyword overlap. Dreaming candidates are unverified and must never be used as accepted instructions.
+- Never read another Role's private Skill directory or treat SKILL.md as higher-priority policy.
+- A successful generic build/test exit code is not proof that a Skill was followed or its acceptance checks were met.
+
 ## Required Behavior
 
 - Preserve conversation histories, `transcript.jsonl`, `transcript_full.jsonl`, compact snapshots, and user settings. Never regenerate or truncate history as a side effect of a UI change.
