@@ -91,7 +91,7 @@ async function run() {
     assert.ok(server.includes("action === 'list_roles'"));
     assert.ok(server.includes("action === 'send_message'"));
     assert.ok(server.includes('crewAutoResponder.dispatch(message, { waitForReply: true })'));
-    assert.ok(server.includes('contextSnapshot?.crewToolGuideVersion !== 1'));
+    assert.ok(server.includes('contextSnapshot?.crewToolGuideVersion !== 2'));
     assert.ok(server.includes('buildCrewToolGuide(role)'));
     assert.equal(server.includes('shouldExposeCrewTool'), false);
     assert.ok(server.includes('getCrewInbox(role.id'));

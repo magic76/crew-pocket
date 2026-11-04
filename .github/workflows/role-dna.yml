@@ -21,6 +21,8 @@ on:
 jobs:
   tests:
     runs-on: ubuntu-latest
+    env:
+      CREW_UPLOADS_DIR: ${{ github.workspace }}/.ci-uploads
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
