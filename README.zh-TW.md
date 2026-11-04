@@ -32,7 +32,7 @@ Crew Pocket 不只是把 CLI 的聊天畫面搬到手機，而是把 AI 助理�
 - **Skill DNA**：角色技能具備候選、驗證、啟用、退役等生命週期。產生候選或符合觸發條件，不代表技能已經由 AI 自動驗證成功。
 - **Context Health / AutoCompact**：Context 來源貢獻估算、預算警示、可追溯組裝、安全壓縮規劃與選用的 AutoCompact 訊號。部分 Token 數值是估算，不等同計費用量。
 - **Tool Improvement Loop**：從工具使用、失敗與恢復證據整理改善候選；不會直接把建議當成已修好的程式碼。
-- **互動式 AI 回覆**：串流對話、可收合的執行結果、內嵌 HTML／SVG 沙盒、視覺化閱讀，以及 \`crew-ui\` 選項、清單、圖表、方案和計算器。
+- **互動式 AI 回覆**：串流對話、可收合的執行結果、內嵌 HTML／SVG 沙盒、視覺化閱讀，以及 `crew-ui` 選項、清單、圖表、方案和計算器。
 - **手機優先操作**：Android WebView、檔案管理、附件、選用的語音功能與無線偵錯工具；實際可用性會因 Provider 和 Android 環境而異。
 - **電腦輔助操作**：透過 Crew Home／Remote Console 在可信任的同一區網使用手機上的 Runtime，連線權限仍由手機控制。
 
@@ -40,9 +40,9 @@ Crew Pocket 不只是把 CLI 的聊天畫面搬到手機，而是把 AI 助理�
 
 | Provider | 狀態 | 說明 |
 | --- | --- | --- |
-| **Google Antigravity CLI（\`agy\`）** | 安裝器預設 | 常駐 Session、對話紀錄與 AGY 專屬功能。 |
-| **OpenAI Codex CLI（\`codex\`）** | 選用 | 使用持久化 \`codex app-server\`，支援工具事件串流、模型／推理設定與原生 Context 壓縮。 |
-| **Claude Code CLI（\`claude\`）** | 預覽版／自備 CLI | 必須在**執行 Runtime 的同一台主機**安裝並登入。Android APK 不內建 Claude；精確 Context 用量、原生 Compact 等功能尚未支援。 |
+| **Google Antigravity CLI（`agy`）** | 安裝器預設 | 常駐 Session、對話紀錄與 AGY 專屬功能。 |
+| **OpenAI Codex CLI（`codex`）** | 選用 | 使用持久化 `codex app-server`，支援工具事件串流、模型／推理設定與原生 Context 壓縮。 |
+| **Claude Code CLI（`claude`）** | 預覽版／自備 CLI | 必須在**執行 Runtime 的同一台主機**安裝並登入。Android APK 不內建 Claude；精確 Context 用量、原生 Compact 等功能尚未支援。 |
 
 模型、登入、工具權限及費用都取決於各 CLI 與帳號設定。切換 Provider **不會**自動搬移原生 Session，也不會合併另一個 Provider 的對話歷史。詳見 [Claude Code Provider 說明](docs/claude-code-provider.md)。
 
@@ -56,40 +56,40 @@ Crew Pocket 不只是把 CLI 的聊天畫面搬到手機，而是把 AI 助理�
 
 打開 Termux，輸入：
 
-\`\`\`bash
+```bash
 curl -fsSL https://raw.githubusercontent.com/magic76/crew-pocket/main/install.sh | bash
-\`\`\`
+```
 
-安裝器會準備最小化的 Node.js／Git／curl 環境、下載或快轉更新專案，再讓你選擇安裝 **AGY、Codex、兩者都裝**，或暫時略過。Termux 預設專案路徑是 \`~/agy-web\`。如果希望先審核遠端腳本，可先閱讀 [install.sh](install.sh)。
+安裝器會準備最小化的 Node.js／Git／curl 環境、下載或快轉更新專案，再讓你選擇安裝 **AGY、Codex、兩者都裝**，或暫時略過。Termux 預設專案路徑是 `~/agy-web`。如果希望先審核遠端腳本，可先閱讀 [install.sh](install.sh)。
 
-AGY 會經由上游安裝器安裝；Android 上的 Codex 選項使用社群維護的 \`@mmmbuto/codex-cli-termux\`。兩者都是外部相依項目，並非由 Crew Pocket 直接提供的執行檔。
+AGY 會經由上游安裝器安裝；Android 上的 Codex 選項使用社群維護的 `@mmmbuto/codex-cli-termux`。兩者都是外部相依項目，並非由 Crew Pocket 直接提供的執行檔。
 
 ### 3. 登入 AI Provider 並啟動
 
 依你選用的 Provider 完成登入：
 
-\`\`\`bash
+```bash
 agy             # 使用 Antigravity 時，首次互動登入
 codex login     # 使用 Codex 時登入
-\`\`\`
+```
 
 接著：
 
-\`\`\`bash
+```bash
 crew doctor     # 檢查環境與 Provider
 crew start      # 啟動本機 Runtime
-\`\`\`
+```
 
-服務會啟動在 **http://127.0.0.1:8000**。平常建議透過 Crew Pocket Android APK 操作；也能從瀏覽器開啟這個網址做測試。注意 \`crew start\` 會重新啟動 Node 服務，執行中的工作回合不適合此時重啟。
+服務會啟動在 **http://127.0.0.1:8000**。平常建議透過 Crew Pocket Android APK 操作；也能從瀏覽器開啟這個網址做測試。注意 `crew start` 會重新啟動 Node 服務，執行中的工作回合不適合此時重啟。
 
 ### 4. 選用：Android APK 外殼
 
 **Termux 安裝器不會替你安裝 APK**，必須另外建置或安裝 Android Wrapper。要讓 APK 可以要求 Termux 啟動 Runtime，請先執行：
 
-\`\`\`bash
+```bash
 cd ~/agy-web
 bash scripts/enable-android-wrapper.sh
-\`\`\`
+```
 
 安裝 APK 後，還需在 Android 的額外權限中允許 Crew Pocket **「在 Termux 環境中執行命令」**。完整建置、權限、無線偵錯快速配對及自動重連，請參閱 [Android Wrapper 文件](android-wrapper/README.md)。
 
@@ -97,25 +97,25 @@ bash scripts/enable-android-wrapper.sh
 
 | 指令 | 用途 |
 | --- | --- |
-| \`crew doctor\` | 檢查 Node.js、專案、Provider、儲存權限與服務狀態。 |
-| \`crew start\` | （重新）啟動本機 Runtime。 |
-| \`crew status\` / \`crew stop\` | 查看或停止 Runtime。 |
-| \`crew update\` | 從 \`origin/main\` 快轉更新專案，之後需重新啟動 Runtime。 |
-| \`crew roles\` | 列出所有 Role ID，方便從 CLI 傳訊。 |
-| \`crew send <發送者-role-id> <接收者-role-id> <訊息>\` | 透過執行中的 Runtime 傳送 Role-to-Role 訊息。 |
+| `crew doctor` | 檢查 Node.js、專案、Provider、儲存權限與服務狀態。 |
+| `crew start` | （重新）啟動本機 Runtime。 |
+| `crew status` / `crew stop` | 查看或停止 Runtime。 |
+| `crew update` | 從 `origin/main` 快轉更新專案，之後需重新啟動 Runtime。 |
+| `crew roles` | 列出所有 Role ID，方便從 CLI 傳訊。 |
+| `crew send <發送者-role-id> <接收者-role-id> <訊息>` | 透過執行中的 Runtime 傳送 Role-to-Role 訊息。 |
 
 例如：
 
-\`\`\`bash
+```bash
 crew roles
 crew send role-general role-myproject "請檢查目前建置錯誤。"
-\`\`\`
+```
 
-上面的 Role ID 只是示意；實際請以 \`crew roles\` 輸出為準。傳送的只有**明確寫出的訊息**，接收方仍使用自己的記憶、專案、工作目錄與目前對話。
+上面的 Role ID 只是示意；實際請以 `crew roles` 輸出為準。傳送的只有**明確寫出的訊息**，接收方仍使用自己的記憶、專案、工作目錄與目前對話。
 
 ## 架構概覽
 
-\`\`\`text
+```text
 Android APK（WebView）／本機瀏覽器／選用的區網 Remote Console
                             |
                        Node.js Runtime
@@ -129,30 +129,30 @@ Android APK（WebView）／本機瀏覽器／選用的區網 Remote Console
                             |
                   AGY / Codex / Claude CLI
                     （安裝在 Runtime 主機）
-\`\`\`
+```
 
-- \`server.js\`：本機 HTTP、SSE 與 API 入口。
-- \`lib/\`：Provider、Role Runtime、角色通訊、記憶、技能、Context 與任務執行。
-- \`public/\`：Android WebView 與瀏覽器共用的 Web UI。
-- \`android-wrapper/\`：APK 外殼及 Android／Termux 橋接。
-- \`docs/\`：機制說明；\`test/\`、\`tests/\`：針對性回歸測試。
+- `server.js`：本機 HTTP、SSE 與 API 入口。
+- `lib/`：Provider、Role Runtime、角色通訊、記憶、技能、Context 與任務執行。
+- `public/`：Android WebView 與瀏覽器共用的 Web UI。
+- `android-wrapper/`：APK 外殼及 Android／Termux 橋接。
+- `docs/`：機制說明；`test/`、`tests/`：針對性回歸測試。
 
 原始對話紀錄與 Role 資料保留在本機；Context 壓縮是整理模型工作脈絡，**不是刪掉使用者的歷史紀錄**。Runtime 才是單一資料來源，Remote Console 只是另一個操作入口，不是同步出另一台 Agent 主機。
 
 ## 更新與開發
 
-\`\`\`bash
+```bash
 crew update
 crew start
-\`\`\`
+```
 
-修改 \`public/\`、\`server.js\`、\`lib/\`，一般只需拉取新版並重新啟動 Runtime；更動 \`android-wrapper/\`、Android 權限或 Native Bridge 才需要重新建置／安裝 APK。
+修改 `public/`、`server.js`、`lib/`，一般只需拉取新版並重新啟動 Runtime；更動 `android-wrapper/`、Android 權限或 Native Bridge 才需要重新建置／安裝 APK。
 
 貢獻程式前，請閱讀 [AGENTS.md](AGENTS.md) 和 [GEMINI.md](GEMINI.md)，針對修改的檔案執行必要的語法檢查與測試，並保留既有對話與記憶資料。
 
 ## 安全性與限制
 
-- **本機優先**：Runtime 預設只監聽 \`127.0.0.1\`。請勿將 API 直接暴露到公網；區網模式必須由手機明確啟用，Remote Console 會進行連線授權。
+- **本機優先**：Runtime 預設只監聽 `127.0.0.1`。請勿將 API 直接暴露到公網；區網模式必須由手機明確啟用，Remote Console 會進行連線授權。
 - **AI 能使用工具**：開放專案檔案、裝置或 Shell 權限前，請先了解 Provider 的核准與沙盒設定；AI 產生的回報不等於實際測試證據。
 - **角色記憶不共用**：角色互動以明確訊息為主，不會直接把另一個角色的私人記憶或完整對話複製過去。
 - **不是雲端模型服務**：需要自行安裝並登入 CLI；本專案不提供付費 LLM 訂閱。
