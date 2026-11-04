@@ -99,5 +99,5 @@ test('Legacy auto-activated evidence remains readable but is quarantined', async
   const pending = await registry.transition('role-a', proposal.id, 'review');
   assert.equal(pending.status, 'candidate');
   assert.equal(pending.verification, null);
-  assert.throws(() => removeRole('..'), /Invalid Role id/);
+  await assert.rejects(removeRole('..'), /Invalid Role id/);
 });
