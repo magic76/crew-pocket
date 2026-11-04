@@ -55,7 +55,8 @@ const { makeMissionGraph, MAX_GRAPH_EVENTS } = require('./lib/mission-graph');
 const { listProjects, getProject } = require('./lib/projects');
 const { defaultRoleMessageQueueStore, listRoleQueuedMessages, enqueueRoleMessage, removeRoleQueuedMessage, clearRoleMessageQueue } = require('./lib/role-message-queue');
 const { defaultMemoryProvider } = require('./lib/memory');
-const { defaultSkillRegistry, skillContext } = require('./lib/skills/registry');
+const { defaultSkillRegistry } = require('./lib/skills/registry');
+const { formatCatalog, syncFile, removeRole } = require('./lib/skills/native');
 const { DreamingManager } = require('./lib/memory/dreaming');
 const { CrewTaskRunner } = require('./lib/mcp/task-runner');
 const { defaultCrewTaskStore } = require('./lib/mcp/tasks');
@@ -178,7 +179,11 @@ async function handleRoleSkills(req, res, parsedUrl) {
         await defaultSkillRegistry.recordEvidence(role.id, skillId, body.evidence);
       } else if (['verify', 'activate', 'retire'].includes(action)) {
         // Requires a direct explicit UI/user request; Dreaming never calls this API.
-        await defaultSkillRegistry.transition(role.id, skillId, action);
+        const changed = await defaultSkillRegistry.transition(role.id, skillId, action);
+        if (action === 'activate' || action === 'retire') {
+          await syncFile(changed).catch(error =>
+            console.warn('[Role DNA] SKILL.md sync failed:', error.message));
+        }
       } else {
         throw new Error('Unsupported Role DNA action');
       }
@@ -1350,6 +1355,8 @@ async function handleRoles(req, res, parsedUrl) {
       await defaultMemoryCandidateStore.purgeRole(roleId);
       await dreamingManager.forgetRole(roleId);
       await defaultSkillRegistry.forgetRole(roleId);
+      await removeRole(roleId).catch(error =>
+        console.warn('[Role DNA] File cleanup failed:', error.message));
       broadcastCrewStatusEvent('role-delete', roleId);
       res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
       return res.end(JSON.stringify({ success: true, deleted: result }));
@@ -2450,7 +2457,7 @@ async function handleChatTurn(req, res, submittedBody = null) {
     ? [...contextSnapshot.contributions]
     : [];
   let memoryRefreshConsumed = false;
-  let initialRoleSkills = [];
+
   const currentIdentityFingerprint = roleProjectFingerprint(role, project);
   const currentMemoryRevision = await memoryStoreRevision();
   let nextMemorySignatures = { ...(contextSnapshot?.memorySignatures || {}) };
@@ -2469,7 +2476,7 @@ async function handleChatTurn(req, res, submittedBody = null) {
         currentPrompt: finalPrompt
       });
       roleMemoryContext = formatAgentContext(agentContext);
-      initialRoleSkills = [...(agentContext.roleSkills || [])];
+
       assembledContextContributions = [...agentContext.contributions];
       nextMemorySignatures = memoryEvidenceSignatures(agentContext.memories);
     } catch (error) {
@@ -2578,44 +2585,32 @@ async function handleChatTurn(req, res, submittedBody = null) {
     finalPrompt = '<ADDITIONAL_METADATA>\n' + crewMetadata + '\n</ADDITIONAL_METADATA>\n' + finalPrompt;
   }
 
-  // Add newly matched Role skills once per conversation. This also lets an
-  // existing conversation trial a candidate when a later user turn matches it.
-  let matchedRoleSkills = [];
-  const freshSkillRefs = new Set(initialRoleSkills.map(skill => 'skill:' + skill.id));
+  // The Agent, not a keyword scorer, selects verified Role Skills.
+  // Only a compact index is delivered automatically; full SKILL.md is
+  // available through the Role-bound crew_skill_get tool when supported.
+  let roleSkillCatalogHash = contextSnapshot?.roleSkillCatalogHash || '';
   try {
-    const skillQuery = [approvedExecutionIntent?.summary, prompt].map(value => String(value || '').trim())
-      .filter(Boolean).join('\n');
-    matchedRoleSkills = await defaultSkillRegistry.matchForTrial(role?.id || DEFAULT_ROLE_ID, skillQuery, 2);
-    const knownSkillRefs = new Set(assembledContextContributions
-      .filter(item => item.type === ContextSourceType.SKILL).map(item => item.sourceRef));
-    const newlyMatched = matchedRoleSkills.filter(skill => !knownSkillRefs.has('skill:' + skill.id));
-    if (newlyMatched.length) {
-      for (const skill of newlyMatched) freshSkillRefs.add('skill:' + skill.id);
-      const skillContributions = buildStaticContextContributions({ roleSkills: newlyMatched })
-        .filter(item => item.type === ContextSourceType.SKILL);
-      assembledContextContributions.push(...skillContributions);
-      finalPrompt = '<ADDITIONAL_METADATA>\n[Matched Role Skills · follow the verification limits stated per skill]\n' +
-        newlyMatched.map(skillContext).join('\n\n') + '\n</ADDITIONAL_METADATA>\n' + finalPrompt;
+    const { skills } = await defaultSkillRegistry.list(role?.id || DEFAULT_ROLE_ID);
+    const catalog = formatCatalog(skills);
+    const hash = crypto.createHash('sha256').update(catalog).digest('hex');
+    if (!conversation_id || hash !== contextSnapshot?.roleSkillCatalogHash) {
+      const content = catalog ||
+        '[Crew Role Skills] No verified active Role Skills. Revoke any previously listed Role Skills. [/Crew Role Skills]';
+      assembledContextContributions = assembledContextContributions
+        .filter(item => item.id !== 'role-skill-catalog');
+      assembledContextContributions.push(contributionFromText({
+        id: 'role-skill-catalog',
+        type: ContextSourceType.SKILL,
+        text: content, label: 'Role Skill catalog',
+        priority: ContextPriority.NORMAL, compactable: true,
+        sourceRef: 'role-skills:catalog'
+      }));
+      finalPrompt = '<ADDITIONAL_METADATA>\n' + content + '\n</ADDITIONAL_METADATA>\n' + finalPrompt;
     }
+    roleSkillCatalogHash = hash;
   } catch (error) {
-    console.warn('[Role DNA] Matched skill lookup failed:', String(error?.message || error).slice(0, 120));
+    console.warn('[Role DNA] Catalog unavailable:', String(error?.message || error).slice(0, 120));
   }
-  const contextSkillRefs = new Set(assembledContextContributions
-    .filter(item => item.type === ContextSourceType.SKILL).map(item => item.sourceRef));
-  // The new-conversation builder may inject a Skill before the second lookup.
-  // Track only matches known to be in the provider-bound Context, with a
-  // separate flag for newly injected versus already present in the thread.
-  const contextSkillsForTurn = [...new Map([...initialRoleSkills, ...matchedRoleSkills]
-    .map(skill => [skill.id, skill])).values()]
-    .filter(skill => contextSkillRefs.has('skill:' + skill.id)).slice(0, 4);
-  const skillUsageForTurn = contextSkillsForTurn.map(skill => ({
-    id: skill.id,
-    delivery: freshSkillRefs.has('skill:' + skill.id) ? 'injected' : 'existing'
-  }));
-  const trialSkillIdsForTurn = contextSkillsForTurn
-    .filter(skill => skill.status === 'candidate' ||
-      (skill.status === 'active' && skill.verification?.method === 'runtime-observed'))
-    .map(skill => skill.id).slice(0, 1);
 
   // P3: optional per-turn presentation hint, never a permanent Role identity.
   // Only lightweight CHAT/INSPECT requests qualify. Existing draft/approval
@@ -2837,13 +2832,8 @@ async function handleChatTurn(req, res, submittedBody = null) {
         : finalPayload.status === 'failed'
           ? [...latestChecks.values()].filter(item => item.outcome === 'failed')
           : [];
-      if (recordableChecks.length && trialSkillIdsForTurn.length) {
-        setImmediate(() => defaultSkillRegistry.recordRuntimeCheck(
-          role?.id || DEFAULT_ROLE_ID,
-          trialSkillIdsForTurn,
-          { turnId: requestId, checks: recordableChecks }
-        ).catch(error => console.warn('[Role DNA] Runtime check save failed:', String(error.message || error).slice(0, 120))));
-      }
+      // A same-turn command exit code cannot attest to Skill correctness.
+      // Observations still flow into Dreaming but never auto-promote a Skill.
       const terminalRecord = chatTurns.finish(requestId, finalPayload);
       // Notify the UI independently of feedback persistence. HTTP finish only
       // means the server flushed its response, not that a WebView rendered it.
@@ -2980,15 +2970,6 @@ async function handleChatTurn(req, res, submittedBody = null) {
         markOnce('to_first_event_ms');
         if (event.type === 'session_started') {
           chatTurns.update(requestId, { conversation_id: event.conversationId, accepted: true, status: 'running' });
-          if (event.conversationId && skillUsageForTurn.length) {
-            // Session start confirms a provider turn exists; does not prove
-            // the model followed the Skill, or that any checks passed.
-            void defaultSkillRegistry.recordUsage(
-              role?.id || DEFAULT_ROLE_ID, skillUsageForTurn,
-              { turnId: requestId, conversationId: event.conversationId, providerId }
-            ).catch(error => console.warn('[Role DNA] Usage record failed:',
-              String(error?.message || error).slice(0, 120)));
-          }
           markOnce('to_session_ms');
           activeConversationId = event.conversationId || activeConversationId;
           // A new thread only has an id after its provider starts. Persist here
@@ -3014,6 +2995,7 @@ async function handleChatTurn(req, res, submittedBody = null) {
           saveContextSnapshot(providerId, event.conversationId, {
             contributions: assembledContextContributions,
             crewToolGuideVersion: 2,
+            roleSkillCatalogHash,
             identityFingerprint: currentIdentityFingerprint,
             memoryRevision: memoryRefreshConsumed || !conversation_id
               ? currentMemoryRevision

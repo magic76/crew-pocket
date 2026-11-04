@@ -80,6 +80,13 @@ addTool('crew_propose_memory', 'Propose a Role memory candidate for later review
     })).max(5).optional()
   }), args => tools.crew_propose_memory(args));
 
+addTool('crew_skill_list', 'List verified active Skills of the bound Role.',
+  z.object({ limit: z.number().int().min(1).max(40).optional() }),
+  args => tools.crew_skill_list(args));
+addTool('crew_skill_get', 'Read SKILL.md of one verified active Skill of the bound Role.',
+  z.object({ skillId: bounded(160) }),
+  args => tools.crew_skill_get(args));
+
 // Context tools are opt-in and always resolve Role/Conversation from the trusted runtime.
 addTool('crew_context_propose', 'Propose a milestone handoff; native compaction only happens post-turn after safety checks.',
   z.object({ summary: bounded(2500).refine(text => text.trim().length >= 40),

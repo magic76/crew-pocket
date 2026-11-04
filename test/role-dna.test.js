@@ -65,14 +65,15 @@ async function run() {
       turnId: requestB, checks: [{ category: 'test', outcome: 'passed' }]
     });
     const promoted = (await usageRegistry.list('developer')).skills[0];
-    assert.equal(promoted.status, 'active', 'two different turn checks auto-activate');
+    assert.equal(promoted.status, 'candidate', 'generic passing tests never auto-activate');
     assert.equal(promoted.usage.length, 2);
     assert.equal(promoted.usage[1].delivery, 'existing');
     assert.equal(promoted.usage[1].check, 'passed');
     assert.equal((await new SkillRegistry({ storagePath: path.join(dir, 'usage.json') })
       .list('developer')).skills[0].usage.length, 2, 'usage survives a restart');
     assert.equal((await usageRegistry.list('other')).skills.length, 0);
-    assert.match(file('server.js'), /defaultSkillRegistry\.recordUsage\(/);
+    assert.match(file('server.js'), /formatCatalog\(skills\)/);
+    assert.doesNotMatch(file('server.js'), /matchForTrial\(/);
     assert.match(file('public/js/role-dna.js'), /最近使用紀錄/);
 
     const skill = await registry.propose('teacher', example, source);
@@ -110,7 +111,7 @@ async function run() {
 
     const context = await buildAgentContext({
       roleId: 'teacher', currentPrompt: 'Gboard first launch issue on Android',
-      skillRegistry: registry,
+      skillRegistry: registry, enableLegacySkillMatching: true,
       roleResolver: async id => ({ id, name: id, description: '', skills: [] }),
       projectResolver: async () => null,
       memoryProvider: { recall: async () => [] }
@@ -122,7 +123,7 @@ async function run() {
     assert.match(skillContext(active), /NOT independently test-verified/);
     const unrelated = await buildAgentContext({
       roleId: 'teacher', currentPrompt: 'Refactor postgres migrations',
-      skillRegistry: registry,
+      skillRegistry: registry, enableLegacySkillMatching: true,
       roleResolver: async id => ({ id, name: id, skills: [] }),
       projectResolver: async () => null,
       memoryProvider: { recall: async () => [] }
@@ -167,7 +168,7 @@ async function run() {
     let summarizations = 0;
     const dreaming = new DreamingManager({
       storagePath: path.join(dir, 'dreaming.json'), now: () => clock,
-      skillRegistry: registry,
+      skillRegistry: registry, enableLegacySkillMatching: true,
       memoryProvider: { retain: async x => { stored.push(x); } },
       getRole: async id => ({ id, name: id, projectId: null }),
       getProvider: () => ({

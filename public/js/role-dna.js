@@ -41,21 +41,19 @@
       item.kind === 'runtime-check' && item.outcome === 'passed').map(item => item.reference)).size;
     const needsReverification = lastFailure >= 0 && runtimePasses === 0;
     const statusLabel = isCandidate
-      ? runtimePasses ? '驗證中 · ' + Math.min(2, runtimePasses) + '/2'
-        : needsReverification ? '需重新驗證'
-          : injectedCount ? '已送入 Context · ' + injectedCount + ' 次'
-            : usage.length ? '已匹配 · ' + usage.length + ' 回合'
-              : '等待適合任務'
-        : isVerified ? '已確認證據 · 待啟用'
+      ? needsReverification ? '需重新驗證'
+        : runtimePasses ? '有 ' + runtimePasses + ' 次通用檢查 · 待人工驗證'
+          : '待人工驗證'
+      : isVerified ? '已確認證據 · 待啟用'
         : skill.status === 'active' && skill.verification?.method === 'runtime-observed'
-          ? '已自動啟用 · 兩回合檢查通過'
-          : skill.status === 'active' ? '已啟用 · 任務匹配時載入'
+          ? '舊版自動啟用 · 需重新審核'
+          : skill.status === 'active' ? '已啟用 · Agent 視需要載入'
             : '已停用';
     const verificationLabel = skill.verification?.method === 'runtime-observed'
-      ? 'Runtime 在 ' + (Number(skill.verification.successfulTurns) || 2) + ' 個不同回合觀察到符合此技能驗收類型的檢查命令成功；依實際退出碼判定，不代表檢查內容另經獨立審核。'
+      ? '舊版 Runtime 根據通用命令退出碼自動啟用；無法證明技能步驟有效。新版已停止將此類技能提供給 Agent，請重新人工驗證。'
       : skill.verification?.method === 'user-attested'
         ? '使用者已確認；不等於 CI 或工具獨立驗證。'
-        : '尚未確認；符合任務才會送入 Context，載入不代表 AI 實際採用。';
+        : '尚未人工確認；不會送進新 Agent 的可用技能清單。';
     const evidenceKind = kind => kind === 'runtime-check' ? 'Runtime 檢查'
       : ({ test: '測試', ci: 'CI', commit: 'Commit', manual: '手動', failure: '失敗' })[kind] || kind;
     const runtimeCategory = category => ({
@@ -119,6 +117,8 @@
         (isCandidate ? '<button type="button" data-skill-action="verify" ' +
           (proofs ? '' : 'disabled ') + '>人工確認 Test/CI（' + proofs + '）</button>' : '') +
         (isVerified ? '<button type="button" data-skill-action="activate">啟用技能</button>' : '') +
+        (skill.status === 'active' && skill.verification?.method === 'runtime-observed'
+          ? '<button type="button" data-skill-action="review">重新人工審核</button>' : '') +
         (!isRetired ? '<button type="button" data-skill-action="retire">停用</button>' : '') +
       '</div>' +
       '</article>';
@@ -130,9 +130,9 @@
     summary.textContent = skills.length + ' 項技能 · ' + active +
       ' 已啟用 · ' + trial + ' 待驗證候選';
     list.innerHTML = skills.length
-      ? '<p class="role-dna-notice">符合任務時，候選 Skill 會作為選用指引送給模型。最近使用紀錄區分新加入 Context 與既有 Context；不能證明 AI 真正採用。僅在兩個不同回合觀察到符合驗收類型且具有退出碼的成功檢查，才會自動啟用。</p>' +
+      ? '<p class="role-dna-notice">只有人工確認並啟用的 Skill 才進入本 Role 的可用清單，Agent 自行決定是否讀取完整 SKILL.md。候選不再自動試用；通用測試成功也不會自動啟用。舊紀錄中的 Context 使用數僅是歷史資訊。</p>' +
         skills.map(card).join('')
-      : '<div class="role-dna-empty">尚無技能。Dreaming 整理到可重複流程時會提出候選；只有匹配任務才會送進 Context。</div>';
+      : '<div class="role-dna-empty">尚無技能。Dreaming 可建立候選，需人工驗證並啟用後才開放 Agent 自行讀取。</div>';
   }
   async function load() {
     if (!roleId) return;
@@ -159,7 +159,8 @@
     const messages = {
       verify: '確認你已親自查核通過的測試證據？這不是自動測試驗證。',
       activate: '啟用此技能？之後只會在任務相關時提供給本 Role 使用。',
-      retire: '停用此技能？停用後不會再載入工作 Context。'
+      retire: '停用此技能？新回合將撤銷目錄中的技能；舊對話若已讀過，仍可能保留歷史 Context。',
+      review: '將舊版自動啟用 Skill 轉回候選，重新確認測試證據？'
     };
     if (messages[action] && !window.confirm(messages[action])) return;
     busy = true;
