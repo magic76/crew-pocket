@@ -34,14 +34,14 @@ const render = async partial => {
 };
 (async () => {
   let html = await render({});
-  assert.match(html, /等待適合任務/);
+  assert.match(html, /待人工驗證/);
   assert.match(html, /尚無匹配的 Provider 回合紀錄/);
   assert.doesNotMatch(html, /<script>/, 'untrusted skill title is escaped');
 
   const use = { turnId: 'request-usage-12345678', conversationId: 'conv-1',
     providerId: 'codex', delivery: 'injected', at: 1780000000000, check: null, categories: [] };
   html = await render({ usage: [use] });
-  assert.match(html, /已送入 Context · 1 次/);
+  assert.match(html, /待人工驗證/);
   assert.match(html, /最近使用紀錄 · 1 回合/);
   assert.match(html, /conv-1/);
   assert.match(html, /尚無可辨識檢查/);
@@ -49,7 +49,7 @@ const render = async partial => {
 
   html = await render({ usage: [{ ...use, check: 'passed', categories: ['test'] }],
     evidence: [{ kind: 'runtime-check', outcome: 'passed', reference: 'turn:request-usage-12345678' }] });
-  assert.match(html, /驗證中 · 1\/2/);
+  assert.match(html, /1 次通用檢查 · 待人工驗證/);
   assert.match(html, /同回合檢查通過/);
   assert.match(html, /測試/);
 
@@ -58,7 +58,7 @@ const render = async partial => {
   assert.match(html, /需重新驗證/);
 
   html = await render({ status: 'active', verification: { method: 'runtime-observed', successfulTurns: 2 } });
-  assert.match(html, /已自動啟用 · 兩回合檢查通過/);
+  assert.match(html, /舊版自動啟用 · 需重新審核/);
   assert.match(nodes['role-dna-summary'].textContent, /已啟用/);
   console.log('role-skill-ui: idle, injected, check 1/2, failed, active, safe escaping passed');
 })().catch(error => { console.error(error); process.exitCode = 1; });

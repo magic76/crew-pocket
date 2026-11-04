@@ -29,6 +29,10 @@ jobs:
       - name: Verify syntax and Role DNA invariants
         run: |
           node --check lib/skills/registry.js
+          node --check lib/skills/native.js
+          node --check lib/mcp/agent-tools.js
+          node --check lib/mcp/codex-adapter.js
+          node --check mcp/server.mjs
           node --check lib/context-builder.js
           node --check lib/context/types.js
           node --check lib/memory/dreaming.js
@@ -40,6 +44,7 @@ jobs:
           node --check test/role-skill-ui.test.js
           node test/role-dna.test.js
           node test/role-skill-ui.test.js
+          node --test test/role-skill-native.test.js test/mcp-codex-integration.test.js
           node test/dreaming.test.js
           node test/role-memory-kernel.test.js
           # Historical role-centric-navigation fixture targets removed UI; navigation has its own CI.
