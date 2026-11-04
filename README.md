@@ -1,274 +1,172 @@
-# Crew Pocket (口袋指揮 2.0) 🚀
+# Crew Pocket
 
 <div align="center">
+  <img src="public/icon-512.png" width="104" alt="Crew Pocket icon">
 
-<img src="public/icon-512.png" width="104" alt="Crew Pocket App Icon">
+  **Your personal AI crew, in your pocket.**
 
-![Crew Pocket Mobile AI Assistant](public/assets/hero_banner.jpg)
+  A local-first, role-centric workspace for running and coordinating AI coding assistants from an Android phone.
 
-**Flagship Tactical Mobile AI Assistant running on Android Termux.**  
-專為行動端量身打造的旗艦級隨身特工 AI 助理。
+  [English](README.md) · [繁體中文](README.zh-TW.md)
 
-深午夜藍、靛藍與青綠的「指揮框架」圖示，代表口袋中的 AI 編排與執行中樞。
-
-[![License: MIT](https://img.shields.io/badge/License-MIT-emerald.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/Platform-Android%20Termux-indigo.svg)](https://termux.dev/)
-[![Engine](https://img.shields.io/badge/AI%20Engines-Antigravity%20%7C%20Codex-purple.svg)](#-雙-agent-provider)
-
+  [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+  [![Platform: Android + Termux](https://img.shields.io/badge/Platform-Android%20%2B%20Termux-blue.svg)](https://termux.dev/)
+  [![Runtime: Node.js](https://img.shields.io/badge/Runtime-Node.js-339933.svg)](https://nodejs.org/)
 </div>
 
----
+![Crew Pocket interface](public/assets/hero_banner.jpg)
 
-## ⚡ 最小安裝（One-Line Quick Install）
+## What is Crew Pocket?
 
-打開 **Termux**，直接貼上並執行以下指令，即可完成所有依賴與環境設定：
+Crew Pocket turns CLI-based AI assistants into a **persistent team of Roles**, rather than a collection of disconnected chat windows. Each Role can have a name, instructions, project/workspace, active conversation, memory, and skills. You can switch Roles, continue work, and send a task or message to another Role without copying the sender's entire context.
 
-```bash
+The main deployment is **an Android APK backed by a Node.js Runtime in Termux**. The APK is a WebView shell for the local interface; it does **not** bundle Node.js or the AI CLI engines. A browser can also open the same local interface for diagnostics, and the optional Remote Console lets a computer access the phone-hosted Runtime over a trusted local network.
+
+> **Project status:** Actively evolving, intended for hands-on use and experimentation. Some features are provider-specific or require device-level setup; do not assume every provider or platform has identical capabilities.
+
+## Highlights
+
+- **Role-first workspace** — independent Role identities, per-Role active conversations, project context, and workspace settings.
+- **Multi-agent communication** — Roles can exchange explicit messages in the recipient's current conversation. Delegated task execution and status tracking are available with runtime/provider constraints.
+- **Memory & Dreaming** — local persistent memory and configurable, idle-time reflection that can propose memory and Skill candidates. Dreaming uses Codex and requires a working authenticated provider; it is not a free background cloud service.
+- **Skill DNA** — Role-scoped reusable skills with candidate, verification, activation, and retirement states. Candidate generation and triggering should not be mistaken for automatically validated agent behavior.
+- **Context Health** — context contribution estimates, budget warnings, provenance-aware context assembly, safe compaction planning, and optional AutoCompact signals. Some usage figures are estimates, not exact billing tokens.
+- **Tool improvement feedback** — records failure/recovery and tool-use evidence to suggest improvements; proposals are not automatically applied as code changes.
+- **Interactive responses** — streaming chat, collapsible execution results, inline HTML/SVG sandboxes, visual reading mode, and allowlisted \`crew-ui\` choice, checklist, chart, scenario, and calculator widgets.
+- **Mobile-first operations** — Android WebView, file access, attachments, optional voice features, and Wireless Debugging tools. Availability varies by provider and Android configuration.
+- **Computer companion** — optional Crew Home / Remote Console on the same trusted LAN, with phone-controlled access.
+
+## Supported AI providers
+
+| Provider | Status | Notes |
+| --- | --- | --- |
+| **Google Antigravity CLI (\`agy\`)** | Installer default | Resident session integration, conversation history, and supported AGY-specific functionality. |
+| **OpenAI Codex CLI (\`codex\`)** | Optional | Persistent \`codex app-server\` integration, streaming tool events, models, reasoning, and native context compaction. |
+| **Claude Code CLI (\`claude\`)** | Preview / bring your own CLI | Requires Claude Code installed and authenticated **on the Runtime host**. Not bundled with the Android APK; some functions (including exact context usage and native compact) are unavailable. |
+
+Provider availability, model options, authentication, tool permissions, and costs depend on the installed CLI and your account. Switching providers does **not** transfer native sessions or merge their histories. See [Claude Code provider details](docs/claude-code-provider.md).
+
+## Quick start (Android / Termux)
+
+### 1. Install Termux
+
+Use the official [F-Droid package](https://f-droid.org/en/packages/com.termux/) or [Termux GitHub releases](https://github.com/termux/termux-app/releases).
+
+### 2. Run the installer
+
+Open Termux and run:
+
+\`\`\`bash
 curl -fsSL https://raw.githubusercontent.com/magic76/crew-pocket/main/install.sh | bash
-```
+\`\`\`
 
-安裝器只安裝核心執行環境（Node.js、Git、curl）與你選擇的 AI Provider；Python 與瀏覽器 Extension 都是選配，不會阻塞基本文字對話。首次仍須親自完成 AI 帳號登入。
+The installer installs or checks the minimal Node.js / Git / curl environment, clones or fast-forwards the repository, and lets you select **AGY**, **Codex**, both, or skip provider installation. Its default Termux checkout is \`~/agy-web\`. Review [install.sh](install.sh) before execution if you prefer to inspect remote scripts.
 
-完成後依序執行：
+The automated AGY setup uses its upstream installer; the Android Codex option uses the community-maintained \`@mmmbuto/codex-cli-termux\` package. These are external dependencies, not binaries shipped by Crew Pocket.
 
-```bash
-crew doctor  # 一次檢查 Node、Provider、儲存權限、Helper 與 Web 服務
-crew start   # 啟動服務並開啟 Crew Pocket
-```
+### 3. Authenticate your CLI and start
 
----
+Sign in to the provider(s) you installed, following their prompts:
 
----
+\`\`\`bash
+agy             # If using Antigravity: interactive first-time sign-in
+codex login     # If using Codex
+\`\`\`
 
-## 🟣 Claude Code CLI（第三種 Provider，預覽）
+Then:
 
-Crew Pocket 也能連接你自己已安裝、已登入的 Claude Code CLI，沿用同一套 Role、Memory、Dreaming、Context 與聊天 UI，支援串流、工具事件、明確 Session Resume 與中斷。
+\`\`\`bash
+crew doctor     # Check basic environment and provider availability
+crew start      # Start the local Runtime
+\`\`\`
 
-Claude Code 必須安裝在 **執行 Crew Runtime 的主機上**，而不是只安裝在開啟 Web 畫面的另一台電腦。這版尚未將 Mac Runtime 或 Android 套件改為跨主機執行。CLI 未安裝時不會出現在可用 Provider 清單。
+The interface is served at **http://127.0.0.1:8000**. The intended everyday experience is the Crew Pocket Android APK; opening that address in a browser is useful for testing. \`crew start\` restarts the Node server, so avoid running it during an active turn.
 
-詳見 [Claude Code Provider 設定、安全性與限制](docs/claude-code-provider.md)。
+### 4. Optional: Android APK shell
 
----
+The APK is **not installed by the Termux installer**. Build or install the Android wrapper separately. For an APK to request that Termux start the Runtime:
 
-
-## 🌟 核心特色 (Key Features)
-
-- 🌐 **原生無縫內嵌沙盒 2.0 (Seamless Inline Sandboxes)**：HTML / SVG / Web Audio / Chart.js 產物直接在對話中滿版動態渲染，高度智慧自適應，支援觸控互動、全螢幕大視野與代碼一鍵複製。
-- 🧩 **對話內原生互動回覆（P0）**：長篇報告可直接針對段落追問，支援 `crew-ui` 單選、清單及數據卡；所有操作先填入當前 Role 的輸入框，確認後才發送。詳見 [互動回覆規格](docs/interactive-replies.md)。
-- 📱 **滿版極致視野 (Full-Width Top-Header Layout)**：捨棄傳統側邊頭像縮排，採用頂部精緻抬頭，釋放 100% 手機螢幕橫向空間，讓代碼與視覺組件更開闊。
-- ⚡ **賽博朋克即時思考跑馬燈 (Cyberpunk Live Ticker)**：AI 思考推理（CoT）、工具呼叫（Tool Call）與文字生成脈絡即時滾動展示。
-- 📦 **深度記憶提煉壓縮 (`/compact`)**：一鍵精簡長篇對話核心脈絡，同時無縫繼承上下文。
-- 💬 **支線解答獨立卡片 (`/btw`)**：主副話題精準分離，可折疊收合，保持主線對話乾淨俐落。
-- 🎙️ **Gemini 2.0 Flash Realtime 語音對話 (Live Mode)**：低延遲雙向 Web Audio PCM 即時語音串流，支援多種風格音色。
-- 🧠 **思考強度自訂 (Thinking Effort)**：3 段式推理深度調節（`Low 極速` / `Medium 平衡` / `High 深度`）。
-- 🤖 **雙 Agent Provider**：可在介面中切換既有的 **Antigravity / agy** 與可選的 **OpenAI Codex CLI**；兩者的對話、Session 與歷史紀錄完全隔離。
-- 🧩 **持久 Codex 工作階段**：透過 `codex app-server` 常駐連線，支援串流回答、thinking、工具事件、檔案圖片輸入、模型清單與原生 context compaction。
-- 🔐 **Codex 全自動執行模式**：Codex 工作回合使用 `approvalPolicy: never` 與 `dangerFullAccess` sandbox，等效於非互動式全權限開發流程；請只在你信任的本機環境與專案中使用。
-- 📈 **Context 與用量**：對話頁與歷史側欄顯示目前 context 用量；Codex 另提供前往 ChatGPT Codex 用量設定頁的連結。
-- 🤖 **多模型選單**：Antigravity 提供既有模型；Codex 啟動後會由本機 CLI 動態讀取可用模型（例如 Sol、Terra、Luna）與其支援的 reasoning effort。
-- 📎 **多模態相機與相簿附加**：支援 iPhone / Android 原生 **HEIC/HEIF** 解碼與 AI 視覺專用輕量自動壓縮。
-- 📍 **GPS 即時定位與地圖**：一鍵獲取手機 GPS 並生成可於新分頁開啟的 Google Maps 導航卡片。
-- 📁 **Termux 本地檔案總管**：行動端目錄導航、代碼預覽與直接送入 AI 對話。
-- 🗑️ **檔案批次管理**：檔案總管支援多選檔案／資料夾後一次刪除。
-- ⚡ **Codex Session 預熱**：可選擇在設定中預熱 Codex session，閒置後自動釋放。
-- 📊 **模型用量監控 (`/usage`)**：即時掌握各模型重置週期與配額進度。
-- 🛡️ **會話隔離與無損日誌引擎**：徹底杜絕多 Session 切換串台 Race Condition，並優先讀取完整日誌避免代碼截斷。
-
----
-
-## 📲 Android Termux 安裝與環境設定指南
-
-### 步驟 1：下載並安裝 Termux
-> ⚠️ **重要提示**：請**勿**從 Google Play 商店下載（Play 商店版本已停止維護，無法正常更新套件）。
-
-請選擇以下官方管道下載並安裝 Termux：
-* 📥 **F-Droid 推薦下載**：[Termux on F-Droid](https://f-droid.org/en/packages/com.termux/)
-* 📥 **GitHub Releases**：[Termux GitHub Releases](https://github.com/termux/termux-app/releases) *(下載 `termux-app_v..._universal.apk` 或對應您手機架構的 `arm64-v8a.apk`)*
-
----
-
-### 步驟 2：初始化 Termux 環境與權限
-
-打開 Termux App，依序執行以下指令：
-
-```bash
-# 1. 取得手機儲存空間存取權限（手機彈窗請點「允許」）
-termux-setup-storage
-
-# 2. 更新套件庫索引與系統套件
-pkg update && pkg upgrade -y
-
-# 3. 基本版只需要 Node.js、Git 與 curl
-pkg install -y git nodejs curl
-```
-
-> Python 僅在需要本地 Python 程式沙盒時再安裝：`pkg install python`。
-
----
-
-### 步驟 3：安裝 AI 核心引擎 (agy / codex)
-
-Crew Pocket 支援雙核心 AI 引擎，請依需求安裝：
-
-#### 🔹 核心 A（預設必裝）：Google Antigravity CLI (`agy`)
-Antigravity (`agy`) 是 Crew Pocket 的預設核心，具備高效率代碼編輯、多模態視覺與上下文記憶管理能力。
-
-```bash
-# 1. 全域安裝 Antigravity CLI
-npm install -g agy
-
-# 2. 驗證安裝
-agy --version
-
-# 3. 首次啟動並完成 Google 帳號授權登入
-agy
-```
-> 💡 **Android 登入小提示**：首次啟動 `agy` 若 Termux 未自動喚醒瀏覽器，請長按複製終端中顯示的 OAuth 授權網址，貼到手機 Chrome/Edge 中完成登入，完成後回到終端按 `Ctrl+C` 結束 TUI 即可。
-> 若 Crew Pocket 顯示「AGY 登入已過期」，請在 Termux 互動執行一次 `agy` 完成重新授權；Web 服務會暫停重複 prewarm，避免失敗程序持續重啟。
-
-#### 🔹 核心 B（可選擴充）：OpenAI Codex CLI (`codex`)
-若您希望在模型選單中無縫切換到 OpenAI Codex 系列模型（如 Sol、Terra、Luna 等），請安裝 Codex CLI：
-
-```bash
-# 1. 安裝 Termux 專用優化版 Codex CLI（Android arm64 環境推薦）
-npm install -g @mmmbuto/codex-cli-termux
-
-# 2. 驗證安裝
-codex --version
-
-# 3. 登入 OpenAI / ChatGPT 帳號
-codex login
-```
-> 💡 **Codex 登入小提示**：Codex 採用 Device Code 模式，執行 `codex login` 後終端會顯示短網址與 8 位驗證碼，用手機瀏覽器打開輸入代碼即可秒速完成授權。
-
-> 🧠 **為什麼先裝 agy 再裝 codex 很順暢？**  
-> Android 系統採用特有的 Bionic Libc 架構。在完成步驟 2 的環境配置與 `agy` 初始化後，Termux 的底層開發工具鏈（Node.js、Python、儲存權限與全域路徑）已全部鋪平。加上 `@mmmbuto/codex-cli-termux` 是社群專門針對 Android arm64 修補過動態連結庫（LD_LIBRARY_PATH）的版本，因此後續安裝其他 CLI 引擎會非常順暢！
-
----
-
-### 步驟 4：下載 Crew Pocket 專案
-
-在 Termux 終端中複製本專案：
-
-```bash
-git clone https://github.com/magic76/crew-pocket.git ~/agy-web
-```
-
-### 步驟 4.1：AI 助理專案規範
-
-本 repo 已包含 [`GEMINI.md`](GEMINI.md) 與 [`AGENTS.md`](AGENTS.md)。使用 Antigravity CLI (`agy`) 或其他支援專案指令檔的 AI agent 時，請從專案根目錄啟動，讓它讀取這些規範後再修改程式：
-
-```bash
+\`\`\`bash
 cd ~/agy-web
-agy
-```
+bash scripts/enable-android-wrapper.sh
+\`\`\`
 
-規範包含 Termux 執行安全、Mobile-first UI、HTML 沙盒、Chart.js、手機裝置能力，以及子代理協作規則（任務拆分、唯讀優先、避免同檔衝突、主代理統一整合與 commit／push）與工具效率規範（無明確要求不使用外部搜尋、批次讀取、單次修改與集中測試）等專案慣例；請保留在 fork 或部署副本中，避免 AI 修改時忽略 Crew Pocket 的既有行為。
+Then grant the Android **Run commands in Termux environment** permission to Crew Pocket. See [Android wrapper setup, build, and Wireless Debugging](android-wrapper/README.md) for prerequisites, build commands, pairing, and reconnect behavior.
 
-### 步驟 4.2：Crew Pocket Browser Extension
+## Daily commands
 
-`extensions/crew-pocket-bridge/` 是 Crew Pocket 的瀏覽器橋接套件，適用於 Lemur Browser 等支援 Chromium Extension 的 Android 瀏覽器。它能把目前網頁的 DOM、截圖、網路請求與除錯資訊送到 Crew Pocket，並透過本機 Bridge Server 接收 AI 指令。
+| Command | Purpose |
+| --- | --- |
+| \`crew doctor\` | Check Node.js, checkout, installed providers, storage, and server status. |
+| \`crew start\` | (Re)start the local Runtime. |
+| \`crew status\` / \`crew stop\` | Inspect or stop the local Runtime. |
+| \`crew update\` | Fast-forward the checkout from \`origin/main\`; restart Runtime afterward. |
+| \`crew roles\` | List Role IDs for command-line messaging. |
+| \`crew send <from-role-id> <to-role-id> <message>\` | Send an explicit Role-to-Role message through the running Runtime. |
 
-套件壓縮檔位於 [`extensions/crew-pocket-bridge/crew-pocket-bridge.zip`](extensions/crew-pocket-bridge/crew-pocket-bridge.zip)。在瀏覽器的擴充功能頁面匯入或解壓後載入此目錄即可；Bridge 已整合進 Crew Pocket 主服務，啟動 `node ~/agy-web/server.js` 後會自動提供 `ws://127.0.0.1:8000/api/extension/ws`。
+For example:
 
-Extension、Web UI 與 AI API 統一走 `127.0.0.1:8000`。
+\`\`\`bash
+crew roles
+crew send role-general role-myproject "Review the current build errors."
+\`\`\`
 
----
+The Role IDs above are illustrative—use IDs returned by \`crew roles\`. Only the explicit message is sent; the receiving Role continues with **its own** memory, project, workspace, and active conversation.
 
-## 🚀 啟動與使用 (Usage)
+## How it works
 
-### 1. 啟動本機 Runtime
-```bash
-cd ~/agy-web
+\`\`\`text
+Android APK (WebView) / local browser / optional LAN Remote Console
+                            |
+                      Node.js Runtime
+                            |
+       +--------------------+--------------------+
+       |                    |                    |
+    Role & chat        Context & memory      Task / tool
+    orchestration      / Skill DNA           feedback
+       |                    |                    |
+       +--------------------+--------------------+
+                            |
+               AGY / Codex / Claude CLI
+                  (installed on host)
+\`\`\`
+
+- \`server.js\` exposes the local HTTP, SSE, and API entry points.
+- \`lib/\` contains providers, Role runtimes, messaging, memory, skills, context management, and task execution.
+- \`public/\` is the web UI served to the Android WebView and browser.
+- \`android-wrapper/\` is the APK shell and Android/Termux bridge.
+- \`docs/\` contains detailed design notes; \`test/\` and \`tests/\` contain focused regression coverage.
+
+The original transcripts and Role-specific state are kept locally. Compaction changes the model's working context, **not** the user's historical transcript. The Runtime should be treated as the source of truth; a Remote Console is an access surface, not a second synchronized agent host.
+
+## Updating and developing
+
+\`\`\`bash
+crew update
 crew start
-```
+\`\`\`
 
-Crew Pocket 的主要使用方式是 **Android APK**。APK 會直接連線本機
-`http://127.0.0.1:8000`，不需要安裝 PWA，也不依賴 Service Worker。
+Changes in \`public/\`, \`server.js\`, or \`lib/\` normally require only a repository update and Runtime restart. Changes to \`android-wrapper/\`, Android permissions, or native bridges require rebuilding/reinstalling the APK.
 
-需要除錯時，仍可用一般瀏覽器開啟：
+Before submitting a change, read [AGENTS.md](AGENTS.md) and [GEMINI.md](GEMINI.md). Run focused tests and syntax checks for the files you modify. Preserve existing conversations and memory across updates.
 
-```
-http://127.0.0.1:8000
-```
+## Security and limitations
 
-更新 Web UI 後只要 `git pull` 並重新啟動 Crew Runtime；localhost 靜態資產不做長期快取，APK 會讀取目前 checkout 的版本。
+- **Local first:** the default Runtime listens on \`127.0.0.1\`. Do not expose its API to the public internet. LAN access is an explicit, authenticated Remote Console mode controlled from the phone.
+- **AI can execute tools:** understand your provider's approval and sandbox settings before giving it access to sensitive projects, files, or devices. Do not equate an AI-generated result with a verified test or a permission grant.
+- **No automatic shared context:** Roles communicate through explicit messages, not by silently sharing private memory or entire transcripts.
+- **Not a hosted model service:** you install and authenticate your own CLI providers; the project does not include a paid LLM subscription.
+- **Android dependencies:** the APK still requires Termux and its local runtime. Optional ADB quick pairing/reconnect needs Android Wireless Debugging and user authorization. Provider features and physical-device reliability vary.
 
-### Crew Home 與電腦遠端介面
+## Documentation
 
-Crew Pocket 採用 **手機主機、電腦當遠端操作介面** 的模式。手機上的 Termux Runtime、對話、任務與 Provider 狀態仍是唯一來源，不需要把資料同步到 Mac / PC。
+- [Android wrapper & Wireless Debugging](android-wrapper/README.md)
+- [Claude Code preview: setup and limitations](docs/claude-code-provider.md)
+- [Interactive response formats and safety boundaries](docs/interactive-replies.md)
+- [AI development conventions](AGENTS.md)
 
-1. 在 APK 右上角開啟 **Crew Home**。
-2. 可以直接看到「處理中 / 等確認 / 已完成」與最近背景任務。
-3. 在「Remote Console」按 **開啟**。Runtime 會自動重啟並改成 LAN 模式。
-4. Runtime 恢復後，使用同一 Wi-Fi 的 Mac / PC 開啟手機顯示的區網網址。
-5. 手機會顯示目前有幾台電腦活躍，並可單獨或全部中斷。
+## Contributing and license
 
-安全行為：
+Issues, bug reports, and focused pull requests are welcome. Please include reproduction steps and the checks you ran, especially for Android WebView, Termux, providers, Role isolation, and conversation persistence.
 
-- 預設仍只綁定 `127.0.0.1`。
-- LAN 模式才綁定 `0.0.0.0`。
-- 手機本機保留管理權限，所以 APK 不會因 LAN 模式而失效。
-- Remote Console 是否接受區網連線由手機端開關控制；Runtime 仍會對遠端瀏覽器建立自己的授權 session。
-- API 與 WebSocket 只在 Remote Console 開啟、且請求通過主機與遠端 session 驗證時提供服務。
-- 關閉電腦連線後 Runtime 會自動恢復 localhost-only。
-- 遠端模式狀態持久化於 `~/.crew-pocket/remote-enabled`，APK Runtime 或新版 `crew start` 都會遵守。
-
-### 更新規則
-
-- 修改 `public/`、`server.js`、`lib/`：只需更新 repo + 重啟 Runtime，**不需要重裝 APK**。
-- 修改 `android-wrapper/`、Android 權限、WebView/Native Bridge：才需要重新 build / 安裝 APK。
-- 正式路徑不使用 PWA manifest、Service Worker 或額外 cache revision；舊版 PWA 狀態只由 APK 做一次性清理。
-
-### 安裝後自我檢查
-
-```bash
-crew doctor
-```
-
-它會顯示 Node.js、Crew Pocket 目錄、agy/Codex 是否已安裝、儲存空間授權與目前 Web 服務狀態。Provider 的帳號登入是外部 OAuth 流程，請依提示執行 `agy` 或 `codex login` 完成。
-
----
-
-## ⌨️ 快捷指令清單 (Slash Commands)
-
-| 指令 | 功能說明 | 適用場景 |
-| :--- | :--- | :--- |
-| `/compact [焦點]` | **對話記憶精簡壓縮** | 當對話太長、Token 消耗過多時，提煉核心脈絡並釋放記憶 |
-| `/btw [問題]` | **順帶一提 · 支線解答** | 在主線討論中插入短小問題，生成獨立折疊卡片 |
-| `/clear` | **一鍵清空開新對話** | 快速重置目前對話上下文 |
-| `/plan [目標]` | **自主架構規劃模式** | 複雜多模組專案逐步拆解 |
-| `/goal [目標]` | **自主特勤目標達成** | 高難度、長時程任務不達目的不停止 |
-
-> `/compact` 依目前 Provider 執行：AGY 使用 Crew Pocket 的既有記憶摘要機制；Codex 使用 CLI 原生的 context compaction。
-
-### `/compact` 歷史留存驗證（AGY）
-
-1. 在同一個對話先傳送兩則有辨識度的訊息，例如「驗證 A」與「驗證 B」，再執行一次 `/compact`。
-2. 再傳送「驗證 C」與一張照片，執行第二次 `/compact`。
-3. 重新整理頁面、切換到另一個歷史對話後再切回來；A、B、C 與照片訊息都必須仍在，且只會多出 checkpoint 分隔卡。
-
-AGY 每次 compact 前會把 active `transcript.jsonl` 的新增 records 依完整紀錄身分去重後封存進 `transcript_full.jsonl`；compact 只縮小模型工作快照，不會刪除 Web 歷史。
-
----
-
-## 🧩 Provider 與對話資料
-
-| Provider | 預設狀態 | 對話與 Session | 特有能力 |
-| :--- | :--- | :--- | :--- |
-| Antigravity / agy | 預設，原有行為不變 | 既有 resident session 與本機 brain 歷史 | `/compact` 記憶摘要、`/usage` 用量彈窗、Gemini Live 語音 |
-| OpenAI Codex | 可選 | `codex app-server` thread，與 AGY 完全隔離 | 動態模型、工具／reasoning 串流、context 用量、原生 compact、Execution Policy |
-
-切換 Provider 不會遷移、覆寫或刪除另一個 Provider 的對話。左側歷史列表會以 `AGY` 或 `Codex` 標籤區分來源。
-
-Codex context 用量由 app-server 在工作回合中回報；伺服器剛重啟時，舊 Codex 對話可能先顯示 `—`，完成新的 Codex 回合後即會更新。
-
----
-
-## 🛠️ 技術架構 (Architecture)
-
-- **後端 (Backend)**: Node.js 原生 HTTP + Server-Sent Events (SSE)；Provider 層將 AGY resident process 與 Codex app-server 事件正規化後送往前端
-- **Provider**: `lib/providers/antigravity.js` 保留既有 AGY 實作；`lib/providers/codex.js` 管理持久 JSON-RPC app-server 與 Codex thread
-- **前端 (Frontend)**: 原生 Modular JavaScript (`app.js`, `chat.js`, `tools.js`, `ui.js`, `live.js`) + Tailwind CSS (Glassmorphism 2.0)
-- **安全防護 (Security)**: DOMPurify 離線安全消毒 + 沙盒化 Iframe 隔離執行
-- **格式支援 (Formats)**: Marked.js + Highlight.js + heic2any + Chart.js
+Licensed under the [MIT License](LICENSE).
