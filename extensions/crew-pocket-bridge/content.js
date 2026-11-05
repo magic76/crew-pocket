@@ -2,19 +2,32 @@
 (function() {
   if (window.__CREW_POCKET_INJECTED) return;
   window.__CREW_POCKET_INJECTED = true;
+  let pendingClientMessageId = null;
+  let deliveryConfirmed = false;
+  let directMessageStatus = null;
 
   console.log('[Crew Pocket Bridge] Injected on:', location.href);
 
-  function notifyBackground(type, payload) {
+  function notifyBackground(type, payload, onResponse) {
+    const message = {
+      source: 'CREW_POCKET_CONTENT',
+      type: type,
+      url: location.href,
+      timestamp: Date.now(),
+      payload: payload
+    };
     try {
-      chrome.runtime.sendMessage({
-        source: 'CREW_POCKET_CONTENT',
-        type: type,
-        url: location.href,
-        timestamp: Date.now(),
-        payload: payload
-      });
-    } catch (err) {}
+      if (typeof onResponse === 'function') {
+        chrome.runtime.sendMessage(message, (response) => {
+          const error = chrome.runtime.lastError;
+          onResponse(error ? { status: 'ERROR', error: error.message } : response);
+        });
+      } else {
+        chrome.runtime.sendMessage(message);
+      }
+    } catch (err) {
+      if (typeof onResponse === 'function') onResponse({ status: 'ERROR', error: err.message });
+    }
   }
 
   window.addEventListener('message', (event) => {
@@ -232,6 +245,7 @@
           gap: 6px;
         }
         .send-btn:active { transform: scale(0.97); }
+        .send-btn:disabled { opacity: 0.65; cursor: wait; }
         .status-tag {
           font-size: 11px;
           color: #34d399;
@@ -289,6 +303,7 @@
     const sendBtn = shadow.getElementById('sendMsgBtn');
     const input = shadow.getElementById('msgInput');
     const status = shadow.getElementById('sendStatus');
+    directMessageStatus = status;
 
     // 🖐️ Smooth Mobile Touch & Desktop Mouse Dragging
     let isDragging = false;
@@ -375,29 +390,50 @@
 
     sendBtn.addEventListener('click', () => {
       const text = input.value.trim();
-      if (!text) return;
+      if (!text || sendBtn.disabled) return;
 
-      status.textContent = '正在發送至 Crew Pocket 對話...';
+      const clientMessageId = window.crypto?.randomUUID
+        ? window.crypto.randomUUID()
+        : `crew_${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}`;
+      pendingClientMessageId = clientMessageId;
+      deliveryConfirmed = false;
+      sendBtn.disabled = true;
+
+      status.textContent = '正在保存到 extension 傳送佇列...';
       
       notifyBackground('USER_DIRECT_MESSAGE', {
+        clientMessageId,
         text: text,
         url: location.href,
         title: document.title,
         lastError: lastErrorMsg,
         timestamp: Date.now()
+      }, (response) => {
+        if (pendingClientMessageId !== clientMessageId) return;
+        sendBtn.disabled = false;
+        if (response?.status !== 'QUEUED') {
+          status.textContent = `❌ 訊息未排入佇列：${response?.error || 'extension 無回應，請重試'}`;
+          return;
+        }
+        input.value = '';
+        if (!deliveryConfirmed) status.textContent = '📬 已存入本機待送佇列，等待 Crew Pocket 確認收件…';
       });
-
-      status.textContent = '✅ 已成功送達 Crew Pocket 聊天室！';
-      input.value = '';
-      setTimeout(() => {
-        status.textContent = '';
-        modalOverlay.classList.remove('open');
-      }, 1200);
     });
   }
 
   // 4. Command Dispatcher
   chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    if (request.type === 'USER_DIRECT_MESSAGE_STATUS') {
+      if (request.clientMessageId === pendingClientMessageId) {
+        if (request.status === 'DELIVERED') {
+          deliveryConfirmed = true;
+          if (directMessageStatus) directMessageStatus.textContent = '✅ Crew Pocket 已確認收到訊息';
+        } else if (request.status === 'FAILED') {
+          if (directMessageStatus) directMessageStatus.textContent = `❌ Crew Pocket 未能接收：${request.error || '請重試'}`;
+        }
+      }
+      return false;
+    }
     if (request.action === 'PING') {
       sendResponse({ status: 'OK', url: location.href, title: document.title });
       return true;

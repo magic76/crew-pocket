@@ -1,11 +1,225 @@
 // Crew Pocket Background Service Worker with Full Network API Interceptor
 const BRIDGE_WS_URL = 'ws://127.0.0.1:8000/api/extension/ws';
+const USER_MESSAGE_OUTBOX_KEY = 'crewPocketBridgeUserMessageOutbox';
+const MAX_USER_MESSAGE_OUTBOX = 100;
+const USER_MESSAGE_RETRY_MS = 15 * 1000;
+const BRIDGE_RETRY_ALARM = 'crew-pocket-bridge-retry';
+const BRIDGE_HEARTBEAT_MS = 20 * 1000;
 let ws = null;
 let reconnectTimer = null;
+let bridgeHeartbeatTimer = null;
+let userMessageRetryTimer = null;
+let userMessageOutbox = [];
+let userMessageOutboxLoad = null;
+let userMessageOutboxMutation = Promise.resolve();
+let flushingUserMessages = false;
 const apiBuffer = [];
 const pendingApiCaptures = new Map();
 const MAX_API_CAPTURE_BYTES = 64 * 1024;
 const MAX_API_CAPTURE_MS = 60 * 1000;
+
+function storageGet(key) {
+  return new Promise((resolve, reject) => {
+    chrome.storage.local.get(key, (result) => {
+      const error = chrome.runtime.lastError;
+      if (error) reject(new Error(error.message));
+      else resolve(result?.[key]);
+    });
+  });
+}
+
+function storageSet(values) {
+  return new Promise((resolve, reject) => {
+    chrome.storage.local.set(values, () => {
+      const error = chrome.runtime.lastError;
+      if (error) reject(new Error(error.message));
+      else resolve();
+    });
+  });
+}
+
+function ensureUserMessageOutboxLoaded() {
+  if (!userMessageOutboxLoad) {
+    userMessageOutboxLoad = storageGet(USER_MESSAGE_OUTBOX_KEY).then((items) => {
+      userMessageOutbox = Array.isArray(items)
+        ? items.filter((item) => item && typeof item.clientMessageId === 'string' && item.payload && typeof item.payload.text === 'string')
+          .slice(-MAX_USER_MESSAGE_OUTBOX)
+          .map((item) => ({
+            clientMessageId: item.clientMessageId.slice(0, 80),
+            payload: item.payload,
+            tabId: Number.isInteger(item.tabId) ? item.tabId : null,
+            frameId: Number.isInteger(item.frameId) ? item.frameId : 0,
+            queuedAt: Number(item.queuedAt) || Date.now(),
+            lastSentAt: Number(item.lastSentAt) || 0,
+            attempts: Math.max(0, Number(item.attempts) || 0)
+          }))
+        : [];
+      return userMessageOutbox;
+    }).catch((error) => {
+      userMessageOutboxLoad = null;
+      throw error;
+    });
+  }
+  return userMessageOutboxLoad;
+}
+
+function mutateUserMessageOutbox(operation) {
+  const pending = userMessageOutboxMutation.then(operation, operation);
+  userMessageOutboxMutation = pending.catch(() => {});
+  return pending;
+}
+
+function sendUserMessageStatus(entry, status, details = {}) {
+  if (!Number.isInteger(entry?.tabId)) return;
+  try {
+    chrome.tabs.sendMessage(entry.tabId, {
+      type: 'USER_DIRECT_MESSAGE_STATUS',
+      clientMessageId: entry.clientMessageId,
+      status,
+      ...details
+    }, { frameId: entry.frameId }, () => { void chrome.runtime.lastError; });
+  } catch (_) {}
+}
+
+async function enqueueUserMessage(message, sender) {
+  const source = message?.payload && typeof message.payload === 'object' ? message.payload : {};
+  const text = String(source.text || '').trim();
+  if (!text) throw new Error('訊息不可為空');
+
+  const clientMessageId = String(source.clientMessageId || '').slice(0, 80);
+  if (!/^[a-zA-Z0-9_-]{16,80}$/.test(clientMessageId)) throw new Error('訊息識別碼無效');
+
+  const payload = {
+    clientMessageId,
+    text,
+    url: String(source.url || message.url || '').slice(0, 4000),
+    title: String(source.title || '').slice(0, 500),
+    lastError: String(source.lastError || '').slice(0, 2000),
+    timestamp: Number(source.timestamp || message.timestamp) || Date.now()
+  };
+  await ensureUserMessageOutboxLoaded();
+
+  return mutateUserMessageOutbox(async () => {
+    const existing = userMessageOutbox.find((item) => item.clientMessageId === clientMessageId);
+    if (existing) return { status: 'QUEUED', clientMessageId };
+    if (userMessageOutbox.length >= MAX_USER_MESSAGE_OUTBOX) throw new Error('本機待送佇列已滿，請先連上 Crew Pocket 後再試');
+
+    const entry = {
+      clientMessageId,
+      payload,
+      tabId: Number.isInteger(sender?.tab?.id) ? sender.tab.id : null,
+      frameId: Number.isInteger(sender?.frameId) ? sender.frameId : 0,
+      queuedAt: Date.now(),
+      lastSentAt: 0,
+      attempts: 0
+    };
+    const next = [...userMessageOutbox, entry];
+    await storageSet({ [USER_MESSAGE_OUTBOX_KEY]: next });
+    userMessageOutbox = next;
+    return { status: 'QUEUED', clientMessageId };
+  });
+}
+
+async function recordUserMessageAttempt(clientMessageId, at) {
+  return mutateUserMessageOutbox(async () => {
+    const index = userMessageOutbox.findIndex((item) => item.clientMessageId === clientMessageId);
+    if (index < 0) return null;
+    const next = [...userMessageOutbox];
+    next[index] = { ...next[index], lastSentAt: at, attempts: next[index].attempts + 1 };
+    await storageSet({ [USER_MESSAGE_OUTBOX_KEY]: next });
+    userMessageOutbox = next;
+    return next[index];
+  });
+}
+
+async function settleUserMessage(message, status) {
+  const clientMessageId = String(message?.clientMessageId || '').slice(0, 80);
+  if (!clientMessageId) return;
+  await ensureUserMessageOutboxLoaded();
+
+  const entry = await mutateUserMessageOutbox(async () => {
+    const existing = userMessageOutbox.find((item) => item.clientMessageId === clientMessageId);
+    if (!existing) return null;
+    const next = userMessageOutbox.filter((item) => item.clientMessageId !== clientMessageId);
+    await storageSet({ [USER_MESSAGE_OUTBOX_KEY]: next });
+    userMessageOutbox = next;
+    return existing;
+  });
+
+  if (!entry) return;
+  if (status === 'DELIVERED') {
+    sendUserMessageStatus(entry, status, { inboundId: String(message.inboundId || '') });
+  } else {
+    sendUserMessageStatus(entry, 'FAILED', { error: String(message.error || 'Crew Pocket 拒收了訊息').slice(0, 240) });
+  }
+  if (userMessageOutbox.length === 0 && userMessageRetryTimer) {
+    clearTimeout(userMessageRetryTimer);
+    userMessageRetryTimer = null;
+  } else if (userMessageOutbox.length > 0) {
+    void flushUserMessageOutbox();
+  }
+}
+
+function scheduleUserMessageRetry(delay = USER_MESSAGE_RETRY_MS) {
+  if (userMessageRetryTimer) clearTimeout(userMessageRetryTimer);
+  userMessageRetryTimer = setTimeout(() => {
+    userMessageRetryTimer = null;
+    void flushUserMessageOutbox();
+  }, Math.max(1000, delay));
+}
+
+async function flushUserMessageOutbox() {
+  if (flushingUserMessages) return;
+  try {
+    await ensureUserMessageOutboxLoaded();
+  } catch (error) {
+    console.warn('[Background] Could not load the direct-message outbox:', error.message);
+    return;
+  }
+
+  if (flushingUserMessages) return;
+  const socket = ws;
+  if (!socket || socket.readyState !== WebSocket.OPEN || userMessageOutbox.length === 0) return;
+  flushingUserMessages = true;
+  try {
+    while (ws === socket && socket.readyState === WebSocket.OPEN) {
+      const now = Date.now();
+      const entry = userMessageOutbox.find((item) => !item.lastSentAt || now - item.lastSentAt >= USER_MESSAGE_RETRY_MS);
+      if (!entry) {
+        const nextRetryAt = Math.min(...userMessageOutbox.map((item) => item.lastSentAt + USER_MESSAGE_RETRY_MS));
+        scheduleUserMessageRetry(nextRetryAt - now);
+        break;
+      }
+
+      const attempt = await recordUserMessageAttempt(entry.clientMessageId, now);
+      if (!attempt) continue;
+      if (ws !== socket || socket.readyState !== WebSocket.OPEN) break;
+      try {
+        socket.send(JSON.stringify({ type: 'USER_DIRECT_MESSAGE', clientMessageId: attempt.clientMessageId, payload: attempt.payload }));
+      } catch (error) {
+        console.warn('[Background] Direct message send failed:', error.message);
+        scheduleUserMessageRetry();
+        break;
+      }
+      scheduleUserMessageRetry();
+    }
+  } catch (error) {
+    console.warn('[Background] Direct-message outbox flush failed:', error.message);
+    scheduleUserMessageRetry();
+  } finally {
+    flushingUserMessages = false;
+  }
+}
+
+function ensureBridgeRetryAlarm() {
+  if (!chrome.alarms) return;
+  try { chrome.alarms.create(BRIDGE_RETRY_ALARM, { periodInMinutes: 1 }); } catch (_) {}
+}
+
+function sendBridgeHeartbeat(socket) {
+  if (ws !== socket || socket.readyState !== WebSocket.OPEN) return;
+  try { socket.send(JSON.stringify({ type: 'CLIENT_HEARTBEAT', timestamp: Date.now() })); } catch (_) {}
+}
 
 function armApiResponseCapture(options) {
   const marker = '__CREW_POCKET_API_CAPTURE_V1__';
@@ -214,21 +428,33 @@ function connectBridge() {
 
   try {
     console.log('[Background] Connecting to Crew Pocket Termux Bridge:', BRIDGE_WS_URL);
-    ws = new WebSocket(BRIDGE_WS_URL);
+    const socket = new WebSocket(BRIDGE_WS_URL);
+    ws = socket;
 
-    ws.onopen = () => {
+    socket.onopen = () => {
       console.log('⚡ [Background] Connected to Termux Bridge!');
-      ws.send(JSON.stringify({ type: 'CLIENT_IDENTIFY', role: 'LEMUR_BROWSER_EXTENSION', timestamp: Date.now() }));
+      socket.send(JSON.stringify({ type: 'CLIENT_IDENTIFY', role: 'LEMUR_BROWSER_EXTENSION', timestamp: Date.now() }));
       // Flush buffered APIs
       while (apiBuffer.length > 0) {
         const item = apiBuffer.shift();
-        ws.send(JSON.stringify(item));
+        socket.send(JSON.stringify(item));
       }
+      if (bridgeHeartbeatTimer) clearInterval(bridgeHeartbeatTimer);
+      bridgeHeartbeatTimer = setInterval(() => sendBridgeHeartbeat(socket), BRIDGE_HEARTBEAT_MS);
+      void flushUserMessageOutbox();
     };
 
-    ws.onmessage = async (event) => {
+    socket.onmessage = async (event) => {
       try {
         const cmd = JSON.parse(event.data);
+        if (cmd.type === 'USER_DIRECT_MESSAGE_ACK') {
+          await settleUserMessage(cmd, 'DELIVERED');
+          return;
+        }
+        if (cmd.type === 'USER_DIRECT_MESSAGE_REJECTED') {
+          await settleUserMessage(cmd, 'FAILED');
+          return;
+        }
         let tabs = await chrome.tabs.query({ active: true });
         if (!tabs || tabs.length === 0) {
           tabs = await chrome.tabs.query({});
@@ -236,18 +462,18 @@ function connectBridge() {
         // Find valid active web tab
         const tab = tabs ? (tabs.find(t => t.url && /^https?:\/\//.test(t.url) && !t.url.includes('chrome://')) || tabs[0]) : null;
         if (!tab || !tab.id) {
-          ws.send(JSON.stringify({ responseTo: cmd.id, status: 'ERROR', message: 'No accessible web tab found' }));
+          socket.send(JSON.stringify({ responseTo: cmd.id, status: 'ERROR', message: 'No accessible web tab found' }));
           return;
         }
 
         if (cmd.action === 'ARM_API_RESPONSE_CAPTURE') {
           const urlIncludes = typeof cmd.urlIncludes === 'string' ? cmd.urlIncludes.trim() : '';
           if (!urlIncludes || urlIncludes.length > 400 || urlIncludes.includes('*') || /[\r\n]/.test(urlIncludes)) {
-            ws.send(JSON.stringify({ responseTo: cmd.id, status: 'ERROR', message: '請提供明確的 API URL 片段（1–400 字元，不接受萬用字元）' }));
+            socket.send(JSON.stringify({ responseTo: cmd.id, status: 'ERROR', message: '請提供明確的 API URL 片段（1–400 字元，不接受萬用字元）' }));
             return;
           }
           if (pendingApiCaptures.size > 0) {
-            ws.send(JSON.stringify({ responseTo: cmd.id, status: 'ERROR', message: '已有一筆 API 回應擷取等待中，請先完成或等待逾時' }));
+            socket.send(JSON.stringify({ responseTo: cmd.id, status: 'ERROR', message: '已有一筆 API 回應擷取等待中，請先完成或等待逾時' }));
             return;
           }
 
@@ -270,14 +496,14 @@ function connectBridge() {
             if (lastError || !result?.success) {
               clearTimeout(timeout);
               pendingApiCaptures.delete(captureId);
-              ws.send(JSON.stringify({
+              socket.send(JSON.stringify({
                 responseTo: cmd.id,
                 status: 'ERROR',
                 message: lastError?.message || '瀏覽器無法在頁面主環境安裝 API 回應擷取器'
               }));
               return;
             }
-            ws.send(JSON.stringify({
+            socket.send(JSON.stringify({
               responseTo: cmd.id,
               status: 'OK',
               data: { armed: true, captureId, expiresAt, maxBytes }
@@ -357,7 +583,7 @@ function connectBridge() {
             args: [cmd.text || '', cmd.selector || '']
           }, (results) => {
             const res = results && results[0] ? results[0].result : null;
-            ws.send(JSON.stringify({ responseTo: cmd.id, status: res && res.success ? 'OK' : 'ERROR', data: res }));
+            socket.send(JSON.stringify({ responseTo: cmd.id, status: res && res.success ? 'OK' : 'ERROR', data: res }));
           });
           return;
         }
@@ -373,7 +599,7 @@ function connectBridge() {
             args: [cmd.selector || '']
           }, (results) => {
             const res = results && results[0] ? results[0].result : null;
-            ws.send(JSON.stringify({ responseTo: cmd.id, status: 'OK', data: res }));
+            socket.send(JSON.stringify({ responseTo: cmd.id, status: 'OK', data: res }));
           });
           return;
         }
@@ -420,7 +646,7 @@ function connectBridge() {
             args: [cmd.query || cmd.text || '', cmd.selector || '']
           }, (results) => {
             const res = results && results[0] ? results[0].result : null;
-            ws.send(JSON.stringify({ responseTo: cmd.id, status: 'OK', data: res }));
+            socket.send(JSON.stringify({ responseTo: cmd.id, status: 'OK', data: res }));
           });
           return;
         }
@@ -428,19 +654,24 @@ function connectBridge() {
         chrome.tabs.sendMessage(tab.id, cmd, (response) => {
           const lastErr = chrome.runtime.lastError;
           if (lastErr) {
-            ws.send(JSON.stringify({ responseTo: cmd.id, status: 'ERROR', message: lastErr.message }));
+            socket.send(JSON.stringify({ responseTo: cmd.id, status: 'ERROR', message: lastErr.message }));
           } else {
-            ws.send(JSON.stringify({ responseTo: cmd.id, status: 'OK', data: response }));
+            socket.send(JSON.stringify({ responseTo: cmd.id, status: 'OK', data: response }));
           }
         });
       } catch (err) {}
     };
 
-    ws.onclose = () => {
+    socket.onclose = () => {
+      if (bridgeHeartbeatTimer) {
+        clearInterval(bridgeHeartbeatTimer);
+        bridgeHeartbeatTimer = null;
+      }
+      if (ws === socket) ws = null;
       scheduleReconnect();
     };
 
-    ws.onerror = () => {};
+    socket.onerror = () => {};
   } catch (e) {
     scheduleReconnect();
   }
@@ -448,7 +679,10 @@ function connectBridge() {
 
 function scheduleReconnect() {
   if (reconnectTimer) clearTimeout(reconnectTimer);
-  reconnectTimer = setTimeout(connectBridge, 3000);
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null;
+    connectBridge();
+  }, 3000);
 }
 
 function sendToBridge(data) {
@@ -514,6 +748,15 @@ if (chrome.webRequest) {
 
 // 2. Forward content events to Termux
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message?.type === 'USER_DIRECT_MESSAGE') {
+    enqueueUserMessage(message, sender).then((response) => {
+      sendResponse(response);
+      void flushUserMessageOutbox();
+    }).catch((error) => {
+      sendResponse({ status: 'ERROR', error: error.message });
+    });
+    return true;
+  }
   if (message?.type === 'API_RESPONSE_CAPTURED') {
     const captureId = String(message.payload?.captureId || '');
     const timeout = pendingApiCaptures.get(captureId);
@@ -537,5 +780,28 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   return true;
 });
 
+if (chrome.alarms) {
+  chrome.alarms.onAlarm.addListener((alarm) => {
+    if (alarm.name !== BRIDGE_RETRY_ALARM) return;
+    connectBridge();
+    void flushUserMessageOutbox();
+  });
+}
+
+chrome.runtime.onStartup.addListener(() => {
+  ensureBridgeRetryAlarm();
+  connectBridge();
+  void flushUserMessageOutbox();
+});
+
+chrome.runtime.onInstalled.addListener(() => {
+  ensureBridgeRetryAlarm();
+  connectBridge();
+});
+
+ensureBridgeRetryAlarm();
+void ensureUserMessageOutboxLoaded().catch((error) => {
+  console.warn('[Background] Could not restore the direct-message outbox:', error.message);
+});
 connectBridge();
 setInterval(connectBridge, 10000);

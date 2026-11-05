@@ -344,6 +344,9 @@ const pendingInboundMessages = [];
 const inboundEventClients = new Set();
 const INBOUND_QUEUE_LIMIT = 50;
 let inboundMessageCounter = 0;
+const inboundMessageReceipts = new Map();
+const INBOUND_RECEIPT_TTL_MS = 24 * 60 * 60 * 1000;
+const INBOUND_RECEIPT_LIMIT = 5000;
 
 function normalizeInboundMessage(body) {
   const text = body && (body.text || body.message || body.prompt);
@@ -357,6 +360,9 @@ function normalizeInboundMessage(body) {
     created_at: Number(body.created_at || body.timestamp) || receivedAt,
     received_at: receivedAt
   };
+
+  const clientMessageId = String(body.clientMessageId || body.client_message_id || '').trim().slice(0, 80);
+  if (/^[a-zA-Z0-9_-]{16,80}$/.test(clientMessageId)) message.client_message_id = clientMessageId;
 
   for (const key of ['image_path', 'url', 'title', 'lastError']) {
     if (typeof body[key] === 'string' && body[key]) message[key] = body[key];
@@ -382,6 +388,18 @@ function writeInboundEvent(res, message) {
 }
 
 function enqueueInboundMessage(body) {
+  const source = String(body?.source || 'External').slice(0, 48);
+  const clientMessageId = String(body?.clientMessageId || body?.client_message_id || '').trim().slice(0, 80);
+  const receiptKey = /^[a-zA-Z0-9_-]{16,80}$/.test(clientMessageId) ? `${source}:${clientMessageId}` : '';
+  const now = Date.now();
+  if (receiptKey) {
+    for (const [key, receipt] of inboundMessageReceipts) {
+      if (receipt.receivedAt < now - INBOUND_RECEIPT_TTL_MS) inboundMessageReceipts.delete(key);
+    }
+    const previous = inboundMessageReceipts.get(receiptKey);
+    if (previous) return previous.message;
+  }
+
   const message = normalizeInboundMessage(body);
   if (!message) return null;
 
@@ -398,6 +416,14 @@ function enqueueInboundMessage(body) {
   if (delivered === 0) {
     pendingInboundMessages.push(message);
     if (pendingInboundMessages.length > INBOUND_QUEUE_LIMIT) pendingInboundMessages.shift();
+  }
+  if (receiptKey) {
+    inboundMessageReceipts.set(receiptKey, { message, receivedAt: now });
+    while (inboundMessageReceipts.size > INBOUND_RECEIPT_LIMIT) {
+      const oldestKey = inboundMessageReceipts.keys().next().value;
+      if (!oldestKey) break;
+      inboundMessageReceipts.delete(oldestKey);
+    }
   }
   return message;
 }
