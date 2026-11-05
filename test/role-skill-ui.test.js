@@ -57,6 +57,13 @@ const render = async partial => {
     usage: [{ ...use, check: 'failed', categories: ['test'] }] });
   assert.match(html, /需重新驗證/);
 
+  html = await render({ autoEligibility: { eligible: true, passed: 1, required: 2, risk: 'low' } });
+  assert.match(html, /指定測試驗證中 · 1\/2 回合/);
+
+  html = await render({ status: 'active', verification: { method: 'runtime-validated', successfulTurns: 2 } });
+  assert.match(html, /低風險自動驗證 · 已啟用/);
+  assert.match(html, /不同回合至少兩次通過/);
+
   html = await render({ status: 'active', verification: { method: 'runtime-observed', successfulTurns: 2 } });
   assert.match(html, /舊版自動啟用 · 需重新審核/);
   assert.match(nodes['role-dna-summary'].textContent, /已啟用/);
