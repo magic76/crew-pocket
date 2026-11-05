@@ -3114,7 +3114,8 @@ async function handleChatTurn(req, res, submittedBody = null) {
               prompt: cleanUserContent(prompt || ''),
               response: event.response,
               status: event.status,
-              runtimeChecks: [...runtimeSkillChecks.values()]
+              runtimeChecks: [...runtimeSkillChecks.values()],
+              acceptanceTests: [...observedSkillTests.values()]
             }).catch(error => console.warn('[Dreaming] checkpoint failed:', error.message)));
           }
           broadcastCrewStatusEvent('turn-complete', role?.id || null);
