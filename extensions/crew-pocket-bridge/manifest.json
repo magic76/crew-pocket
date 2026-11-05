@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Crew Pocket AI Bridge",
-  "version": "1.1.0",
-  "description": "Bridges Lemur Browser pages with Crew Pocket AI in Termux for remote debugging, DOM inspection & API network tracking.",
+  "version": "1.2.0",
+  "description": "Bridge browser pages to Crew Pocket AI for DOM inspection, debugging, network metadata, and one-shot JSON response capture.",
   "permissions": [
     "activeTab",
     "scripting",

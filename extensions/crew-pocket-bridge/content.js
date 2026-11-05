@@ -17,6 +17,20 @@
     } catch (err) {}
   }
 
+  window.addEventListener('message', (event) => {
+    if (event.source !== window) return;
+    const message = event.data;
+    if (message?.source !== 'CREW_POCKET_API_RESPONSE_CAPTURE' || message.type !== 'RESULT' || !message.payload?.captureId) return;
+    try {
+      chrome.runtime.sendMessage({
+        source: 'CREW_POCKET_CONTENT',
+        type: 'API_RESPONSE_CAPTURED',
+        timestamp: Date.now(),
+        payload: message.payload
+      }, () => { void chrome.runtime.lastError; });
+    } catch (_) {}
+  });
+
   // Keepalive heartbeat to keep background service worker connected
   setInterval(() => {
     notifyBackground('HEARTBEAT', {});

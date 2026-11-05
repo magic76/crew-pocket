@@ -167,11 +167,17 @@ agy
 
 ### 步驟 4.2：Crew Pocket Browser Extension
 
-`extensions/crew-pocket-bridge/` 是 Crew Pocket 的瀏覽器橋接套件，適用於 Lemur Browser 等支援 Chromium Extension 的 Android 瀏覽器。它能把目前網頁的 DOM、截圖、網路請求與除錯資訊送到 Crew Pocket，並透過本機 Bridge Server 接收 AI 指令。
+`extensions/crew-pocket-bridge/` 是 Crew Pocket 的瀏覽器橋接套件，適用於 Lemur Browser 等支援 Chromium Extension 的 Android 瀏覽器。它能把目前網頁的 DOM、Console 訊息與網路請求 metadata 送到 Crew Pocket，並透過本機 Bridge Server 接收 AI 指令。一般監控不讀取 response body；目前沒有頁面截圖擷取命令。
 
 套件壓縮檔位於 [`extensions/crew-pocket-bridge/crew-pocket-bridge.zip`](extensions/crew-pocket-bridge/crew-pocket-bridge.zip)。在瀏覽器的擴充功能頁面匯入或解壓後載入此目錄即可；Bridge 已整合進 Crew Pocket 主服務，啟動 `node ~/agy-web/server.js` 後會自動提供 `ws://127.0.0.1:8000/api/extension/ws`。
 
 Extension、Web UI 與 AI API 統一走 `127.0.0.1:8000`。
+
+#### 一次性讀取指定 API JSON 回應
+
+AI 可對目前作用中的網頁分頁呼叫 `POST /api/extension/command`，送出 `{"action":"ARM_API_RESPONSE_CAPTURE","urlIncludes":"/api/endpoint"}`。這會在 15 秒內等待該分頁的 fetch/XHR；可用 `durationMs` 設定 1–60 秒、`maxBytes` 設定 1–64 KiB（預設 16 KiB）。頁面送出符合 URL 片段的 JSON API 後，從 `GET /api/extension/api-response?captureId=<回傳的 captureId>` 讀取一次結果。讀取後即移除，未讀結果兩分鐘後過期。
+
+擷取只在明確指定 URL 片段後啟動，僅讀一筆 JSON response，不讀 request/response headers；欄位名稱含 token、secret、password、cookie、authorization、CSRF、API key、signature 或 session 的值會遮蔽。回應只暫存在 Runtime 記憶體，不寫入磁碟，且結果 API 僅接受 loopback 用戶端。超出大小上限、非 JSON、service worker 或跨來源 iframe 發出的請求不會提供 body。
 
 ---
 
