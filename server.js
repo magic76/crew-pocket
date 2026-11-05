@@ -3810,11 +3810,13 @@ async function handleSocialApi(req, res, parsedUrl) {
         result = { publisherScheduler: await defaultSocialPublisherScheduler.enable(body.intervalMinutes) };
       } else if (action === 'disable') {
         result = { publisherScheduler: await defaultSocialPublisherScheduler.disable() };
+      } else if (action === 'acknowledge_error') {
+        result = { publisherScheduler: await defaultSocialPublisherScheduler.acknowledgeError(body.errorId) };
       } else if (action === 'run_once') {
         if (body.confirmed !== true) throw new Error('執行 Publisher 前需要使用者確認');
         result = { publisherScheduler: await defaultSocialPublisherScheduler.launchRunOnce('manual') };
       } else {
-        throw new Error('Publisher scheduler action must be enable, disable, or run_once');
+        throw new Error('Publisher scheduler action must be enable, disable, acknowledge_error, or run_once');
       }
     } else if (pathname === '/api/social/status' && req.method === 'GET') {
       result = await socialAccounts.getStatus();

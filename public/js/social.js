@@ -3,6 +3,7 @@
     status: null,
     publisherScheduler: null,
     publisherIntervalTouched: false,
+    publisherFailureNotificationPending: '',
     activePlatform: 'facebook',
     facebookPages: [],
     facebookPosts: [],
@@ -134,6 +135,7 @@
     const pending = byId('social-publisher-pending');
     const pendingLabel = byId('social-publisher-pending-label');
     const confirmRequest = byId('social-publisher-confirm-request');
+    const acknowledgeError = byId('social-publisher-ack-error');
     if (enable) {
       enable.classList.toggle('hidden', Boolean(scheduler?.enabled));
       enable.disabled = !available || busy || running;
@@ -153,6 +155,100 @@
       pendingLabel.textContent = (request.requestedByRoleId || 'Crew Role') + ' 請求在 Queue 排定時間執行，並每 ' + request.intervalMinutes + ' 分鐘探測新稿。尚未啟用。';
     }
     if (confirmRequest) confirmRequest.disabled = !available || busy || running;
+    if (acknowledgeError) acknowledgeError.disabled = busy || state.busy.has('publisher:error') || !scheduler?.lastError;
+  }
+
+  function formatPublisherTime(value) {
+    const time = Number(value);
+    if (!Number.isFinite(time) || time <= 0) return '';
+    return new Date(time).toLocaleString([], { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  }
+
+  function describeCodeUpdate(update) {
+    if (!update) return '';
+    if (update.status === 'checking') return '正在檢查程式更新';
+    if (update.status === 'updated') return '程式已更新至 ' + (update.to || '最新版本');
+    if (update.status === 'up_to_date') return '程式已是最新 ' + (update.to || '');
+    if (update.status === 'failed') return 'Git 更新失敗';
+    return '';
+  }
+
+  function maybeNotifyPublisherError(scheduler) {
+    const issue = scheduler?.lastError;
+    if (!issue?.id || typeof window.triggerDoneNotification !== 'function') return;
+    if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+    try {
+      if (localStorage.getItem('agy_notify_enabled') === 'false') return;
+      const notifiedId = localStorage.getItem('crew-social-publisher-error-notified') || '';
+      const fingerprint = String(issue.id);
+      if (notifiedId === fingerprint || state.publisherFailureNotificationPending === fingerprint) return;
+      state.publisherFailureNotificationPending = fingerprint;
+      const body = '本輪已停止發送。' + (issue.message || '請查看 Crew Pocket 社群 Publisher 狀態。');
+      Promise.resolve(window.triggerDoneNotification(body, {
+        title: '社群 Publisher 發生錯誤',
+        tag: 'crew-social-publisher-error'
+      })).then(sent => {
+        if (sent) localStorage.setItem('crew-social-publisher-error-notified', fingerprint);
+      }).catch(() => {}).finally(() => {
+        if (state.publisherFailureNotificationPending === fingerprint) state.publisherFailureNotificationPending = '';
+      });
+    } catch (_) {
+      state.publisherFailureNotificationPending = '';
+    }
+  }
+
+  function updateHomePublisherIndicator(scheduler) {
+    const button = byId('social-publisher-home-status');
+    const label = byId('social-publisher-home-label');
+    const detail = byId('social-publisher-home-detail');
+    if (!button || !label || !detail) return;
+
+    let indicatorState = 'unknown';
+    if (!scheduler) {
+      label.textContent = '社群 Publisher：狀態讀取失敗';
+      detail.textContent = '點此重試並查看排程狀態';
+    } else if (!scheduler.available) {
+      indicatorState = 'unavailable';
+      label.textContent = '社群 Publisher：尚未設定';
+      detail.textContent = '找不到本機 Publisher 或憑證設定';
+    } else {
+      const last = scheduler.lastRun;
+      const lastAt = formatPublisherTime(last?.finishedAt || last?.startedAt);
+      const summary = last?.summary;
+      const issue = scheduler.lastError;
+      const codeUpdate = last?.codeUpdate;
+      const mode = summary?.agentMode === 'live' ? 'Live' : summary?.agentMode === 'dry_run' ? 'Dry Run' : '';
+      const needsReconciliation = Number(summary?.results?.needs_reconciliation || 0) + Number(summary?.videoResults?.needs_reconciliation || 0);
+      const lastFailed = ['failed', 'interrupted'].includes(last?.status);
+
+      if (scheduler.running || last?.status === 'running') {
+        indicatorState = 'running';
+        label.textContent = '社群 Publisher：正在執行';
+        detail.textContent = (codeUpdate?.status === 'checking' ? '正在先檢查 GitHub 程式更新' : '正在同步 Queue／處理到期項目') + (lastAt ? ' · 開始 ' + lastAt : '');
+      } else if (issue) {
+        indicatorState = 'attention';
+        label.textContent = '社群 Publisher：發生錯誤，待查看';
+        detail.textContent = (formatPublisherTime(issue.finishedAt) || '最近一次執行') + ' · ' + (issue.message || '本輪已停止發送');
+      } else if (scheduler.enabled) {
+        indicatorState = needsReconciliation ? 'attention' : 'enabled';
+        label.textContent = lastFailed ? '社群排程已啟用 · 上次錯誤已查看'
+          : needsReconciliation ? '社群排程已啟用 · 有項目待核對'
+            : '社群 Publisher：自動排程已啟用';
+        const nextAt = formatPublisherTime(scheduler.nextRunAt);
+        const lastText = lastAt ? '最近 ' + (last?.status === 'completed' ? '完成 ' : '') + lastAt : '';
+        const modeText = mode ? ' · 上次 ' + mode : '';
+        const updateText = describeCodeUpdate(codeUpdate);
+        const attentionText = needsReconciliation ? ' · ' + needsReconciliation + ' 項待核對' : '';
+        const errorText = last?.error ? ' · ' + last.error : '';
+        detail.textContent = (nextAt ? '下次 ' + nextAt : '等待排程') + (lastText ? ' · ' + lastText : '') + modeText + (updateText ? ' · ' + updateText : '') + attentionText + errorText;
+      } else {
+        indicatorState = lastFailed || needsReconciliation ? 'attention' : 'paused';
+        label.textContent = lastFailed ? '社群 Publisher：上次錯誤已查看' : '社群 Publisher：自動排程已暫停';
+        detail.textContent = (lastAt ? '最近執行 ' + lastAt + (mode ? ' · 上次 ' + mode : '') : '點此查看排程與最近執行') + (describeCodeUpdate(codeUpdate) ? ' · ' + describeCodeUpdate(codeUpdate) : '') + (needsReconciliation ? ' · ' + needsReconciliation + ' 項待核對' : '') + (last?.error ? ' · ' + last.error : '');
+      }
+    }
+    button.dataset.state = indicatorState;
+    button.setAttribute('aria-label', label.textContent + '。' + detail.textContent + '。點擊開啟社群工作台');
   }
 
   function shortRunCounts(counts) {
@@ -162,7 +258,18 @@
 
   function displayPublisherScheduler(scheduler) {
     state.publisherScheduler = scheduler || null;
+    maybeNotifyPublisherError(scheduler);
+    updateHomePublisherIndicator(scheduler);
     const label = byId('social-publisher-status');
+    const errorPanel = byId('social-publisher-error');
+    const errorLabel = byId('social-publisher-error-label');
+    if (errorPanel) errorPanel.classList.toggle('hidden', !scheduler?.lastError);
+    if (errorLabel && scheduler?.lastError) {
+      const issue = scheduler.lastError;
+      const time = formatPublisherTime(issue.finishedAt);
+      const updateText = describeCodeUpdate(issue.codeUpdate);
+      errorLabel.textContent = [time, issue.source ? '來源 ' + issue.source : '', updateText, issue.message].filter(Boolean).join(' · ');
+    }
     if (label) {
       if (!scheduler) label.textContent = '無法讀取 Publisher 排程狀態。';
       else if (!scheduler.available) label.textContent = '找不到本機 Publisher 或 .env；請確認 ~/crew-social-agent 已設定。';
@@ -187,7 +294,8 @@
             (shortRunCounts(summary.videoResults) ? '；影片：' + shortRunCounts(summary.videoResults) : '') +
             '；模式 ' + summary.agentMode
           : '';
-        label.textContent += '\n最近執行：' + when + ' · ' + status + resultText + (last.error ? '；' + last.error : '');
+        const codeUpdateText = last.codeUpdate ? '；程式：' + describeCodeUpdate(last.codeUpdate) : '';
+        label.textContent += '\n最近執行：' + when + ' · ' + status + resultText + codeUpdateText + (last.error ? '；' + last.error : '');
       }
     }
     const select = byId('social-publisher-interval');
@@ -207,6 +315,12 @@
       showStatus('無法讀取 Publisher 排程：' + error.message, true);
       return null;
     }
+  }
+
+  function openPublisherWorkbench() {
+    if (typeof window.openAuthModal === 'function') window.openAuthModal();
+    refreshPublisherScheduler();
+    window.setTimeout(() => byId('social-workbench')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 220);
   }
 
   async function enablePublisherSchedule(requestedInterval = null) {
@@ -240,6 +354,21 @@
       showStatus('暫停 Publisher 排程失敗：' + error.message, true);
     } finally {
       setBusy('publisher:enable', false);
+    }
+  }
+
+  async function acknowledgePublisherError() {
+    const errorId = state.publisherScheduler?.lastError?.id;
+    if (!errorId) return;
+    setBusy('publisher:error', true);
+    try {
+      const data = await post('/api/social/publisher-scheduler', { action: 'acknowledge_error', errorId });
+      displayPublisherScheduler(data.publisherScheduler);
+      showStatus('Publisher 錯誤已標記為已查看；狀態與執行紀錄仍保留。');
+    } catch (error) {
+      showStatus('標記 Publisher 錯誤失敗：' + error.message, true);
+    } finally {
+      setBusy('publisher:error', false);
     }
   }
 
@@ -996,6 +1125,8 @@
     byId('social-publisher-enable')?.addEventListener('click', () => enablePublisherSchedule());
     byId('social-publisher-disable')?.addEventListener('click', disablePublisherSchedule);
     byId('social-publisher-run-now')?.addEventListener('click', runPublisherOnce);
+    byId('social-publisher-ack-error')?.addEventListener('click', acknowledgePublisherError);
+    byId('social-publisher-home-status')?.addEventListener('click', openPublisherWorkbench);
     byId('social-publisher-interval')?.addEventListener('change', () => { state.publisherIntervalTouched = true; });
     byId('social-publisher-confirm-request')?.addEventListener('click', () => {
       enablePublisherSchedule(state.publisherScheduler?.requestedSchedule?.intervalMinutes || 30);
@@ -1005,7 +1136,7 @@
     refreshPublisherScheduler();
     setInterval(() => {
       if (!document.hidden) refreshPublisherScheduler();
-    }, 60000);
+    }, 10000);
   }
 
   window.refreshSocialStatus = refreshStatus;

@@ -2202,8 +2202,8 @@ window.selectEffort = function(effortId) {
 };
 
 // Push Notification Helpers
-async function triggerDoneNotification(text) {
-  if (!notificationsEnabled || !('Notification' in window) || Notification.permission !== 'granted') return;
+async function triggerDoneNotification(text, options = {}) {
+  if (!notificationsEnabled || !('Notification' in window) || Notification.permission !== 'granted') return false;
 
   // Android expands Web Notifications into a multi-line card. Keep the full
   // readable reply here; the browser itself applies its platform safety limit.
@@ -2218,19 +2218,22 @@ async function triggerDoneNotification(text) {
 
   const notifOptions = {
     body: cleanReply || '回覆已生成完畢！',
-    tag: 'agy-done',
+    tag: String(options?.tag || 'agy-done').slice(0, 120),
     renotify: true,
     vibrate: [200, 100, 200]
   };
 
   try {
-    const n = new Notification('Crew Pocket', notifOptions);
+    const n = new Notification(String(options?.title || 'Crew Pocket').slice(0, 80), notifOptions);
     n.onclick = () => {
       window.focus();
       n.close();
     };
-  } catch (e) {}
+    return true;
+  } catch (e) { return false; }
 }
+
+window.triggerDoneNotification = triggerDoneNotification;
 
 function updateNotifyBtnUI() {
   if (!notifyBtn) return;

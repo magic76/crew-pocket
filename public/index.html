@@ -568,6 +568,14 @@
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
         </button>
       </div>
+      <button id="social-publisher-home-status" class="crew-publisher-home-status" type="button" data-state="loading" aria-label="查看本機社群 Publisher 狀態">
+        <span class="crew-publisher-home-dot" aria-hidden="true"></span>
+        <span class="crew-publisher-home-copy">
+          <strong id="social-publisher-home-label">社群 Publisher：讀取中…</strong>
+          <small id="social-publisher-home-detail">點此查看自動排程與最近執行</small>
+        </span>
+        <span class="crew-publisher-home-chevron" aria-hidden="true">›</span>
+      </button>
     </div>
   </div>
 
@@ -1467,17 +1475,22 @@
           <div class="flex items-center justify-between gap-2">
             <div>
               <div class="font-bold text-slate-100 text-sm">Facebook + Threads 社群工作台</div>
-              <div class="mt-0.5 text-[10px] text-slate-400">AI 只擬稿；按確認後才會發布</div>
+              <div class="mt-0.5 text-[10px] text-slate-400">手動發文需確認；Queue 排程由本機自動發布</div>
             </div>
             <span id="social-workbench-status" class="shrink-0 px-2 py-0.5 rounded-full text-[10px] bg-slate-800 text-slate-400">載入中</span>
           </div>
 
-          <p class="text-[10px] leading-relaxed text-slate-400">Facebook API 僅支援你管理的粉絲專頁，不能代替個人檔案發文。Threads 可讀取自己的串文和串文回覆。V1 僅處理文字；Meta 可能要求外部使用者權限經 App Review / Advanced Access。</p>
+          <p class="text-[10px] leading-relaxed text-slate-400">手動工作台可讀取串文／留言，並在確認後以文字發布或回覆；本機 Queue Publisher 另可自動發布符合格式的圖片／影片。Facebook 僅支援你管理的粉絲專頁；Meta 可能要求外部使用者權限經 App Review / Advanced Access。</p>
 
           <section class="rounded-xl border border-emerald-500/25 bg-slate-900/70 p-2.5 space-y-2" aria-labelledby="social-publisher-title">
             <div>
-              <div id="social-publisher-title" class="text-[11px] font-semibold text-emerald-200">本機 Social Publisher 排程</div>
-              <p class="mt-0.5 text-[9px] leading-relaxed text-slate-400">啟用時先同步 Queue，之後優先在已知貼文的排定時間執行；下方間隔用來探測新加入的 Queue。到期且 publish_permitted=true 的項目可能直接發布。手機 Runtime 關閉或 Android 暫停 Termux 時可能延遲；同一狀態目錄雖有跨程序鎖，仍建議只留一個排程來源，避免重複同步與鎖競爭。</p>
+              <div id="social-publisher-title" class="text-[11px] font-semibold text-emerald-200">本機自動發布（不使用 LLM）</div>
+              <p class="mt-0.5 text-[9px] leading-relaxed text-slate-400">本機 Node Publisher 直接同步 GitHub Queue 並呼叫 Meta API；文章內容由你或 ChatGPT 先放入 Queue，排程與發布不會喚醒 Role 或呼叫 LLM。每次執行前會先檢查並以 --ff-only 更新 crew-social-agent/main；若本機有程式修改、分支不符或更新失敗，本輪會停止並保留錯誤。啟用時先同步 Queue，之後在已知貼文排定時間執行；下方間隔用來探測新加入的 Queue。系統通知需在 Pocket 開啟通知功能；未開啟時錯誤會保留在首頁與此處。手機 Runtime 關閉或 Android 暫停 Termux 時可能延遲。</p>
+            </div>
+            <div id="social-publisher-error" class="hidden rounded-lg border border-rose-500/40 bg-rose-950/30 p-2 space-y-1.5" role="alert">
+              <div class="text-[10px] font-semibold text-rose-200">Publisher 發生錯誤；本輪已停止發送</div>
+              <p id="social-publisher-error-label" class="text-[9px] leading-relaxed text-rose-100 break-words"></p>
+              <button id="social-publisher-ack-error" type="button" class="min-h-8 rounded-lg bg-rose-900/70 px-2.5 text-[9px] font-semibold text-rose-100">我已看到錯誤</button>
             </div>
             <div id="social-publisher-pending" class="hidden rounded-lg border border-amber-500/30 bg-amber-950/20 p-2 space-y-1.5">
               <p id="social-publisher-pending-label" class="text-[9px] leading-relaxed text-amber-100"></p>
