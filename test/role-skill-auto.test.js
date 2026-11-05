@@ -42,6 +42,10 @@ test('only explicit harmless test file checks are auto-eligible', () => {
 });
 test('trusted test observation requires exact command, terminal state and runner summary', () => {
   assert.equal(commandFromEvent(event()), command);
+  assert.equal(commandFromEvent({ ...event(), info: { ...event().info,
+    parameters: { cmd: ['bash', '-lc', command] } } }), command);
+  assert.equal(commandFromEvent(event("bash -lc '" + command + "'")), command);
+  assert.equal(commandFromEvent(event("bash -lc '" + command + "; echo unsafe'")), null);
   assert.deepEqual(accepted, { command, outcome: 'passed', tests: 3, passed: 3, failed: 0 });
   assert.equal(observedTest(event('npm test')), null);
   assert.equal(observedTest(event(command + ' && echo OK')), null);
