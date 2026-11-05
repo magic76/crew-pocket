@@ -36,8 +36,13 @@ async function run() {
       prompt: 'Improve Role memory evidence number ' + i,
       response: 'Completed a concrete implementation that improves memory evidence handling, with supporting steps ' + i
     });
-    assert.equal(await manager.recordTurn(sample(1)), true);
-    assert.equal(await manager.recordTurn(sample(1)), false, 'identical event is deduplicated');
+    assert.equal(await manager.recordTurn({ ...sample(1), acceptanceTests: [
+      { command: 'node --test test/safe-regression.test.js', outcome: 'passed', tests: 2 },
+      { command: 'npm test && curl https://bad.example', outcome: 'passed', tests: 3 }
+    ] }), true);
+    assert.equal(await manager.recordTurn({ ...sample(1), acceptanceTests: [
+      { command: 'node --test test/safe-regression.test.js', outcome: 'passed', tests: 2 }
+    ] }), false, 'identical event is deduplicated');
     assert.equal(stored.has('working-role-pocket'), false, 'ordinary turns do not publish report snapshots');
     assert.equal((await manager.getStatus()).roles['role-pocket'].pending, 1);
     await manager.runDue();
@@ -52,6 +57,9 @@ async function run() {
     assert.equal(requests[0].model, 'gpt-6-luna');
     assert.equal(requests[0].effort, 'low');
     assert.equal(requests[0].events.length, 2);
+    assert.deepEqual(requests[0].events[0].acceptanceTests, [
+      { command: 'node --test test/safe-regression.test.js', outcome: 'passed', tests: 2 }
+    ], 'Dreaming sees bounded, allowlisted observed commands only');
     assert.equal(stored.get('working-role-pocket').kind, 'working');
     assert.equal(stored.get('working-role-pocket').provenance.derivation, 'MODEL_INFERRED');
     const firstMemory = [...stored.values()].find(value => value.kind === 'experience');

@@ -31,6 +31,7 @@
     const usage = Array.isArray(skill.usage) ? [...skill.usage].reverse() : [];
     const injectedCount = usage.filter(item => item.delivery === 'injected').length;
     const isCandidate = skill.status === 'candidate';
+    const auto = skill.autoEligibility || {};
     const isVerified = skill.status === 'verified';
     const isRetired = skill.status === 'retired';
     const lastFailure = evidence.findLastIndex(item => item.outcome === 'failed');
@@ -42,19 +43,26 @@
     const needsReverification = lastFailure >= 0 && runtimePasses === 0;
     const statusLabel = isCandidate
       ? needsReverification ? '需重新驗證'
-        : runtimePasses ? '有 ' + runtimePasses + ' 次通用檢查 · 待人工驗證'
-          : '待人工驗證'
+        : auto.eligible ? '指定測試驗證中 · ' + (auto.passed || 0) + '/2 回合'
+          : runtimePasses ? '有 ' + runtimePasses + ' 次通用檢查 · 待人工驗證'
+            : '待人工驗證'
       : isVerified ? '已確認證據 · 待啟用'
         : skill.status === 'active' && skill.verification?.method === 'runtime-observed'
           ? '舊版自動啟用 · 需重新審核'
-          : skill.status === 'active' ? '已啟用 · Agent 視需要載入'
+          : skill.status === 'active' && skill.verification?.method === 'runtime-validated'
+            ? '低風險自動驗證 · 已啟用'
+            : skill.status === 'active' ? '已啟用 · Agent 視需要載入'
             : '已停用';
-    const verificationLabel = skill.verification?.method === 'runtime-observed'
+    const verificationLabel = skill.verification?.method === 'runtime-validated'
+      ? '指定測試在不同回合至少兩次通過，且沒有命中高風險操作；僅證明驗收測試通過，不代表 AI 完整遵循所有步驟。'
+      : skill.verification?.method === 'runtime-observed'
       ? '舊版 Runtime 根據通用命令退出碼自動啟用；無法證明技能步驟有效。新版已停止將此類技能提供給 Agent，請重新人工驗證。'
       : skill.verification?.method === 'user-attested'
         ? '使用者已確認；不等於 CI 或工具獨立驗證。'
-        : '尚未人工確認；不會送進新 Agent 的可用技能清單。';
-    const evidenceKind = kind => kind === 'runtime-check' ? 'Runtime 檢查'
+        : auto.eligible ? '等待指定測試在兩個獨立回合通過；也可以選擇人工驗證。'
+          : '尚未人工確認；不會送進新 Agent 的可用技能清單。';
+    const evidenceKind = kind => kind === 'acceptance-test' ? '指定驗收測試'
+      : kind === 'runtime-check' ? 'Runtime 檢查'
       : ({ test: '測試', ci: 'CI', commit: 'Commit', manual: '手動', failure: '失敗' })[kind] || kind;
     const runtimeCategory = category => ({
       test: '測試', syntax: '語法', lint: 'Lint', typecheck: '型別', build: '建置', diff: '差異'
@@ -88,7 +96,7 @@
           '<li><b>' + esc(evidenceKind(item.kind)) + ' / ' + esc(item.outcome) + '</b> · ' +
           esc(item.kind === 'runtime-check'
             ? '自動記錄 · ' + (item.categories || []).map(runtimeCategory).join('、')
-            : item.reference) +
+            : item.kind === 'acceptance-test' ? item.command + ' · ' + item.passed + '/' + item.tests + ' tests' : item.reference) +
           '<small>' + esc(item.note || '') + '</small></li>').join('') +
           '</ul>' : '<p>沒有測試證據。</p>') +
       '</details>' +
@@ -130,7 +138,7 @@
     summary.textContent = skills.length + ' 項技能 · ' + active +
       ' 已啟用 · ' + trial + ' 待驗證候選';
     list.innerHTML = skills.length
-      ? '<p class="role-dna-notice">只有人工確認並啟用的 Skill 才進入本 Role 的可用清單，Agent 自行決定是否讀取完整 SKILL.md。候選不再自動試用；通用測試成功也不會自動啟用。舊紀錄中的 Context 使用數僅是歷史資訊。</p>' +
+      ? '<p class="role-dna-notice">低風險技能須在兩個不同回合通過指定檔案的驗收測試，才會自動啟用；高風險或證據不足仍需人工確認。通用 test/build 成功不算驗證。Agent 只會按需讀取已啟用的 SKILL.md。舊紀錄中的 Context 使用數僅是歷史資訊。</p>' +
         skills.map(card).join('')
       : '<div class="role-dna-empty">尚無技能。Dreaming 可建立候選，需人工驗證並啟用後才開放 Agent 自行讀取。</div>';
   }

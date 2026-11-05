@@ -57,6 +57,7 @@ const { defaultRoleMessageQueueStore, listRoleQueuedMessages, enqueueRoleMessage
 const { defaultMemoryProvider } = require('./lib/memory');
 const { defaultSkillRegistry } = require('./lib/skills/registry');
 const { formatCatalog, syncFile, removeRole } = require('./lib/skills/native');
+const { commandFromEvent, observedTest } = require('./lib/skills/auto-verify');
 const { DreamingManager } = require('./lib/memory/dreaming');
 const { CrewTaskRunner } = require('./lib/mcp/task-runner');
 const { defaultCrewTaskStore } = require('./lib/mcp/tasks');
@@ -2647,6 +2648,8 @@ async function handleChatTurn(req, res, submittedBody = null) {
     const provider = getProvider(providerId);
     const toolRuns = new Map();
     const runtimeSkillChecks = new Map();
+    const pendingSkillTestCommands = new Map();
+    const observedSkillTests = new Map();
     const changedFiles = new Set();
     const readFingerprints = new Set();
     let toolEventCount = 0;
@@ -2755,6 +2758,16 @@ async function handleChatTurn(req, res, submittedBody = null) {
       if (state === 'running') runtimeSkillChecks.delete(key);
       const runtimeCheck = runtimeCheckResult(event);
       if (runtimeCheck) runtimeSkillChecks.set(key, runtimeCheck);
+      const directTestCommand = commandFromEvent(event);
+      if (state === 'running' && directTestCommand) pendingSkillTestCommands.set(key, directTestCommand);
+      const observedAcceptance = observedTest(event, pendingSkillTestCommands.get(key));
+      if (observedAcceptance && observedAcceptance.outcome !== 'unverified') {
+        const previous = observedSkillTests.get(observedAcceptance.command);
+        // A failed attempt in the turn wins over a later retry.
+        if (!previous || previous.outcome !== 'failed') {
+          observedSkillTests.set(observedAcceptance.command, observedAcceptance);
+        }
+      }
       const toolOutput = typeof info.output === 'string' ? info.output :
         typeof info.aggregatedOutput === 'string' ? info.aggregatedOutput : '';
       const errorCode = info.error_code || info.errorCode ||
@@ -2832,8 +2845,20 @@ async function handleChatTurn(req, res, submittedBody = null) {
         : finalPayload.status === 'failed'
           ? [...latestChecks.values()].filter(item => item.outcome === 'failed')
           : [];
-      // A same-turn command exit code cannot attest to Skill correctness.
-      // Observations still flow into Dreaming but never auto-promote a Skill.
+      // General exit codes only inform Dreaming. Separately, an exact,
+      // per-file test command with a runner summary may validate a low-risk
+      // candidate after two independent, completed provider turns.
+      if (role?.id && observedSkillTests.size && ['completed', 'failed'].includes(finalPayload.status)) {
+        const acceptance = [...observedSkillTests.values()]
+          .filter(item => finalPayload.status === 'completed' || item.outcome === 'failed');
+        if (acceptance.length) {
+          setImmediate(() => defaultSkillRegistry.recordAutoChecks(role.id, {
+            turnId: requestId, checks: acceptance
+          }).then(changes => Promise.all(changes.filter(c => c.statusChanged)
+            .map(c => syncFile(c.skill)))).catch(error =>
+            console.warn('[Role DNA] Scoped auto-verification failed:', error.message)));
+        }
+      }
       const terminalRecord = chatTurns.finish(requestId, finalPayload);
       // Notify the UI independently of feedback persistence. HTTP finish only
       // means the server flushed its response, not that a WebView rendered it.
@@ -3089,7 +3114,8 @@ async function handleChatTurn(req, res, submittedBody = null) {
               prompt: cleanUserContent(prompt || ''),
               response: event.response,
               status: event.status,
-              runtimeChecks: [...runtimeSkillChecks.values()]
+              runtimeChecks: [...runtimeSkillChecks.values()],
+              acceptanceTests: [...observedSkillTests.values()]
             }).catch(error => console.warn('[Dreaming] checkpoint failed:', error.message)));
           }
           broadcastCrewStatusEvent('turn-complete', role?.id || null);
