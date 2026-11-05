@@ -1,7 +1,8 @@
 #!/data/data/com.termux/files/usr/bin/bash
 set -euo pipefail
 
-export PATH="$HOME/.local/bin:${PREFIX:-/data/data/com.termux/files/usr}/bin:$PATH"
+export PREFIX="${PREFIX:-/data/data/com.termux/files/usr}"
+export PATH="$HOME/.local/bin:$PREFIX/bin:$PATH"
 
 provider="${1:-}"
 case "$provider" in
@@ -11,7 +12,9 @@ case "$provider" in
       exit 1
     }
     echo "Updating Codex..."
-    npm install -g @mmmbuto/codex-cli-termux@latest
+    # This package's Termux postinstall rewrites its /usr/bin/env shebangs.
+    # Allow only this package's install script for this invocation.
+    npm install -g --allow-scripts=@mmmbuto/codex-cli-termux @mmmbuto/codex-cli-termux@latest
     echo "Codex version:"
     codex --version
     ;;
