@@ -525,11 +525,58 @@
 
     // ⚡ 6. Execute Custom JavaScript on Page
     if (request.action === 'EVAL') {
+      const code = typeof request.code === 'string' ? request.code : '';
+      if (!code.trim() || code.length > 8 * 1024) {
+        sendResponse({ status: 'ERROR', message: '除錯程式碼需為 1–8192 字元' });
+        return false;
+      }
+      const redactText = (text) => String(text || '')
+        .replace(/\bBearer\s+[^\s,"}]+/gi, 'Bearer [REDACTED]')
+        .replace(/((?:access[_-]?token|refresh[_-]?token|id[_-]?token|api[_-]?key|client[_-]?secret|app[_-]?secret|password|authorization|cookie|session)\s*[:=]\s*["']?)[^\s,"'&;}]+/gi, '$1[REDACTED]')
+        .replace(/([?&](?:access_token|refresh_token|token|api[_-]?key|client_secret|app_secret|signature)=)[^&#\s"<>]+/gi, '$1[REDACTED]');
+      const formatResult = (value) => {
+        if (typeof value === 'string') return redactText(value).slice(0, 32 * 1024);
+        if (value === undefined) return 'undefined';
+        const seen = new WeakSet();
+        try {
+          const serialized = JSON.stringify(value, (key, item) => {
+            if (/token|secret|password|authorization|cookie|csrf|api[_-]?key|signature|private[_-]?key|session|email|phone|mobile|user[_-]?id|account[_-]?id/i.test(key)) return '[REDACTED]';
+            if (typeof item === 'bigint') return `${item}n`;
+            if (typeof item === 'function') return `[Function${item.name ? `: ${item.name}` : ''}]`;
+            if (typeof item === 'string' && item.length > 8000) return `${item.slice(0, 8000)}…[truncated]`;
+            if (item && typeof item === 'object') {
+              if (item instanceof Element) return { type: 'Element', tagName: item.tagName, id: item.id || '', className: String(item.className || '').slice(0, 160), text: String(item.innerText || '').slice(0, 500) };
+              if (item instanceof Error) return { name: item.name, message: item.message, stack: String(item.stack || '').slice(0, 4000) };
+              if (seen.has(item)) return '[Circular]';
+              seen.add(item);
+              if (Array.isArray(item) && item.length > 100) return [...item.slice(0, 100), `[${item.length - 100} more items]`];
+              if (!Array.isArray(item) && Object.keys(item).length > 100) {
+                const limited = Object.fromEntries(Object.entries(item).slice(0, 100));
+                limited.__truncatedKeys = Object.keys(item).length - 100;
+                return limited;
+              }
+            }
+            return item;
+          });
+          return redactText(serialized === undefined ? value : serialized).slice(0, 32 * 1024);
+        } catch (_) {
+          return redactText(value).slice(0, 32 * 1024);
+        }
+      };
       try {
-        const result = eval(request.code);
-        sendResponse({ status: 'SUCCESS', result: typeof result === 'object' ? JSON.stringify(result) : String(result) });
+        let timeoutId;
+        Promise.race([
+          Promise.resolve().then(() => eval(code)),
+          new Promise((_, reject) => {
+            timeoutId = setTimeout(() => reject(new Error('頁面 JS 執行超過 5 秒')), 5000);
+          })
+        ]).then((result) => {
+          sendResponse({ status: 'SUCCESS', result: formatResult(result), executionWorld: 'ISOLATED' });
+        }).catch((err) => {
+          sendResponse({ status: 'ERROR', message: String(err?.message || err).slice(0, 2000), stack: String(err?.stack || '').slice(0, 4000), executionWorld: 'ISOLATED' });
+        }).finally(() => clearTimeout(timeoutId));
       } catch (err) {
-        sendResponse({ status: 'ERROR', message: err.message });
+        sendResponse({ status: 'ERROR', message: String(err?.message || err).slice(0, 2000), stack: String(err?.stack || '').slice(0, 4000), executionWorld: 'ISOLATED' });
       }
       return true;
     }

@@ -167,7 +167,9 @@ agy
 
 ### 步驟 4.2：Crew Pocket Browser Extension
 
-`extensions/crew-pocket-bridge/` 是 Crew Pocket 的瀏覽器橋接套件，適用於 Lemur Browser 等支援 Chromium Extension 的 Android 瀏覽器。它能把目前網頁的 DOM、Console 訊息與網路請求 metadata 送到 Crew Pocket，並透過本機 Bridge Server 接收 AI 指令。一般監控不讀取 response body；目前沒有頁面截圖擷取命令。
+`extensions/crew-pocket-bridge/` 是 Crew Pocket 的瀏覽器橋接套件，適用於 Lemur Browser 等支援 Chromium Extension 的 Android 瀏覽器。它能把目前網頁的 DOM、Console 訊息與網路請求 metadata 送到 Crew Pocket，並透過本機 Bridge Server 接收 AI 指令。Popup 的 API 頁籤可在本機掃描目前頁面已載入的同源 JavaScript，列出靜態 endpoint 候選與呼叫上下文；掃描不帶登入 Cookie，也不會呼叫外部 Reader。使用者可對指定 endpoint 啟動 15 秒單次擷取，取得經遮蔽與大小限制的 JSON request/response；一般被動監控仍只記錄 metadata。HTTP 202、403 或 429 的主頁回應會標記為可能阻擋，靜態候選不等於 runtime 已確認。Extension popup 只對 loopback 上的 `/api/extension/*` 開放 CORS，其他本機 API 不接受 extension origin。
+
+Popup 的「允許 Codex 除錯 5 分鐘」會為目前網址啟用受限的 `EVAL` 指令：最多執行 20 次、每段程式碼最多 8 KiB、單次執行最多 5 秒、單次結果最多 32 KiB；頁面重新載入、路徑變更或到期後會自動關閉。Extension 先嘗試在頁面主環境執行；若網站 CSP 阻擋動態程式碼，會退回 extension 隔離環境，回報執行環境供 AI 判讀。結果會裁切並遮蔽常見憑證欄位。已啟用角色工具的 Codex 對話可呼叫 `crew_extension_page_eval` 檢查頁面、`crew_extension_debug_context` 讀取該分頁近期快照／錯誤／API metadata，並用 `crew_extension_api_capture_start` 與 `crew_extension_api_response_read` 擷取及讀取一次同源 JSON API。靜態候選需先在 Popup 掃描後按「傳回 Crew Pocket」，AI 才能從除錯 Context 讀取。要用新工具需更新後端並建立新的 Codex 角色對話；Antigravity 目前沒有這組動態工具。工具指引限制為唯讀除錯，除非使用者明確要求，不應點擊、送出表單、修改頁面或發送網路請求。頁面資料由使用者開啟權限後才可讀，API body 一次讀取後即移除。
 
 套件壓縮檔位於 [`extensions/crew-pocket-bridge/crew-pocket-bridge.zip`](extensions/crew-pocket-bridge/crew-pocket-bridge.zip)。在瀏覽器的擴充功能頁面匯入或解壓後載入此目錄即可；Bridge 已整合進 Crew Pocket 主服務，啟動 `node ~/agy-web/server.js` 後會自動提供 `ws://127.0.0.1:8000/api/extension/ws`。
 
@@ -175,9 +177,9 @@ Extension、Web UI 與 AI API 統一走 `127.0.0.1:8000`。
 
 #### 一次性讀取指定 API JSON 回應
 
-AI 可對目前作用中的網頁分頁呼叫 `POST /api/extension/command`，送出 `{"action":"ARM_API_RESPONSE_CAPTURE","urlIncludes":"/api/endpoint"}`。這會在 15 秒內等待該分頁的 fetch/XHR；可用 `durationMs` 設定 1–60 秒、`maxBytes` 設定 1–64 KiB（預設 16 KiB）。頁面送出符合 URL 片段的 JSON API 後，從 `GET /api/extension/api-response?captureId=<回傳的 captureId>` 讀取一次結果。讀取後即移除，未讀結果兩分鐘後過期。
+Popup 上每個靜態候選或 runtime 請求都可按「監聽此 endpoint 15 秒」，啟動目前作用中分頁的單次擷取。底層本機 Bridge API 也支援 `POST /api/extension/command`，送出 `{"action":"ARM_API_RESPONSE_CAPTURE","urlIncludes":"/api/endpoint"}`；可用 `durationMs` 設定 1–60 秒、`maxBytes` 設定 1–64 KiB（預設 16 KiB）。頁面送出符合 URL 片段的 JSON API 後，從 `GET /api/extension/api-response?captureId=<回傳的 captureId>` 讀取一次結果。讀取後即移除，未讀結果兩分鐘後過期。
 
-擷取只在明確指定 URL 片段後啟動，僅讀一筆 JSON response，不讀 request/response headers；欄位名稱含 token、secret、password、cookie、authorization、CSRF、API key、signature 或 session 的值會遮蔽。回應只暫存在 Runtime 記憶體，不寫入磁碟，且結果 API 僅接受 loopback 用戶端。超出大小上限、非 JSON、service worker 或跨來源 iframe 發出的請求不會提供 body。
+擷取只在明確指定 URL 片段後啟動，僅讀一筆同源 JSON request/response，不讀 request/response headers；欄位名稱含 token、secret、password、cookie、authorization、CSRF、API key、signature、email、phone 或 user ID 的值會遮蔽。回應只暫存在 Runtime 記憶體，不寫入磁碟，且結果 API 僅接受 loopback 用戶端。超出大小上限、非 JSON、service worker 或跨來源請求不會提供 body。
 
 ---
 

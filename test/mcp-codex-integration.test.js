@@ -16,12 +16,13 @@ function stubTransport() {
 
 test('Codex dynamic tools carry no model-selectable Role identity', () => {
   const tools = listCodexRoleTools();
-  assert.equal(tools.length, 16);
+  assert.equal(tools.length, 20);
   assert.equal(tools.some(tool => JSON.stringify(tool.inputSchema).includes('fromRoleId')), false);
   assert.equal(tools.some(tool => JSON.stringify(tool.inputSchema).includes('"roleId"')), false);
   assert.deepEqual(tools.map(t => t.name).sort(), [
     'crew_whoami','crew_list_roles','crew_get_inbox','crew_send_message','crew_request_social_publisher_schedule','crew_recall','crew_propose_memory','crew_handoff','crew_get_task_status','crew_report_done',
-    'crew_context_propose','crew_context_list','crew_context_curate','crew_context_recall','crew_skill_list','crew_skill_get'
+    'crew_context_propose','crew_context_list','crew_context_curate','crew_context_recall','crew_skill_list','crew_skill_get',
+    'crew_extension_page_eval','crew_extension_debug_context','crew_extension_api_capture_start','crew_extension_api_response_read'
   ].sort());
 });
 
@@ -86,7 +87,7 @@ test('Codex new threads advertise role tools while old threads are not rewritten
     onAbort: () => {}
   });
   assert.equal(calls[0].method, 'thread/start');
-  assert.equal(calls[0].params.dynamicTools.length, 16);
+  assert.equal(calls[0].params.dynamicTools.length, 20);
   assert.equal(events[0].roleToolsStatus, 'ready');
   assert.equal(provider.roleToolsByThread.get('thread-new'), 'role-a');
   assert.equal(provider.getRoleToolStatus('thread-new').status, 'ready');

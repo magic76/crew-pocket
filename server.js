@@ -467,6 +467,12 @@ async function handleInboundMessage(req, res) {
 }
 
 const extensionBridge = createExtensionBridge({ onInboundMessage: enqueueInboundMessage });
+const codexProvider = getProvider('codex');
+if (typeof codexProvider?.setExtensionCommandHandler === 'function') {
+  codexProvider.setExtensionCommandHandler(command => extensionBridge.executeCommand(command));
+  codexProvider.setExtensionContextHandler((pageUrl, tabId) => extensionBridge.getDebugContext(pageUrl, tabId));
+  codexProvider.setExtensionApiResponseHandler((pageUrl, tabId) => extensionBridge.readLatestCapturedApiResponse(pageUrl, tabId));
+}
 
 // 📦 Export / Copy Browser Extension to custom location
 async function handleExportExtension(req, res) {
