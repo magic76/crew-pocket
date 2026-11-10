@@ -137,6 +137,11 @@ const closeDrawerBtn = document.getElementById('close-drawer-btn');
 const convList = document.getElementById('conv-list');
 const roleNavList = document.getElementById('role-nav-list');
 const crewRoomSummary = document.getElementById('crew-room-summary');
+const crewQueueModal = document.getElementById('crew-queue-modal');
+const crewQueueDetails = document.getElementById('crew-queue-details');
+const crewQueueSubtitle = document.getElementById('crew-queue-subtitle');
+const crewQueueClose = document.getElementById('crew-queue-close');
+const crewQueueRefresh = document.getElementById('crew-queue-refresh');
 const crewHomeHeader = document.getElementById('crew-home-header');
 const crewHomeDetails = document.getElementById('crew-home-details');
 const crewSummaryToggle = document.getElementById('crew-summary-toggle');
@@ -155,6 +160,10 @@ function setCrewHomeDetailsExpanded(expanded) {
 }
 crewSummaryToggle?.addEventListener('click', () => {
   setCrewHomeDetailsExpanded(crewSummaryToggle.getAttribute('aria-expanded') !== 'true');
+});
+crewRoomSummary?.addEventListener('click', event => {
+  if (!event.target.closest('[data-crew-queue-open]')) return;
+  openCrewQueueDetails();
 });
 function bindCrewHeaderScrollCollapse(container) {
   if (!container) return;
@@ -1047,8 +1056,9 @@ function renderRoleNavigation() {
         '</strong><span>角色</span></span>',
       '<span class="crew-summary-item" data-kind="working"><strong>' +
         (crewStatusVerified ? workingCount : '—') + '</strong><span>工作中</span></span>',
-      '<span class="crew-summary-item" data-kind="waiting" title="排隊中的角色訊息與自動回覆請求"><strong>' +
-        (crewStatusVerified ? queuedCount : '—') + '</strong><span>排隊中</span></span>',
+      '<button type="button" class="crew-summary-item crew-summary-item-button" data-kind="waiting" data-crew-queue-open aria-haspopup="dialog" aria-controls="crew-queue-modal" aria-label="查看排隊中的 ' +
+        (crewStatusVerified ? queuedCount : '未知') + ' 個項目" title="查看排隊中的角色訊息與自動回覆請求"><strong>' +
+        (crewStatusVerified ? queuedCount : '—') + '</strong><span>排隊中</span></button>',
       '<span class="crew-summary-item" data-kind="attention" title="未讀回覆、未讀任務結果與失敗項目"><strong>' +
         (crewStatusVerified ? attentionCount : '—') + '</strong><span>未讀／失敗</span></span>'
     ].join('');
@@ -1342,10 +1352,148 @@ function toggleRoleModal(modal, open, { fromHistory = false, handoff = false } =
     }, 150));
   }
 }
+
+let crewQueueReturnFocus = null;
+function queueReasonText(reason) {
+  return ({
+    role_busy: '角色正在處理其他工作',
+    role_auto_response_busy: '角色正在回覆其他訊息',
+    provider_unavailable: 'Provider 暫不可用',
+    retry_backoff: '等待重試時間',
+    provider_error: 'Provider 回覆失敗，稍後重試'
+  })[reason] || '';
+}
+function queueItemStatusText(item) {
+  if (item.type === 'role_message') return '等待送出';
+  return ({
+    queued: '等待 AI 回覆',
+    pending: '等待重試',
+    retrying: '等待重試',
+    running: '處理中'
+  })[item.status] || '等待處理';
+}
+function queueDateText(value) {
+  const time = Number(value) || 0;
+  return time ? new Date(time).toLocaleString('zh-TW', {
+    month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit'
+  }) : '';
+}
+function queueTextElement(tag, className, value) {
+  const element = document.createElement(tag);
+  if (className) element.className = className;
+  element.textContent = String(value || '');
+  return element;
+}
+function renderCrewQueueDetails(data) {
+  if (!crewQueueDetails) return;
+  const roles = Array.isArray(data.roles) ? data.roles : [];
+  const queuedMessageCount = roles.reduce((count, role) => count + (Number(role.queuedMessageCount) || 0), 0);
+  const queuedRequestCount = roles.reduce((count, role) => count + (Number(role.queuedRequestCount) || 0), 0);
+  const fragment = document.createDocumentFragment();
+  if (!Number(data.totalCount)) {
+    fragment.appendChild(queueTextElement('p', 'crew-queue-empty', '目前沒有等待中的項目。'));
+    crewQueueDetails.replaceChildren(fragment);
+    if (crewQueueSubtitle) crewQueueSubtitle.textContent = '角色訊息與自動回覆請求都已清空。';
+    return;
+  }
+
+  if (!roles.length) {
+    fragment.appendChild(queueTextElement('p', 'crew-queue-empty', '目前讀不到排隊項目的明細，請重新整理。'));
+  }
+  for (const role of roles) {
+    const section = document.createElement('section');
+    section.className = 'crew-queue-role';
+    const itemCount = Number(role.queuedMessageCount || 0) + Number(role.queuedRequestCount || 0);
+    section.appendChild(queueTextElement('h3', 'crew-queue-role-title', `${role.roleName || '未知角色'} · ${itemCount} 項`));
+
+    const items = Array.isArray(role.items) ? role.items : [];
+    for (const item of items) {
+      const card = document.createElement('article');
+      card.className = 'crew-queue-item';
+      const heading = document.createElement('div');
+      heading.className = 'crew-queue-item-heading';
+      const label = item.type === 'role_message'
+        ? (item.source === 'quick-share' ? '快速分享訊息' : '待送出的角色訊息')
+        : '自動回覆請求';
+      heading.append(
+        queueTextElement('strong', 'crew-queue-item-type', label),
+        queueTextElement('span', 'crew-queue-item-status', queueItemStatusText(item))
+      );
+      card.appendChild(heading);
+
+      const meta = [];
+      if (item.type === 'auto_response' && item.fromRoleName) meta.push(`來自 ${item.fromRoleName}`);
+      if (item.type === 'role_message' && item.providerId) meta.push(`Provider：${item.providerId}`);
+      if (item.type === 'auto_response' && Number(item.attempts) > 0) meta.push(`已嘗試 ${Number(item.attempts)} 次`);
+      const reason = queueReasonText(item.lastReason);
+      if (reason) meta.push(reason);
+      const date = queueDateText(item.createdAt);
+      if (date) meta.push(date);
+      if (meta.length) card.appendChild(queueTextElement('div', 'crew-queue-item-meta', meta.join(' · ')));
+
+      const content = String(item.text || '').trim() || (item.hasImage ? '（含圖片附件）' : '（沒有文字內容）');
+      card.appendChild(queueTextElement('p', 'crew-queue-item-content', content));
+      if (item.textTruncated) card.appendChild(queueTextElement('small', 'crew-queue-item-note', '內容過長，僅顯示前 1,000 字。'));
+      section.appendChild(card);
+    }
+
+    if (role.requestItemsTruncated) {
+      const notice = Number(role.queuedRequestCount) > items.filter(item => item.type === 'auto_response').length
+        ? `自動回覆請求共有 ${Number(role.queuedRequestCount)} 則，目前只列出最近可讀取的 100 則。`
+        : '自動回覆請求明細目前無法完整讀取。';
+      section.appendChild(queueTextElement('p', 'crew-queue-item-note', notice));
+    }
+    fragment.appendChild(section);
+  }
+
+  crewQueueDetails.replaceChildren(fragment);
+  if (crewQueueSubtitle) crewQueueSubtitle.textContent =
+    `共 ${Number(data.totalCount) || 0} 項 · ${queuedMessageCount} 則角色訊息 · ${queuedRequestCount} 則自動回覆請求。`;
+}
+async function loadCrewQueueDetails() {
+  if (!crewQueueDetails) return;
+  crewQueueDetails.replaceChildren(queueTextElement('div', 'crew-record-loading', '載入排隊項目中…'));
+  try {
+    const response = await fetch('/api/crew-queue-details', { cache: 'no-store' });
+    const data = await response.json();
+    if (!response.ok || !data.success) throw new Error(data.error || '讀取失敗');
+    renderCrewQueueDetails(data);
+  } catch (_) {
+    crewQueueDetails.replaceChildren(queueTextElement('p', 'crew-queue-empty', '暫時無法讀取排隊項目，請按右上角重新整理。'));
+    if (crewQueueSubtitle) crewQueueSubtitle.textContent = 'Runtime 尚未提供排隊明細。';
+  }
+}
+function openCrewQueueDetails() {
+  if (!crewQueueModal) return;
+  if (crewQueueModal.classList.contains('hidden')) crewQueueReturnFocus = document.activeElement;
+  toggleRoleModal(crewQueueModal, true);
+  crewQueueClose?.focus({ preventScroll: true });
+  void loadCrewQueueDetails();
+}
+function closeCrewQueueDetails({ fromHistory = false } = {}) {
+  if (!crewQueueModal || crewQueueModal.classList.contains('hidden')) return;
+  toggleRoleModal(crewQueueModal, false, { fromHistory });
+  const previousFocus = crewQueueReturnFocus;
+  crewQueueReturnFocus = null;
+  if (previousFocus?.isConnected) window.setTimeout(() => previousFocus.focus?.({ preventScroll: true }), 160);
+}
+crewQueueClose?.addEventListener('click', () => closeCrewQueueDetails());
+crewQueueRefresh?.addEventListener('click', () => { void loadCrewQueueDetails(); });
+crewQueueModal?.addEventListener('click', event => {
+  if (event.target === crewQueueModal) closeCrewQueueDetails();
+});
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape' && crewQueueModal && !crewQueueModal.classList.contains('hidden')) {
+    closeCrewQueueDetails();
+  }
+});
 // Native Android Back calls WebView.goBack(); close any sheets not belonging to
 // the restored history entry, without adding another history transition.
 window.addEventListener('crew:navigation-popstate', event => {
   const active = event.detail?.overlay || null;
+  if (crewQueueModal && crewQueueModal.id !== active && !crewQueueModal.classList.contains('hidden')) {
+    closeCrewQueueDetails({ fromHistory: true });
+  }
   if (active !== 'role-detail' && crewRoleDetailId) {
     closeCrewRoleDetail({ fromHistory: true });
   }

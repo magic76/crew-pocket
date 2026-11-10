@@ -683,6 +683,23 @@
       </section>
     </div>
 
+    <div id="crew-queue-modal" class="crew-record-modal fixed inset-0 z-[80] hidden items-end justify-center bg-black/75 p-2 opacity-0 transition-opacity duration-150 sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-labelledby="crew-queue-title">
+      <section class="crew-record-sheet flex w-full max-w-lg flex-col overflow-hidden rounded-3xl border shadow-2xl">
+        <div class="crew-record-header">
+          <div class="min-w-0 flex-1">
+            <div class="crew-record-kicker">QUEUE DETAILS</div>
+            <h2 id="crew-queue-title">排隊中的項目</h2>
+            <p id="crew-queue-subtitle">列出待送出的角色訊息，以及等待 AI 自動回覆的收件訊息。</p>
+          </div>
+          <button id="crew-queue-refresh" type="button" aria-label="重新整理排隊項目" title="重新整理">↻</button>
+          <button id="crew-queue-close" type="button" aria-label="關閉排隊項目">✕</button>
+        </div>
+        <div id="crew-queue-details" class="crew-record-body crew-queue-details p-3" role="region" aria-label="排隊項目明細" aria-live="polite">
+          <div class="crew-record-loading">載入排隊項目中…</div>
+        </div>
+      </section>
+    </div>
+
     <!-- MESSAGES SCROLL AREA -->    <!-- MESSAGES SCROLL AREA -->
     <main id="messages-container" class="flex-1 overflow-y-auto overflow-x-hidden px-2 py-3 sm:px-2 sm:py-4 space-y-3.5 select-text min-h-0 w-full max-w-full">
       <!-- Welcome Message -->
@@ -1481,6 +1498,22 @@
           </div>
 
           <p class="text-[10px] leading-relaxed text-slate-400">手動工作台可讀取串文／留言，並在確認後以文字發布或回覆；本機 Queue Publisher 另可自動發布符合格式的圖片／影片。Facebook 僅支援你管理的粉絲專頁；Meta 可能要求外部使用者權限經 App Review / Advanced Access。</p>
+
+          <section class="rounded-xl border border-sky-500/25 bg-slate-900/70 p-2.5 space-y-2" aria-labelledby="social-auth-tunnel-title">
+            <div class="flex items-center justify-between gap-2">
+              <div>
+                <div id="social-auth-tunnel-title" class="text-[11px] font-semibold text-sky-200">Meta OAuth callback Tunnel</div>
+                <div class="mt-0.5 text-[9px] text-slate-400">auth.3sssi.com · 僅 Facebook／Threads 回呼路徑</div>
+              </div>
+              <button id="social-auth-tunnel-refresh" type="button" class="min-h-8 shrink-0 rounded-lg bg-slate-800 px-2.5 text-[9px] font-semibold text-slate-200">重新整理</button>
+            </div>
+            <p class="text-[9px] leading-relaxed text-slate-400">其他網址一律回 404；Tunnel 只轉到本機 OAuth callback，不會公開 Pocket 其他頁面或 API。憑證與設定只由 Termux 後端讀取。Android 暫停 Termux 時，連線可能中斷。</p>
+            <div id="social-auth-tunnel-status" class="rounded-lg border border-slate-800 bg-slate-950/70 px-2.5 py-2 text-[9px] leading-relaxed text-slate-300" role="status" aria-live="polite">正在檢查 Tunnel 狀態…</div>
+            <div class="grid grid-cols-2 gap-1.5">
+              <button id="social-auth-tunnel-start" type="button" class="min-h-9 rounded-lg bg-sky-700 text-[10px] font-semibold text-white" disabled>啟動 Tunnel</button>
+              <button id="social-auth-tunnel-stop" type="button" class="min-h-9 rounded-lg bg-slate-800 text-[10px] font-semibold text-slate-200" disabled>停止 Tunnel</button>
+            </div>
+          </section>
 
           <section class="rounded-xl border border-emerald-500/25 bg-slate-900/70 p-2.5 space-y-2" aria-labelledby="social-publisher-title">
             <div>

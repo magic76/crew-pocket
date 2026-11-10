@@ -92,6 +92,15 @@ body[data-primary-tab="crew"] #chat-composer-footer { display: none !important; 
 .crew-summary-item[data-kind="working"] strong { color: var(--cp-success); }
 .crew-summary-item[data-kind="waiting"] strong,
 .crew-summary-item[data-kind="attention"] strong { color: var(--cp-warning); }
+.crew-summary-item-button {
+  width: 100%; margin: 0; color: inherit; font: inherit;
+  appearance: none; -webkit-appearance: none;
+  cursor: pointer; touch-action: manipulation;
+}
+.crew-summary-item-button:active { background: var(--cp-accent-soft); }
+.crew-summary-item-button:focus-visible {
+  outline: 2px solid var(--cp-accent-strong); outline-offset: 2px;
+}
 .crew-home-sync { font-size: 10px; color: var(--cp-muted); margin-top: 6px; }
 .crew-home-sync[data-verified="false"] { color: var(--cp-warning); }
 #role-nav-view #cockpit-scroll {
@@ -405,6 +414,31 @@ body[data-primary-tab="crew"] #crew-back-home-btn { display: none; }
   scrollbar-width: none;
 }
 .crew-record-body::-webkit-scrollbar { display: none; }
+.crew-queue-details { padding: 11px 12px 16px; }
+.crew-queue-role + .crew-queue-role {
+  margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--cp-border);
+}
+.crew-queue-role-title {
+  margin: 0 0 9px; color: var(--cp-text); font-size: 12px; font-weight: 750;
+}
+.crew-queue-item {
+  display: grid; gap: 6px; margin-top: 7px; padding: 10px 11px;
+  border: 1px solid var(--cp-border); border-radius: 12px;
+  background: var(--cp-surface-2); color: var(--cp-text-secondary);
+}
+.crew-queue-item-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.crew-queue-item-type { min-width: 0; color: var(--cp-text); font-size: 11px; font-weight: 700; }
+.crew-queue-item-status {
+  flex: none; padding: 3px 7px; border-radius: 999px;
+  background: var(--cp-warning-soft, rgba(245,158,11,.1)); color: var(--cp-warning);
+  font-size: 9px; font-weight: 700;
+}
+.crew-queue-item-meta, .crew-queue-item-note { color: var(--cp-muted); font-size: 9px; line-height: 1.45; }
+.crew-queue-item-content {
+  margin: 0; color: var(--cp-text-secondary); font-size: 11px; line-height: 1.55;
+  white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.crew-queue-empty { margin: 0; padding: 24px 8px; color: var(--cp-muted); text-align: center; font-size: 12px; }
 .crew-record-loading { text-align: center; font-size: 12px; color: var(--cp-muted); padding: 22px 8px; }
 #role-history-modal #conv-list .sticky {
   background: var(--cp-surface-2) !important;

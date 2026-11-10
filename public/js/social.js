@@ -2,6 +2,9 @@
   const state = {
     status: null,
     publisherScheduler: null,
+    authTunnel: null,
+    authTunnelBusy: false,
+    authTunnelRefreshing: false,
     publisherIntervalTouched: false,
     publisherFailureNotificationPending: '',
     activePlatform: 'facebook',
@@ -314,6 +317,80 @@
       displayPublisherScheduler(null);
       showStatus('無法讀取 Publisher 排程：' + error.message, true);
       return null;
+    }
+  }
+
+  function renderAuthTunnelStatus() {
+    const box = byId('social-auth-tunnel-status');
+    const start = byId('social-auth-tunnel-start');
+    const stop = byId('social-auth-tunnel-stop');
+    if (!box || !start || !stop) return;
+    const tunnel = state.authTunnel;
+    const label = tunnel?.message || '正在檢查 Tunnel 狀態…';
+    box.textContent = label;
+    box.classList.remove('border-slate-800', 'text-slate-300', 'border-emerald-500/40', 'text-emerald-200', 'border-amber-500/40', 'text-amber-100', 'border-rose-500/40', 'text-rose-200');
+    const tone = tunnel?.state === 'connected'
+      ? ['border-emerald-500/40', 'text-emerald-200']
+      : ['starting', 'running'].includes(tunnel?.state)
+        ? ['border-amber-500/40', 'text-amber-100']
+        : ['unavailable', 'error'].includes(tunnel?.state)
+          ? ['border-rose-500/40', 'text-rose-200']
+          : ['border-slate-800', 'text-slate-300'];
+    box.classList.add(...tone);
+
+    const canControl = Boolean(tunnel?.available);
+    const running = Boolean(tunnel?.running);
+    start.disabled = state.authTunnelBusy || !canControl || running;
+    stop.disabled = state.authTunnelBusy || !canControl || !running;
+    start.textContent = state.authTunnelBusy ? '處理中…' : '啟動 Tunnel';
+    stop.textContent = state.authTunnelBusy ? '處理中…' : '停止 Tunnel';
+  }
+
+  async function refreshAuthTunnelStatus() {
+    if (state.authTunnelRefreshing) return state.authTunnel;
+    state.authTunnelRefreshing = true;
+    try {
+      const data = await request('/api/social/auth-tunnel');
+      state.authTunnel = data.tunnel || null;
+    } catch (error) {
+      state.authTunnel = {
+        available: false,
+        state: 'unavailable',
+        running: false,
+        message: '無法讀取 Tunnel 狀態：' + error.message
+      };
+    } finally {
+      state.authTunnelRefreshing = false;
+      renderAuthTunnelStatus();
+    }
+    return state.authTunnel;
+  }
+
+  async function controlAuthTunnel(action) {
+    if (state.authTunnelBusy) return;
+    const starting = action === 'start';
+    const confirmed = await confirmInWorkbench({
+      title: starting ? '啟動 Meta OAuth callback Tunnel？' : '停止 Meta OAuth callback Tunnel？',
+      note: starting
+        ? '只會啟動既有 auth.3sssi.com OAuth callback Tunnel。設定只允許 Facebook／Threads 回呼路徑轉到本機；其餘網址回 404。'
+        : '只會停止命令列使用這份 OAuth callback 設定的 cloudflared 程序；其他 Tunnel 不會被停止。',
+      confirmLabel: starting ? '確認啟動' : '確認停止'
+    });
+    if (!confirmed) return;
+
+    state.authTunnelBusy = true;
+    renderAuthTunnelStatus();
+    try {
+      const data = await post('/api/social/auth-tunnel', { action, confirmed: true });
+      state.authTunnel = data.tunnel || null;
+      renderAuthTunnelStatus();
+      showStatus(starting ? 'Tunnel 啟動要求已送出，正在確認 Edge 連線。' : 'OAuth callback Tunnel 已停止。');
+    } catch (error) {
+      showStatus((starting ? '啟動' : '停止') + ' Tunnel 失敗：' + error.message, true);
+      await refreshAuthTunnelStatus();
+    } finally {
+      state.authTunnelBusy = false;
+      renderAuthTunnelStatus();
     }
   }
 
@@ -1116,12 +1193,17 @@
       if (!document.hidden) {
         refreshStatus();
         refreshPublisherScheduler();
+        refreshAuthTunnelStatus();
       }
     });
     window.addEventListener('focus', () => {
       refreshStatus();
       refreshPublisherScheduler();
+      refreshAuthTunnelStatus();
     });
+    byId('social-auth-tunnel-refresh')?.addEventListener('click', refreshAuthTunnelStatus);
+    byId('social-auth-tunnel-start')?.addEventListener('click', () => controlAuthTunnel('start'));
+    byId('social-auth-tunnel-stop')?.addEventListener('click', () => controlAuthTunnel('stop'));
     byId('social-publisher-enable')?.addEventListener('click', () => enablePublisherSchedule());
     byId('social-publisher-disable')?.addEventListener('click', disablePublisherSchedule);
     byId('social-publisher-run-now')?.addEventListener('click', runPublisherOnce);
@@ -1134,9 +1216,15 @@
     switchPlatform('facebook');
     refreshStatus();
     refreshPublisherScheduler();
+    refreshAuthTunnelStatus();
     setInterval(() => {
       if (!document.hidden) refreshPublisherScheduler();
     }, 10000);
+    setInterval(() => {
+      if (!document.hidden && ['starting', 'connected', 'running'].includes(state.authTunnel?.state)) {
+        refreshAuthTunnelStatus();
+      }
+    }, 5000);
   }
 
   window.refreshSocialStatus = refreshStatus;

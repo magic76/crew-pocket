@@ -118,6 +118,7 @@ const { renderVisualAnswer } = require('./lib/visual-answer');
 const { createSocialAccounts } = require('./lib/social-accounts');
 const { createSocialDraftGenerator } = require('./lib/social-draft');
 const { defaultSocialPublisherScheduler } = require('./lib/social-publisher-scheduler');
+const { createAuthTunnelController } = require('./lib/auth-tunnel-controller');
 
 
 const crewTaskRunner = new CrewTaskRunner({
@@ -134,6 +135,7 @@ const dreamingManager = new DreamingManager({
 });
 
 const socialAccounts = createSocialAccounts({ homeDir: RUNTIME_HOME });
+const authTunnelController = createAuthTunnelController({ homeDir: RUNTIME_HOME });
 const generateSocialDraft = createSocialDraftGenerator({
   getProvider,
   getDefaultModel,
@@ -1520,6 +1522,74 @@ async function handleCrewStatus(res) {
   } catch (error) {
     res.writeHead(500, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
     res.end(JSON.stringify({ success: false, roles: [], error: error.message || 'Crew status unavailable' }));
+  }
+}
+
+async function handleCrewQueueDetails(res) {
+  try {
+    const [roles, roleMessages, inboxSummaryByRole] = await Promise.all([
+      listRoles(),
+      listRoleQueuedMessages(),
+      getCrewInboxSummaryByRole()
+    ]);
+    const roleGroups = await Promise.all(roles.map(async role => {
+      const queuedMessages = roleMessages
+        .filter(message => message.roleId === role.id)
+        .map(message => ({
+          id: message.id,
+          type: 'role_message',
+          status: 'queued',
+          source: String(message.source || 'chat').slice(0, 48),
+          providerId: String(message.providerId || '').slice(0, 80),
+          text: String(message.text || '').slice(0, 1000),
+          textTruncated: String(message.text || '').length > 1000,
+          hasImage: Boolean(message.imagePath),
+          createdAt: Number(message.createdAt) || 0
+        }));
+
+      let inboxUnavailable = false;
+      const inbox = await getCrewInbox(role.id, { undeliveredOnly: true, limit: 100 })
+        .catch(() => { inboxUnavailable = true; return []; });
+      const requests = inbox
+        .filter(message => !message.replyToId && message.kind !== 'task_result'
+          && !['failed', 'replied'].includes(message.autoResponse?.status || 'queued'))
+        .map(message => ({
+          id: message.id,
+          type: 'auto_response',
+          status: String(message.autoResponse?.status || 'queued').slice(0, 24),
+          fromRoleName: String(message.fromRoleName || '其他角色').slice(0, 120),
+          text: String(message.content || '').slice(0, 1000),
+          textTruncated: String(message.content || '').length > 1000,
+          attempts: Math.max(0, Number(message.autoResponse?.attempts) || 0),
+          lastReason: String(message.autoResponse?.lastReason || '').slice(0, 80),
+          nextAttemptAt: Number(message.autoResponse?.nextAttemptAt) || null,
+          createdAt: Number(message.autoResponse?.queuedAt || message.createdAt) || 0
+        }));
+
+      const summary = inboxSummaryByRole.get(role.id) || {};
+      const queuedRequestCount = Math.max(0, Number(summary.queuedRequestCount) || requests.length);
+      const queuedMessageCount = queuedMessages.length;
+      return {
+        roleId: role.id,
+        roleName: role.name,
+        queuedMessageCount,
+        queuedRequestCount,
+        requestItemsTruncated: inboxUnavailable || queuedRequestCount > requests.length,
+        items: [...queuedMessages, ...requests].sort((a, b) => a.createdAt - b.createdAt)
+      };
+    }));
+    const totalCount = roleGroups.reduce((count, role) => count + role.queuedRequestCount + role.queuedMessageCount, 0);
+
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+    res.end(JSON.stringify({
+      success: true,
+      generatedAt: Date.now(),
+      totalCount,
+      roles: roleGroups.filter(role => role.queuedMessageCount || role.queuedRequestCount)
+    }));
+  } catch (error) {
+    res.writeHead(500, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+    res.end(JSON.stringify({ success: false, error: error.message || 'Crew queue details unavailable' }));
   }
 }
 
@@ -3926,6 +3996,41 @@ async function handleSocialApi(req, res, parsedUrl) {
   }
 }
 
+async function handleAuthTunnelControl(req, res) {
+  const json = (statusCode, payload) => {
+    res.writeHead(statusCode, {
+      'Content-Type': 'application/json; charset=utf-8',
+      'Cache-Control': 'no-store'
+    });
+    return res.end(JSON.stringify(payload));
+  };
+
+  if (!isLocalAdminRequest(req)) {
+    return json(403, { success: false, error: 'Tunnel 只能在手機上的 Crew Pocket 管理。' });
+  }
+
+  try {
+    if (req.method === 'GET') {
+      return json(200, { success: true, tunnel: await authTunnelController.getStatus() });
+    }
+    if (req.method !== 'POST') return json(405, { success: false, error: '不支援的 Tunnel 操作。' });
+
+    const body = await parseJsonBody(req);
+    const action = String(body?.action || '').trim();
+    if (body?.confirmed !== true || !['start', 'stop'].includes(action)) {
+      return json(400, { success: false, error: '請在工作台確認啟動或停止 Tunnel。' });
+    }
+    const tunnel = action === 'start'
+      ? await authTunnelController.start()
+      : await authTunnelController.stop();
+    return json(200, { success: true, tunnel });
+  } catch (error) {
+    const message = error?.userMessage || 'Tunnel 操作失敗；設定與憑證不會傳給 WebView。';
+    const statusCode = Number(error?.statusCode) || 400;
+    return json(statusCode >= 400 && statusCode <= 599 ? statusCode : 400, { success: false, error: message });
+  }
+}
+
 // 🌐 HTTP Server Request Dispatcher
 const server = http.createServer(async (req, res) => {
   const parsedUrl = url.parse(req.url, true);
@@ -3993,6 +4098,8 @@ const server = http.createServer(async (req, res) => {
 
   if (pathname === '/api/visual-answer' && req.method === 'POST') {
     return handleVisualAnswer(req, res);
+  } else if (pathname === '/api/social/auth-tunnel' && ['GET', 'POST'].includes(req.method)) {
+    return handleAuthTunnelControl(req, res);
   } else if (pathname.startsWith('/api/social/')) {
     return handleSocialApi(req, res, parsedUrl);
   } else if (pathname === '/api/crew-context-usage' && req.method === 'GET') {
@@ -4029,6 +4136,8 @@ const server = http.createServer(async (req, res) => {
     return handleRoles(req, res, parsedUrl);
   } else if (pathname === '/api/crew-status' && req.method === 'GET') {
     return handleCrewStatus(res);
+  } else if (pathname === '/api/crew-queue-details' && req.method === 'GET') {
+    return handleCrewQueueDetails(res);
   } else if (pathname === '/api/world-chat-result' && req.method === 'GET') {
     return handleWorldChatResult(parsedUrl,res);
   } else if (pathname === '/api/world-chat-history' && req.method === 'GET') {
