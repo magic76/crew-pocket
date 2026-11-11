@@ -3314,6 +3314,57 @@ async function sendRoleMessage(payload = {}) {
 window.sendRoleMessage = sendRoleMessage;
 window.hydrateRoleMessageQueue = hydrateRoleMessageQueue;
 window.getRoleQueuedMessages = getQueuedMessagesForRole;
+window.retryRoleQueuedMessage = async function({ roleId, messageId, providerId, conversationId } = {}) {
+  const targetRoleId = String(roleId || '');
+  const targetMessageId = String(messageId || '');
+  if (!targetRoleId || !targetMessageId) throw new Error('缺少角色或排隊訊息編號。');
+  if (acknowledgedQueuedMessageIds.has(targetMessageId)) {
+    await removePendingQueuedMessage({ id: targetMessageId }, targetRoleId);
+    acknowledgedQueuedMessageIds.delete(targetMessageId);
+    return { success: true, navigated: false, alreadyAccepted: true };
+  }
+  const messages = await hydrateRoleMessageQueue(targetRoleId, { force: true });
+  const message = messages.find(item => item.id === targetMessageId);
+  if (!message) throw new Error('這則訊息已不在一般對話佇列中，請重新整理明細。');
+  const targetProvider = message.providerId || String(providerId || '');
+  const targetConversation = message.conversationId || String(conversationId || '') || null;
+  const matchesCurrent = currentStreamRoleId() === targetRoleId
+    && currentProvider === targetProvider
+    && (currentConversationId || null) === targetConversation;
+  let navigated = false;
+
+  if (!matchesCurrent) {
+    const currentRoleId = currentStreamRoleId();
+    if (getActiveRoleStream(currentRoleId)) {
+      throw new Error('目前角色仍有生成中的工作；請等它完成後再切換並重試。');
+    }
+    if (getActiveRoleStream(targetRoleId)) {
+      throw new Error('目標角色仍有生成中的工作；訊息會在工作完成後按序送出。');
+    }
+    if (promptInput?.value?.trim() || uploadedImagePath) {
+      throw new Error('目前輸入框有尚未送出的內容。先送出或清空後，再切換到這則訊息的對話重試。');
+    }
+    if (!targetConversation) {
+      throw new Error('這則訊息沒有記錄原對話；請先切換到該角色的對話後再重試。');
+    }
+    const opened = await window.openCrewConversation?.(targetProvider, targetConversation, {
+      expectedRoleId: targetRoleId
+    });
+    if (!opened) throw new Error('無法開啟這則訊息所屬的原對話。');
+    navigated = true;
+  }
+
+  if (currentStreamRoleId() !== targetRoleId || currentProvider !== targetProvider
+      || (currentConversationId || null) !== targetConversation) {
+    throw new Error('目前對話與排隊訊息不符，沒有重新送出。');
+  }
+  const queue = getQueuedMessagesForRole(targetRoleId);
+  if (queue[0]?.id !== targetMessageId) {
+    throw new Error('佇列會依序送出；請先處理最早的等待項目。');
+  }
+  queuedMessageDelivery.retry(targetRoleId, targetMessageId);
+  return { success: true, navigated };
+};
 
 // Toggle Send / Stop button appearance & state// Toggle Send / Stop button appearance & state
 function setStreamingState(streaming) {

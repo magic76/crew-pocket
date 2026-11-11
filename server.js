@@ -1541,6 +1541,7 @@ async function handleCrewQueueDetails(res) {
           status: 'queued',
           source: String(message.source || 'chat').slice(0, 48),
           providerId: String(message.providerId || '').slice(0, 80),
+          conversationId: String(message.conversationId || '').slice(0, 200),
           text: String(message.text || '').slice(0, 1000),
           textTruncated: String(message.text || '').length > 1000,
           hasImage: Boolean(message.imagePath),
@@ -1552,7 +1553,7 @@ async function handleCrewQueueDetails(res) {
         .catch(() => { inboxUnavailable = true; return []; });
       const requests = inbox
         .filter(message => !message.replyToId && message.kind !== 'task_result'
-          && !['failed', 'replied'].includes(message.autoResponse?.status || 'queued'))
+          && !['replied', 'cancelled'].includes(message.autoResponse?.status || 'queued'))
         .map(message => ({
           id: message.id,
           type: 'auto_response',
@@ -1561,35 +1562,114 @@ async function handleCrewQueueDetails(res) {
           text: String(message.content || '').slice(0, 1000),
           textTruncated: String(message.content || '').length > 1000,
           attempts: Math.max(0, Number(message.autoResponse?.attempts) || 0),
+          manualRetries: Math.max(0, Number(message.autoResponse?.manualRetries) || 0),
           lastReason: String(message.autoResponse?.lastReason || '').slice(0, 80),
           nextAttemptAt: Number(message.autoResponse?.nextAttemptAt) || null,
+          roleProcessing: crewAutoResponder.activeRoles.has(role.id),
           createdAt: Number(message.autoResponse?.queuedAt || message.createdAt) || 0
         }));
 
       const summary = inboxSummaryByRole.get(role.id) || {};
-      const queuedRequestCount = Math.max(0, Number(summary.queuedRequestCount) || requests.length);
+      const queuedRequestCount = Math.max(0, Number(summary.queuedRequestCount) || 0);
+      const failedRequestCount = Math.max(0, Number(summary.failedRequestCount) || 0);
       const queuedMessageCount = queuedMessages.length;
       return {
         roleId: role.id,
         roleName: role.name,
         queuedMessageCount,
         queuedRequestCount,
-        requestItemsTruncated: inboxUnavailable || queuedRequestCount > requests.length,
+        failedRequestCount,
+        requestItemsTruncated: inboxUnavailable || queuedRequestCount + failedRequestCount > requests.length,
         items: [...queuedMessages, ...requests].sort((a, b) => a.createdAt - b.createdAt)
       };
     }));
-    const totalCount = roleGroups.reduce((count, role) => count + role.queuedRequestCount + role.queuedMessageCount, 0);
+    const totalCount = roleGroups.reduce((count, role) => count + role.queuedRequestCount + role.failedRequestCount + role.queuedMessageCount, 0);
 
     res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
     res.end(JSON.stringify({
       success: true,
       generatedAt: Date.now(),
       totalCount,
-      roles: roleGroups.filter(role => role.queuedMessageCount || role.queuedRequestCount)
+      roles: roleGroups.filter(role => role.queuedMessageCount || role.queuedRequestCount || role.failedRequestCount)
     }));
   } catch (error) {
     res.writeHead(500, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
     res.end(JSON.stringify({ success: false, error: error.message || 'Crew queue details unavailable' }));
+  }
+}
+
+async function handleCrewQueueAction(req, res) {
+  const json = (statusCode, payload) => {
+    res.writeHead(statusCode, {
+      'Content-Type': 'application/json; charset=utf-8',
+      'Cache-Control': 'no-store'
+    });
+    return res.end(JSON.stringify(payload));
+  };
+  if (!isLocalAdminRequest(req)) {
+    return json(403, { success: false, error: '排隊項目只能在手機上的 Crew Pocket 管理。' });
+  }
+
+  try {
+    const body = await parseJsonBody(req);
+    const roleId = String(body?.roleId || body?.role_id || '').trim();
+    const messageId = String(body?.messageId || body?.message_id || '').trim();
+    const action = String(body?.action || '').trim();
+    if (!roleId || !messageId || !(await getRole(roleId))) {
+      return json(404, { success: false, error: '找不到這個角色或排隊項目。' });
+    }
+
+    if (action === 'remove_role_message') {
+      const removed = await removeRoleQueuedMessage(roleId, messageId);
+      if (!removed) return json(404, { success: false, error: '這則等待送出的訊息已不存在。' });
+      broadcastCrewStatusEvent('queue-remove', roleId);
+      return json(200, { success: true, status: 'removed' });
+    }
+
+    if (action === 'retry_role_message') {
+      const queued = await listRoleQueuedMessages(roleId);
+      const message = queued.find(item => item.id === messageId);
+      if (!message) return json(404, { success: false, error: '這則等待送出的訊息已不存在。' });
+      if (queued[0]?.id !== messageId) {
+        return json(409, { success: false, error: '佇列會依序送出；請先處理最早的等待項目。' });
+      }
+      if (message.source !== 'quick-share') {
+        return json(200, { success: true, status: 'ready' });
+      }
+      if (roleSubmitter.activeRoles.has(roleId)) {
+        return json(409, { success: false, error: '此角色正在處理快速分享訊息，請稍後再試。' });
+      }
+      const receipt = (await defaultRoleMessageQueueStore.readReceipts())[messageId];
+      if (receipt?.status !== 'queued') {
+        return json(409, { success: false, error: '快速分享的執行狀態不是等待中，為避免重複送出，沒有重新觸發。' });
+      }
+      setImmediate(() => roleSubmitter.drain(roleId)
+        .catch(error => console.warn('[Role Submit] Manual retry failed:', error.message)));
+      broadcastCrewStatusEvent('queue-retry', roleId);
+      return json(202, { success: true, status: 'scheduled' });
+    }
+
+    const inbox = await getCrewInbox(roleId, { undeliveredOnly: true, limit: 100 });
+    const message = inbox.find(item => item.id === messageId && !item.replyToId && item.kind !== 'task_result');
+    if (!message) return json(404, { success: false, error: '這則自動回覆請求已不存在或已完成。' });
+
+    if (action === 'retry_auto_response') {
+      const result = await crewAutoResponder.retry(message, {
+        confirmUnknownOutcome: body?.confirmUnknownOutcome === true
+      });
+      return json(202, { success: true, status: result.status, messageId });
+    }
+    if (action === 'cancel_auto_response') {
+      const result = await crewAutoResponder.cancel(message);
+      return json(200, { success: true, status: result.status, messageId, historyPreserved: true });
+    }
+    return json(400, { success: false, error: '不支援的排隊項目操作。' });
+  } catch (error) {
+    const statusCode = Number(error?.statusCode) || 400;
+    return json(statusCode >= 400 && statusCode <= 599 ? statusCode : 400, {
+      success: false,
+      error: error?.message || '排隊項目操作失敗。'
+    });
   }
 }
 
@@ -4138,6 +4218,8 @@ const server = http.createServer(async (req, res) => {
     return handleCrewStatus(res);
   } else if (pathname === '/api/crew-queue-details' && req.method === 'GET') {
     return handleCrewQueueDetails(res);
+  } else if (pathname === '/api/crew-queue-action' && req.method === 'POST') {
+    return handleCrewQueueAction(req, res);
   } else if (pathname === '/api/world-chat-result' && req.method === 'GET') {
     return handleWorldChatResult(parsedUrl,res);
   } else if (pathname === '/api/world-chat-history' && req.method === 'GET') {

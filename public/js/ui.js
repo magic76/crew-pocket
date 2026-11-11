@@ -1304,6 +1304,7 @@ const crewStatusEvents = new EventSource('/api/crew-status/events');
 crewStatusEvents.addEventListener('crew-status', () => {
   crewStatusUpdatedAt = 0;
   loadCrewStatus({ force: true }).catch(() => {});
+  if (!crewQueueModal?.classList.contains('hidden')) loadCrewQueueDetails();
 });
 crewStatusEvents.addEventListener('error', () => {
   // Connection status is not proof of current agent state. Clear trusted status
@@ -1360,16 +1361,19 @@ function queueReasonText(reason) {
     role_auto_response_busy: '角色正在回覆其他訊息',
     provider_unavailable: 'Provider 暫不可用',
     retry_backoff: '等待重試時間',
-    provider_error: 'Provider 回覆失敗，稍後重試'
+    provider_error: 'Provider 回覆失敗，稍後重試',
+    previous_attempt_unknown: '上次執行結果不明'
   })[reason] || '';
 }
 function queueItemStatusText(item) {
   if (item.type === 'role_message') return '等待送出';
+  if (item.status === 'running' && !item.roleProcessing) return '上次結果不明';
   return ({
     queued: '等待 AI 回覆',
     pending: '等待重試',
     retrying: '等待重試',
-    running: '處理中'
+    running: '處理中',
+    failed: 'AI 回覆失敗'
   })[item.status] || '等待處理';
 }
 function queueDateText(value) {
@@ -1384,11 +1388,26 @@ function queueTextElement(tag, className, value) {
   element.textContent = String(value || '');
   return element;
 }
+function createCrewQueueActionButton(label, action, roleId, item) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'crew-queue-action';
+  button.textContent = label;
+  button.dataset.queueAction = action;
+  button.dataset.queueRoleId = roleId;
+  button.dataset.queueMessageId = item.id;
+  if (item.source) button.dataset.queueSource = item.source;
+  if (item.lastReason) button.dataset.queueReason = item.lastReason;
+  if (item.providerId) button.dataset.queueProviderId = item.providerId;
+  if (item.conversationId) button.dataset.queueConversationId = item.conversationId;
+  return button;
+}
 function renderCrewQueueDetails(data) {
   if (!crewQueueDetails) return;
   const roles = Array.isArray(data.roles) ? data.roles : [];
   const queuedMessageCount = roles.reduce((count, role) => count + (Number(role.queuedMessageCount) || 0), 0);
   const queuedRequestCount = roles.reduce((count, role) => count + (Number(role.queuedRequestCount) || 0), 0);
+  const failedRequestCount = roles.reduce((count, role) => count + (Number(role.failedRequestCount) || 0), 0);
   const fragment = document.createDocumentFragment();
   if (!Number(data.totalCount)) {
     fragment.appendChild(queueTextElement('p', 'crew-queue-empty', '目前沒有等待中的項目。'));
@@ -1403,7 +1422,7 @@ function renderCrewQueueDetails(data) {
   for (const role of roles) {
     const section = document.createElement('section');
     section.className = 'crew-queue-role';
-    const itemCount = Number(role.queuedMessageCount || 0) + Number(role.queuedRequestCount || 0);
+    const itemCount = Number(role.queuedMessageCount || 0) + Number(role.queuedRequestCount || 0) + Number(role.failedRequestCount || 0);
     section.appendChild(queueTextElement('h3', 'crew-queue-role-title', `${role.roleName || '未知角色'} · ${itemCount} 項`));
 
     const items = Array.isArray(role.items) ? role.items : [];
@@ -1425,6 +1444,7 @@ function renderCrewQueueDetails(data) {
       if (item.type === 'auto_response' && item.fromRoleName) meta.push(`來自 ${item.fromRoleName}`);
       if (item.type === 'role_message' && item.providerId) meta.push(`Provider：${item.providerId}`);
       if (item.type === 'auto_response' && Number(item.attempts) > 0) meta.push(`已嘗試 ${Number(item.attempts)} 次`);
+      if (item.type === 'auto_response' && Number(item.manualRetries) > 0) meta.push(`手動重試 ${Number(item.manualRetries)} 次`);
       const reason = queueReasonText(item.lastReason);
       if (reason) meta.push(reason);
       const date = queueDateText(item.createdAt);
@@ -1434,12 +1454,30 @@ function renderCrewQueueDetails(data) {
       const content = String(item.text || '').trim() || (item.hasImage ? '（含圖片附件）' : '（沒有文字內容）');
       card.appendChild(queueTextElement('p', 'crew-queue-item-content', content));
       if (item.textTruncated) card.appendChild(queueTextElement('small', 'crew-queue-item-note', '內容過長，僅顯示前 1,000 字。'));
+      const actions = document.createElement('div');
+      actions.className = 'crew-queue-item-actions';
+      if (item.type === 'role_message') {
+        actions.append(
+          createCrewQueueActionButton('重新觸發', 'retry_role_message', role.roleId, item),
+          createCrewQueueActionButton('刪除', 'remove_role_message', role.roleId, item)
+        );
+      } else if (item.roleProcessing) {
+        actions.appendChild(queueTextElement('small', 'crew-queue-item-note', '角色正在處理其他工作，稍後再操作。'));
+      } else {
+        actions.append(
+          createCrewQueueActionButton('立即重試', 'retry_auto_response', role.roleId, item),
+          createCrewQueueActionButton('取消排隊', 'cancel_auto_response', role.roleId, item)
+        );
+      }
+      if (actions.childElementCount) card.appendChild(actions);
       section.appendChild(card);
     }
 
     if (role.requestItemsTruncated) {
-      const notice = Number(role.queuedRequestCount) > items.filter(item => item.type === 'auto_response').length
-        ? `自動回覆請求共有 ${Number(role.queuedRequestCount)} 則，目前只列出最近可讀取的 100 則。`
+      const requestTotal = Number(role.queuedRequestCount || 0) + Number(role.failedRequestCount || 0);
+      const visibleRequestTotal = items.filter(item => item.type === 'auto_response').length;
+      const notice = requestTotal > visibleRequestTotal
+        ? `自動回覆項目共有 ${requestTotal} 則，目前只列出最近可讀取的 100 則。`
         : '自動回覆請求明細目前無法完整讀取。';
       section.appendChild(queueTextElement('p', 'crew-queue-item-note', notice));
     }
@@ -1448,7 +1486,7 @@ function renderCrewQueueDetails(data) {
 
   crewQueueDetails.replaceChildren(fragment);
   if (crewQueueSubtitle) crewQueueSubtitle.textContent =
-    `共 ${Number(data.totalCount) || 0} 項 · ${queuedMessageCount} 則角色訊息 · ${queuedRequestCount} 則自動回覆請求。`;
+    `等待中 ${queuedMessageCount + queuedRequestCount} 項 · ${failedRequestCount} 項自動回覆失敗。可重試 AI 回覆；取消會保留收件歷史。`;
 }
 async function loadCrewQueueDetails() {
   if (!crewQueueDetails) return;
@@ -1463,6 +1501,82 @@ async function loadCrewQueueDetails() {
     if (crewQueueSubtitle) crewQueueSubtitle.textContent = 'Runtime 尚未提供排隊明細。';
   }
 }
+async function performCrewQueueItemAction(button) {
+  const action = button?.dataset?.queueAction || '';
+  const roleId = button?.dataset?.queueRoleId || '';
+  const messageId = button?.dataset?.queueMessageId || '';
+  if (!action || !roleId || !messageId) return;
+
+  if (action === 'remove_role_message') {
+    if (!window.confirm('刪除此則等待送出的訊息？刪除後無法從佇列還原。')) return;
+  } else if (action === 'retry_role_message' && button.dataset.queueSource !== 'quick-share') {
+    if (!window.confirm('重新觸發一般角色訊息。若原請求其實已被 Provider 接受、但佇列確認未保存，可能會重複送出。繼續嗎？')) return;
+  } else if (action === 'cancel_auto_response') {
+    if (!window.confirm('取消這則訊息的 AI 自動回覆？收件訊息會保留在歷史中。')) return;
+  } else if (action === 'retry_auto_response') {
+    const unknownOutcome = button.dataset.queueReason === 'previous_attempt_unknown'
+      || button.closest('.crew-queue-item')?.querySelector('.crew-queue-item-status')?.textContent === '上次結果不明';
+    const note = unknownOutcome
+      ? '上次執行結果不明，重新觸發可能重複回覆或重複執行工具。'
+      : '會立即重新呼叫 AI；若上次執行已產生副作用但結果未記錄，可能重複回覆或執行工具。';
+    if (!window.confirm(`${note}\n\n要繼續嗎？`)) return;
+  }
+
+  button.disabled = true;
+  try {
+    if (action === 'retry_role_message') {
+      let actionMessage = '已重新觸發；若角色正在工作，訊息會等目前工作完成後送出。';
+      const response = await fetch('/api/crew-queue-action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
+        body: JSON.stringify({ action, roleId, messageId })
+      });
+      const result = await response.json();
+      if (!response.ok || !result.success) throw new Error(result.error || '操作失敗');
+      if (button.dataset.queueSource !== 'quick-share') {
+        const retry = window.retryRoleQueuedMessage;
+        if (typeof retry !== 'function') throw new Error('訊息重試功能尚未載入，請重新整理頁面。');
+        const retried = await retry({
+          roleId,
+          messageId,
+          providerId: button.dataset.queueProviderId || '',
+          conversationId: button.dataset.queueConversationId || ''
+        });
+        if (retried?.navigated) closeCrewQueueDetails();
+        if (retried?.alreadyAccepted) actionMessage = '伺服器已接受這則訊息，已清除殘留的佇列項目，沒有重複送出。';
+      }
+      if (typeof showContextToast === 'function') showContextToast(actionMessage);
+    } else {
+      const response = await fetch('/api/crew-queue-action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
+        body: JSON.stringify({
+          action,
+          roleId,
+          messageId,
+          confirmUnknownOutcome: action === 'retry_auto_response'
+        })
+      });
+      const result = await response.json();
+      if (!response.ok || !result.success) throw new Error(result.error || '操作失敗');
+      const message = action === 'remove_role_message' ? '已刪除等待送出的訊息。'
+        : action === 'cancel_auto_response' ? '已取消自動回覆；收件歷史仍保留。'
+          : '已安排 AI 立即重試。';
+      if (typeof showContextToast === 'function') showContextToast(message);
+    }
+    await loadCrewQueueDetails();
+  } catch (error) {
+    if (typeof showContextToast === 'function') showContextToast(error.message || '排隊項目操作失敗。', { critical: true });
+    else window.alert(error.message || '排隊項目操作失敗。');
+    button.disabled = false;
+  }
+}
+crewQueueDetails?.addEventListener('click', event => {
+  const button = event.target.closest('[data-queue-action]');
+  if (button) void performCrewQueueItemAction(button);
+});
 function openCrewQueueDetails() {
   if (!crewQueueModal) return;
   if (crewQueueModal.classList.contains('hidden')) crewQueueReturnFocus = document.activeElement;
