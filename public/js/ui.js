@@ -24,6 +24,13 @@ const BUILTIN_MODEL_FALLBACKS = [
   { id: 'gpt-5.6-luna', provider: 'codex', name: 'GPT-5.6 Luna', desc: '快速省資源 · 高頻輕量工作', icon: '🌙', badge: 'Luna', badgeColor: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40', isDefault: false, defaultReasoningEffort: 'medium', supportedReasoningEfforts: ['low', 'medium', 'high', 'xhigh', 'max'] }
 ];
 BUILTIN_MODEL_FALLBACKS.push({ id: 'sonnet', provider: 'claude', name: 'Claude Sonnet', desc: 'Claude Code CLI', icon: '🟣', isDefault: true, defaultReasoningEffort: 'medium', supportedReasoningEfforts: ['low', 'medium', 'high'] });
+BUILTIN_MODEL_FALLBACKS.push(
+  { id: 'gemini-3.8-flash', provider: 'antigravity', name: 'Gemini 3.8 Flash', desc: '極速混合推理 · 最新旗艦', icon: '⚡', badge: '最新', badgeColor: 'bg-teal-500/20 text-teal-300 border-teal-500/40', isDefault: true, defaultReasoningEffort: 'low', supportedReasoningEfforts: ['low', 'medium', 'high'] },
+  { id: 'gemini-4-argon', provider: 'antigravity', name: 'Gemini 4 Argon', desc: '新世代推理大模型', icon: '✨', badge: '最新', badgeColor: 'bg-teal-500/20 text-teal-300 border-teal-500/40', isDefault: false, defaultReasoningEffort: 'medium', supportedReasoningEfforts: ['low', 'medium', 'high'] },
+  { id: 'gemini-4-hydrogen', provider: 'antigravity', name: 'Gemini 4 Hydrogen', desc: '深度思考與超長上下文', icon: '✨', badge: '最新', badgeColor: 'bg-teal-500/20 text-teal-300 border-teal-500/40', isDefault: false, defaultReasoningEffort: 'medium', supportedReasoningEfforts: ['low', 'medium', 'high', 'xhigh'] },
+  { id: 'gemini-3.7-flash', provider: 'antigravity', name: 'Gemini 3.7 Flash', desc: '極速混合推理 · 穩定推薦', icon: '✨', badge: '推薦', badgeColor: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40', isDefault: false, defaultReasoningEffort: 'low', supportedReasoningEfforts: ['low', 'medium', 'high'] },
+  { id: 'claude-sonnet-5-5', provider: 'antigravity', name: 'Claude Sonnet 5.5', desc: '深度邏輯與大型代碼架構', icon: '✨', badge: '最新', badgeColor: 'bg-teal-500/20 text-teal-300 border-teal-500/40', isDefault: false, defaultReasoningEffort: 'medium', supportedReasoningEfforts: ['low', 'medium', 'high'] }
+);
 let availableModels = [...BUILTIN_MODEL_FALLBACKS];
 let availableEfforts = [
   { id: 'low', name: 'Low (極速)', desc: '⚡ 0~1s 秒回 · 日常對話', icon: '⚡', color: 'emerald' },
@@ -77,11 +84,11 @@ window.requestProviderPrewarm = function(delay = 250) {
   return prewarmRequest;
 };
 
-async function loadModelsCatalog() {
-  if (modelsCatalogLoaded) return { models: availableModels, efforts: availableEfforts };
+async function loadModelsCatalog(force = false) {
+  if (modelsCatalogLoaded && !force) return { models: availableModels, efforts: availableEfforts };
   if (!modelsCatalogRequest) {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 2500);
+    const timeout = setTimeout(() => controller.abort(), 10000);
     modelsCatalogRequest = fetch('/api/models', { signal: controller.signal })
       .then(res => {
         if (!res.ok) throw new Error('模型清單載入失敗');
@@ -2191,8 +2198,8 @@ window.selectProvider = async function(providerId, { preserveActiveStream = fals
   if (!supported.includes(currentEffort)) currentEffort = selectedModel?.defaultReasoningEffort || supported[0] || 'low';
   renderProviderOptions();
   updateModelUI();
-  loadModelsList();
-  toggleModelModal(false);
+  await loadModelsList();
+  // Keep model modal open so user can pick the model for the switched provider!
   let restored = true;
   if (currentConversationId) restored = await loadConversationHistory(currentConversationId, { activate: activateConversation, expectedRoleId });
   else {
@@ -2406,7 +2413,7 @@ function toggleModelModal(open) {
 async function loadModelsList() {
   if (!modelOptionsContainer) return;
   try {
-    await loadModelsCatalog();
+    await loadModelsCatalog(true);
 
     const providerModels = availableModels.filter(m => (m.provider || 'antigravity') === currentProvider);
     modelOptionsContainer.innerHTML = providerModels.map(m => {

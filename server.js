@@ -516,7 +516,7 @@ for d in [src, tgt]:
 async function handleGetModels(res) {
   const discoverModels = async (provider) => {
     if (!provider.metadata.capabilities.models || typeof provider.listModels !== 'function') return [];
-    const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('model discovery timed out')), 2000));
+    const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('model discovery timed out')), 6000));
     try { return await Promise.race([provider.listModels(), timeout]); }
     catch (err) {
       console.warn(`[${provider.id} Models] Discovery failed:`, err.message);
