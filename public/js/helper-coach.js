@@ -57,12 +57,18 @@
   }
 
   function renderStatus(data) {
-    const statusLabels = {
-      not_paired: ['尚未配對', 'border-slate-700 bg-slate-900/70 text-slate-300'],
-      waiting_for_helper_runtime: ['等待 Helper Runtime 支援 Coach v1', 'border-amber-500/30 bg-amber-500/5 text-amber-100'],
-      runtime_connected: ['近期收到已配對 Runtime 事件', 'border-emerald-500/30 bg-emerald-500/5 text-emerald-100']
-    };
-    const [label, style] = statusLabels[data.status] || statusLabels.not_paired;
+    const label = data.status === 'runtime_connected'
+      ? '近期收到已配對 Runtime 事件'
+      : data.status === 'waiting_for_helper_runtime' && data.runtimeProtocolAvailable
+        ? 'Coach v1 曾連線 · 目前等待下一個事件'
+        : data.status === 'waiting_for_helper_runtime'
+          ? '等待 Helper Runtime 支援 Coach v1'
+          : '尚未配對';
+    const style = data.status === 'runtime_connected'
+      ? 'border-emerald-500/30 bg-emerald-500/5 text-emerald-100'
+      : data.status === 'waiting_for_helper_runtime'
+        ? 'border-amber-500/30 bg-amber-500/5 text-amber-100'
+        : 'border-slate-700 bg-slate-900/70 text-slate-300';
     statusNode.className = `rounded-2xl border p-3 text-[11px] ${style}`;
     statusNode.innerHTML = `<div class="font-semibold">${escapeHtml(label)}</div>
       <div class="mt-1 text-[10px] opacity-80">${escapeHtml(data.helperCompatibility || '')}</div>
@@ -133,6 +139,10 @@
         <details class="mt-2 text-[9px] text-slate-400"><summary class="cursor-pointer">查看前置條件與操作步驟</summary>
           <p class="mt-1">前置：${escapeHtml((skill.preconditions || []).join(' · ') || '—')}</p>
           <ol class="mt-1 list-decimal space-y-0.5 pl-4">${(skill.steps || []).map(step => `<li>${escapeHtml(step)}</li>`).join('')}</ol>
+        </details>
+        <details class="mt-1 text-[9px] text-slate-400"><summary class="cursor-pointer">查看獨立驗證證據 (${evidenceCount})</summary>
+          <ul class="mt-1 space-y-0.5">${(skill.evidence || []).map(item => `<li>${escapeHtml(item.taskId)} · ${escapeHtml(item.outcome)} · ${escapeHtml(item.verificationMethod)} · ${escapeHtml(formatTime(item.at))}</li>`).join('') || '<li>尚無驗證證據</li>'}</ul>
+          <p class="mt-1 break-words text-slate-500">來源事件：${escapeHtml((skill.sourceEventIds || []).join(' · ') || '—')}</p>
         </details>
       </article>`;
     }).join('');

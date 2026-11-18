@@ -7,13 +7,13 @@ const os = require('node:os');
 const path = require('node:path');
 const http = require('node:http');
 const { HelperCoachService, createSignature } = require('../lib/helper-coach/service');
-const { HelperCoachStore } = require('../lib/helper-coach/store');
+const { HelperCoachStore, defaultHelperCoachStore } = require('../lib/helper-coach/store');
 const { HelperCodePRService, validateHelperPatch } = require('../lib/helper-coach/code-pr');
 const { handleHelperCoachRoute } = require('../lib/helper-coach/http');
 const { SkillRegistry } = require('../lib/skills/registry');
 const { LocalMemoryProvider } = require('../lib/memory/local-memory-provider');
 const { RoleStore, HELPER_COACH_ROLE_ID } = require('../lib/roles');
-const { redactUiSummary } = require('../lib/helper-coach/protocol');
+const { normalizeEvent, redactUiSummary } = require('../lib/helper-coach/protocol');
 
 const NOW = Date.parse('2026-11-18T03:00:00.000Z');
 
@@ -103,6 +103,7 @@ test('Mock Helper Runtime completes Maps and Apple Music coaching, and learning 
   const { clock, service, runtime, skills, memory } = await fixture(t);
   const emptyDashboard = await service.dashboard();
   assert.equal(emptyDashboard.status, 'waiting_for_helper_runtime');
+  assert.equal(emptyDashboard.runtimeProtocolAvailable, false);
   assert.equal(emptyDashboard.metrics.successRate, null, 'an empty ledger cannot display a fabricated success rate');
   const mapsOne = await runtime.runVerifiedTask('maps.navigation', 'maps_task_0001', 'com.google.android.apps.maps', 'navigation_active');
   assert.equal(mapsOne.stage, 'outcome_verified');
@@ -119,21 +120,32 @@ test('Mock Helper Runtime completes Maps and Apple Music coaching, and learning 
   assert.equal(dashboard.metrics.completedTasks, 3);
   assert.equal(dashboard.metrics.verifiedSuccesses, 3);
   assert.equal(dashboard.metrics.successRate, 1);
-  assert.equal(dashboard.runtimeProtocolAvailable, false);
+  assert.equal(dashboard.runtimeProtocolAvailable, true);
   const mapsSkill = dashboard.skills.find(skill => skill.appPackage === 'com.google.android.apps.maps');
   assert.equal(mapsSkill.status, 'active');
   assert.equal(mapsSkill.successRate, 1);
   assert.equal(mapsSkill.outcomeCount, 2);
   assert.ok(mapsSkill.preconditions.length >= 3);
   assert.equal(mapsSkill.steps.length, 4);
+  assert.ok(mapsSkill.sourceEventIds.length > 0);
+  const storedMapsSkill = (await skills.list('role-helper-coach')).skills.find(skill => skill.id === mapsSkill.id);
+  assert.deepEqual(storedMapsSkill.sourceConversationIds, [], 'Helper event IDs are not mislabeled as conversations');
+  assert.ok(storedMapsSkill.sourceEventIds.length > 0);
   assert.equal(dashboard.skills.find(skill => skill.appPackage === 'com.apple.android.music').status, 'candidate');
   const learnedMemory = await memory.readAll();
   assert.equal(learnedMemory.length, 3);
   assert.equal(learnedMemory[0].provenance.derivation, 'SYSTEM_OBSERVED');
   assert.equal(learnedMemory[0].provenance.sources[0].type, 'tool');
-  assert.match(redactUiSummary('token=secret-value and user@example.test 0912-345-678'), /\[redacted sensitive field\]/);
-  assert.doesNotMatch(redactUiSummary('token=secret-value and user@example.test'), /secret-value|user@example/);
+  assert.match(redactUiSummary('token=secret-value; user@example.test; 0912-345-678'), /token: \[redacted\]/);
+  assert.doesNotMatch(redactUiSummary('Search query: secret-value; destination: 123 Example Road; https://example.test/?token=abc'),
+    /secret-value|123 Example Road|example\.test|token=abc/);
+  assert.doesNotMatch(redactUiSummary('user@example.test 0912-345-678 4111 1111 1111 1111'),
+    /user@example|0912|4111/);
   assert.equal((await service.dashboard()).runtimeLastSeenAt, clock.value);
+  await service.revoke();
+  const revokedDashboard = await service.dashboard();
+  assert.equal(revokedDashboard.runtimeProtocolAvailable, false);
+  assert.equal(revokedDashboard.status, 'not_paired');
 });
 
 test('signed event ingress rejects bad auth, stale timestamps, unexpected action IDs, and replays', async t => {
@@ -155,7 +167,24 @@ test('signed event ingress rejects bad auth, stale timestamps, unexpected action
   await assert.rejects(() => service.receiveSignedEvent({
     rawBody: badRaw, timestamp: String(clock.value), nonce: 'invalid_action_nonce_0002',
     signature: createSignature(pairing.pairingSecret, String(clock.value), 'invalid_action_nonce_0002', badRaw)
-  }), /unknown action/);
+  }), /unknown.*action/);
+
+  const crossTask = { ...event, event_id: 'auth_event_003', available_actions: ['apple_music.play_selected'] };
+  const crossTaskRaw = Buffer.from(JSON.stringify(crossTask));
+  await assert.rejects(() => service.receiveSignedEvent({
+    rawBody: crossTaskRaw, timestamp: String(clock.value), nonce: 'cross_task_nonce_00003',
+    signature: createSignature(pairing.pairingSecret, String(clock.value), 'cross_task_nonce_00003', crossTaskRaw)
+  }), /cross-task action/);
+
+  const rawSensitiveCode = { ...event, event_id: 'auth_event_004', error_code: 'PRIVATE_TOKEN_VALUE' };
+  const rawSensitiveCodeBody = Buffer.from(JSON.stringify(rawSensitiveCode));
+  await service.receiveSignedEvent({
+    rawBody: rawSensitiveCodeBody, timestamp: String(clock.value), nonce: 'safe_error_nonce_000004',
+    signature: createSignature(pairing.pairingSecret, String(clock.value), 'safe_error_nonce_000004', rawSensitiveCodeBody)
+  });
+  const safeEvent = (await service.dashboard()).events.find(item => item.eventId === 'auth_event_004');
+  assert.match(safeEvent.summary, /UNKNOWN/);
+  assert.doesNotMatch(safeEvent.summary, /PRIVATE_TOKEN_VALUE/);
 
   const signed = {
     ...base,
@@ -167,6 +196,29 @@ test('signed event ingress rejects bad auth, stale timestamps, unexpected action
   const duplicate = { ...signed, nonce: 'replay_nonce_00000002', signature: createSignature(pairing.pairingSecret, base.timestamp, 'replay_nonce_00000002', rawBody) };
   await assert.rejects(() => service.receiveSignedEvent(duplicate), /Duplicate/);
   assert.equal((await service.dashboard()).metrics.observedTasks, 1);
+});
+
+test('unrecognized Runtime error, rejection, and verification strings never reach the ledger', () => {
+  const common = {
+    protocol_version: 1,
+    timestamp: new Date(NOW).toISOString(),
+    source: 'helper'
+  };
+  const rejection = normalizeEvent({
+    ...common,
+    event_id: 'safe_reject_01', task_id: 'safe_task_0001', kind: 'advice_validation',
+    observation_event_id: 'safe_observe_01', advice_event_id: 'safe_advice_001',
+    suggested_action_id: null, accepted: false, user_confirmed: false,
+    ui_signature: 'maps_ui_safe', rejection_code: 'PRIVATE_TOKEN_VALUE'
+  }, NOW);
+  assert.equal(rejection.rejection_code, 'UNKNOWN');
+
+  const outcome = normalizeEvent({
+    ...common,
+    event_id: 'safe_outcome_01', task_id: 'safe_task_0001', kind: 'task_outcome',
+    verified: false, verification_method: 'private_token_value', duration_ms: 0, evidence_refs: []
+  }, NOW);
+  assert.equal(outcome.verification_method, 'unknown');
 });
 
 test('expired and mismatched UI advice is aborted; retry budget is bounded', async t => {
@@ -309,6 +361,19 @@ test('pairing settings reject non-loopback callers and same-phone requests witho
     noOrigin, '/api/helper-coach/pair', options);
   assert.equal(noOrigin.status, 403);
   assert.doesNotMatch(JSON.stringify(noOrigin.body), /must-not-be-created/);
+
+  const wrongScheme = capture();
+  await handleHelperCoachRoute({ method: 'POST', headers: {
+    host: '127.0.0.1:8000', origin: 'https://127.0.0.1:8000'
+  }, socket: { remoteAddress: '127.0.0.1' } }, wrongScheme, '/api/helper-coach/pair', options);
+  assert.equal(wrongScheme.status, 403, 'a matching host and port with a different scheme is cross-origin');
+});
+
+test('default coaching services share one serialized local store', () => {
+  const service = new HelperCoachService();
+  const codePRService = new HelperCodePRService();
+  assert.equal(service.store, defaultHelperCoachStore);
+  assert.equal(codePRService.store, defaultHelperCoachStore);
 });
 
 test('code proposal patch allowlist prevents workflows/manifests and requires confirmation before commands', async t => {
