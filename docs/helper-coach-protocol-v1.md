@@ -12,8 +12,9 @@ Status: Pocket's client now targets the Helper Runtime Bridge in `magic76/crew-h
 
 ## Helper event feed
 
-The feed response is `{protocol_version, events, has_more, next_cursor}`. `since_event_id` is exclusive. Pocket accepts only these Helper event kinds and exact fields:
+The feed response is `{protocol_version, events, has_more, next_cursor}`. `since_event_id` is exclusive. Pocket accepts these Helper event kinds and exact fields:
 
+- `task_received` (Pocket tracking extension; the current Helper v1 Runtime does not emit it yet): `protocol_version`, `event_id`, `task_id`, `timestamp`, `source`, `kind`, `app_package` (may be empty if unknown), `goal` (one closed GoalIntent value or empty). It contains no user text. This event gives Pocket a receipt timestamp before the first UI observation.
 - `task_observation`: `protocol_version`, `event_id`, `task_id`, `timestamp`, `source`, `kind`, `app_package`, `goal`, `step_index`, structural `ui_summary`, `available_actions`, `active_skills`, string `previous_action`, `result`, `error_code`, `evidence_refs`.
 - `task_outcome`: `protocol_version`, `event_id`, `task_id`, `timestamp`, `source`, `kind`, `app_package`, `verified`, `verification_method`, `duration_ms`, `result`, `error_code`, `evidence_refs`.
 - `coach_action_result`: `protocol_version`, `event_id`, `task_id`, `timestamp`, `source`, `kind`, `observation_event_id`, `advice_event_id`, `suggested_action_id`, `status` (`executed|failed|cancelled`), `runtime_action_success`, `error_code`, `evidence_refs`.
@@ -43,5 +44,6 @@ Pocket recognizes task success only when `verified` is true, `result` is `succes
 
 - `lib/helper-coach/bridge-client.js` implements loopback requests, exact-target HMAC signing and response limits. `protocol.js`, `engine.js`, `service.js`, `store.js` and `http.js` normalize the strict schema, poll/deduplicate events, create constrained advice and track action/task results.
 - Pairing is entered in the Growth Center. Runtime polling runs in the existing Node service; the APK and Android permissions are unchanged. A service restart is needed after deploying the new JavaScript, but this change does not restart it.
-- The Growth Center displays actual local events, queue states, candidate provenance and outcomes; empty metrics remain empty. Role Memory uses the existing `TOOL` provenance path.
+- The Growth Center tracks every task represented by received Helper events, including GoalIntents outside the coaching allowlist. Its coverage table separates receipt events, observations, task outcomes, coaching strategy support and independent verification support. Success rate and failure counts include only task/app pairs with an explicit Pocket verifier; outcomes without one remain visible as “no verifier” and are not counted as either success or failure. Role Memory uses the existing `TOOL` provenance path.
+- The current Helper v1 Runtime does not emit `task_received`, although Pocket accepts this privacy-safe extension. Until Helper emits it for every accepted task, Pocket cannot confirm receipt before the first `task_observation` / `task_outcome`, or count a received message that never produces another task event. Full message-receipt coverage requires Helper to emit the listed receipt event for every accepted task, without user text. All tracked task and event history remains bounded by the local store retention limits.
 - Focused checks use `node --test test/helper-coach.integration.test.js`. Mock Bridge tests exercise HMAC, cursor paging/deduplication, receipt and outcome correlation, supported task policies, candidate staging and PR-reference staging. These checks do not validate Helper's running Bridge, pairing UI, or physical-device task completion.

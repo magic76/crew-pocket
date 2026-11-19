@@ -231,15 +231,35 @@ test('Pocket polls Helper with exact HMAC contract, applies scoped advice, and d
   bridge.enqueue('task_outcome', musicId, outcomeFields('com.apple.android.music', {
     method: 'MEDIA_PLAYBACK_BECAME_ACTIVE', evidence: 'MEDIA_PLAYBACK_BECAME_ACTIVE'
   }));
+  bridge.enqueue('task_outcome', searchId, outcomeFields('com.apple.android.music', {
+    method: 'RUNTIME_VERIFIED', evidence: 'RUNTIME_VERIFIED'
+  }));
   await service.pollBridge();
   const dashboard = await service.dashboard();
   const mapsTask = dashboard.tasks.find(task => task.taskId === mapsId);
+  const searchTask = dashboard.tasks.find(task => task.taskId === searchId);
   assert.equal(mapsTask.outcome.verified, true);
   assert.equal(mapsTask.advice[0].status, 'executed');
   assert.equal(mapsTask.advice[0].runtimeActionSuccess, true);
-  assert.equal(dashboard.metrics.completedTasks, 2);
+  assert.equal(searchTask.outcome.verified, false, 'a Helper success without a Pocket verifier is not promoted to verified');
+  assert.equal(searchTask.verificationStatus, 'no_verifier');
+  assert.equal(dashboard.metrics.trackedTasks, 4, 'all observed GoalIntents are included in tracking');
+  assert.equal(dashboard.metrics.receivedTasks, 0, 'task observations do not falsely claim a receipt event');
+  assert.equal(dashboard.metrics.observedTasks, 4);
+  assert.equal(dashboard.metrics.completedTasks, 3, 'terminal outcomes are counted across supported and unsupported coaching scopes');
+  assert.equal(dashboard.metrics.verifiableOutcomes, 2);
   assert.equal(dashboard.metrics.verifiedSuccesses, 2);
-  assert.equal(dashboard.metrics.observedTasks, 3, 'unsupported Goals are excluded from coaching metrics');
+  assert.equal(dashboard.metrics.failedOutcomes, 0, 'an outcome without a task verifier is not counted as a failure');
+  assert.equal(dashboard.metrics.unverifiableOutcomes, 1);
+  assert.equal(dashboard.metrics.successRate, 1, 'success rate uses only outcomes with an explicit task verifier');
+  const searchCoverage = dashboard.coverage.find(item => item.appPackage === 'com.apple.android.music' && item.goal === 'SEARCH:RESULT');
+  assert.equal(searchCoverage.taskCount, 1);
+  assert.equal(searchCoverage.tasksWithOutcome, 1);
+  assert.equal(searchCoverage.coachSupported, true);
+  assert.equal(searchCoverage.verificationSupported, false);
+  assert.equal(searchCoverage.unverifiableOutcomes, 1);
+  const appOpenCoverage = dashboard.coverage.find(item => item.goal === 'APP:OPEN');
+  assert.equal(appOpenCoverage.coachSupported, false, 'unsupported strategy combinations remain visible in coverage');
   assert.equal(dashboard.skills.every(skill => skill.status === 'candidate'), true, 'verified outcomes do not auto-activate Pocket skills');
   assert.equal(bridge.skills.length, 2, 'verified outcomes stage inactive candidates to Helper');
   assert.ok(bridge.skills.every(skill => skill.status === 'candidate' && skill.action_sequence.every(action => action === 'inspect_ui')));
@@ -280,6 +300,40 @@ test('cursor paging, exclusive next_cursor, event deduplication, and stale obser
   const future = (await service.dashboard()).tasks.find(task => task.taskId === futureId);
   assert.equal(future.stage, 'stale_observation');
   assert.equal(bridge.advice.length, 0);
+});
+
+test('privacy-safe task_received events let Pocket track accepted work before the first observation', async t => {
+  const { bridge, service } = await fixture(t);
+  const taskId = 'received-before-observation-001';
+  bridge.enqueue('task_received', taskId, {
+    app_package: 'com.google.android.apps.maps', goal: 'NAVIGATION:START'
+  });
+
+  const polled = await service.pollBridge();
+  const dashboard = await service.dashboard();
+  const task = dashboard.tasks.find(item => item.taskId === taskId);
+  assert.equal(polled.processed, 1);
+  assert.equal(task.stage, 'received');
+  assert.equal(task.observationCount, 0);
+  assert.equal(task.receivedAt, NOW);
+  assert.equal(task.coachSupported, true);
+  assert.equal(task.verificationSupported, true);
+  assert.equal(dashboard.metrics.trackedTasks, 1);
+  assert.equal(dashboard.metrics.receivedTasks, 1);
+  assert.equal(dashboard.metrics.observedTasks, 0);
+  assert.equal(dashboard.metrics.openTasks, 1);
+  assert.equal(dashboard.coverage[0].taskCount, 1);
+  assert.equal(dashboard.coverage[0].receivedTasks, 1);
+  assert.equal(bridge.advice.length, 0, 'receipt alone never triggers an action');
+
+  const base = {
+    protocol_version: 1, event_id: 'received-event-001', task_id: 'received-task-001',
+    timestamp: new Date(NOW).toISOString(), source: 'helper', kind: 'task_received',
+    app_package: '', goal: ''
+  };
+  const { normalizeEvent } = require('../lib/helper-coach/protocol');
+  assert.equal(normalizeEvent(base).goal, '');
+  assert.throws(() => normalizeEvent({ ...base, message: 'private text' }), /Unexpected Helper protocol field/);
 });
 
 test('expired queued advice is shown as unresolved and no longer blocks a fresh observation', async t => {
