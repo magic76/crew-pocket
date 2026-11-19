@@ -225,7 +225,7 @@ test('Pocket polls Helper with exact HMAC contract, applies scoped advice, and d
 
   bridge.enqueue('coach_action_result', mapsId, actionResultFields(mapsAdvice));
   bridge.enqueue('task_outcome', mapsId, outcomeFields('com.google.android.apps.maps', {
-    method: 'NAVIGATION_TRANSITION_OBSERVED', evidence: 'NAVIGATION_TRANSITION_OBSERVED'
+    method: 'MAPS_NAVIGATION_ACTIVE_VERIFIED', evidence: 'MAPS_NAVIGATION_ACTIVE_VERIFIED'
   }));
   bridge.enqueue('coach_action_result', musicId, actionResultFields(musicAdvice));
   bridge.enqueue('task_outcome', musicId, outcomeFields('com.apple.android.music', {
@@ -334,6 +334,42 @@ test('privacy-safe task_received events let Pocket track accepted work before th
   const { normalizeEvent } = require('../lib/helper-coach/protocol');
   assert.equal(normalizeEvent(base).goal, '');
   assert.throws(() => normalizeEvent({ ...base, message: 'private text' }), /Unexpected Helper protocol field/);
+});
+
+test('APP:OPEN can be verified from target-package transition evidence without enabling coaching advice', async t => {
+  const { bridge, service } = await fixture(t);
+  const taskId = 'app-open-verified-001';
+  bridge.enqueue('task_received', taskId, { app_package: '', goal: 'APP:OPEN' });
+  bridge.enqueue('task_outcome', taskId, outcomeFields('com.google.android.youtube', {
+    method: 'APP_PACKAGE_TRANSITION_OBSERVED', evidence: 'APP_PACKAGE_TRANSITION_OBSERVED'
+  }));
+
+  await service.pollBridge();
+  const dashboard = await service.dashboard();
+  const task = dashboard.tasks.find(item => item.taskId === taskId);
+  assert.equal(task.coachSupported, false, 'verifier coverage does not imply a coaching strategy');
+  assert.equal(task.verificationSupported, true);
+  assert.equal(task.outcome.verified, true);
+  assert.equal(dashboard.metrics.verifiedSuccesses, 1);
+  assert.equal(bridge.advice.length, 0, 'verification-only coverage never authorizes an app launch');
+});
+
+test('fixed-app outcomes cannot change task identity to bypass the task verifier', async t => {
+  const { bridge, service } = await fixture(t);
+  const taskId = 'maps-outcome-package-mismatch-001';
+  bridge.enqueue('task_observation', taskId, observationFields({ result: 'unknown', retry: false }));
+  await service.pollBridge();
+  bridge.enqueue('task_outcome', taskId, outcomeFields('com.google.android.youtube', {
+    method: 'MAPS_NAVIGATION_ACTIVE_VERIFIED', evidence: 'MAPS_NAVIGATION_ACTIVE_VERIFIED'
+  }));
+
+  await service.pollBridge();
+  const dashboard = await service.dashboard();
+  const task = dashboard.tasks.find(item => item.taskId === taskId);
+  assert.equal(task.appPackage, 'com.google.android.apps.maps');
+  assert.equal(task.verificationSupported, true);
+  assert.equal(task.outcome.verified, false);
+  assert.equal(task.lastFailureCause, 'OUTCOME_APP_MISMATCH');
 });
 
 test('expired queued advice is shown as unresolved and no longer blocks a fresh observation', async t => {
@@ -491,10 +527,19 @@ test('outcome success requires a task-specific verification value and trusted ma
   const { isVerifiedOutcome } = require('../lib/helper-coach/protocol');
   const task = { appPackage: 'com.google.android.apps.maps', goal: 'NAVIGATION:START' };
   assert.equal(isVerifiedOutcome(task, { verified: true, result: 'success', verification_method: 'RUNTIME_VERIFIED', evidence_refs: ['RUNTIME_VERIFIED'] }), false);
-  assert.equal(isVerifiedOutcome(task, { verified: true, result: 'success', verification_method: 'NAVIGATION_TRANSITION_OBSERVED', evidence_refs: ['NAVIGATION_TRANSITION_OBSERVED'] }), true);
+  assert.equal(isVerifiedOutcome(task, { verified: true, result: 'success', verification_method: 'MAPS_NAVIGATION_ACTIVE_VERIFIED', evidence_refs: ['MAPS_NAVIGATION_ACTIVE_VERIFIED'] }), true);
+  assert.equal(isVerifiedOutcome(task, { verified: true, result: 'success', verification_method: 'NAVIGATION_TRANSITION_OBSERVED', evidence_refs: ['NAVIGATION_TRANSITION_OBSERVED'] }), false);
   assert.equal(isVerifiedOutcome(task, { verified: true, result: 'success', verification_method: 'NAVIGATION_ACTIVE', evidence_refs: ['TAP_EFFECT_OBSERVED'] }), false);
-  assert.equal(isVerifiedOutcome(task, { verified: true, result: 'unknown', verification_method: 'NAVIGATION_TRANSITION_OBSERVED', evidence_refs: ['NAVIGATION_TRANSITION_OBSERVED'] }), false);
-  assert.equal(isVerifiedOutcome(task, { verified: true, result: 'success', verification_method: 'MAPS_NAVIGATION_ACTIVE_VERIFIED', evidence_refs: ['MAPS_NAVIGATION_ACTIVE_VERIFIED'] }), false);
+  assert.equal(isVerifiedOutcome(task, { verified: true, result: 'unknown', verification_method: 'MAPS_NAVIGATION_ACTIVE_VERIFIED', evidence_refs: ['MAPS_NAVIGATION_ACTIVE_VERIFIED'] }), false);
+  assert.equal(isVerifiedOutcome({ appPackage: 'com.spotify.music', goal: 'MEDIA:PLAY' }, {
+    verified: true, result: 'success', verification_method: 'MEDIA_PLAYBACK_BECAME_ACTIVE', evidence_refs: ['MEDIA_PLAYBACK_BECAME_ACTIVE']
+  }), true, 'task-level playback evidence applies to a valid target player package');
+  assert.equal(isVerifiedOutcome({ appPackage: '', goal: 'APP:OPEN' }, {
+    verified: true, result: 'success', verification_method: 'APP_PACKAGE_TRANSITION_OBSERVED', evidence_refs: ['APP_PACKAGE_TRANSITION_OBSERVED']
+  }), false, 'a transition without a valid target package is not independently verifiable');
+  assert.equal(isVerifiedOutcome({ appPackage: 'com.google.android.youtube', goal: 'APP:OPEN' }, {
+    verified: true, result: 'success', verification_method: 'APP_PACKAGE_TRANSITION_OBSERVED', evidence_refs: ['APP_PACKAGE_TRANSITION_OBSERVED']
+  }), true);
 });
 
 test('Runtime failures require explicit user attribution; code PR workflow stages only a GitHub reference to Helper', async t => {
