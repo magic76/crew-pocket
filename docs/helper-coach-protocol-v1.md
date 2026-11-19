@@ -1,72 +1,45 @@
-# Helper Coach v1 — shared protocol and implementation status
+# Helper Coach v1 — Pocket / Helper Bridge contract
 
-Status: **Pocket side implemented; Android Helper Runtime adapter is not yet available.** The Pocket event API and state machine are exercised with an integration Mock Adapter. The mock does not operate Android and is not evidence that Maps navigation or Apple Music playback works on a device.
+Status: Pocket's client now targets the Helper Runtime Bridge in `magic76/crew-helper` PR #205. Unit and Mock Bridge integration checks do not prove that either Android app is installed, paired, or operating real Maps / Apple Music tasks.
 
-## Goal
-Crew Pocket acts as a teacher; Crew Helper owns Android permissions, executes actions, and reports evidence. Pocket may diagnose, suggest an existing skill, propose a new skill, or propose a source-code patch. Pocket never silently changes Helper's code, installs an APK, or executes privileged operations.
+## Ownership and transport
 
-## Transport and trust
-- Same-device loopback only (127.0.0.1); never bind to 0.0.0.0. Pocket uses its existing local HTTP server and serves `/api/helper-coach/events`; it does not open another listener. Helper must call `http://127.0.0.1:8000/api/helper-coach/events` from the same phone.
-- Repository discovery at `magic76/crew-helper` commit `ecc79d9f51dbca44c83d3f311dfd2243077ffb53` found an existing Android [`AccessibilityBridgeServer`](https://github.com/magic76/crew-helper/blob/ecc79d9f51dbca44c83d3f311dfd2243077ffb53/app/src/main/java/com/crewpocket/helper/AccessibilityBridgeServer.java) on `127.0.0.1:8766`. That is Helper's private action bridge, guarded by its app-private [`X-Crew-Bridge-Token`](https://github.com/magic76/crew-helper/blob/ecc79d9f51dbca44c83d3f311dfd2243077ffb53/app/src/main/java/com/crewpocket/helper/AppConfig.java); it is not a Coach event/advice API. Pocket must not call it directly or obtain/expose that token. The old external-server mode is removed. Coach telemetry is Helper-to-Pocket over Pocket's existing port 8000; Helper remains the only action executor.
-- Explicit user opt-in. Pocket creates a per-install secret and stores it in `~/.crew-pocket/helper-coach-v1.json` with owner-only permissions. Helper must store the secret in app-private storage. Sign each request as HMAC-SHA256 over `<timestamp>\n<nonce>\n<exact raw body>` using headers `X-Crew-Coach-Timestamp`, `X-Crew-Coach-Nonce`, and `X-Crew-Coach-Signature` (lowercase hex). Pocket enforces a two-minute clock window, one-time nonces, unique event IDs, 16 KiB event bodies, and an in-memory per-minute rate limit.
-- No raw passwords, OTPs, payment fields, account tokens, microphone recordings, search/destination text or unrestricted screenshots in coaching telemetry. Helper should send only redacted UI summaries and opaque local evidence references; Pocket removes common sensitive labels, URLs, long numeric sequences, and unrecognized error, rejection, or verification codes before persistence. No screenshot endpoint exists in Coach v1.
-- Helper Runtime is sole executor. Pocket outputs structured advice, never raw shell/ADB commands as executable instructions.
+- Helper is the only Android action executor. Pocket is a client of Helper's existing loopback Bridge at `http://127.0.0.1:8766`; Pocket never reads or sends the existing `X-Crew-Bridge-Token`.
+- The user enables Helper Coach in Helper's Crew Experience, copies its 64-character hex Coach secret, and pastes it into Pocket. Pocket stores the key in `~/.crew-pocket/helper-coach-v1.json` with owner-only file permissions. Pairing does not generate or display a replacement key.
+- Pocket polls every 2.5 seconds while paired. It requests `GET /coach/v1/events?since_event_id=<exclusive cursor>&limit=20`, deduplicates by `event_id`, advances to `next_cursor`, and drains pages while `has_more` is true. If Helper's bounded feed has aged out a cursor, Pocket safely replays retained events and relies on event-ID deduplication.
+- Every Bridge request is HMAC-SHA256 signed with `X-Coach-Timestamp` (epoch milliseconds), `X-Coach-Nonce` (UUID/hex), and lowercase-hex `X-Coach-Signature`. The canonical string is `UPPER_METHOD\nexact request-target including query\ntimestamp\nnonce\nlowercase SHA256(raw body)`. Helper enforces a 60-second clock window, nonce replay protection, loopback access and a 32 KiB request limit. Pocket also caps Bridge responses at 32 KiB.
+- Pocket does not open a new listener or expose the Helper secret in its dashboard response. The browser only submits the key to Pocket's same-origin pairing route; Pocket performs Bridge requests from the local Node runtime.
 
-## Message envelope
-All messages have: `protocol_version: 1`, `event_id`, `task_id`, `timestamp` (ISO 8601), `source` (`helper` or `pocket`), and `kind`.
+## Helper event feed
 
-### Helper -> Pocket
-`task_observation`: `task_type` (`maps.navigation|apple_music.search_play`), `app_package`, `app_version`, `ui_signature`, `step_index`, `ui_summary` (redacted; no destination or search text is required), `available_actions` (Runtime-advertised action identifiers), `previous_action`, `result` (`success|failed|unknown`), `error_code`, `failure_attribution` (`runtime_defect|interaction_issue|unknown`), and `evidence_refs` (opaque local ephemeral references only).
+The feed response is `{protocol_version, events, has_more, next_cursor}`. `since_event_id` is exclusive. Pocket accepts only these Helper event kinds and exact fields:
 
-`advice_validation`: `observation_event_id`, `advice_event_id`, `suggested_action_id`, `accepted`, `user_confirmed`, `ui_signature`, optional `rejection_code`. This is required before Helper may execute the suggested action.
+- `task_observation`: `protocol_version`, `event_id`, `task_id`, `timestamp`, `source`, `kind`, `app_package`, `goal`, `step_index`, structural `ui_summary`, `available_actions`, `active_skills`, string `previous_action`, `result`, `error_code`, `evidence_refs`.
+- `task_outcome`: `protocol_version`, `event_id`, `task_id`, `timestamp`, `source`, `kind`, `app_package`, `verified`, `verification_method`, `duration_ms`, `result`, `error_code`, `evidence_refs`.
+- `coach_action_result`: `protocol_version`, `event_id`, `task_id`, `timestamp`, `source`, `kind`, `observation_event_id`, `advice_event_id`, `suggested_action_id`, `status` (`executed|failed|cancelled`), `runtime_action_success`, `error_code`, `evidence_refs`.
 
-Supported action identifiers are `maps.focus_search`, `maps.enter_destination`, `maps.select_destination`, `maps.start_navigation`; `apple_music.focus_search`, `apple_music.search_catalog`, `apple_music.select_track`, `apple_music.play_selected`; and recovery controls `common.return_to_target_app`, `common.retry_last_action`, `common.focus_visible_control`, `common.request_user_confirmation`. User destinations and music queries stay in Helper Runtime; Pocket receives no search text or destination field. Every suggestion must still be in the exact current `available_actions` list.
+GoalIntent is a closed category: `MEDIA:PAUSE`, `MEDIA:NEXT`, `MEDIA:PREVIOUS`, `NAVIGATION:START`, `MEDIA:PLAY`, `MESSAGE:SEND`, `TEXT:TYPE_ONLY`, `SEARCH:RESULT`, `APP:OPEN`, or empty. Helper intentionally omits free-form goal text, query/result labels, screenshots, TAP targets, app version and UI fingerprint. Pocket does not infer them from `ui_summary`.
 
-`task_outcome`: `verified` boolean, `verification_method`, `duration_ms`, `skill_id` (optional), `evidence_refs`.
+Pocket coaching is restricted to `com.google.android.apps.maps` + `NAVIGATION:START`, and `com.apple.android.music` + `MEDIA:PLAY` or `SEARCH:RESULT`. Other app/goal pairs receive no advice. Only `inspect_ui` and `retry_previous_safe_tap` are accepted, with `{}` parameters, confidence at least 0.5, `requires_user_confirmation: false`, and an expiry no later than 60 seconds after the observation. `inspect_ui` uses `FRESH_OBSERVATION`. Retry is limited to a failed task observation where Helper advertises the safe retry: Maps uses `NAVIGATION_ACTIVE`; Apple Music `MEDIA:PLAY` uses `MEDIA_PLAYBACK_BECAME_ACTIVE`. The event schema does not expose the private postcondition for `SEARCH:RESULT`, so Pocket only suggests `inspect_ui` for that goal.
 
-### Pocket -> Helper
-`coach_advice`: `observation_event_id`, `ui_signature`, `diagnosis`, `suggested_action_id` (must be in available_actions), `expected_postcondition`, `confidence` (0..1), `expires_at`, `requires_user_confirmation`.
+## Advice and results
 
-`skill_candidate`: `skill_id`, `app_package`, `preconditions`, `action_sequence` (only allowlisted Runtime actions), `postconditions`, `evidence_refs`, `status: candidate`.
+Pocket sends `POST /coach/v1/advice` with the common v1 envelope (`source: pocket`, `kind: coach_advice`) plus `observation_event_id`, fixed safe `diagnosis`, `suggested_action_id`, empty `parameters`, `expected_postcondition`, `confidence`, `expires_at`, and `requires_user_confirmation`. It sends no target labels, arbitrary arguments, transcript, query, UI fingerprint or task generation.
 
-`code_change_proposal`: `repository`, `diagnosis`, `reproduction_steps`, `test_plan`, `proposed_diff_ref` (PR or patch reference). No automatic merge or install.
+HTTP 202 is only an accepted/queued receipt. Pocket stores that state and polls the same feed for `coach_action_result`, which it correlates by `advice_event_id` and additionally checks against the task, observation and action IDs. It separately correlates `task_outcome` by `task_id`; only a task-specific verified outcome is terminal success. An executed action is never treated as goal completion. A timeout or ambiguous POST result is marked unknown and is not automatically resubmitted.
 
-## State machine
-`observed -> diagnosed -> advice_proposed -> runtime_validated -> executed -> outcome_verified -> candidate_recorded`.
-Failure, timeout, changed foreground app or expired advice -> `aborted` and re-observe. Never assume a tap implies success.
+Pocket recognizes task success only when `verified` is true, `result` is `success`, the app/GoalIntent matches a supported task, and `verification_method` exactly matches a trusted `evidence_ref`. Maps accepts `NAVIGATION_TRANSITION_OBSERVED`; Apple Music playback accepts `MEDIA_PLAYBACK_BECAME_ACTIVE`. Generic `RUNTIME_VERIFIED`, TAP, or app-transition evidence alone does not count as either task's success. The current Helper source writes uppercase completion evidence into `verification_method` via `safeErrorCode`.
 
-Pocket Coach v1 currently uses a deterministic, bounded diagnostic policy for these two task templates. Advice is an action identifier and a postcondition; Pocket has no device-action executor. The Runtime must advertise the action on the current screen, validate it against the current app/UI signature, report validation, execute it once, then send a new observation. Pocket stops after three failed retries. Unknown/unadvertised actions produce no executable advice.
+## Skills and code proposals
 
-## Skill promotion
-- Candidate skills remain inactive by default.
-- Promotion requires two different successful task IDs with distinct outcome event IDs, explicit scope (package/version/UI signature), and an allowlisted Runtime verification method. A matching failed outcome demotes a Helper-validated skill back to candidate.
-- Do not use an unverified coach recommendation to bootstrap its own verification.
-- Keep provenance (task ID, observations, model/role version, verification method). Do not equate a model's verbal claim with an Android state assertion.
+- A verified Maps or Apple Music playback outcome creates a Pocket Role Skill candidate with app-package and GoalIntent scope plus Helper event provenance. The Maps skill postcondition is `NAVIGATION_TRANSITION_OBSERVED`; its safe retry postcondition remains `NAVIGATION_ACTIVE`. Apple Music uses `MEDIA_PLAYBACK_BECAME_ACTIVE` for both playback retry and verification. The same verified outcome may stage an inactive `skill_candidate` to Helper; its action sequence is limited to `inspect_ui`. Pocket requires two different verified task IDs and outcome event IDs before marking its candidate ready for review. It does not activate automatically; explicit user activation remains required.
+- `SEARCH:RESULT` can receive an `inspect_ui` coaching suggestion, but its current feed has no search-result verifier, so it cannot independently promote a skill.
+- A failed outcome can create a code-review prompt, but Pocket does not infer a Runtime defect from the outcome. The user must confirm that attribution and provide the diagnosis, reproduction steps and test plan. After explicit confirmation, Pocket accepts only a bounded Helper Java source/test diff, runs `git diff --check` and `./gradlew testDebugUnitTest --no-daemon` in a temporary checkout, pushes an isolated branch and opens a Draft PR. It never merges, deploys or installs an APK.
+- After the PR exists, Pocket sends Helper only a `code_change_proposal` containing its GitHub PR URL, diagnosis, reproduction steps and test plan. The Helper endpoint rejects inline patches and stages the reference as pending review.
 
-## First end-to-end acceptance (Runtime work still required)
-1. Helper runs Google Maps task with existing Runtime; a controlled failure emits redacted `task_observation`.
-2. Pocket receives authenticated event and suggests only a currently available Runtime action.
-3. Helper validates preconditions, executes once, then independently checks the postcondition.
-4. Both sides record same task ID; candidate stays inactive until promotion criteria.
-5. Test invalid auth, stale/duplicate advice, unexpected action ID, UI change, sensitive-screen redaction, offline Pocket and timeout; Helper must continue functioning without Pocket.
-6. Repeat for Apple Music, verifying playback state rather than only opening the app.
+## Pocket implementation and verification boundary
 
-## Implementation gates
-1. Inspect existing Helper Connected Server Mode, Crew Experience and Pocket bridge/role/memory; reuse existing interfaces.
-2. Implement authenticated loopback event ingestion and read-only coaching first.
-3. Add Runtime action allowlist and postcondition verification.
-4. Add candidate skill storage and review UI.
-5. Separately implement code-change proposals as PRs with tests and explicit approval, never direct APK mutation.
-
-## Pocket implementation
-- `lib/helper-coach/protocol.js`, `engine.js`, `service.js`, `store.js`, and `http.js` implement the Pocket-side v1 boundary and local ledger.
-- `lib/skills/registry.js` stores scoped candidates and only activates after two distinct authenticated verified task outcomes. Successful evidence is also retained in the existing Role Memory store with `TOOL` provenance.
-- `role-helper-coach` is seeded as a non-deletable built-in Role. The Growth Center is backed only by this local event/skill ledger; empty state has no sample metrics. A valid signed v1 event is the only signal that the paired Runtime supports the protocol; the UI does not infer support from pairing alone.
-- `lib/helper-coach/code-pr.js` accepts only explicitly confirmed diffs under Helper Java source/test directories, clones `magic76/crew-helper` into a temporary checkout, runs `git diff --check` and `./gradlew testDebugUnitTest --no-daemon`, pushes an isolated branch, then opens a Draft PR. It never merges, deploys, or installs. A Runtime-attributed failure automatically creates a source-review suggestion; the user reviews/refines its diagnosis and supplies the patch before the isolated test/PR step. This workflow has not opened a real Helper PR in the absence of such a task.
-- Run focused checks with `node --test test/helper-coach.integration.test.js`; the Mock Adapter covers the HTTP route, HMAC, replay/stale advice, Maps/Apple Music flows, bounded retries, provenance and code-patch allowlists. These tests do not validate a physical phone/app.
-- Local UI routes are `/api/helper-coach/dashboard`, `/pair`, `/revoke`, `/code-proposals`, and `/code-pr`; pairing/configuration POSTs require a same-origin browser action. The Helper event endpoint is `/api/helper-coach/events`, loopback-only and HMAC-authenticated.
-
-## Required Helper Runtime work
-The current `magic76/crew-helper` Bridge exposes its existing authenticated operations but has no Coach event or advice-validation API. Before a physical task can run, Helper must add an explicit opt-in Coach pairing screen separate from the 8766 bridge token; store the Coach key privately; sign outbound event requests with nonce/timestamp; emit the redacted envelope above with app version, UI signature and current task-specific action allowlist; validate advice expiry/action/UI state before each execution; confirm any system permission request; and emit `advice_validation`, fresh observations, and task-specific outcome verifiers. It must report `navigation_active` (a planned route alone is not enough) and require `playback_active_and_track_matches` for Apple Music.
-
-Helper must also report task failure attribution only from its Runtime diagnosis. A user interaction problem cannot create a code-fix task. For Maps the success verifier must be `navigation_active` (a route preview is not enough); for Apple Music it must be `playback_active_and_track_matches`. The next cross-repository work is a canonical Helper contract/API implementation and its Android tests; this Pocket PR does not modify the Helper repository.
+- `lib/helper-coach/bridge-client.js` implements loopback requests, exact-target HMAC signing and response limits. `protocol.js`, `engine.js`, `service.js`, `store.js` and `http.js` normalize the strict schema, poll/deduplicate events, create constrained advice and track action/task results.
+- Pairing is entered in the Growth Center. Runtime polling runs in the existing Node service; the APK and Android permissions are unchanged. A service restart is needed after deploying the new JavaScript, but this change does not restart it.
+- The Growth Center displays actual local events, queue states, candidate provenance and outcomes; empty metrics remain empty. Role Memory uses the existing `TOOL` provenance path.
+- Focused checks use `node --test test/helper-coach.integration.test.js`. Mock Bridge tests exercise HMAC, cursor paging/deduplication, receipt and outcome correlation, supported task policies, candidate staging and PR-reference staging. These checks do not validate Helper's running Bridge, pairing UI, or physical-device task completion.

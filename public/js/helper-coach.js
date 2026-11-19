@@ -11,6 +11,8 @@
   const noticeNode = document.getElementById('helper-coach-notice');
   const pairButton = document.getElementById('helper-coach-pair');
   const revokeButton = document.getElementById('helper-coach-revoke');
+  const pairForm = document.getElementById('helper-coach-pair-form');
+  const pairKey = document.getElementById('helper-coach-pair-key');
   const pairSecret = document.getElementById('helper-coach-pair-secret');
   let currentDashboard = null;
   let loading = false;
@@ -58,23 +60,23 @@
 
   function renderStatus(data) {
     const label = data.status === 'runtime_connected'
-      ? '近期收到已配對 Runtime 事件'
-      : data.status === 'waiting_for_helper_runtime' && data.runtimeProtocolAvailable
-        ? 'Coach v1 曾連線 · 目前等待下一個事件'
-        : data.status === 'waiting_for_helper_runtime'
-          ? '等待 Helper Runtime 支援 Coach v1'
+      ? 'Helper Bridge 已連線並收到事件'
+      : data.status === 'bridge_connected_waiting'
+        ? 'Bridge 已連線 · 等待 Helper 任務事件'
+        : data.status === 'bridge_unavailable'
+          ? '等待 Helper Bridge 連線'
           : '尚未配對';
     const style = data.status === 'runtime_connected'
       ? 'border-emerald-500/30 bg-emerald-500/5 text-emerald-100'
-      : data.status === 'waiting_for_helper_runtime'
+      : ['bridge_connected_waiting', 'bridge_unavailable'].includes(data.status)
         ? 'border-amber-500/30 bg-amber-500/5 text-amber-100'
         : 'border-slate-700 bg-slate-900/70 text-slate-300';
     statusNode.className = `rounded-2xl border p-3 text-[11px] ${style}`;
     statusNode.innerHTML = `<div class="font-semibold">${escapeHtml(label)}</div>
       <div class="mt-1 text-[10px] opacity-80">${escapeHtml(data.helperCompatibility || '')}</div>
-      <div class="mt-1 text-[9px] opacity-70">診斷方式：Pocket v1 的明確錯誤碼規則與任務步驟；目前不使用 UI 畫面截圖或模擬成功數據。</div>
-      <div class="mt-1 text-[9px] opacity-60">最後事件：${escapeHtml(formatTime(data.runtimeLastSeenAt))}</div>`;
-    pairButton.classList.toggle('hidden', Boolean(data.enabled));
+      <div class="mt-1 text-[9px] opacity-70">策略只使用 app_package、GoalIntent、結果代碼及 Helper 公告的安全動作；不讀取查詢文字、目標標籤或畫面內容。</div>
+      <div class="mt-1 text-[9px] opacity-60">Bridge 最近連線：${escapeHtml(formatTime(data.bridgeLastReachableAt))} · 最近事件：${escapeHtml(formatTime(data.runtimeLastSeenAt))}${data.bridgeLastError ? ` · ${escapeHtml(data.bridgeLastError)}` : ''}</div>`;
+    pairForm.classList.toggle('hidden', Boolean(data.enabled));
     revokeButton.classList.toggle('hidden', !data.enabled);
   }
 
@@ -99,7 +101,7 @@
     });
     const byDate = new Map(buckets.map(item => [item.key, item]));
     for (const task of tasks) {
-      if (!task.outcome?.at) continue;
+      if (!task.coachSupported || !task.outcome?.at) continue;
       const key = new Date(task.outcome.at).toLocaleDateString('en-CA');
       const bucket = byDate.get(key);
       if (!bucket) continue;
@@ -134,7 +136,8 @@
       return `<article class="rounded-xl border ${active ? 'border-emerald-500/25' : 'border-amber-500/20'} bg-slate-950/60 p-2.5">
         <div class="flex items-start justify-between gap-2"><strong class="text-[11px] text-slate-100">${escapeHtml(skill.title)}</strong>
           <span class="shrink-0 rounded-full border px-2 py-0.5 text-[9px] ${active ? 'border-emerald-500/30 text-emerald-200' : 'border-amber-500/30 text-amber-200'}">${badge}</span></div>
-        <p class="mt-1 text-[9px] text-slate-400">範圍：${escapeHtml(skill.appPackage || '—')} · ${escapeHtml(skill.appVersion || '—')} · UI ${escapeHtml(skill.uiSignature || '—')}</p>
+        <p class="mt-1 text-[9px] text-slate-400">範圍：${escapeHtml(skill.appPackage || '—')} · ${escapeHtml(skill.goal || '—')}</p>
+        ${skill.readyForReview ? '<p class="mt-1 text-[9px] text-teal-200">已有兩筆獨立驗證結果，可到 Helper 檢視並由使用者啟用。</p>' : ''}
         <p class="mt-1 text-[9px] text-slate-500">成功率：${successRate} (${evidenceCount} 個獨立結果)；驗證方式：${escapeHtml(skill.verification?.method || '尚未完成獨立驗證')}</p>
         <details class="mt-2 text-[9px] text-slate-400"><summary class="cursor-pointer">查看前置條件與操作步驟</summary>
           <p class="mt-1">前置：${escapeHtml((skill.preconditions || []).join(' · ') || '—')}</p>
@@ -155,12 +158,16 @@
       return;
     }
     node.innerHTML = tasks.slice(0, 30).map(task => {
-      const outcome = task.outcome?.verified ? '驗證成功' : task.outcome ? '未驗證成功' : task.stage;
-      const style = task.outcome?.verified ? 'text-emerald-200' : task.outcome ? 'text-rose-200' : 'text-slate-300';
+      const outcome = !task.coachSupported ? '策略範圍外' : task.outcome?.verified ? '驗證成功' : task.outcome ? '未驗證成功' : task.stage;
+      const style = task.coachSupported && task.outcome?.verified ? 'text-emerald-200' : task.coachSupported && task.outcome ? 'text-rose-200' : 'text-slate-300';
       return `<article class="rounded-xl border border-slate-800 bg-slate-950/60 p-2.5">
         <div class="flex items-start justify-between gap-2"><strong class="text-[10px] text-slate-100">${escapeHtml(task.label)}</strong><span class="${style} text-[9px]">${escapeHtml(outcome)}</span></div>
-        <p class="mt-1 text-[9px] text-slate-500">${escapeHtml(task.appPackage)} ${escapeHtml(task.appVersion)} · ${escapeHtml(formatTime(task.updatedAt))}</p>
-        <p class="mt-1 text-[9px] text-slate-400">重試 ${Number(task.retryCount) || 0}/${Number(task.maxRetries) || 3}${task.lastFailureCause ? ` · 失敗原因 ${escapeHtml(task.lastFailureCause)}` : ''}${task.failureAttribution ? ` · 歸因 ${escapeHtml(task.failureAttribution)}` : ''}</p>
+        <p class="mt-1 text-[9px] text-slate-500">${escapeHtml(task.appPackage)} · ${escapeHtml(task.goal || 'GoalIntent 未分類')} · ${escapeHtml(formatTime(task.updatedAt))}</p>
+        <p class="mt-1 text-[9px] text-slate-400">安全重試 ${Number(task.retryCount) || 0}/${Number(task.maxRetries) || 3}${task.lastFailureCause ? ` · 錯誤代碼 ${escapeHtml(task.lastFailureCause)}` : ''}</p>
+        ${(task.advice || []).length ? `<details class="mt-2 text-[9px] text-slate-400"><summary class="cursor-pointer">查看 Pocket 建議與 Runtime 結果</summary><ul class="mt-1 space-y-1">${task.advice.map(item => {
+          const status = { sending: '送出中', queued: '已排隊，等待 Runtime 結果', executed: 'Runtime 已執行', failed: 'Runtime 執行失敗', cancelled: 'Runtime 已取消', rejected: 'Helper 拒絕', acceptance_unknown: '送達狀態不明', expired_no_result: '建議已過期，尚無 Runtime 結果' }[item.status] || item.status;
+          return `<li>${escapeHtml(item.actionId)} · ${escapeHtml(status)}${item.runtimeActionSuccess ? ' · 操作成功，尚不代表任務完成' : ''}${item.errorCode ? ` · ${escapeHtml(item.errorCode)}` : ''} · ${escapeHtml(formatTime(item.completedAt || item.createdAt))}</li>`;
+        }).join('')}</ul></details>` : ''}
       </article>`;
     }).join('');
   }
@@ -177,12 +184,13 @@
   function renderCodeProposals(proposals = [], tasks = []) {
     const node = document.getElementById('helper-coach-code');
     const taskEligible = tasks.some(task => task.failureAttribution === 'runtime_defect' && ['failed', 'aborted'].includes(task.stage));
-    const statusLabels = { needs_code_review: '待檢查程式來源', proposal_only: '修正提案已整理', draft_pr_opened: 'Draft PR 已建立' };
+    const statusLabels = { needs_code_review: '待確認是否為 Runtime 缺陷', proposal_only: '修正提案已整理', draft_pr_opened: 'Draft PR 已建立', staged_in_helper: '已送 Helper 待審查' };
     const entries = proposals.map(proposal => `<article class="rounded-xl border border-slate-800 bg-slate-950/60 p-2.5">
       <div class="flex items-start justify-between gap-2"><strong class="text-[10px] text-slate-100">${escapeHtml(proposal.diagnosis)}</strong><span class="text-[9px] text-slate-400">${escapeHtml(statusLabels[proposal.status] || proposal.status)}</span></div>
-      <p class="mt-1 text-[9px] text-slate-500">${escapeHtml(proposal.taskId)} · ${escapeHtml(formatTime(proposal.createdAt))}${proposal.prUrl ? ` · <a class="text-teal-300 underline" href="${escapeHtml(proposal.prUrl)}" target="_blank" rel="noopener">Draft PR</a>` : ''}</p>
+      <p class="mt-1 text-[9px] text-slate-500">${escapeHtml(proposal.taskId)} · ${escapeHtml(formatTime(proposal.createdAt))}${proposal.prUrl ? ` · <a class="text-teal-300 underline" href="${escapeHtml(proposal.prUrl)}" target="_blank" rel="noopener">Draft PR</a>` : ''}${proposal.helperStageStatus ? ` · Helper：${escapeHtml(proposal.helperStageStatus)}` : ''}</p>
       ${proposal.status === 'needs_code_review' ? `<details class="mt-2 rounded-lg border border-indigo-500/20 p-2" open><summary class="cursor-pointer text-[9px] text-indigo-200">檢查並整理程式改善計畫</summary>
         <form class="mt-2 space-y-2" data-coach-refine-proposal="${escapeHtml(proposal.id)}">
+          <label class="flex items-start gap-2 text-[9px] text-amber-200"><input name="runtimeDefectConfirmed" type="checkbox" required class="mt-0.5">我確認這次失敗可能來自 Helper Runtime 程式缺陷，並同意進行原始碼檢查。</label>
           <textarea name="diagnosis" required minlength="12" maxlength="1200" rows="2" class="w-full rounded-lg border border-slate-700 bg-slate-950 p-2 text-[10px] text-slate-100">${escapeHtml(proposal.diagnosis)}</textarea>
           <textarea name="reproductionSteps" required rows="3" class="w-full rounded-lg border border-slate-700 bg-slate-950 p-2 text-[10px] text-slate-100">${escapeHtml((proposal.reproductionSteps || []).join('\n'))}</textarea>
           <textarea name="testPlan" required rows="3" class="w-full rounded-lg border border-slate-700 bg-slate-950 p-2 text-[10px] text-slate-100">${escapeHtml((proposal.testPlan || []).join('\n'))}</textarea>
@@ -225,6 +233,7 @@
     const splitLines = key => String(values.get(key) || '').split(/\r?\n/).map(line => line.trim()).filter(Boolean);
     const result = await request('/api/helper-coach/code-proposals', {
       method: 'POST', body: JSON.stringify({ proposalId: form.getAttribute('data-coach-refine-proposal'), diagnosis: values.get('diagnosis'),
+        runtimeDefectConfirmed: values.get('runtimeDefectConfirmed') === 'on',
         reproductionSteps: splitLines('reproductionSteps'), testPlan: splitLines('testPlan') })
     });
     showNotice(`程式改善提案已保存：${result.proposal.id}`);
@@ -243,7 +252,9 @@
           title: values.get('title'), patch: values.get('patch'), confirmed: true
         })
       });
-      showNotice(`測試完成，Draft PR 已建立：${result.prUrl}`);
+      showNotice(result.helperStage?.staged
+        ? `測試完成、Draft PR 已建立並送到 Helper 待審查：${result.prUrl}`
+        : `測試完成，Draft PR 已建立：${result.prUrl}${result.helperStage?.reason ? ` · Helper 提案未送達（${result.helperStage.reason}）` : ''}`);
       await refresh();
     } catch (error) {
       showError(error.message);
@@ -259,28 +270,15 @@
   pairButton?.addEventListener('click', async () => {
     pairButton.disabled = true;
     try {
-      const result = await request('/api/helper-coach/pair', { method: 'POST', body: '{}' });
+      const secret = String(pairKey?.value || '').trim();
+      if (!/^[a-fA-F0-9]{64}$/.test(secret)) throw new Error('請貼上 Helper 顯示的 64 位十六進位 Coach 金鑰。');
+      const result = await request('/api/helper-coach/pair', { method: 'POST', body: JSON.stringify({ secret }) });
+      if (pairKey) pairKey.value = '';
       pairSecret.classList.remove('hidden');
-      pairSecret.replaceChildren();
-      const warning = document.createElement('p');
-      warning.className = 'text-[10px] text-amber-100';
-      warning.textContent = result.note;
-      const secret = document.createElement('code');
-      secret.className = 'mt-2 block break-all rounded-lg bg-black/40 p-2 text-[10px] text-teal-100';
-      secret.textContent = result.pairingSecret;
-      const copy = document.createElement('button');
-      copy.type = 'button';
-      copy.className = 'mt-2 min-h-9 rounded-lg border border-slate-700 px-3 text-[10px] text-slate-200';
-      copy.textContent = '複製配對金鑰';
-      copy.addEventListener('click', async () => {
-        await navigator.clipboard?.writeText(result.pairingSecret);
-        copy.textContent = '已複製';
-      });
-      pairSecret.append(warning, secret, copy);
-      window.setTimeout(() => { secret.textContent = '配對金鑰已從畫面清除'; }, 60_000);
+      pairSecret.textContent = result.note;
       await refresh();
     } catch (error) { showError(error.message); }
-    finally { pairButton.disabled = false; }
+    finally { if (pairKey) pairKey.value = ''; pairButton.disabled = false; }
   });
   revokeButton?.addEventListener('click', async () => {
     if (!window.confirm('撤銷 Helper Coach 配對金鑰？')) return;

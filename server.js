@@ -115,6 +115,7 @@ const { buildTurnResult, normalizeResultStatus } = require('./lib/turn-result');
 const { saveExecutionFeedback, enrichExecutionHistory } = require('./lib/execution-feedback');
 const { defaultToolImprovementStore } = require('./lib/tool-improvement/store');
 const { HelperCoachService } = require('./lib/helper-coach/service');
+const { HelperCoachBridgeClient } = require('./lib/helper-coach/bridge-client');
 const { HelperCodePRService } = require('./lib/helper-coach/code-pr');
 const { handleHelperCoachRoute } = require('./lib/helper-coach/http');
 const { renderVisualAnswer } = require('./lib/visual-answer');
@@ -138,8 +139,10 @@ const dreamingManager = new DreamingManager({
 });
 const helperCoachService = new HelperCoachService({
   skillRegistry: defaultSkillRegistry,
-  memoryProvider: defaultMemoryProvider
+  memoryProvider: defaultMemoryProvider,
+  bridgeClient: new HelperCoachBridgeClient()
 });
+helperCoachService.startPolling();
 const helperCodePRService = new HelperCodePRService();
 
 const socialAccounts = createSocialAccounts({ homeDir: RUNTIME_HOME });
