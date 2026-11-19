@@ -114,6 +114,10 @@ const { getDefaultModel } = require('./lib/model-runtime');
 const { buildTurnResult, normalizeResultStatus } = require('./lib/turn-result');
 const { saveExecutionFeedback, enrichExecutionHistory } = require('./lib/execution-feedback');
 const { defaultToolImprovementStore } = require('./lib/tool-improvement/store');
+const { HelperCoachService } = require('./lib/helper-coach/service');
+const { HelperCoachBridgeClient } = require('./lib/helper-coach/bridge-client');
+const { HelperCodePRService } = require('./lib/helper-coach/code-pr');
+const { handleHelperCoachRoute } = require('./lib/helper-coach/http');
 const { renderVisualAnswer } = require('./lib/visual-answer');
 const { createSocialAccounts } = require('./lib/social-accounts');
 const { createSocialDraftGenerator } = require('./lib/social-draft');
@@ -133,6 +137,13 @@ const dreamingManager = new DreamingManager({
   getRole,
   getProvider
 });
+const helperCoachService = new HelperCoachService({
+  skillRegistry: defaultSkillRegistry,
+  memoryProvider: defaultMemoryProvider,
+  bridgeClient: new HelperCoachBridgeClient()
+});
+helperCoachService.startPolling();
+const helperCodePRService = new HelperCodePRService();
 
 const socialAccounts = createSocialAccounts({ homeDir: RUNTIME_HOME });
 const authTunnelController = createAuthTunnelController({ homeDir: RUNTIME_HOME });
@@ -4176,7 +4187,13 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
-  if (pathname === '/api/visual-answer' && req.method === 'POST') {
+  if (pathname.startsWith('/api/helper-coach/')) {
+    return handleHelperCoachRoute(req, res, pathname, {
+      service: helperCoachService,
+      codePRService: helperCodePRService,
+      isLoopbackAddress
+    });
+  } else if (pathname === '/api/visual-answer' && req.method === 'POST') {
     return handleVisualAnswer(req, res);
   } else if (pathname === '/api/social/auth-tunnel' && ['GET', 'POST'].includes(req.method)) {
     return handleAuthTunnelControl(req, res);
