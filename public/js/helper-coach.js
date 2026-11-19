@@ -75,19 +75,43 @@
     statusNode.innerHTML = `<div class="font-semibold">${escapeHtml(label)}</div>
       <div class="mt-1 text-[10px] opacity-80">${escapeHtml(data.helperCompatibility || '')}</div>
       <div class="mt-1 text-[9px] opacity-70">策略只使用 app_package、GoalIntent、結果代碼及 Helper 公告的安全動作；不讀取查詢文字、目標標籤或畫面內容。</div>
+      <div class="mt-1 text-[9px] opacity-70">Pocket 可追蹤 task_received、觀察與終態；目前 Helper v1 尚未送出 task_received，因此第一筆觀察前的已接收訊息仍不可見。</div>
       <div class="mt-1 text-[9px] opacity-60">Bridge 最近連線：${escapeHtml(formatTime(data.bridgeLastReachableAt))} · 最近事件：${escapeHtml(formatTime(data.runtimeLastSeenAt))}${data.bridgeLastError ? ` · ${escapeHtml(data.bridgeLastError)}` : ''}</div>`;
     pairForm.classList.toggle('hidden', Boolean(data.enabled));
     revokeButton.classList.toggle('hidden', !data.enabled);
   }
 
   function renderMetrics(metrics = {}) {
-    document.getElementById('helper-coach-metric-observed').textContent = metrics.observedTasks ?? '—';
+    document.getElementById('helper-coach-metric-observed').textContent = metrics.trackedTasks ?? '—';
+    document.getElementById('helper-coach-metric-observed-detail').textContent =
+      `收件回執 ${metrics.receivedTasks ?? 0} · 觀察 ${metrics.observedTasks ?? 0} · 尚無終態 ${metrics.openTasks ?? 0}`;
     document.getElementById('helper-coach-metric-success').textContent = Number.isFinite(metrics.successRate)
-      ? `${Math.round(metrics.successRate * 100)}% (${metrics.verifiedSuccesses}/${metrics.completedTasks})` : '—';
-    document.getElementById('helper-coach-metric-failed').textContent = metrics.completedTasks
-      ? String(metrics.failedOutcomes ?? 0) : '—';
-    document.getElementById('helper-coach-metric-retries').textContent = metrics.observedTasks
-      ? String(metrics.retryCount ?? 0) : '—';
+      ? `${Math.round(metrics.successRate * 100)}% (${metrics.verifiedSuccesses}/${metrics.verifiableOutcomes})` : '—';
+    document.getElementById('helper-coach-metric-success-detail').textContent =
+      `${metrics.verifiableOutcomes ?? 0} 個有專屬驗證規則的終態`;
+    document.getElementById('helper-coach-metric-failed').textContent = String(metrics.failedOutcomes ?? 0);
+    document.getElementById('helper-coach-metric-failed-detail').textContent =
+      `終態 ${metrics.completedTasks ?? 0} · 無驗證規則 ${metrics.unverifiableOutcomes ?? 0}`;
+    document.getElementById('helper-coach-metric-retries').textContent = String(metrics.retryCount ?? 0);
+    document.getElementById('helper-coach-metric-retries-detail').textContent =
+      `Pocket 建議 ${metrics.adviceCount ?? 0} · 策略覆蓋 ${metrics.coachSupportedTasks ?? 0}/${metrics.trackedTasks ?? 0}`;
+  }
+
+  function renderCoverage(coverage = []) {
+    const node = document.getElementById('helper-coach-coverage');
+    if (!coverage.length) {
+      node.innerHTML = '<p class="py-2 text-center text-[10px] text-slate-500">尚未收到 Helper 任務事件。</p>';
+      return;
+    }
+    node.innerHTML = coverage.map(item => {
+      const strategy = item.coachSupported ? '有教練策略' : '策略尚未涵蓋';
+      const verifier = item.verificationSupported ? '有驗證規則' : '無驗證規則';
+      return `<article class="rounded-xl border border-slate-800 bg-slate-950/50 px-2.5 py-2">
+        <div class="flex items-start justify-between gap-2"><strong class="text-[10px] text-slate-200">${escapeHtml(item.label)}</strong><span class="shrink-0 text-[9px] ${item.verificationSupported ? 'text-teal-200' : 'text-amber-200'}">${verifier}</span></div>
+        <p class="mt-1 text-[9px] text-slate-500">${escapeHtml(item.appPackage)} · ${escapeHtml(item.goal || 'GoalIntent 未分類')} · ${strategy}</p>
+        <p class="mt-1 text-[9px] text-slate-400">任務 ${Number(item.taskCount) || 0} · 收件回執 ${Number(item.receivedTasks) || 0} · 觀察 ${Number(item.observationCount) || 0} · 已收終態 ${Number(item.tasksWithOutcome) || 0} · 驗證成功 ${Number(item.verifiedSuccesses) || 0} · 可驗證失敗 ${Number(item.failedOutcomes) || 0} · 無驗證規則 ${Number(item.unverifiableOutcomes) || 0}</p>
+      </article>`;
+    }).join('');
   }
 
   function renderTrend(tasks = []) {
@@ -101,7 +125,7 @@
     });
     const byDate = new Map(buckets.map(item => [item.key, item]));
     for (const task of tasks) {
-      if (!task.coachSupported || !task.outcome?.at) continue;
+      if (!task.verificationSupported || !task.outcome?.at) continue;
       const key = new Date(task.outcome.at).toLocaleDateString('en-CA');
       const bucket = byDate.get(key);
       if (!bucket) continue;
@@ -158,11 +182,23 @@
       return;
     }
     node.innerHTML = tasks.slice(0, 30).map(task => {
-      const outcome = !task.coachSupported ? '策略範圍外' : task.outcome?.verified ? '驗證成功' : task.outcome ? '未驗證成功' : task.stage;
-      const style = task.coachSupported && task.outcome?.verified ? 'text-emerald-200' : task.coachSupported && task.outcome ? 'text-rose-200' : 'text-slate-300';
+      const stageLabels = {
+        received: 'Helper 已接收，等待首次觀察', observed: '已收到觀察', advice_submitting: '教練建議送出中', awaiting_action_result: '等待操作結果',
+        awaiting_observation: '等待 Helper 下一次觀察', awaiting_outcome: '等待任務終態',
+        abstained: 'Pocket 暫不建議，交由 Helper 重新規劃', stale_observation: '觀察已過期',
+        retry_limit_reached: '已達安全重試上限', outcome_verified: '已獨立驗證成功', failed: '任務未通過驗證'
+      };
+      const outcome = task.verificationStatus === 'verified' ? 'Pocket 已獨立驗證成功'
+        : task.verificationStatus === 'unverified' ? '未通過專屬驗證'
+          : task.verificationStatus === 'no_verifier' ? '已收終態 · Pocket 無驗證規則'
+            : stageLabels[task.stage] || task.stage;
+      const style = task.verificationStatus === 'verified' ? 'text-emerald-200'
+        : task.verificationStatus === 'unverified' ? 'text-rose-200'
+          : task.verificationStatus === 'no_verifier' ? 'text-amber-200' : 'text-slate-300';
       return `<article class="rounded-xl border border-slate-800 bg-slate-950/60 p-2.5">
         <div class="flex items-start justify-between gap-2"><strong class="text-[10px] text-slate-100">${escapeHtml(task.label)}</strong><span class="${style} text-[9px]">${escapeHtml(outcome)}</span></div>
         <p class="mt-1 text-[9px] text-slate-500">${escapeHtml(task.appPackage)} · ${escapeHtml(task.goal || 'GoalIntent 未分類')} · ${escapeHtml(formatTime(task.updatedAt))}</p>
+        <p class="mt-1 text-[9px] text-slate-500">${task.coachSupported ? '教練策略可用' : '教練策略未涵蓋'} · ${task.verificationSupported ? '有專屬驗證規則' : '尚無專屬驗證規則'} · 觀察 ${Number(task.observationCount) || 0} 次</p>
         <p class="mt-1 text-[9px] text-slate-400">安全重試 ${Number(task.retryCount) || 0}/${Number(task.maxRetries) || 3}${task.lastFailureCause ? ` · 錯誤代碼 ${escapeHtml(task.lastFailureCause)}` : ''}</p>
         ${(task.advice || []).length ? `<details class="mt-2 text-[9px] text-slate-400"><summary class="cursor-pointer">查看 Pocket 建議與 Runtime 結果</summary><ul class="mt-1 space-y-1">${task.advice.map(item => {
           const status = { sending: '送出中', queued: '已排隊，等待 Runtime 結果', executed: 'Runtime 已執行', failed: 'Runtime 執行失敗', cancelled: 'Runtime 已取消', rejected: 'Helper 拒絕', suppressed_terminal: '任務已終止，Pocket 未送出', suppressed_awaiting_outcome: '等待 Helper 任務終態，Pocket 暫停建議', acceptance_unknown: '送達狀態不明', expired_no_result: '建議已過期，尚無 Runtime 結果' }[item.status] || item.status;
@@ -212,6 +248,7 @@
     currentDashboard = data;
     renderStatus(data);
     renderMetrics(data.metrics);
+    renderCoverage(data.coverage);
     renderTrend(data.tasks);
     renderSkills(data.skills);
     renderTasks(data.tasks);
