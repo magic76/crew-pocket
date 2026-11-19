@@ -25,6 +25,7 @@ class MockHelperBridge {
     this.clock = clock;
     this.events = [];
     this.advice = [];
+    this.adviceRejection = null;
     this.skills = [];
     this.codeProposals = [];
     this.requests = [];
@@ -90,6 +91,9 @@ class MockHelperBridge {
     try { body = JSON.parse(rawBody.toString('utf8')); }
     catch (_) { return this.respond(res, 400, { success: false, error: 'INVALID_JSON' }); }
     if (pathname === '/coach/v1/advice') {
+      if (this.adviceRejection) {
+        return this.respond(res, this.adviceRejection.status, this.adviceRejection.body);
+      }
       this.advice.push(body);
       return this.respond(res, 202, {
         protocol_version: 1, event_id: body.event_id, advice_event_id: body.event_id,
@@ -323,6 +327,74 @@ test('a successful inspect is not repeated without a fresh Helper safe-retry sig
   assert.equal(bridge.advice[1].suggested_action_id, 'retry_previous_safe_tap');
   assert.equal(bridge.advice[1].expected_postcondition, 'NAVIGATION_ACTIVE');
   assert.equal(state.tasks[taskId].adviceCount, 2);
+});
+
+test('successful RUNTIME_VERIFIED observations wait for the terminal outcome without advice', async t => {
+  const { bridge, store, service } = await fixture(t);
+  const taskId = 'runtime-verified-observation-001';
+  const observation = observationFields({
+    app: 'com.apple.android.music', goal: 'MEDIA:PLAY', result: 'success', retry: false
+  });
+  observation.error_code = 'RUNTIME_VERIFIED';
+  observation.evidence_refs = ['RUNTIME_VERIFIED'];
+  bridge.enqueue('task_observation', taskId, observation);
+
+  await service.pollBridge();
+  let state = await store.snapshot();
+  assert.equal(bridge.advice.length, 0);
+  assert.equal(state.tasks[taskId].stage, 'awaiting_outcome');
+  assert.equal(state.tasks[taskId].adviceCount, 0);
+
+  bridge.enqueue('task_outcome', taskId, outcomeFields('com.apple.android.music', {
+    method: 'MEDIA_PLAYBACK_BECAME_ACTIVE', evidence: 'MEDIA_PLAYBACK_BECAME_ACTIVE'
+  }));
+  await service.pollBridge();
+  state = await store.snapshot();
+  assert.equal(state.tasks[taskId].stage, 'outcome_verified');
+  assert.equal(state.tasks[taskId].outcome.verified, true);
+  assert.equal(bridge.advice.length, 0);
+});
+
+test('an outcome already present in fetched feed pages suppresses earlier observation advice', async t => {
+  const { bridge, store, service } = await fixture(t);
+  const taskId = 'terminal-outcome-same-poll-001';
+  bridge.enqueue('task_observation', taskId, observationFields({
+    app: 'com.apple.android.music', goal: 'MEDIA:PLAY', result: 'failed', retry: true
+  }));
+  for (let index = 0; index < 19; index++) {
+    bridge.enqueue('task_observation', `terminal-feed-filler-${String(index).padStart(2, '0')}`, observationFields({
+      goal: 'APP:OPEN', result: 'unknown', retry: false
+    }));
+  }
+  bridge.enqueue('task_outcome', taskId, outcomeFields('com.apple.android.music', {
+    method: 'MEDIA_PLAYBACK_BECAME_ACTIVE', evidence: 'MEDIA_PLAYBACK_BECAME_ACTIVE'
+  }));
+
+  const poll = await service.pollBridge();
+  assert.equal(poll.pages, 2, 'terminal outcome is on the next feed page');
+  const state = await store.snapshot();
+  assert.equal(bridge.advice.length, 0, 'terminal outcome is reconciled before any advice POST');
+  assert.equal(state.tasks[taskId].stage, 'outcome_verified');
+  assert.equal(state.tasks[taskId].outcome.verified, true);
+  assert.equal(state.tasks[taskId].adviceCount || 0, 0);
+});
+
+test('422 Helper decision codes are retained in advice state and dashboard output', async t => {
+  const { bridge, store, service } = await fixture(t);
+  const taskId = 'advice-rejected-decision-001';
+  bridge.adviceRejection = { status: 422, body: { decision: 'STALE_TASK' } };
+  bridge.enqueue('task_observation', taskId, observationFields({ result: 'failed', retry: false }));
+
+  await service.pollBridge();
+  const state = await store.snapshot();
+  const advice = Object.values(state.advice).find(item => item.taskId === taskId);
+  assert.equal(advice.status, 'rejected');
+  assert.equal(advice.errorCode, 'HTTP_422');
+  assert.equal(advice.runtimeDecision, 'STALE_TASK');
+  const dashboard = await service.dashboard();
+  const task = dashboard.tasks.find(item => item.taskId === taskId);
+  assert.equal(task.advice[0].runtimeDecision, 'STALE_TASK');
+  assert.ok(dashboard.events.some(event => event.kind === 'coach_advice' && event.summary.includes('STALE_TASK')));
 });
 
 test('normalizer rejects old task fields and preserves only the Helper v1 allowlist', () => {
