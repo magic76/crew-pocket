@@ -332,6 +332,14 @@ test('a successful inspect is not repeated without a fresh Helper safe-retry sig
 test('successful RUNTIME_VERIFIED observations wait for the terminal outcome without advice', async t => {
   const { bridge, store, service } = await fixture(t);
   const taskId = 'runtime-verified-observation-001';
+  bridge.enqueue('task_observation', taskId, observationFields({
+    app: 'com.apple.android.music', goal: 'MEDIA:PLAY', result: 'failed', retry: true
+  }));
+  for (let index = 0; index < 19; index++) {
+    bridge.enqueue('task_observation', `runtime-verified-filler-${String(index).padStart(2, '0')}`, observationFields({
+      goal: 'APP:OPEN', result: 'unknown', retry: false
+    }));
+  }
   const observation = observationFields({
     app: 'com.apple.android.music', goal: 'MEDIA:PLAY', result: 'success', retry: false
   });
@@ -339,11 +347,22 @@ test('successful RUNTIME_VERIFIED observations wait for the terminal outcome wit
   observation.evidence_refs = ['RUNTIME_VERIFIED'];
   bridge.enqueue('task_observation', taskId, observation);
 
-  await service.pollBridge();
+  const firstPoll = await service.pollBridge();
+  assert.equal(firstPoll.pages, 2, 'successful marker is on the next feed page');
   let state = await store.snapshot();
   assert.equal(bridge.advice.length, 0);
   assert.equal(state.tasks[taskId].stage, 'awaiting_outcome');
+  assert.equal(state.tasks[taskId].awaitingTerminalOutcome, true);
   assert.equal(state.tasks[taskId].adviceCount, 0);
+
+  bridge.enqueue('task_observation', taskId, observationFields({
+    app: 'com.apple.android.music', goal: 'MEDIA:PLAY', result: 'failed', retry: true
+  }));
+  await service.pollBridge();
+  state = await store.snapshot();
+  assert.equal(bridge.advice.length, 0, 'later observations remain suppressed while the outcome is pending');
+  assert.equal(state.tasks[taskId].stage, 'awaiting_outcome');
+  assert.equal(state.tasks[taskId].awaitingTerminalOutcome, true);
 
   bridge.enqueue('task_outcome', taskId, outcomeFields('com.apple.android.music', {
     method: 'MEDIA_PLAYBACK_BECAME_ACTIVE', evidence: 'MEDIA_PLAYBACK_BECAME_ACTIVE'
@@ -352,6 +371,7 @@ test('successful RUNTIME_VERIFIED observations wait for the terminal outcome wit
   state = await store.snapshot();
   assert.equal(state.tasks[taskId].stage, 'outcome_verified');
   assert.equal(state.tasks[taskId].outcome.verified, true);
+  assert.equal(state.tasks[taskId].awaitingTerminalOutcome, false);
   assert.equal(bridge.advice.length, 0);
 });
 

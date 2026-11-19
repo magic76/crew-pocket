@@ -165,7 +165,7 @@
         <p class="mt-1 text-[9px] text-slate-500">${escapeHtml(task.appPackage)} · ${escapeHtml(task.goal || 'GoalIntent 未分類')} · ${escapeHtml(formatTime(task.updatedAt))}</p>
         <p class="mt-1 text-[9px] text-slate-400">安全重試 ${Number(task.retryCount) || 0}/${Number(task.maxRetries) || 3}${task.lastFailureCause ? ` · 錯誤代碼 ${escapeHtml(task.lastFailureCause)}` : ''}</p>
         ${(task.advice || []).length ? `<details class="mt-2 text-[9px] text-slate-400"><summary class="cursor-pointer">查看 Pocket 建議與 Runtime 結果</summary><ul class="mt-1 space-y-1">${task.advice.map(item => {
-          const status = { sending: '送出中', queued: '已排隊，等待 Runtime 結果', executed: 'Runtime 已執行', failed: 'Runtime 執行失敗', cancelled: 'Runtime 已取消', rejected: 'Helper 拒絕', suppressed_terminal: '任務已終止，Pocket 未送出', acceptance_unknown: '送達狀態不明', expired_no_result: '建議已過期，尚無 Runtime 結果' }[item.status] || item.status;
+          const status = { sending: '送出中', queued: '已排隊，等待 Runtime 結果', executed: 'Runtime 已執行', failed: 'Runtime 執行失敗', cancelled: 'Runtime 已取消', rejected: 'Helper 拒絕', suppressed_terminal: '任務已終止，Pocket 未送出', suppressed_awaiting_outcome: '等待 Helper 任務終態，Pocket 暫停建議', acceptance_unknown: '送達狀態不明', expired_no_result: '建議已過期，尚無 Runtime 結果' }[item.status] || item.status;
           return `<li>${escapeHtml(item.actionId)} · ${escapeHtml(status)}${item.runtimeActionSuccess ? ' · 操作成功，尚不代表任務完成' : ''}${item.errorCode ? ` · ${escapeHtml(item.errorCode)}` : ''}${item.runtimeDecision ? ` · Runtime: ${escapeHtml(item.runtimeDecision)}` : ''} · ${escapeHtml(formatTime(item.completedAt || item.createdAt))}</li>`;
         }).join('')}</ul></details>` : ''}
       </article>`;
