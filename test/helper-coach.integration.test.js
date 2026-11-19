@@ -298,6 +298,33 @@ test('expired queued advice is shown as unresolved and no longer blocks a fresh 
   assert.equal(bridge.advice[1].suggested_action_id, 'inspect_ui');
 });
 
+test('a successful inspect is not repeated without a fresh Helper safe-retry signal', async t => {
+  const { bridge, store, service } = await fixture(t);
+  const taskId = 'inspect-replan-task-001';
+  bridge.enqueue('task_observation', taskId, observationFields({ retry: false }));
+  await service.pollBridge();
+  assert.equal(bridge.advice.length, 1);
+  assert.equal(bridge.advice[0].suggested_action_id, 'inspect_ui');
+
+  bridge.enqueue('coach_action_result', taskId, actionResultFields(bridge.advice[0], 'executed', true));
+  bridge.enqueue('task_observation', taskId, observationFields({ retry: false }));
+  await service.pollBridge();
+  let state = await store.snapshot();
+  assert.equal(bridge.advice.length, 1, 'Pocket abstains instead of repeating a successful inspect');
+  assert.equal(state.tasks[taskId].stage, 'abstained');
+  assert.equal(state.tasks[taskId].adviceCount, 1, 'abstaining does not consume the advice quota');
+  assert.equal(state.tasks[taskId].successfulInspectCount, 1);
+  assert.match(state.events.at(-1).summary, /Let Helper Runtime replan/);
+
+  bridge.enqueue('task_observation', taskId, observationFields({ retry: true, result: 'failed' }));
+  await service.pollBridge();
+  state = await store.snapshot();
+  assert.equal(bridge.advice.length, 2, 'a new Helper-advertised safe retry may still be suggested');
+  assert.equal(bridge.advice[1].suggested_action_id, 'retry_previous_safe_tap');
+  assert.equal(bridge.advice[1].expected_postcondition, 'NAVIGATION_ACTIVE');
+  assert.equal(state.tasks[taskId].adviceCount, 2);
+});
+
 test('normalizer rejects old task fields and preserves only the Helper v1 allowlist', () => {
   const base = {
     protocol_version: 1, event_id: 'event-001', task_id: 'task-001',
